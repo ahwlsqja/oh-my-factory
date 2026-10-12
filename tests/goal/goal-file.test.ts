@@ -1,5 +1,5 @@
-import { dirname } from "node:path";
 import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   GoalFileError,
