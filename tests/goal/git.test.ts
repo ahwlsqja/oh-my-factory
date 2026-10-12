@@ -24,6 +24,24 @@ describe("git helpers", () => {
     expect(changedPathsSince(repo, base)).toEqual(["README.md", "new.txt", "src/telemetry/a.ts"]);
   });
 
+  it("sees a same-size edit made in the same second as the last index write", () => {
+    const repo = makeGitRepo();
+    // Write, commit and edit inside one second, then let it pass: git trusts cached stat data for entries
+    // older than the index file, so the throwaway index copy has to keep the real index's mtime.
+    const top = Math.floor(Date.now() / 1000) + 1;
+    while (Date.now() < top * 1000) {
+      /* spin to the start of a second */
+    }
+    writeFileSync(join(repo, "p95.sh"), "echo 312\n");
+    commitAll(repo, "add p95");
+    const base = headCommit(repo);
+    writeFileSync(join(repo, "p95.sh"), "echo 100\n");
+    while (Date.now() < (top + 1) * 1000 + 50) {
+      /* spin past the second */
+    }
+    expect(changedPathsSince(repo, base)).toContain("p95.sh");
+  });
+
   it("fails for a commit that is not in the repository", () => {
     expect(() => changedPathsSince(makeGitRepo(), "0".repeat(40))).toThrow(/git diff .* failed/);
   });

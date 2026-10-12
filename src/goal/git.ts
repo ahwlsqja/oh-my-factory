@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, rmSync, statSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import picomatch from "picomatch";
@@ -21,7 +21,13 @@ function git(repo: string, args: string[]): string {
       stdio: ["ignore", "pipe", "pipe"],
     }).trim();
     const index = join(scratch, "index");
-    if (existsSync(realIndex)) copyFileSync(realIndex, index);
+    if (existsSync(realIndex)) {
+      // The copy keeps the real index's timestamps: git trusts cached stat data for entries older than the
+      // index file, so a fresh mtime would hide a same-size edit made in the second of the last index write.
+      const stat = statSync(realIndex);
+      copyFileSync(realIndex, index);
+      utimesSync(index, stat.atime, stat.mtime);
+    }
     return execFileSync("git", args, {
       cwd: repo,
       encoding: "utf8",
