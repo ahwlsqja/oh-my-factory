@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { Ledger } from "../../src/core/ledger.js";
 import { projectDir } from "../../src/core/paths.js";
 import { lockGoal } from "../../src/goal/goal-lock.js";
 import { readProposal } from "../../src/goal/metrics.js";
@@ -85,5 +86,16 @@ describe("omf goal audit", () => {
     expect(result.code).toBe(1);
     expect(result.stdout).toContain("goal g-fast: needs re-approval (regime 1)");
     expect(result.stdout).toContain("- goal.md changed since approval");
+  });
+});
+
+describe("omf goal approve", () => {
+  it("refuses without an interactive terminal and approves nothing", () => {
+    const fx = setupGoal();
+    gitIn(fx.repo, "config", "user.email", "dev@example.com");
+    const result = omf(["goal", "approve", "g-fast"], fx.repo, fx.home);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("J1 approval needs an interactive terminal; nothing was approved");
+    expect(new Ledger(fx.location.dir).readVerified().some((e) => e.type === "goal.approved")).toBe(false);
   });
 });
