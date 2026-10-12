@@ -86,7 +86,7 @@ export function writeLock(projectDir: string, lock: MetricLock): void {
 /**
  * A person proposes a metric (agent-drafted metrics come later, spec §4.2). It stays a proposal until a
  * goal that uses it is approved (J1). The file is written inside the ledger lock, after the chain
- * verifies, so a broken ledger leaves no proposal behind.
+ * verifies, so a broken chain leaves no proposal behind (the fixed event payload is not re-validated first).
  */
 export function proposeMetric(
   ledger: Ledger,
