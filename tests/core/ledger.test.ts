@@ -159,7 +159,7 @@ describe("Ledger", () => {
       ledger.appendWith(() => {
         throw new Error("no");
       }),
-    ).toThrow("no");
+    ).toThrow(/^no$/);
     expect(ledger.verify()).toEqual({ ok: true, count: 0, head: GENESIS_HASH });
   });
 });
