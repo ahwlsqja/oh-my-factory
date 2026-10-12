@@ -6,6 +6,10 @@ import { validate } from "./schema.js";
 
 export const GENESIS_HASH = "0".repeat(64);
 
+/** What a torn final line means to the user; shared by `ledger verify` and `doctor`. */
+export const TORN_TAIL_WARNING =
+  "a torn final line (an interrupted write) is ignored; the next write discards it and records that it did";
+
 export interface LedgerEvent {
   schema_version: 1;
   seq: number;

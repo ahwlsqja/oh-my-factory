@@ -80,3 +80,15 @@ describe("omf CLI", () => {
     expect(report.isolation.measured).toBe("unmeasured");
   });
 });
+
+describe("omf ledger verify on a ledger that holds no project.initialized", () => {
+  it("exits 1 with 'project not initialized' when the initialized ledger was emptied", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    omf(["init"], repo, home);
+    writeFileSync(join(projectDir(repo, { HOME: home }), "ledger.jsonl"), "");
+    const out = omf(["ledger", "verify"], repo, home);
+    expect(out.code).toBe(1);
+    expect(out.stderr).toContain("project not initialized; run omf init");
+  });
+});

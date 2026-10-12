@@ -1,8 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runDoctor } from "../../src/core/doctor.js";
+import { TORN_TAIL_WARNING } from "../../src/core/ledger.js";
+import { projectDir } from "../../src/core/paths.js";
 import { initProject } from "../../src/core/project.js";
 import { makeGitRepo, makeTempDir } from "../helpers/tmp.js";
 
@@ -120,5 +122,45 @@ describe("runDoctor", () => {
     const home = makeTempDir("omf-home-");
     const report = runDoctor(repo, { ...env(home, stubBin({ dockerDaemon: true })), OMF_HOME: "state" });
     expect(report.problems.some((p) => p.includes("must be an absolute path"))).toBe(true);
+  });
+});
+
+describe("runDoctor: initialized means a verified ledger holding project.initialized", () => {
+  it("treats an empty ledger as not initialized and writes no preflight.json", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const e = env(home, stubBin({ dockerDaemon: true }));
+    const dir = projectDir(repo, e);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "ledger.jsonl"), "");
+    const report = runDoctor(repo, e);
+    expect(report.project.initialized).toBe(false);
+    expect(report.problems).toContain("project not initialized; run omf init");
+    expect(existsSync(join(dir, "preflight.json"))).toBe(false);
+  });
+
+  it("treats a ledger holding only a torn line as not initialized and writes no preflight.json", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const e = env(home, stubBin({ dockerDaemon: true }));
+    const dir = projectDir(repo, e);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "ledger.jsonl"), '{"schema_version":1,"se');
+    const report = runDoctor(repo, e);
+    expect(report.project.initialized).toBe(false);
+    expect(report.problems).toContain("project not initialized; run omf init");
+    expect(existsSync(join(dir, "preflight.json"))).toBe(false);
+  });
+
+  it("warns about a torn tail on an initialized project without failing the report", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const e = env(home, stubBin({ dockerDaemon: true }));
+    const dir = projectDir(repo, e);
+    initProject(repo, e);
+    appendFileSync(join(dir, "ledger.jsonl"), '{"schema_version":1,"se');
+    const report = runDoctor(repo, e);
+    expect(report.warnings).toContain(TORN_TAIL_WARNING);
+    expect(report.ok).toBe(true);
   });
 });

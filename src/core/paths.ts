@@ -115,10 +115,27 @@ export function assertOutsideAgentHomes(dir: string, env: NodeJS.ProcessEnv = pr
   }
 }
 
-export function projectDir(cwd: string, env: NodeJS.ProcessEnv = process.env): string {
-  const repo = repoToplevel(cwd);
-  const dir = join(omfHome(env), "projects", projectId(repo));
+/** Where a repository's host state lives. The only place that derives it. */
+export interface ProjectLocation {
+  repo: string;
+  id: string;
+  dir: string;
+}
+
+/** Location for a repository root (already resolved by `repoToplevel`). Throws when it would sit in the repo or an agent home. */
+export function locateProject(repo: string, env: NodeJS.ProcessEnv = process.env): ProjectLocation {
+  const id = projectId(repo);
+  const dir = join(omfHome(env), "projects", id);
   assertOutsideRepo(dir, repo);
   assertOutsideAgentHomes(dir, env);
-  return dir;
+  return { repo, id, dir };
+}
+
+/** Location of the project that `cwd` belongs to. */
+export function resolveProject(cwd: string, env: NodeJS.ProcessEnv = process.env): ProjectLocation {
+  return locateProject(repoToplevel(cwd), env);
+}
+
+export function projectDir(cwd: string, env: NodeJS.ProcessEnv = process.env): string {
+  return resolveProject(cwd, env).dir;
 }

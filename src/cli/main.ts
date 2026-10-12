@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import { runDoctor } from "../core/doctor.js";
-import { Ledger } from "../core/ledger.js";
-import { projectDir } from "../core/paths.js";
-import { initProject } from "../core/project.js";
+import { TORN_TAIL_WARNING } from "../core/ledger.js";
+import { resolveProject } from "../core/paths.js";
+import { NOT_INITIALIZED_MESSAGE, initProject, readProjectStatus } from "../core/project.js";
 
 const { version } = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { version: string };
 
@@ -34,11 +34,14 @@ program
     const report = runDoctor(process.cwd());
     if (options.json) {
       console.log(JSON.stringify(report, null, 2));
-    } else if (report.ok) {
-      console.log("ok");
     } else {
-      console.log("problems:");
-      for (const problem of report.problems) console.log(`  - ${problem}`);
+      if (report.ok) {
+        console.log("ok");
+      } else {
+        console.log("problems:");
+        for (const problem of report.problems) console.log(`  - ${problem}`);
+      }
+      for (const warning of report.warnings) console.error(`warning: ${warning}`);
     }
     process.exitCode = report.ok ? 0 : 1;
   });
@@ -49,21 +52,20 @@ ledgerCommand
   .command("verify")
   .description("verify the ledger hash chain")
   .action(() => {
-    const ledger = new Ledger(projectDir(process.cwd()));
-    if (!existsSync(ledger.file)) {
-      console.error("project not initialized; run omf init");
+    const status = readProjectStatus(resolveProject(process.cwd()));
+    const { ledger } = status;
+    if (ledger === null) {
+      console.error(NOT_INITIALIZED_MESSAGE);
       process.exitCode = 1;
-      return;
-    }
-    const result = ledger.verify();
-    if (result.ok) {
-      console.log(`ok: ${result.count} events, head ${result.head}`);
-      if (result.tornTail) {
-        console.error("warning: a torn final line (an interrupted write) is ignored; the next write discards it and records that it did");
-      }
+    } else if (!ledger.ok) {
+      console.error(`corrupt at seq ${ledger.seq}: ${ledger.reason}`);
+      process.exitCode = 1;
+    } else if (!status.initialized) {
+      console.error(NOT_INITIALIZED_MESSAGE);
+      process.exitCode = 1;
     } else {
-      console.error(`corrupt at seq ${result.seq}: ${result.reason}`);
-      process.exitCode = 1;
+      console.log(`ok: ${ledger.count} events, head ${ledger.head}`);
+      if (ledger.tornTail) console.error(`warning: ${TORN_TAIL_WARNING}`);
     }
   });
 

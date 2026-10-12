@@ -1,15 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Ledger, type VerifyResult } from "./ledger.js";
-import {
-  NotAGitRepoError,
-  UnsupportedRepoError,
-  assertOutsideRepo,
-  omfHome,
-  projectId,
-  repoToplevel,
-} from "./paths.js";
+import { TORN_TAIL_WARNING, type VerifyResult } from "./ledger.js";
+import { NotAGitRepoError, type ProjectLocation, UnsupportedRepoError, locateProject, repoToplevel } from "./paths.js";
+import { NOT_INITIALIZED_MESSAGE, readProjectStatus } from "./project.js";
 
 export interface ToolProbe {
   found: boolean;
@@ -30,6 +24,7 @@ export interface PreflightReport {
   isolation: { declared: "L2"; measured: "unmeasured"; note: string };
   ok: boolean;
   problems: string[];
+  warnings: string[];
 }
 
 /** Runs `cmd args` with PATH taken from `env`; any failure means "not usable". */
@@ -74,28 +69,30 @@ export function runDoctor(
     }
   }
 
+  const warnings: string[] = [];
   let dir: string | null = null;
   let initialized = false;
   let ledgerResult: VerifyResult | null = null;
   if (toplevel !== null) {
-    let candidate: string | null = null;
+    let location: ProjectLocation | null = null;
     try {
-      candidate = join(omfHome(env), "projects", projectId(toplevel));
-      assertOutsideRepo(candidate, toplevel);
+      location = locateProject(toplevel, env);
     } catch (err) {
       problems.push((err as Error).message);
-      candidate = null;
     }
-    if (candidate !== null) {
-      dir = candidate;
-      const ledger = new Ledger(dir);
-      initialized = existsSync(ledger.file);
-      if (initialized) {
-        ledgerResult = ledger.verify();
-        if (!ledgerResult.ok) problems.push(`ledger corrupt at seq ${ledgerResult.seq}: ${ledgerResult.reason}`);
-      } else {
-        problems.push("project not initialized; run omf init");
+    if (location !== null) {
+      dir = location.dir;
+      const status = readProjectStatus(location);
+      initialized = status.initialized;
+      ledgerResult = status.ledger;
+      if (status.ledger === null) {
+        problems.push(NOT_INITIALIZED_MESSAGE);
+      } else if (!status.ledger.ok) {
+        problems.push(`ledger corrupt at seq ${status.ledger.seq}: ${status.ledger.reason}`);
+      } else if (!status.initialized) {
+        problems.push(NOT_INITIALIZED_MESSAGE);
       }
+      if (status.ledger?.ok && status.ledger.tornTail) warnings.push(TORN_TAIL_WARNING);
     }
   }
 
@@ -112,6 +109,7 @@ export function runDoctor(
     },
     ok: problems.length === 0,
     problems,
+    warnings,
   };
   if (initialized && dir !== null) {
     writeFileSync(join(dir, "preflight.json"), `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });

@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Ledger } from "../../src/core/ledger.js";
-import { NotAGitRepoError, projectDir } from "../../src/core/paths.js";
-import { DEFAULT_CONFIG, PROJECT_SUBDIRS, initProject } from "../../src/core/project.js";
+import { NotAGitRepoError, projectDir, resolveProject } from "../../src/core/paths.js";
+import { DEFAULT_CONFIG, PROJECT_SUBDIRS, initProject, readProjectStatus } from "../../src/core/project.js";
 import { makeGitRepo, makeTempDir } from "../helpers/tmp.js";
 
 describe("initProject", () => {
@@ -67,5 +67,45 @@ describe("initProject", () => {
     const { projectDir: dir } = initProject(repo, env);
     writeFileSync(join(dir, "ledger.jsonl"), "{not json\n");
     expect(() => initProject(repo, env)).toThrow(/ledger corrupt at seq 1/);
+  });
+});
+
+describe("readProjectStatus", () => {
+  const envFor = (): NodeJS.ProcessEnv => ({ OMF_HOME: join(makeTempDir("omf-home-"), ".omf") });
+
+  it("reports no ledger and not initialized when ledger.jsonl does not exist", () => {
+    const repo = makeGitRepo();
+    const status = readProjectStatus(resolveProject(repo, envFor()));
+    expect(status.ledger).toBeNull();
+    expect(status.initialized).toBe(false);
+  });
+
+  it("reports an empty ledger as ok but not initialized", () => {
+    const repo = makeGitRepo();
+    const location = resolveProject(repo, envFor());
+    mkdirSync(location.dir, { recursive: true });
+    writeFileSync(join(location.dir, "ledger.jsonl"), "");
+    const status = readProjectStatus(location);
+    expect(status.ledger).toEqual({ ok: true, count: 0, head: "0".repeat(64) });
+    expect(status.initialized).toBe(false);
+  });
+
+  it("reports a ledger holding only a torn line as ok with a torn tail but not initialized", () => {
+    const repo = makeGitRepo();
+    const location = resolveProject(repo, envFor());
+    mkdirSync(location.dir, { recursive: true });
+    writeFileSync(join(location.dir, "ledger.jsonl"), '{"schema_version":1,"se');
+    const status = readProjectStatus(location);
+    expect(status.ledger).toMatchObject({ ok: true, count: 0, tornTail: true });
+    expect(status.initialized).toBe(false);
+  });
+
+  it("reports an initialized project as initialized", () => {
+    const repo = makeGitRepo();
+    const env = envFor();
+    initProject(repo, env);
+    const status = readProjectStatus(resolveProject(repo, env));
+    expect(status.ledger).toMatchObject({ ok: true, count: 1 });
+    expect(status.initialized).toBe(true);
   });
 });
