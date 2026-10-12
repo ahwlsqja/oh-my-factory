@@ -4,8 +4,23 @@ import { fileURLToPath } from "node:url";
 const CLI = fileURLToPath(new URL("../../dist/cli/main.js", import.meta.url));
 
 /**
- * Runs the built CLI with HOME pointed at `home`, OMF_HOME unset and no inherited GIT_* variables.
- * `extraEnv` is merged last, so a test can override PATH or anything else.
+ * Variables inherited from the test process that would point the CLI at a real home or repo state:
+ * GIT_*, OMF_HOME, the agent config-dir overrides and every XDG_* location.
+ */
+function isInheritedLocation(key: string): boolean {
+  return (
+    key.startsWith("GIT_") ||
+    key.startsWith("XDG_") ||
+    key === "OMF_HOME" ||
+    key === "CODEX_HOME" ||
+    key === "CLAUDE_CONFIG_DIR"
+  );
+}
+
+/**
+ * Runs the built CLI with HOME pointed at `home`. Inherited locations (see `isInheritedLocation`) are
+ * stripped first. `extraEnv` is merged last so a test can set PATH or an agent config dir, but it may
+ * not set HOME, OMF_HOME or GIT_*: those are fixed by the harness.
  */
 export function omf(
   args: string[],
@@ -13,8 +28,13 @@ export function omf(
   home: string,
   extraEnv: NodeJS.ProcessEnv = {},
 ): { code: number; stdout: string; stderr: string } {
+  for (const key of Object.keys(extraEnv)) {
+    if (key === "HOME" || key === "OMF_HOME" || key.startsWith("GIT_")) {
+      throw new Error(`omf(): extraEnv may not set ${key}; the harness fixes it`);
+    }
+  }
   const env: NodeJS.ProcessEnv = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_") && key !== "OMF_HOME"),
+    Object.entries(process.env).filter(([key]) => !isInheritedLocation(key)),
   );
   env.HOME = home;
   Object.assign(env, extraEnv);

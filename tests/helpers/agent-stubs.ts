@@ -12,6 +12,9 @@ function realUtility(name: string): string {
  * CODEX_HOME / CLAUDE_CONFIG_DIR when set, and ~/.claude.json. Spec §11 rule 1 forbids any of it
  * reaching the caller's home.
  */
+/** Appends the probe's HOME to homes.log beside the stub, so a test can see where each probe ran. */
+const LOG_HOME = 'printf "%s\\n" "$HOME" >> "${0%/*}/homes.log"';
+
 const POLLUTE =
   'mkdir -p "$HOME/.codex/tmp" "${CODEX_HOME:-$HOME/.codex}" "$HOME/.claude" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" ' +
   '&& touch "$HOME/.codex/tmp/x" "${CODEX_HOME:-$HOME/.codex}/y" "$HOME/.claude/x" ' +
@@ -29,7 +32,7 @@ export function writePollutingAgentStubs(dir: string): void {
   ];
   for (const [name, version] of stubs) {
     const path = join(dir, name);
-    writeFileSync(path, `#!/bin/sh\n${POLLUTE} || exit 1\necho "${version}"\nexit 0\n`);
+    writeFileSync(path, `#!/bin/sh\n${LOG_HOME}\n${POLLUTE} || exit 1\necho "${version}"\nexit 0\n`);
     chmodSync(path, 0o755);
   }
 }

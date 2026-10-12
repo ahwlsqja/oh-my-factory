@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { TORN_TAIL_WARNING, type VerifyResult } from "./ledger.js";
 import { NotAGitRepoError, type ProjectLocation, UnsupportedRepoError, locateProject, repoToplevel } from "./paths.js";
 import { NOT_INITIALIZED_MESSAGE, readProjectStatus } from "./project.js";
@@ -39,11 +39,15 @@ function probe(cmd: string, args: string[], env: NodeJS.ProcessEnv): ToolProbe {
 /**
  * Agent CLIs write caches under their home even for `--version`, so they are probed with a throwaway
  * home that is removed afterwards (spec §11 rule 1). Docker keeps the caller's environment so its
- * context and daemon settings still apply.
+ * context and daemon settings still apply. The scratch dir goes under the caller's TMPDIR when that is
+ * an absolute path, so a caller can keep it private; `os.tmpdir()` reads process.env, not `env`.
  */
 function probeAgentCli(cmd: string, env: NodeJS.ProcessEnv): ToolProbe {
-  const scratch = mkdtempSync(join(tmpdir(), "omf-probe-"));
+  const root = env.TMPDIR !== undefined && isAbsolute(env.TMPDIR) ? env.TMPDIR : tmpdir();
+  const scratch = mkdtempSync(join(root, "omf-probe-"));
   try {
+    // The real codex warns on stderr when CODEX_HOME does not exist yet.
+    mkdirSync(join(scratch, "codex"));
     return probe(cmd, ["--version"], {
       ...env,
       HOME: scratch,

@@ -9,7 +9,6 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runDoctor } from "../../src/core/doctor.js";
@@ -25,13 +24,6 @@ const REAL_GIT = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8"
 function listTree(root: string): string[] {
   if (!existsSync(root)) return [];
   return readdirSync(root, { recursive: true }).map(String).sort();
-}
-
-/** Names of the throwaway directories doctor creates for agent probes that are still in tmpdir(). */
-function listProbeDirs(): string[] {
-  return readdirSync(tmpdir())
-    .filter((name) => name.startsWith("omf-probe-"))
-    .sort();
 }
 
 /** Gives a stub directory the real git, so the git probe works while PATH holds nothing else. */
@@ -126,16 +118,27 @@ describe("runDoctor", () => {
     const bin = makeTempDir("omf-bin-");
     writePollutingAgentStubs(bin);
     withGit(bin);
-    const e = env(home, bin);
+    // The caller's config-dir overrides point into the watched home, so a probe that only replaced
+    // HOME would still leak there. A private TMPDIR keeps the scratch dirs out of shared tmpdir().
+    const scratchRoot = makeTempDir("omf-scratch-");
+    const e = {
+      ...env(home, bin),
+      CODEX_HOME: join(home, ".codex"),
+      CLAUDE_CONFIG_DIR: join(home, ".claude"),
+      TMPDIR: scratchRoot,
+    };
     const treeBefore = listTree(home);
-    const probeDirsBefore = listProbeDirs();
 
     const report = runDoctor(repo, e);
 
     expect(listTree(home)).toEqual(treeBefore);
-    expect(listProbeDirs().filter((name) => !probeDirsBefore.includes(name))).toEqual([]);
+    expect(readdirSync(scratchRoot)).toEqual([]);
     expect(report.tools.claude).toEqual({ found: true, version: "2.1.0 (Claude Code)" });
     expect(report.tools.codex).toEqual({ found: true, version: "codex-cli 0.160.1" });
+    // Each probe ran with a scratch HOME created under the TMPDIR the caller gave.
+    const probeHomes = readFileSync(join(bin, "homes.log"), "utf8").trim().split("\n");
+    expect(probeHomes).toHaveLength(2);
+    for (const probeHome of probeHomes) expect(probeHome.startsWith(`${scratchRoot}/`)).toBe(true);
   });
 
   it("reports a corrupt ledger", () => {

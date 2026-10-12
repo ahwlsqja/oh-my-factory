@@ -85,7 +85,13 @@ describe("E5 init-non-pollution", () => {
       execFileSync("git", ["status", "--porcelain", "--ignored"], { cwd: repo, encoding: "utf8" });
     const before = { repo: snapshot(repo), agents: agentHomeState(home), status: gitStatus() };
 
-    const result = omf(["doctor", "--json"], repo, home, { PATH: path });
+    // The caller's config-dir overrides point into the watched home, so a probe that only replaced
+    // HOME would still leak there.
+    const result = omf(["doctor", "--json"], repo, home, {
+      PATH: path,
+      CODEX_HOME: join(home, ".codex"),
+      CLAUDE_CONFIG_DIR: join(home, ".claude"),
+    });
 
     // The polluting stubs must actually have run, or the comparison below proves nothing.
     expect(JSON.parse(result.stdout).tools.claude.found).toBe(true);
