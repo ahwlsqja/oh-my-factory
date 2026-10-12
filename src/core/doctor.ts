@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TORN_TAIL_WARNING, type VerifyResult } from "./ledger.js";
 import { NotAGitRepoError, type ProjectLocation, UnsupportedRepoError, locateProject, repoToplevel } from "./paths.js";
@@ -35,6 +36,29 @@ function probe(cmd: string, args: string[], env: NodeJS.ProcessEnv): ToolProbe {
   return { found: true, version: first.length > 0 ? first : null };
 }
 
+/**
+ * Agent CLIs write caches under their home even for `--version`, so they are probed with a throwaway
+ * home that is removed afterwards (spec §11 rule 1). Docker keeps the caller's environment so its
+ * context and daemon settings still apply.
+ */
+function probeAgentCli(cmd: string, env: NodeJS.ProcessEnv): ToolProbe {
+  const scratch = mkdtempSync(join(tmpdir(), "omf-probe-"));
+  try {
+    return probe(cmd, ["--version"], {
+      ...env,
+      HOME: scratch,
+      CODEX_HOME: join(scratch, "codex"),
+      CLAUDE_CONFIG_DIR: join(scratch, "claude"),
+      XDG_CONFIG_HOME: join(scratch, "xdg-config"),
+      XDG_CACHE_HOME: join(scratch, "xdg-cache"),
+      XDG_DATA_HOME: join(scratch, "xdg-data"),
+      XDG_STATE_HOME: join(scratch, "xdg-state"),
+    });
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
 export function runDoctor(
   cwd: string,
   env: NodeJS.ProcessEnv = process.env,
@@ -45,8 +69,8 @@ export function runDoctor(
   const git = probe("git", ["--version"], env);
   const docker = probe("docker", ["--version"], env);
   const daemon = docker.found ? probe("docker", ["info", "--format", "{{.ServerVersion}}"], env).found : false;
-  const claude = probe("claude", ["--version"], env);
-  const codex = probe("codex", ["--version"], env);
+  const claude = probeAgentCli("claude", env);
+  const codex = probeAgentCli("codex", env);
   const tools: Array<[string, ToolProbe]> = [
     ["git", git],
     ["docker", docker],

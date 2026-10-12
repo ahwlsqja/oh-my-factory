@@ -1,14 +1,38 @@
 import { execFileSync } from "node:child_process";
-import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runDoctor } from "../../src/core/doctor.js";
 import { TORN_TAIL_WARNING } from "../../src/core/ledger.js";
 import { projectDir } from "../../src/core/paths.js";
 import { initProject } from "../../src/core/project.js";
+import { writePollutingAgentStubs } from "../helpers/agent-stubs.js";
 import { makeGitRepo, makeTempDir } from "../helpers/tmp.js";
 
 const REAL_GIT = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
+
+/** Sorted paths of everything under `root` (directories included); empty when `root` is absent. */
+function listTree(root: string): string[] {
+  if (!existsSync(root)) return [];
+  return readdirSync(root, { recursive: true }).map(String).sort();
+}
+
+/** Names of the throwaway directories doctor creates for agent probes that are still in tmpdir(). */
+function listProbeDirs(): string[] {
+  return readdirSync(tmpdir())
+    .filter((name) => name.startsWith("omf-probe-"))
+    .sort();
+}
 
 /** Gives a stub directory the real git, so the git probe works while PATH holds nothing else. */
 function withGit(dir: string): string {
@@ -89,6 +113,29 @@ describe("runDoctor", () => {
     const report = runDoctor(repo, env(home, stubBin({ dockerDaemon: true })));
     expect(report.problems).toContain("project not initialized; run omf init");
     expect(report.project.initialized).toBe(false);
+    expect(existsSync(join(home, ".omf"))).toBe(false);
+  });
+
+  it("probes claude and codex without writing into the caller's home", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    mkdirSync(join(home, ".claude"), { recursive: true });
+    writeFileSync(join(home, ".claude", "settings.json"), '{"hooks":{}}\n');
+    mkdirSync(join(home, ".codex"), { recursive: true });
+    writeFileSync(join(home, ".codex", "config.toml"), 'model = "x"\n');
+    const bin = makeTempDir("omf-bin-");
+    writePollutingAgentStubs(bin);
+    withGit(bin);
+    const e = env(home, bin);
+    const treeBefore = listTree(home);
+    const probeDirsBefore = listProbeDirs();
+
+    const report = runDoctor(repo, e);
+
+    expect(listTree(home)).toEqual(treeBefore);
+    expect(listProbeDirs().filter((name) => !probeDirsBefore.includes(name))).toEqual([]);
+    expect(report.tools.claude).toEqual({ found: true, version: "2.1.0 (Claude Code)" });
+    expect(report.tools.codex).toEqual({ found: true, version: "codex-cli 0.160.1" });
   });
 
   it("reports a corrupt ledger", () => {
