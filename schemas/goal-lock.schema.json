@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OMF goal lock (J1, spec §4.1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "goal_id",
+    "regime",
+    "semantic_sha256",
+    "head_commit",
+    "metrics",
+    "approved_by",
+    "approved_at",
+    "semantic"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "goal_id": { "type": "string", "pattern": "^g-[a-z0-9]+(-[a-z0-9]+)*$" },
+    "regime": { "type": "integer", "minimum": 1 },
+    "semantic_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "head_commit": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+    "metrics": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^m-[a-z0-9]+(-[a-z0-9]+)*$" }
+    },
+    "approved_by": { "type": "string", "pattern": "^human:\\S+$" },
+    "approved_at": { "type": "string", "minLength": 1 },
+    "semantic": { "type": "object" }
+  }
+}
