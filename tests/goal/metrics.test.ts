@@ -62,6 +62,7 @@ describe("metric proposals and locks", () => {
     };
     writeLock(dir, lock);
     expect(readLock(dir, "g-a", "m-p95-latency")).toEqual(lock);
+    expect((statSync(lockFile(dir, "g-a", "m-p95-latency")).mode & 0o777).toString(8)).toBe("600");
     writeFileSync(lockFile(dir, "g-a", "m-p95-latency"), "{ not json");
     expect(() => readLock(dir, "g-a", "m-p95-latency")).toThrow(/not valid JSON/);
   });
