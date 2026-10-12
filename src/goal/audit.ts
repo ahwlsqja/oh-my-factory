@@ -16,6 +16,8 @@ export interface AuditReport {
   problems: string[];
   /** Anything here means J1 must approve again before a candidate (spec §4.1, §4.6). */
   regime_changes: string[];
+  /** The watched paths behind the "watched path changed" entries, for showing the diff. */
+  watched_paths_changed: string[];
   approval: GoalApproval | null;
   /** The locked goal and metrics, present only when every lock verifies. */
   locked: { goal: GoalLock; metrics: MetricLock[] } | null;
@@ -104,17 +106,19 @@ function definitionChanges(dir: string, locks: readonly MetricLock[]): string[] 
   return changes;
 }
 
-function watchedChanges(repo: string, commit: string, locks: readonly MetricLock[]): string[] {
-  if (locks.every((lock) => lock.watched_paths.length === 0)) return [];
+function watchedChanges(repo: string, commit: string, locks: readonly MetricLock[]): { messages: string[]; paths: string[] } {
+  if (locks.every((lock) => lock.watched_paths.length === 0)) return { messages: [], paths: [] };
   let changed: string[];
   try {
     changed = changedPathsSince(repo, commit);
   } catch {
-    return [`approval commit ${commit.slice(0, 12)} is no longer in the repository`];
+    return { messages: [`approval commit ${commit.slice(0, 12)} is no longer in the repository`], paths: [] };
   }
-  return locks.flatMap((lock) =>
-    matchWatched(changed, lock.watched_paths).map((path) => `watched path changed: ${path} (${lock.metric_id})`),
-  );
+  const hits = locks.flatMap((lock) => matchWatched(changed, lock.watched_paths).map((path) => ({ path, id: lock.metric_id })));
+  return {
+    messages: hits.map(({ path, id }) => `watched path changed: ${path} (${id})`),
+    paths: [...new Set(hits.map((hit) => hit.path))],
+  };
 }
 
 function draftProblems(dir: string, front: GoalFront): string[] {
@@ -142,6 +146,7 @@ export function auditGoal(location: ProjectLocation, goalId: string, now: Date =
     state: "invalid",
     problems: [],
     regime_changes: [],
+    watched_paths_changed: [],
     approval: null,
     locked: null,
     budget: null,
@@ -178,7 +183,9 @@ export function auditGoal(location: ProjectLocation, goalId: string, now: Date =
 
   if (semanticHash(front) !== approval.semantic_sha256) report.regime_changes.push("goal.md changed since approval");
   report.regime_changes.push(...definitionChanges(location.dir, metricLocks ?? []));
-  report.regime_changes.push(...watchedChanges(location.repo, approval.head_commit, metricLocks ?? []));
+  const watched = watchedChanges(location.repo, approval.head_commit, metricLocks ?? []);
+  report.regime_changes.push(...watched.messages);
+  report.watched_paths_changed = watched.paths;
 
   if (goalLock !== null) {
     const wallTime = parseDuration(goalLock.semantic.budget.wall_time);

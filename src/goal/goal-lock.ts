@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { canonicalize } from "../core/canonical-json.js";
 import { budgetState, declareBudget } from "../core/budget.js";
 import { Ledger, type LedgerEvent } from "../core/ledger.js";
 import type { ProjectLocation } from "../core/paths.js";
@@ -8,7 +9,7 @@ import { validate } from "../core/schema.js";
 import { type GoalSemantic, readGoal, referencedMetrics, semanticHash, semanticOf } from "./goal-file.js";
 import { parseDuration } from "./duration.js";
 import { changedPathsSince, headCommit, matchWatched } from "./git.js";
-import { definitionOf, metricSha256, readProposal, writeLock } from "./metrics.js";
+import { type MetricDefinition, definitionOf, metricSha256, readProposal, writeLock } from "./metrics.js";
 
 /** The locked goal: the semantic fields J1 approved, and the commit the watched paths are compared with. */
 export interface GoalLock {
@@ -33,6 +34,13 @@ export interface GoalApproval {
   approved_at: string;
   /** When the goal was first approved; wall time is counted from here (spec §4.4). */
   first_approved_at: string;
+}
+
+/** What the person was shown at approval; the lock is refused if the goal or a metric no longer matches. */
+export interface ApprovalExpectation {
+  semantic_sha256: string;
+  /** metric id to the sha256 of the proposal that was shown. */
+  metrics: Record<string, string>;
 }
 
 export class ApprovalError extends Error {
@@ -105,6 +113,14 @@ export function latestApproval(events: readonly LedgerEvent[], goalId: string): 
   return latest;
 }
 
+function requireShown(expected: ApprovalExpectation, front: GoalSemantic, proposals: readonly MetricDefinition[]): void {
+  const shown = Object.entries(expected.metrics).sort(([a], [b]) => a.localeCompare(b));
+  const current = proposals.map((proposal) => [proposal.metric_id, metricSha256(proposal)] as const).sort(([a], [b]) => a.localeCompare(b));
+  if (semanticHash(front) !== expected.semantic_sha256 || canonicalize(shown) !== canonicalize(current)) {
+    throw new ApprovalError("the goal or a metric changed after it was shown; nothing was approved. Review it and approve again");
+  }
+}
+
 /**
  * Re-approval does not move the budgets: rounds are enforced from the ledger and wall time from the first
  * approval, and raising either is a J8 decision. Refusing here keeps what the person sees at approval equal
@@ -151,6 +167,7 @@ export function lockGoal(
   goalId: string,
   actor: string,
   now: () => Date = () => new Date(),
+  expected?: ApprovalExpectation,
 ): GoalApproval {
   if (!actor.startsWith("human:")) throw new ApprovalError(`only a person approves a goal (J1); actor was ${actor}`);
   const ledger = new Ledger(location.dir, now);
@@ -163,6 +180,7 @@ export function lockGoal(
     if (proposal === null) throw new ApprovalError(`metric ${id} has no proposal; run omf metric propose ${id}`);
     return proposal;
   });
+  if (expected !== undefined) requireShown(expected, goal.front, proposals);
   const targetProposal = proposals[0];
   if (targetProposal !== undefined && targetProposal.unit !== goal.front.target.unit) {
     throw new ApprovalError(

@@ -55,6 +55,12 @@ export function changedPathsSince(repo: string, commit: string): string[] {
   return [...new Set([...tracked, ...untracked])].sort();
 }
 
+/** `git diff --stat` of the paths against `commit`, for showing a person what changed. Empty when nothing differs. */
+export function diffStat(repo: string, commit: string, paths: readonly string[]): string {
+  if (paths.length === 0) return "";
+  return git(repo, ["diff", "--stat", "--no-renames", commit, "--", ...paths]).trimEnd();
+}
+
 /** Identifies what a measurement ran against: the commit plus any uncommitted state. */
 export function workingTreeFingerprint(repo: string): string {
   const status = git(repo, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]);

@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 import { Ledger } from "../../src/core/ledger.js";
 import { approveGoal } from "../../src/goal/approve.js";
 import { auditGoal } from "../../src/goal/audit.js";
-import { lockFile } from "../../src/goal/metrics.js";
+import { semanticHash, readGoal } from "../../src/goal/goal-file.js";
+import { lockFile, metricSha256, proposeMetric, readProposal } from "../../src/goal/metrics.js";
 import { setupGoal } from "../helpers/goal.js";
 import { commitAll } from "../helpers/tmp.js";
 
@@ -53,5 +54,29 @@ describe("approveGoal", () => {
     expect(() => approveGoal(fx.location, "g-fast", "agent:claude")).toThrow(/only a person/);
     expect(() => approveGoal(fx.location, "g-fast", "human:dev")).toThrow(/m-unknown has no proposal/);
     expect(new Ledger(fx.location.dir).readVerified()).toHaveLength(before);
+  });
+
+  it("refuses when the goal or a metric changed after it was shown, and writes nothing", () => {
+    const fx = setupGoal();
+    const goal = readGoal(fx.location.dir, "g-fast").front;
+    const expected = {
+      semantic_sha256: semanticHash(goal),
+      metrics: {
+        "m-p95": metricSha256(readProposal(fx.location.dir, "m-p95")!),
+        "m-errors": metricSha256(readProposal(fx.location.dir, "m-errors")!),
+      },
+    };
+    proposeMetric(
+      fx.ledger,
+      fx.location.dir,
+      { metric_id: "m-p95", command: ["sh", "-c", "echo 1"], unit: "ms", watched_paths: ["bench/p95.sh"], image: null },
+      "human:dev",
+    );
+    const before = new Ledger(fx.location.dir).readVerified().length;
+    expect(() => approveGoal(fx.location, "g-fast", "human:dev", undefined, expected)).toThrow(/changed after it was shown/);
+    expect(new Ledger(fx.location.dir).readVerified()).toHaveLength(before);
+
+    writeFileSync(fx.goalFile, readFileSync(fx.goalFile, "utf8").replace("value: 250", "value: 400"));
+    expect(() => approveGoal(fx.location, "g-fast", "human:dev", undefined, expected)).toThrow(/changed after it was shown/);
   });
 });

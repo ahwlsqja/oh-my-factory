@@ -1,6 +1,6 @@
 import type { ProjectLocation } from "../core/paths.js";
 import { auditGoal } from "./audit.js";
-import { ApprovalError, type GoalApproval, lockGoal } from "./goal-lock.js";
+import { ApprovalError, type ApprovalExpectation, type GoalApproval, lockGoal } from "./goal-lock.js";
 
 export interface ApproveResult {
   approval: GoalApproval;
@@ -18,6 +18,7 @@ export function approveGoal(
   goalId: string,
   actor: string,
   now: () => Date = () => new Date(),
+  expected?: ApprovalExpectation,
 ): ApproveResult {
   if (!actor.startsWith("human:")) throw new ApprovalError(`only a person approves a goal (J1); actor was ${actor}`);
   const report = auditGoal(location, goalId, now());
@@ -27,5 +28,5 @@ export function approveGoal(
   if (report.state === "approved" && report.problems.length === 0 && report.approval !== null) {
     return { approval: report.approval, created: false };
   }
-  return { approval: lockGoal(location, goalId, actor, now), created: true };
+  return { approval: lockGoal(location, goalId, actor, now, expected), created: true };
 }

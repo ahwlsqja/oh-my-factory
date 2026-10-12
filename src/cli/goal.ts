@@ -2,12 +2,15 @@ import { createInterface } from "node:readline/promises";
 import type { Command } from "commander";
 import { humanActor } from "../core/actor.js";
 import { Ledger } from "../core/ledger.js";
-import { type ProjectStatus, requireProject } from "../core/project.js";
+import type { ProjectLocation } from "../core/paths.js";
+import { requireProject } from "../core/project.js";
 import { approveGoal } from "../goal/approve.js";
 import { type AuditReport, auditGoal } from "../goal/audit.js";
-import { createGoal, readGoal, referencedMetrics } from "../goal/goal-file.js";
+import { createGoal, readGoal, referencedMetrics, semanticHash } from "../goal/goal-file.js";
+import { diffStat } from "../goal/git.js";
+import type { ApprovalExpectation } from "../goal/goal-lock.js";
 import { type GapReport, measureGoal } from "../goal/measure.js";
-import { proposeMetric, readProposal } from "../goal/metrics.js";
+import { metricSha256, proposeMetric, readProposal } from "../goal/metrics.js";
 
 function collect(value: string, previous: string[]): string[] {
   return [...previous, value];
@@ -35,28 +38,47 @@ function printAudit(report: AuditReport): void {
 
 const listOrNone = (items: readonly string[]): string => (items.length === 0 ? "none" : items.join(", "));
 
-/** What the person approves: the locked fields and every metric command, shown before the prompt. */
-function printForApproval(status: ProjectStatus, goalId: string): void {
+/**
+ * What the person approves, shown before the prompt: why approval is needed (problems and regime changes,
+ * with the diff of watched paths), the locked fields and every metric command. `expected` holds the
+ * hashes of what was shown; approveGoal refuses if either changed by the time the person confirms.
+ */
+export function approvalScreen(
+  status: ProjectLocation,
+  goalId: string,
+): { lines: string[]; expected: ApprovalExpectation } {
+  const lines: string[] = [];
+  const out = (line: string): void => void lines.push(line);
+  const audit = auditGoal(status, goalId);
+  if (audit.problems.length > 0 || audit.regime_changes.length > 0) {
+    out(`why approval is needed again (goal ${goalId} is ${audit.state.replace("needs_reapproval", "needs re-approval")}):`);
+    for (const problem of audit.problems) out(`  problem: ${problem}`);
+    for (const change of audit.regime_changes) out(`  - ${change}`);
+    if (audit.approval !== null && audit.watched_paths_changed.length > 0) {
+      out(`changes since the approval at ${audit.approval.head_commit.slice(0, 12)}:`);
+      const stat = diffStat(status.repo, audit.approval.head_commit, audit.watched_paths_changed);
+      out(stat === "" ? "  (only untracked files; no diff to show)" : stat);
+    }
+  }
   const { front } = readGoal(status.dir, goalId);
-  console.log(`goal ${front.goal_id}: ${front.title}`);
-  console.log(`objective: ${front.objective}`);
-  console.log(`target: ${front.target.metric_id} ${front.target.operator} ${front.target.value} ${front.target.unit}`);
-  console.log(`leading: ${listOrNone(front.leading)}; lagging: ${listOrNone(front.lagging)}; guardrails: ${listOrNone(front.guardrails)}`);
-  console.log(
-    `budget: ${front.budget.rounds} rounds, ${front.budget.wall_time} wall time, at most ${front.budget.max_open_work_items} open work items`,
-  );
-  console.log(`decision rule: ${front.prereg.decision_rule} (minimum observation ${front.prereg.min_observation})`);
+  out(`goal ${front.goal_id}: ${front.title}`);
+  out(`objective: ${front.objective}`);
+  out(`target: ${front.target.metric_id} ${front.target.operator} ${front.target.value} ${front.target.unit}`);
+  out(`leading: ${listOrNone(front.leading)}; lagging: ${listOrNone(front.lagging)}; guardrails: ${listOrNone(front.guardrails)}`);
+  out(`budget: ${front.budget.rounds} rounds, ${front.budget.wall_time} wall time, at most ${front.budget.max_open_work_items} open work items`);
+  out(`decision rule: ${front.prereg.decision_rule} (minimum observation ${front.prereg.min_observation})`);
+  const metrics: Record<string, string> = {};
   for (const id of referencedMetrics(front)) {
     const proposal = readProposal(status.dir, id);
     if (proposal === null) {
-      console.log(`metric ${id}: no proposal`);
+      out(`metric ${id}: no proposal`);
       continue;
     }
+    metrics[id] = metricSha256(proposal);
     const image = proposal.image === null ? "" : `; image ${proposal.image}`;
-    console.log(
-      `metric ${id}: ${JSON.stringify(proposal.command)} -> ${proposal.unit}; watches ${listOrNone(proposal.watched_paths)}${image}`,
-    );
+    out(`metric ${id}: ${JSON.stringify(proposal.command)} -> ${proposal.unit}; watches ${listOrNone(proposal.watched_paths)}${image}`);
   }
+  return { lines, expected: { semantic_sha256: semanticHash(front), metrics } };
 }
 
 function printGap(report: GapReport, file: string): void {
@@ -126,7 +148,8 @@ export function registerGoalCommands(program: Command): void {
         throw new Error("J1 approval needs an interactive terminal; nothing was approved");
       }
       const actor = humanActor(status.repo);
-      printForApproval(status, goalId);
+      const screen = approvalScreen(status, goalId);
+      for (const line of screen.lines) console.log(line);
       const prompt = createInterface({ input: process.stdin, output: process.stdout });
       const answer = (await prompt.question(`Type ${goalId} to approve as ${actor}: `)).trim();
       prompt.close();
@@ -135,7 +158,7 @@ export function registerGoalCommands(program: Command): void {
         process.exitCode = 1;
         return;
       }
-      const result = approveGoal(status, goalId, actor);
+      const result = approveGoal(status, goalId, actor, undefined, screen.expected);
       console.log(
         result.created
           ? `approved ${goalId} (regime ${result.approval.regime})`
