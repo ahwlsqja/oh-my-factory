@@ -11,7 +11,14 @@ export function makeTempDir(prefix = "omf-test-"): string {
 export function makeGitRepo(): string {
   const dir = makeTempDir("omf-repo-");
   const git = (...args: string[]): void => {
-    execFileSync("git", args, { cwd: dir, stdio: "ignore" });
+    execFileSync("git", args, {
+      cwd: dir,
+      stdio: "ignore",
+      env: {
+        ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
+        LC_ALL: "C",
+      },
+    });
   };
   git("init", "-q", "-b", "main");
   writeFileSync(join(dir, "README.md"), "# fixture\n");
