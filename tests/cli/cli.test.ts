@@ -1,8 +1,8 @@
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { projectDir } from "../../src/core/paths.js";
-import { omf } from "../helpers/cli.js";
+import { omf, omfWithUmask } from "../helpers/cli.js";
 import { makeGitRepo, makeTempDir } from "../helpers/tmp.js";
 
 const packageVersion = (JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { version: string }).version;
@@ -98,5 +98,47 @@ describe("omf() harness guard", () => {
     expect(() => omf(["--help"], makeTempDir(), makeTempDir(), { [key]: "/x" })).toThrow(
       `omf(): extraEnv may not set ${key}; the harness fixes it`,
     );
+  });
+});
+
+describe("OMF host state modes", () => {
+  const PRIVATE_DIRS = ["", "vault", "vault/metrics", "vault/scenarios", "runs", "worktrees"];
+  const PRIVATE_FILES = ["config.toml", "ledger.jsonl"];
+  const modeOf = (path: string): string => (statSync(path).mode & 0o777).toString(8);
+
+  /** Asserts that every OMF host directory and file under `dir` has the private mode. */
+  function expectPrivate(dir: string): void {
+    for (const sub of PRIVATE_DIRS) expect(modeOf(join(dir, sub)), `dir ${sub || "."}`).toBe("700");
+    for (const file of PRIVATE_FILES) expect(modeOf(join(dir, file)), file).toBe("600");
+  }
+
+  it("init creates the layout at 700 and the files at 600 under a permissive umask", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    expect(omfWithUmask("000", ["init"], repo, home).code).toBe(0);
+    expectPrivate(projectDir(repo, { HOME: home }));
+  });
+
+  it("init repairs modes that an existing project was left with", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    omfWithUmask("000", ["init"], repo, home);
+    const dir = projectDir(repo, { HOME: home });
+    chmodSync(dir, 0o755);
+    chmodSync(join(dir, "config.toml"), 0o644);
+    chmodSync(join(dir, "ledger.jsonl"), 0o644);
+    expect(omfWithUmask("000", ["init"], repo, home).stdout).toMatch(/^already initialized /);
+    expectPrivate(dir);
+  });
+
+  it("doctor writes preflight.json at 600 even when the file already exists at 644", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    omfWithUmask("000", ["init"], repo, home);
+    const preflight = join(projectDir(repo, { HOME: home }), "preflight.json");
+    writeFileSync(preflight, "{}\n");
+    chmodSync(preflight, 0o644);
+    omfWithUmask("000", ["doctor"], repo, home);
+    expect(modeOf(preflight)).toBe("600");
   });
 });

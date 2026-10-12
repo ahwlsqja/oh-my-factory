@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { TORN_TAIL_WARNING, type VerifyResult } from "./ledger.js";
@@ -140,7 +140,10 @@ export function runDoctor(
     warnings,
   };
   if (initialized && dir !== null) {
-    writeFileSync(join(dir, "preflight.json"), `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+    const preflightPath = join(dir, "preflight.json");
+    writeFileSync(preflightPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+    // writeFileSync keeps the mode of an existing file, so set it explicitly.
+    chmodSync(preflightPath, 0o600);
   }
   return report;
 }

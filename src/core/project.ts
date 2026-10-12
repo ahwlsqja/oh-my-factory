@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Ledger, type LedgerEvent, type VerifyResult } from "./ledger.js";
 import { type ProjectLocation, resolveProject } from "./paths.js";
@@ -50,6 +50,24 @@ export interface InitResult {
 /** Signals, inside the ledger lock, that the project already has its first event. */
 class AlreadyInitialized extends Error {}
 
+/**
+ * Pins the project's host state to its owner: directories 0700, files 0600. A mode is applied only when
+ * a path is created, so this runs on every init and also fixes an existing project. OMF_HOME and
+ * OMF_HOME/projects are not touched, because the user may share them.
+ */
+function restrictProjectModes(dir: string): void {
+  chmodSync(dir, 0o700);
+  for (const sub of PROJECT_SUBDIRS) {
+    // Intermediate directories too: "vault/metrics" also creates "vault".
+    const segments = sub.split("/");
+    for (let depth = 1; depth <= segments.length; depth++) chmodSync(join(dir, ...segments.slice(0, depth)), 0o700);
+  }
+  for (const file of ["config.toml", "ledger.jsonl"]) {
+    const path = join(dir, file);
+    if (existsSync(path)) chmodSync(path, 0o600);
+  }
+}
+
 export function initProject(cwd: string, env: NodeJS.ProcessEnv = process.env): InitResult {
   const { repo, id, dir } = resolveProject(cwd, env);
 
@@ -57,6 +75,7 @@ export function initProject(cwd: string, env: NodeJS.ProcessEnv = process.env): 
   for (const sub of PROJECT_SUBDIRS) mkdirSync(join(dir, sub), { recursive: true, mode: 0o700 });
   const configPath = join(dir, "config.toml");
   if (!existsSync(configPath)) writeFileSync(configPath, DEFAULT_CONFIG, { mode: 0o600 });
+  restrictProjectModes(dir);
 
   // "Initialized" is decided by isInitialized, under the ledger lock. A crash that left only a torn
   // first line is therefore not mistaken for an initialized project, and two concurrent inits write
