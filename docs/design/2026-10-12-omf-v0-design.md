@@ -172,6 +172,8 @@ The format follows Larson's RFC requirements (goal, measurement, approach). It l
 under an opt-in directory (default `factory/goals/<goal_id>/goal.md`) or in host state if the owner
 declines repo files.
 
+v0.1 keeps `goal.md` in host state (`goals/<goal_id>/goal.md`); the repository copy is planned.
+
 ```yaml
 ---
 schema_version: 1
@@ -691,6 +693,8 @@ written to trackers, only summaries and references.
 | `omf init` | Create host state only. Writes nothing to the repo. |
 | `omf doctor` | Detect CLIs, Docker, auth, isolation level, branch protection. Report the guarantees available in this environment. |
 | `omf goal new` / `audit` / `approve` | Create `goal.md`, run the interview, J1, lock |
+| `omf metric propose` | Propose a metric (command, unit, watched paths) for J1 |
+| `omf goal measure` | §4.4 steps 1 to 3 on their own: audit, measure, evaluate, gap report |
 | `omf goal tick` | One G pass (§4.4) |
 | `omf goal sign` | J5 |
 | `omf decide <work-id>` | S1 interview, `spec.md`, J2 |

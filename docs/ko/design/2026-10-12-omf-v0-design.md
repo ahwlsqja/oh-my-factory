@@ -110,6 +110,8 @@ X  EXECUTION     L2 devcontainer (default) | L3 L2 + egress allowlist + leak red
 
 형식은 Larson의 RFC 요건(목표, 측정, 접근)을 따른다. 저장소의 선택 참여(opt-in) 디렉터리(기본값 `factory/goals/<goal_id>/goal.md`)에 두거나, 소유자가 저장소 파일을 원하지 않으면 호스트 상태에 둔다.
 
+v0.1 은 `goal.md` 를 호스트 상태(`goals/<goal_id>/goal.md`)에 둔다. 저장소 사본은 계획 중이다.
+
 ```yaml
 ---
 schema_version: 1
@@ -502,6 +504,8 @@ handoff:
 | `omf init` | 호스트 상태만 만든다. 저장소에는 아무것도 쓰지 않는다. |
 | `omf doctor` | CLI, Docker, 인증, 격리 수준, 브랜치 보호를 감지한다. 이 환경에서 쓸 수 있는 보장을 보고한다. |
 | `omf goal new` / `audit` / `approve` | `goal.md` 생성, 인터뷰 진행, J1, 잠금 |
+| `omf metric propose` | J1 에 올릴 지표(명령, 단위, 감시 경로)를 제안 |
+| `omf goal measure` | §4.4 의 1~3단계만 단독 실행: 감사, 측정, 평가, 격차 보고서 |
 | `omf goal tick` | G 한 바퀴 (§4.4) |
 | `omf goal sign` | J5 |
 | `omf decide <work-id>` | S1 인터뷰, `spec.md`, J2 |
