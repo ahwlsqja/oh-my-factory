@@ -1990,3 +1990,45 @@ Expected: typecheck prints nothing. All 60 tests pass.
 git add README.md docs/plans/README.md
 git commit -m "docs: document M1 usage and mark the milestone done"
 ```
+
+---
+
+## Deviations during execution
+
+Every task went through a spec review and a code-quality review. The lead approved these changes
+beyond the plan text; the code and tests are the source of truth.
+
+- **Task 2.** `canonicalize` rejects values that are not plain JSON (Date, Map, class instances,
+  undefined, functions, symbols, bigint, non-finite numbers, sparse arrays), so two values that look
+  equal cannot hash differently.
+- **Task 3.** The project identity is the main working tree from `git worktree list --porcelain`,
+  so linked worktrees share one project; bare repositories are refused. `assertOutsideRepo`
+  compares real paths of the nearest existing ancestor (macOS `/var` is `/private/var`) and treats a
+  `..foo` directory as inside. `OMF_HOME` must be absolute. Git runs without `GIT_*` variables and
+  with `LC_ALL=C`, because localized messages broke error matching.
+- **Task 4.** Reclaiming a stale lock is serialized by a `.reclaim` guard file, and a lock file that
+  has vanished is never removed by a reclaimer. Staleness thresholds are 1000 ms, inside the 2 s
+  wait. The owner's pid and start time are validated, and release checks both. `ps` runs with
+  `LC_ALL=C`. The callback's error wins over a release error. The lock is not reentrant. A
+  multi-process contention test was added.
+- **Task 5.** One cached Ajv 2020 instance; schemas resolve from both `src/` and `dist/`.
+- **Task 6.** Torn-tail policy (spec §8): an unterminated final line that parses as an event is kept
+  and gets its newline; otherwise the next append truncates it and records `ledger.tail_discarded`.
+  Lines that are not JSON objects are corruption. `readVerified` parses once. `appendWith` checks and
+  writes under one lock. Limits are documented. A contention test was added.
+- **Task 7.** Budget events from the ledger are validated (positive integer rounds, declared before
+  use, declared and raised only by `human:` actors, declared once); an invalid event stops the line.
+  `consumeBudget` checks and writes inside `appendWith`, and only `omf` or `human:` actors consume.
+  The contention test reproduced the race before the fix.
+- **Task 8.** Initialization is decided by a `project.initialized` event in the ledger, not by files
+  on disk, and the directory layout is repaired on every `init`. Directories are 0700, files 0600.
+- **Task 9.** Tool probes time out after 5 s with SIGKILL and take `PATH` from the given
+  environment; tests use a stub-only `PATH`. Repository and project-directory errors become
+  problems. `preflight.json` is written only for an initialized project.
+- **Task 10.** A torn tail is reported on stderr with exit 0. Exit codes are in `--help`. The version
+  is read from `package.json`.
+- **Task 11.** Reuses `tests/helpers/cli.ts`. The test also checks the ledger bytes are unchanged
+  after the refused commands. The README lists the contention tests.
+- **Task 12.** The final count is 109 tests in 15 files, not 60.
+- **After Task 12.** Tests are type-checked (`tsconfig.test.json`), the test setup builds `dist/`
+  from scratch, and spec §8 documents the `hash` field, torn writes and the ledger's limits.
