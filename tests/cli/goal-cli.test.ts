@@ -99,3 +99,30 @@ describe("omf goal approve", () => {
     expect(new Ledger(fx.location.dir).readVerified().some((e) => e.type === "goal.approved")).toBe(false);
   });
 });
+
+describe("omf goal measure", () => {
+  it("prints the gap and warns about the unisolated host runner", () => {
+    const fx = setupGoal();
+    lockGoal(fx.location, "g-fast", "human:dev");
+    const result = omf(["goal", "measure", "g-fast", "--runner", "host"], fx.repo, fx.home);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("target m-p95: 312 ms; target <= 250 ms; gap 62 (decrease, medium)");
+    expect(result.stdout).toContain("guardrail m-errors: unevaluated");
+    expect(result.stderr).toContain("warning: measured on the host without isolation (--runner host)");
+  });
+
+  it("uses Docker by default and fails metrics that have no image", () => {
+    const fx = setupGoal();
+    lockGoal(fx.location, "g-fast", "human:dev");
+    const result = omf(["goal", "measure", "g-fast"], fx.repo, fx.home);
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain("failed: metric m-p95 has no image");
+  });
+
+  it("exits 2 for an unapproved goal", () => {
+    const fx = setupGoal();
+    const result = omf(["goal", "measure", "g-fast", "--runner", "host"], fx.repo, fx.home);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("goal g-fast is not approved (J1); nothing was measured");
+  });
+});

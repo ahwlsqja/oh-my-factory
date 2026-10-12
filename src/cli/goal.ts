@@ -6,6 +6,7 @@ import { type ProjectStatus, requireProject } from "../core/project.js";
 import { approveGoal } from "../goal/approve.js";
 import { type AuditReport, auditGoal } from "../goal/audit.js";
 import { createGoal, readGoal, referencedMetrics } from "../goal/goal-file.js";
+import { type GapReport, measureGoal } from "../goal/measure.js";
 import { proposeMetric, readProposal } from "../goal/metrics.js";
 
 function collect(value: string, previous: string[]): string[] {
@@ -56,6 +57,34 @@ function printForApproval(status: ProjectStatus, goalId: string): void {
       `metric ${id}: ${JSON.stringify(proposal.command)} -> ${proposal.unit}; watches ${listOrNone(proposal.watched_paths)}${image}`,
     );
   }
+}
+
+function printGap(report: GapReport, file: string): void {
+  console.log(`goal ${report.goal_id} (regime ${report.regime}), runner ${report.runner}`);
+  const t = report.target;
+  const wanted = `target ${t.operator} ${t.value} ${t.unit}`;
+  if (t.result === null) console.log(`target ${t.metric_id}: not measured; ${wanted}`);
+  else if (t.result.met) console.log(`target ${t.metric_id}: ${t.measured} ${t.unit}; ${wanted}; met`);
+  else {
+    console.log(
+      `target ${t.metric_id}: ${t.measured} ${t.unit}; ${wanted}; gap ${t.result.gap} (${t.result.direction}, ${t.result.size})`,
+    );
+  }
+  for (const m of report.metrics) {
+    const value = m.value === null ? `failed: ${m.failure}` : `${m.value} ${m.unit}`;
+    let band = "";
+    if (m.band !== null) {
+      band =
+        m.band.status === "breach"
+          ? `; band ${m.band.tier} (${m.band.rule})${m.band_action === null ? "" : ` -> ${m.band_action}`}`
+          : `; ${m.band.status.replace(/_/g, " ")}`;
+    }
+    console.log(`  ${m.metric_id} [${m.roles.join(", ")}]: ${value}${band}`);
+  }
+  for (const g of report.guardrails) console.log(`guardrail ${g.metric_id}: ${g.status}`);
+  printList("needs re-approval (J1)", report.regime_changes);
+  if (report.wall_time_exceeded) console.log("wall time exceeded (J6)");
+  console.log(`report: ${file}`);
 }
 
 /** Goal and metric commands (spec §9). Errors propagate to main.ts, which exits 2. */
@@ -112,6 +141,25 @@ export function registerGoalCommands(program: Command): void {
           ? `approved ${goalId} (regime ${result.approval.regime})`
           : `${goalId} is already approved (regime ${result.approval.regime})`,
       );
+    });
+
+  goal
+    .command("measure")
+    .argument("<goal_id>")
+    .option("--runner <runner>", "docker (isolated) or host (no isolation)", "docker")
+    .option("--json", "print the gap report as JSON")
+    .description("audit the goal, run its locked metrics, and write a gap report to host state")
+    .action((goalId: string, options: { runner: string; json?: boolean }) => {
+      if (options.runner !== "docker" && options.runner !== "host") {
+        throw new Error(`unknown runner ${options.runner}; use docker or host`);
+      }
+      const status = requireProject(process.cwd());
+      const { report, file } = measureGoal(status, goalId, { runner: options.runner });
+      if (options.json) console.log(JSON.stringify(report, null, 2));
+      else printGap(report, file);
+      if (report.isolation === "none") console.error("warning: measured on the host without isolation (--runner host)");
+      const failed = report.metrics.some((m) => m.failure !== null);
+      process.exitCode = report.needs_reapproval || failed ? 1 : 0;
     });
 
   const metric = program.command("metric").description("propose metrics for J1");
