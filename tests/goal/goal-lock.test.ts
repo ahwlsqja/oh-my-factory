@@ -1,5 +1,6 @@
-import { readFileSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { budgetState } from "../../src/core/budget.js";
 import { Ledger } from "../../src/core/ledger.js";
@@ -7,6 +8,7 @@ import { semanticHash } from "../../src/goal/goal-file.js";
 import { ApprovalError, goalLockFile, latestApproval, lockGoal, readGoalLock } from "../../src/goal/goal-lock.js";
 import { lockFile, metricSha256, readLock, readProposal } from "../../src/goal/metrics.js";
 import { setupGoal } from "../helpers/goal.js";
+import { makeTempDir } from "../helpers/tmp.js";
 
 describe("lockGoal", () => {
   it("locks the goal and its metrics as regime 1 and declares the rounds budget", () => {
@@ -85,5 +87,118 @@ describe("lockGoal", () => {
     lockGoal(fx.location, "g-fast", "human:dev");
     writeFileSync(fx.goalFile, readFileSync(fx.goalFile, "utf8").replace(/wall_time: \S+/, "wall_time: 999d"));
     expect(() => lockGoal(fx.location, "g-fast", "human:dev")).toThrow(/wall.time.*J8/);
+  });
+});
+
+const GOAL_LOCK_MODULE = resolve("dist/goal/goal-lock.js");
+const PATHS_MODULE = resolve("dist/core/paths.js");
+
+/**
+ * Child: waits for the go file, then approves the goal as `actor`. Its clock sleeps 300 ms the first time
+ * lockGoal reads it, which happens after the approve lock is held, so the winner keeps the lock long enough
+ * for the other process to have taken its snapshot of the regime and to be waiting for the lock.
+ */
+const APPROVER = `
+const { lockGoal } = await import(process.argv[1]);
+const { resolveProject } = await import(process.argv[2]);
+const { existsSync, writeFileSync } = await import("node:fs");
+const [repo, omfHome, goalId, actor, ready, go] = process.argv.slice(3);
+const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+const location = resolveProject(repo, { OMF_HOME: omfHome });
+writeFileSync(ready, "");
+while (!existsSync(go)) sleep(2);
+let first = true;
+const now = () => {
+  if (first) {
+    first = false;
+    sleep(300);
+  }
+  return new Date();
+};
+try {
+  const approval = lockGoal(location, goalId, actor, now);
+  console.log(JSON.stringify({ ok: true, actor, regime: approval.regime }));
+} catch (err) {
+  console.log(JSON.stringify({ ok: false, actor, name: err.name, message: err.message }));
+}
+`;
+
+interface Outcome {
+  ok: boolean;
+  actor: string;
+  regime?: number;
+  name?: string;
+  message?: string;
+}
+
+async function waitFor(path: string): Promise<void> {
+  for (let i = 0; i < 500; i++) {
+    if (existsSync(path)) return;
+    await new Promise((done) => setTimeout(done, 20));
+  }
+  throw new Error(`timed out waiting for ${path}`);
+}
+
+function startApprover(fx: ReturnType<typeof setupGoal>, actor: string, ready: string, go: string): Promise<Outcome> {
+  return new Promise((done, fail) => {
+    const args = [GOAL_LOCK_MODULE, PATHS_MODULE, fx.repo, join(fx.home, ".omf"), "g-fast", actor, ready, go];
+    const child = spawn(process.execPath, ["--input-type=module", "-e", APPROVER, ...args], {
+      env: { ...process.env, HOME: fx.home },
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    let out = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      out += chunk.toString();
+    });
+    child.on("error", fail);
+    child.on("close", (code) => {
+      if (code !== 0) fail(new Error(`approver ${actor} exited ${code}: ${out}`));
+      else done(JSON.parse(out.trim().split("\n").at(-1) ?? "") as Outcome);
+    });
+  });
+}
+
+describe("lockGoal under concurrency", () => {
+  it("lets exactly one of two racing approvals through and writes nothing for the other", async () => {
+    const fx = setupGoal();
+    const sync = makeTempDir("omf-race-");
+    const go = join(sync, "go");
+    const readyA = join(sync, "ready-a");
+    const readyB = join(sync, "ready-b");
+    const runs = [startApprover(fx, "human:a", readyA, go), startApprover(fx, "human:b", readyB, go)];
+    await Promise.all([waitFor(readyA), waitFor(readyB)]);
+    writeFileSync(go, "");
+    const outcomes = await Promise.all(runs);
+
+    const won = outcomes.filter((o) => o.ok);
+    const lost = outcomes.filter((o) => !o.ok);
+    expect(won).toHaveLength(1);
+    expect(lost).toHaveLength(1);
+    expect(lost[0]).toMatchObject({ name: "ApprovalError" });
+    expect(lost[0]?.message).toMatch(/another approval of g-fast ran concurrently/);
+    const winner = won[0]!.actor;
+
+    const events = new Ledger(fx.location.dir).readVerified();
+    expect(events.filter((e) => e.type === "goal.approved")).toHaveLength(1);
+    expect(events.filter((e) => e.type === "budget.declared")).toHaveLength(1);
+    expect(
+      events.filter((e) => e.type === "metric.locked").map((e) => [e.payload.metric_id, e.payload.regime, e.actor]),
+    ).toEqual([
+      ["m-p95", 1, winner],
+      ["m-errors", 1, winner],
+    ]);
+    expect(readGoalLock(fx.location.dir, "g-fast")).toMatchObject({ regime: 1, approved_by: winner });
+    expect(readLock(fx.location.dir, "g-fast", "m-p95")).toMatchObject({ regime: 1, approved_by: winner });
+    expect(existsSync(join(fx.location.dir, "vault", "metrics", "g-fast", "approve.lock"))).toBe(false);
+  });
+
+  it("reclaims an approve.lock left by a process that died, and releases it when done", () => {
+    const fx = setupGoal();
+    const dead = spawnSync(process.execPath, ["-e", ""]).pid;
+    const lockPath = join(fx.location.dir, "vault", "metrics", "g-fast", "approve.lock");
+    mkdirSync(dirname(lockPath), { recursive: true });
+    writeFileSync(lockPath, JSON.stringify({ pid: dead, start_time: null, acquired_at: "2026-10-12T00:00:00.000Z" }));
+    expect(lockGoal(fx.location, "g-fast", "human:dev").regime).toBe(1);
+    expect(existsSync(lockPath)).toBe(false);
   });
 });

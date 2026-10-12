@@ -74,8 +74,19 @@ export function runOnHost(
   }
 }
 
+/**
+ * An image reference becomes one argv element of `docker run`, directly before the command. A value that
+ * starts with "-" would be read as a docker option (`--privileged`, `-v /:/host`) and one with whitespace is
+ * not a reference at all. The metric schemas enforce the same rule when a metric is proposed or locked; this
+ * is the guard of last resort for a caller that did not go through them (spec §4.2).
+ */
+export function isValidImage(image: string): boolean {
+  return /^[^\s-]\S*$/.test(image);
+}
+
 /** Argv for a disposable, network-less container with the repository mounted read-only (spec §4.2). */
 export function dockerArgs(command: readonly string[], repo: string, image: string, name: string): string[] {
+  if (!isValidImage(image)) throw new Error('invalid image reference: it must not start with "-" or contain whitespace');
   return [
     "run",
     "--rm",

@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "real model called from tests" >&2
+exit 97

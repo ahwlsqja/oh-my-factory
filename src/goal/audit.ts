@@ -7,12 +7,17 @@ import { type GoalApproval, type GoalLock, GoalLockError, latestApproval, readGo
 import { changedPathsSince, matchWatched } from "./git.js";
 import { MetricError, type MetricLock, lockedSha256, metricSha256, readLock, readProposal } from "./metrics.js";
 
-export type GoalState = "invalid" | "draft" | "approved" | "needs_reapproval";
+/**
+ * `tampered`: an approval exists but a lock, the budget events or the goal lock do not verify against the
+ * ledger (E1). It is never `approved`, so nothing that branches on the state treats the goal as sound;
+ * approving again repairs it.
+ */
+export type GoalState = "invalid" | "draft" | "approved" | "needs_reapproval" | "tampered";
 
 export interface AuditReport {
   goal_id: string;
   state: GoalState;
-  /** Anything here stops measurement: the goal file is unusable or a lock does not match the ledger. */
+  /** Anything here stops measurement: the goal file is unusable or a lock does not match the ledger (state `tampered` once approved). */
   problems: string[];
   /** Anything here means J1 must approve again before a candidate (spec §4.1, §4.6). */
   regime_changes: string[];
@@ -82,7 +87,7 @@ function verifiedMetricLocks(
       continue;
     }
     const sha = metricSha256(lock);
-    if (sha !== lock.sha256 || sha !== lockedSha256(events, goalId, id) || lock.regime !== approval.regime) {
+    if (sha !== lock.sha256 || sha !== lockedSha256(events, goalId, id, approval.regime) || lock.regime !== approval.regime) {
       problems.push(`metric lock tampered: ${id}`);
       intact = false;
       continue;
@@ -191,6 +196,8 @@ export function auditGoal(location: ProjectLocation, goalId: string, now: Date =
     const wallTime = parseDuration(goalLock.semantic.budget.wall_time);
     report.wall_time_exceeded = now.getTime() - Date.parse(approval.first_approved_at) > wallTime;
   }
-  report.state = report.regime_changes.length > 0 ? "needs_reapproval" : "approved";
+  // Problems first: a goal whose locks do not verify is tampered even when it also has regime changes.
+  if (report.problems.length > 0) report.state = "tampered";
+  else report.state = report.regime_changes.length > 0 ? "needs_reapproval" : "approved";
   return report;
 }

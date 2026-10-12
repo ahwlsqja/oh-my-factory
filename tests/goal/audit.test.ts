@@ -49,11 +49,14 @@ describe("auditGoal", () => {
     const report = auditGoal(tampered.location, "g-fast");
     expect(report.problems).toEqual(["metric lock tampered: m-p95"]);
     expect(report.locked).toBeNull();
+    expect(report.state).toBe("tampered");
 
     const missing = setupGoal();
     lockGoal(missing.location, "g-fast", "human:dev");
     rmSync(lockFile(missing.location.dir, "g-fast", "m-errors"));
-    expect(auditGoal(missing.location, "g-fast").problems).toEqual(["metric lock missing: m-errors"]);
+    const gone = auditGoal(missing.location, "g-fast");
+    expect(gone.problems).toEqual(["metric lock missing: m-errors"]);
+    expect(gone.state).toBe("tampered");
 
     const malformed = setupGoal();
     lockGoal(malformed.location, "g-fast", "human:dev");
@@ -68,7 +71,37 @@ describe("auditGoal", () => {
     const lock = JSON.parse(readFileSync(file, "utf8")) as { semantic: { target: { value: number } } };
     lock.semantic.target.value = 1000;
     writeFileSync(file, JSON.stringify(lock));
-    expect(auditGoal(fx.location, "g-fast").problems).toEqual(["goal lock tampered: g-fast"]);
+    const report = auditGoal(fx.location, "g-fast");
+    expect(report.problems).toEqual(["goal lock tampered: g-fast"]);
+    expect(report.state).toBe("tampered");
+  });
+
+  it("reports tampered, not needs_reapproval, when a lock is edited and goal.md also changed", () => {
+    const fx = setupGoal();
+    lockGoal(fx.location, "g-fast", "human:dev");
+    const file = lockFile(fx.location.dir, "g-fast", "m-p95");
+    const lock = JSON.parse(readFileSync(file, "utf8")) as { command: string[] };
+    lock.command = ["sh", "-c", "echo 1"];
+    writeFileSync(file, JSON.stringify(lock));
+    writeFileSync(fx.goalFile, readFileSync(fx.goalFile, "utf8").replace("value: 250", "value: 400"));
+    const report = auditGoal(fx.location, "g-fast");
+    expect(report.regime_changes).toEqual(["goal.md changed since approval"]);
+    expect(report.problems).toEqual(["metric lock tampered: m-p95"]);
+    expect(report.state).toBe("tampered");
+  });
+
+  it("checks a metric lock against the ledger event of its own regime only", () => {
+    const fx = setupGoal();
+    lockGoal(fx.location, "g-fast", "human:dev");
+    // An approval that crashed after writing a lock event never got its goal.approved: regime 2 does not exist.
+    fx.ledger.append({
+      actor: "human:dev",
+      type: "metric.locked",
+      payload: { goal_id: "g-fast", metric_id: "m-p95", sha256: "f".repeat(64), regime: 2 },
+    });
+    const report = auditGoal(fx.location, "g-fast");
+    expect(report.problems).toEqual([]);
+    expect(report.state).toBe("approved");
   });
 
   it("treats a changed proposal as a regime change", () => {

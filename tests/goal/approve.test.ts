@@ -43,9 +43,13 @@ describe("approveGoal", () => {
     approveGoal(fx.location, "g-fast", "human:dev");
     const file = lockFile(fx.location.dir, "g-fast", "m-p95");
     writeFileSync(file, readFileSync(file, "utf8").replace("bench/p95.sh\"", "bench/other.sh\""));
-    expect(auditGoal(fx.location, "g-fast").problems).toEqual(["metric lock tampered: m-p95"]);
+    const broken = auditGoal(fx.location, "g-fast");
+    expect(broken.problems).toEqual(["metric lock tampered: m-p95"]);
+    expect(broken.state).toBe("tampered");
     expect(approveGoal(fx.location, "g-fast", "human:dev").created).toBe(true);
-    expect(auditGoal(fx.location, "g-fast").problems).toEqual([]);
+    const repaired = auditGoal(fx.location, "g-fast");
+    expect(repaired.problems).toEqual([]);
+    expect(repaired.state).toBe("approved");
   });
 
   it("refuses agents and a draft with problems, and writes nothing", () => {

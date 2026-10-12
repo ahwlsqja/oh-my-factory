@@ -111,11 +111,22 @@ export function proposeMetric(
   return proposal;
 }
 
-/** The sha256 the ledger last recorded for this goal's metric lock, or null. */
-export function lockedSha256(events: readonly LedgerEvent[], goalId: string, metricId: string): string | null {
+/**
+ * The sha256 the ledger last recorded for this goal's metric lock in `regime`, or null. Only events of that
+ * regime count: an event of a regime that was never approved (a crashed re-approval) must not vouch for
+ * or against the approved lock, and an older regime's hash must not vouch for a newer lock (spec §4.2).
+ * Within one regime the last event wins, because a retried approval writes the same regime again.
+ */
+export function lockedSha256(
+  events: readonly LedgerEvent[],
+  goalId: string,
+  metricId: string,
+  regime: number,
+): string | null {
   let sha: string | null = null;
   for (const event of events) {
     if (event.type !== "metric.locked" || event.payload.goal_id !== goalId || event.payload.metric_id !== metricId) continue;
+    if (event.payload.regime !== regime) continue;
     if (typeof event.payload.sha256 === "string") sha = event.payload.sha256;
   }
   return sha;

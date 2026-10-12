@@ -1,12 +1,13 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { canonicalize } from "../core/canonical-json.js";
 import { budgetState, declareBudget } from "../core/budget.js";
 import { Ledger, type LedgerEvent } from "../core/ledger.js";
+import { LockHeldError, withLockSync } from "../core/lock.js";
 import type { ProjectLocation } from "../core/paths.js";
 import { writePrivateFile } from "../core/private-fs.js";
 import { validate } from "../core/schema.js";
-import { type GoalSemantic, readGoal, referencedMetrics, semanticHash, semanticOf } from "./goal-file.js";
+import { type GoalSemantic, assertGoalId, readGoal, referencedMetrics, semanticHash, semanticOf } from "./goal-file.js";
 import { parseDuration } from "./duration.js";
 import { changedPathsSince, headCommit, matchWatched } from "./git.js";
 import { type MetricDefinition, definitionOf, metricSha256, readProposal, writeLock } from "./metrics.js";
@@ -156,11 +157,23 @@ function requireBudgetsUnchanged(
   }
 }
 
+/** How long a second approval of the same goal waits for the first one to finish. */
+const APPROVE_LOCK_WAIT_MS = 10_000;
+
+function approveLockFile(projectDir: string, goalId: string): string {
+  return join(projectDir, "vault", "metrics", goalId, "approve.lock");
+}
+
 /**
  * J1: locks the goal's semantic fields and every metric it refers to, as a new regime (spec §4.1,
  * §4.2). Lock files are written before their ledger events, and goal.approved comes last. A crash part
  * way leaves a lock that does not match the ledger, which audit reports and approving again repairs.
  * The rounds budget is declared on the first approval only; raising it later is a separate J8 decision.
+ *
+ * The whole approval runs under `vault/metrics/<goal>/approve.lock`. The regime is read once before the
+ * lock is taken and again after: if it moved, another approval finished while this one waited, so what
+ * the caller decided on is stale and nothing is written. Two racing approvals therefore never both write
+ * lock files, `metric.locked` events or a `goal.approved` for the same regime.
  */
 export function lockGoal(
   location: ProjectLocation,
@@ -170,8 +183,41 @@ export function lockGoal(
   expected?: ApprovalExpectation,
 ): GoalApproval {
   if (!actor.startsWith("human:")) throw new ApprovalError(`only a person approves a goal (J1); actor was ${actor}`);
+  assertGoalId(goalId);
   const ledger = new Ledger(location.dir, now);
+  const seen = latestApproval(ledger.readVerified(), goalId);
+  const lockPath = approveLockFile(location.dir, goalId);
+  mkdirSync(dirname(lockPath), { recursive: true, mode: 0o700 });
+  try {
+    return withLockSync(
+      lockPath,
+      () => lockGoalSerialized(location, ledger, goalId, actor, now, expected, seen),
+      APPROVE_LOCK_WAIT_MS,
+    );
+  } catch (err) {
+    if (err instanceof LockHeldError && err.path === lockPath) {
+      throw new ApprovalError(`another approval of ${goalId} is in progress; nothing was approved. Try again`);
+    }
+    throw err;
+  }
+}
+
+/** The body of lockGoal, run while this process holds the goal's approve.lock. `seen` is the approval before the wait. */
+function lockGoalSerialized(
+  location: ProjectLocation,
+  ledger: Ledger,
+  goalId: string,
+  actor: string,
+  now: () => Date,
+  expected: ApprovalExpectation | undefined,
+  seen: GoalApproval | null,
+): GoalApproval {
   const previous = latestApproval(ledger.readVerified(), goalId);
+  if ((previous?.regime ?? 0) !== (seen?.regime ?? 0)) {
+    throw new ApprovalError(
+      `another approval of ${goalId} ran concurrently; nothing was approved. Review the goal and approve again`,
+    );
+  }
   const goal = readGoal(location.dir, goalId);
   if (previous !== null) requireBudgetsUnchanged(location, ledger, goalId, goal.front.budget, previous);
   const metrics = referencedMetrics(goal.front);

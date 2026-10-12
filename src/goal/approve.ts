@@ -9,9 +9,9 @@ export interface ApproveResult {
 }
 
 /**
- * J1 (spec §4.1). Locks a new regime when the goal is a draft, when its locks do not verify, or when
- * there is a regime change. An approved goal with nothing changed is left alone, so approving twice
- * writes nothing.
+ * J1 (spec §4.1). Locks a new regime when the goal is a draft, when it is `tampered` (a lock does not
+ * verify; approving again repairs it), or when there is a regime change. An approved goal with nothing
+ * changed is left alone, so approving twice writes nothing.
  */
 export function approveGoal(
   location: ProjectLocation,

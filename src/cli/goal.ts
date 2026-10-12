@@ -16,6 +16,9 @@ function collect(value: string, previous: string[]): string[] {
   return [...previous, value];
 }
 
+/** `name@sha256:<digest>`: the only image form that cannot be re-pointed after J1 approved the metric. */
+const DIGEST_PINNED = /@sha256:[0-9a-f]{64}$/;
+
 function printList(title: string, items: readonly string[]): void {
   if (items.length === 0) return;
   console.log(`${title}:`);
@@ -27,6 +30,9 @@ function printAudit(report: AuditReport): void {
   console.log(`goal ${report.goal_id}: ${report.state.replace("needs_reapproval", "needs re-approval")}${regime}`);
   if (report.state === "draft" && report.problems.length === 0) {
     console.log(`ready for J1: run omf goal approve ${report.goal_id}`);
+  }
+  if (report.state === "tampered") {
+    console.log(`a lock does not match the ledger and measurement is stopped; run omf goal approve ${report.goal_id} to repair it`);
   }
   if (report.budget !== null) {
     console.log(`budget: ${report.budget.remaining} of ${report.budget.declared + report.budget.raised} rounds left`);
@@ -208,6 +214,11 @@ export function registerGoalCommands(program: Command): void {
       if (proposal.watched_paths.length === 0) {
         console.error(
           `warning: ${proposal.metric_id} watches no path, so a change to the code it runs is not a regime change; add --watch <glob>`,
+        );
+      }
+      if (proposal.image !== null && !DIGEST_PINNED.test(proposal.image)) {
+        console.error(
+          `warning: ${proposal.metric_id} image ${proposal.image} is not pinned by digest, so the tag can be re-pointed after approval without a regime change; use <name>@sha256:<digest>`,
         );
       }
     });

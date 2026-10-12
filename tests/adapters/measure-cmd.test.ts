@@ -66,6 +66,14 @@ describe("docker runner", () => {
     expect(isolationOf("host")).toBe("none");
   });
 
+  it("refuses an image that docker would read as an option or split into arguments", () => {
+    for (const image of ["-x", "--privileged", "a b", "a\tb", ""]) {
+      expect(() => dockerArgs(["sh", "bench.sh"], "/repo", image, "omf-measure-1")).toThrow(/invalid image/);
+    }
+    const pinned = `node@sha256:${"a".repeat(64)}`;
+    expect(dockerArgs(["sh", "bench.sh"], "/repo", pinned, "omf-measure-1").slice(-3)).toEqual([pinned, "sh", "bench.sh"]);
+  });
+
   it("needs an image", () => {
     const metric = { metric_id: "m-x", command: ["sh", "x.sh"], unit: "ms", watched_paths: [], image: null };
     expect(runMeasurement(metric, makeTempDir(), "docker")).toEqual({

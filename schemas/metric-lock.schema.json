@@ -24,7 +24,7 @@
     "command": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
     "unit": { "type": "string", "minLength": 1 },
     "watched_paths": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
-    "image": { "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
+    "image": { "anyOf": [{ "type": "string", "minLength": 1, "pattern": "^[^\\s-]\\S*$" }, { "type": "null" }] },
     "owner": { "type": "string", "pattern": "^human:\\S+$" },
     "approved_by": { "type": "string", "pattern": "^human:\\S+$" },
     "approved_at": { "type": "string", "minLength": 1 },
