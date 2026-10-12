@@ -510,6 +510,8 @@ handoff:
 
 **패키징** 은 oh-my-* 관례를 따른다. npm 패키지 `oh-my-factory` 하나, bin `omf` 하나, Node 22 이상, TypeScript, Apache-2.0 이다.
 
+v0.1 에서는 아래 `packages/*` 경계를 패키지 하나 안의 디렉터리(`src/core`, `src/goal`, `src/verify`, `src/adapters`, `src/cli`)로 둔다. 두 번째 사용처가 생길 때 워크스페이스 패키지로 나눈다.
+
 ```
 oh-my-factory/
   packages/core         state machine, ledger (hash chain), budgets, termination states, schema validation

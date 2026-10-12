@@ -689,6 +689,10 @@ written to trackers, only summaries and references.
 **Packaging** follows oh-my-* conventions: one npm package `oh-my-factory`, one bin `omf`, Node 22
 or later, TypeScript, Apache-2.0.
 
+In v0.1 the `packages/*` boundaries below are directories under one package (`src/core`,
+`src/goal`, `src/verify`, `src/adapters`, `src/cli`). They split into workspace packages only when a
+second consumer appears.
+
 ```
 oh-my-factory/
   packages/core         state machine, ledger (hash chain), budgets, termination states, schema validation
