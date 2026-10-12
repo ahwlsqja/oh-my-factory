@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { Ledger } from "../../src/core/ledger.js";
 import { approveGoal } from "../../src/goal/approve.js";
 import { auditGoal } from "../../src/goal/audit.js";
-import { lockFile, metricSha256, proposeMetric } from "../../src/goal/metrics.js";
+import { type MetricLock, lockFile, metricSha256, proposeMetric } from "../../src/goal/metrics.js";
 import { omf } from "../helpers/cli.js";
 import { setupGoal } from "../helpers/goal.js";
 import { commitAll } from "../helpers/tmp.js";
@@ -39,7 +39,7 @@ describe("E1 metric-tamper-stops", () => {
     const fx = setupGoal();
     approveGoal(fx.location, "g-fast", "human:dev");
     const file = lockFile(fx.location.dir, "g-fast", "m-p95");
-    const lock = JSON.parse(readFileSync(file, "utf8")) as Parameters<typeof metricSha256>[0];
+    const lock = JSON.parse(readFileSync(file, "utf8")) as MetricLock;
     lock.command = ["sh", "-c", "echo 1"];
     lock.sha256 = metricSha256(lock);
     writeFileSync(file, JSON.stringify(lock));
