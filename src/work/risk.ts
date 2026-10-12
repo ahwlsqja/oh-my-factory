@@ -56,7 +56,8 @@ const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
 function isClassifiable(raw: string, normalized: string): boolean {
   if (normalized === "" || normalized === ".") return false;
   if (raw.includes("\\") || CONTROL_CHARS.test(raw) || GLOB_CHARS.test(raw)) return false;
-  if (normalized.startsWith("/")) return false;
+  // normalizePath strips a leading "/", so an absolute path is detected on the raw text.
+  if (raw.startsWith("/")) return false;
   const segments = normalized.split("/");
   if (segments.includes("..")) return false;
   return segments[0]?.toLowerCase() !== ".git";
