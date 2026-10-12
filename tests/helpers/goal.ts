@@ -1,10 +1,15 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { declareBudget } from "../../src/core/budget.js";
 import { Ledger } from "../../src/core/ledger.js";
 import { type ProjectLocation, resolveProject } from "../../src/core/paths.js";
+import { writePrivateFile } from "../../src/core/private-fs.js";
 import { initProject } from "../../src/core/project.js";
-import { createGoal, goalTemplate } from "../../src/goal/goal-file.js";
-import { proposeMetric } from "../../src/goal/metrics.js";
+import { bandsFile } from "../../src/goal/bands.js";
+import { createGoal, goalTemplate, readGoal, referencedMetrics, semanticHash, semanticOf } from "../../src/goal/goal-file.js";
+import { headCommit } from "../../src/goal/git.js";
+import { goalLockFile } from "../../src/goal/goal-lock.js";
+import { definitionOf, metricSha256, proposeMetric, readProposal, writeLock } from "../../src/goal/metrics.js";
 import { commitAll, makeGitRepo, makeTempDir } from "./tmp.js";
 
 export interface GoalFixture {
@@ -55,4 +60,79 @@ export function setupGoal(options: { guardrails?: string[] } = {}): GoalFixture 
     "human:dev",
   );
   return { repo, home, env, location, ledger, goalFile };
+}
+
+/**
+ * Writes `goals/<goal>/bands/<metric>.yaml` with one 3 sigma tier and returns its path. A test edits the
+ * returned file to change the bands after approval.
+ */
+export function writeBands(fx: GoalFixture, metricId: string, action: "log" | "diagnose" | "propose" = "propose"): string {
+  const file = bandsFile(fx.location.dir, "g-fast", metricId);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(
+    file,
+    `metric: ${metricId}\nbaseline: rolling_30d\nrules: western_electric\ntiers:\n  3sigma: { action: ${action} }\n`,
+  );
+  return file;
+}
+
+/**
+ * Approves goal g-fast exactly as `lockGoal` did before M2b: the `goal.approved` event has no `bands_sha256`
+ * and no `wall_time`, and the goal lock has no `bands` map. Used to prove that such an approval still audits clean.
+ */
+export function approveLegacy(fx: GoalFixture): void {
+  const goal = readGoal(fx.location.dir, "g-fast");
+  const metrics = referencedMetrics(goal.front);
+  const approvedAt = new Date().toISOString();
+  for (const id of metrics) {
+    const proposal = readProposal(fx.location.dir, id)!;
+    const sha256 = metricSha256(proposal);
+    writeLock(fx.location.dir, {
+      schema_version: 1,
+      goal_id: "g-fast",
+      ...definitionOf(proposal),
+      owner: proposal.owner,
+      approved_by: "human:dev",
+      approved_at: approvedAt,
+      sha256,
+      regime: 1,
+    });
+    fx.ledger.append({ actor: "human:dev", type: "metric.locked", payload: { goal_id: "g-fast", metric_id: id, sha256, regime: 1 } });
+  }
+  const semantic = semanticOf(goal.front);
+  const semantic_sha256 = semanticHash(semantic);
+  const head_commit = headCommit(fx.repo);
+  const lock = {
+    schema_version: 1,
+    goal_id: "g-fast",
+    regime: 1,
+    semantic_sha256,
+    head_commit,
+    metrics,
+    approved_by: "human:dev",
+    approved_at: approvedAt,
+    semantic,
+  };
+  writePrivateFile(goalLockFile(fx.location.dir, "g-fast"), `${JSON.stringify(lock, null, 2)}\n`);
+  fx.ledger.append({
+    actor: "human:dev",
+    type: "goal.approved",
+    payload: { goal_id: "g-fast", regime: 1, semantic_sha256, head_commit, metrics },
+  });
+  declareBudget(fx.ledger, "g-fast", "rounds", goal.front.budget.rounds, "human:dev");
+}
+
+/** Appends the `goal.stale` event that the refresh stage (Task 10) writes, so audit tests need no tick. */
+export function markStale(fx: GoalFixture, tripped: string[] = ["age"]): void {
+  fx.ledger.append({
+    actor: "omf",
+    type: "goal.stale",
+    payload: {
+      goal_id: "g-fast",
+      tick_id: "t-20261012T000000Z-0001",
+      regime: 1,
+      tripped,
+      signals: { age_ms: 1_209_600_001, commits_since: null, target_move: null },
+    },
+  });
 }

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse } from "yaml";
+import { canonicalize, sha256Hex } from "../core/canonical-json.js";
 import { validate } from "../core/schema.js";
 import { goalDir } from "./goal-file.js";
 
@@ -92,4 +93,36 @@ export function detectBand(history: readonly number[], current: number): BandRes
     return { status: "breach", tier: "1sigma", rule: "eight points in a row on one side of the mean", mean, sigma };
   }
   return { status: "in_band", mean, sigma };
+}
+
+/** What J1 locks about bands: one hash per metric, `null` for a metric with no bands file, and the hash of that map. */
+export interface BandsLockInfo {
+  map: Record<string, string | null>;
+  sha256: string;
+}
+
+/** Hash of the parsed config, so a comment or key-order edit is not a change but a widened tier is. */
+export function bandsSha256(config: BandsConfig): string {
+  return sha256Hex(canonicalize(config));
+}
+
+/** The lock info for configs that were already read, so a screen can show and hash the same read. */
+export function bandsLockInfoOf(configs: Readonly<Record<string, BandsConfig | null>>): BandsLockInfo {
+  const map: Record<string, string | null> = {};
+  for (const id of Object.keys(configs).sort()) {
+    const config = configs[id];
+    map[id] = config === undefined || config === null ? null : bandsSha256(config);
+  }
+  return { map, sha256: sha256Hex(canonicalize(map)) };
+}
+
+/**
+ * Bands are part of the J1 lock (spec §4.1, §4.6): they decide what counts as a breach, so widening one
+ * after approval would silence a breach without a decision. Throws BandsError for an invalid file. A missing
+ * file hashes as null, so creating or deleting one is a change as well.
+ */
+export function bandsLockInfo(projectDir: string, goalId: string, metricIds: readonly string[]): BandsLockInfo {
+  const configs: Record<string, BandsConfig | null> = {};
+  for (const id of metricIds) configs[id] = readBands(projectDir, goalId, id);
+  return bandsLockInfoOf(configs);
 }

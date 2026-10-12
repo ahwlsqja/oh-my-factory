@@ -71,6 +71,8 @@ function pastValues(events: readonly LedgerEvent[], goalId: string, metricId: st
     const { payload } = event;
     if (event.type !== "metric.measured" || payload.goal_id !== goalId || payload.metric_id !== metricId) continue;
     if (payload.regime !== regime || Date.parse(event.ts) < sinceMs || typeof payload.value !== "number") continue;
+    // Measured while a regime change was pending: not an approved reading, so it is no baseline (carried item 12).
+    if (payload.needs_reapproval === true) continue;
     values.push(payload.value);
   }
   return values;
@@ -81,6 +83,21 @@ function guardrailStatus(entry: MetricMeasurement | undefined): GuardrailStatus 
     return "unevaluated";
   }
   return entry.band.status === "breach" ? "breach" : "pass";
+}
+
+/** What `goal.measured` records about the guardrails; the success check (spec §4.5) reads only this. */
+export type GuardrailsAggregate = "pass" | "breach" | "unevaluated" | "none";
+
+/**
+ * Precedence breach > unevaluated > pass > none. `none` is only a goal that declares no guardrails. A guardrail
+ * whose metric has no bands file is permanently `unevaluated`, so it can never be read as `pass`: not having
+ * been judged is not the same as having passed (D9a).
+ */
+export function aggregateGuardrails(guardrails: readonly { status: GuardrailStatus }[]): GuardrailsAggregate {
+  if (guardrails.length === 0) return "none";
+  if (guardrails.some((g) => g.status === "breach")) return "breach";
+  if (guardrails.some((g) => g.status === "unevaluated")) return "unevaluated";
+  return "pass";
 }
 
 const TIER_ORDER: readonly Tier[] = ["3sigma", "2sigma", "1sigma"];
@@ -123,13 +140,13 @@ function stop(ledger: Ledger, goalId: string, reasons: string[]): never {
  * One measurement pass (spec §4.4 steps 1 to 3): audit, run every locked metric, evaluate the gap to
  * the locked target and the bands, and write a host-only gap report. An unapproved goal or a lock that
  * does not verify stops before anything runs (E1). A regime change is recorded and labeled, and
- * measurement continues.
+ * measurement continues. Metrics run one after another, each in its own process group (spec §4.2).
  */
-export function measureGoal(
+export async function measureGoal(
   location: ProjectLocation,
   goalId: string,
   options: MeasureOptions,
-): { report: GapReport; file: string } {
+): Promise<{ report: GapReport; file: string }> {
   const now = options.now ?? ((): Date => new Date());
   const ledger = new Ledger(location.dir, now);
   const audit = auditGoal(location, goalId, now());
@@ -164,7 +181,7 @@ export function measureGoal(
       band: null,
       band_action: null,
     };
-    const outcome = runMeasurement(lock, location.repo, options.runner, options.env);
+    const outcome = await runMeasurement(lock, location.repo, options.runner, options.env);
     if (!outcome.ok) {
       entry.failure = outcome.reason;
       ledger.append({
@@ -242,6 +259,7 @@ export function measureGoal(
       // Not a verdict while a regime change is pending: consumers must not count it as met.
       target_met: pending ? null : (report.target.result?.met ?? null),
       needs_reapproval: pending,
+      guardrails: aggregateGuardrails(report.guardrails),
     },
   });
   return { report, file };

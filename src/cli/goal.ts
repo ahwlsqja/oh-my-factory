@@ -1,4 +1,3 @@
-import { createInterface } from "node:readline/promises";
 import type { Command } from "commander";
 import { humanActor } from "../core/actor.js";
 import { Ledger } from "../core/ledger.js";
@@ -6,15 +5,20 @@ import type { ProjectLocation } from "../core/paths.js";
 import { requireProject } from "../core/project.js";
 import { approveGoal } from "../goal/approve.js";
 import { type AuditReport, auditGoal } from "../goal/audit.js";
+import { type BandsConfig, bandsLockInfoOf, readBands } from "../goal/bands.js";
 import { createGoal, readGoal, referencedMetrics, semanticHash } from "../goal/goal-file.js";
 import { diffStat } from "../goal/git.js";
 import type { ApprovalExpectation } from "../goal/goal-lock.js";
 import { type GapReport, measureGoal } from "../goal/measure.js";
 import { metricSha256, proposeMetric, readProposal } from "../goal/metrics.js";
+import { confirmByTyping, requireTerminal } from "./confirm.js";
 
 function collect(value: string, previous: string[]): string[] {
   return [...previous, value];
 }
+
+/** `name@sha256:<digest>`: the only image form that cannot be re-pointed after J1 approved the metric. */
+const DIGEST_PINNED = /@sha256:[0-9a-f]{64}$/;
 
 function printList(title: string, items: readonly string[]): void {
   if (items.length === 0) return;
@@ -28,6 +32,9 @@ function printAudit(report: AuditReport): void {
   if (report.state === "draft" && report.problems.length === 0) {
     console.log(`ready for J1: run omf goal approve ${report.goal_id}`);
   }
+  if (report.state === "tampered") {
+    console.log(`a lock does not match the ledger and measurement is stopped; run omf goal approve ${report.goal_id} to repair it`);
+  }
   if (report.budget !== null) {
     console.log(`budget: ${report.budget.remaining} of ${report.budget.declared + report.budget.raised} rounds left`);
   }
@@ -38,9 +45,21 @@ function printAudit(report: AuditReport): void {
 
 const listOrNone = (items: readonly string[]): string => (items.length === 0 ? "none" : items.join(", "));
 
+const BAND_TIERS = ["3sigma", "2sigma", "1sigma"] as const;
+
+/** One line per metric on the approval screen: the baseline and what each tier does, or that nothing is watched. */
+function describeBands(config: BandsConfig | null): string {
+  if (config === null) return "none (not monitored)";
+  const tiers = BAND_TIERS.flatMap((tier) => {
+    const entry = config.tiers[tier];
+    return entry === undefined ? [] : [`${tier} -> ${entry.action}`];
+  });
+  return `baseline ${config.baseline}; ${tiers.join(", ")}`;
+}
+
 /**
  * What the person approves, shown before the prompt: why approval is needed (problems and regime changes,
- * with the diff of watched paths), the locked fields and every metric command. `expected` holds the
+ * with the diff of watched paths), the locked fields, every metric command and the bands of every metric. `expected` holds the
  * hashes of what was shown; approveGoal refuses if either changed by the time the person confirms.
  */
 export function approvalScreen(
@@ -78,7 +97,17 @@ export function approvalScreen(
     const image = proposal.image === null ? "" : `; image ${proposal.image}`;
     out(`metric ${id}: ${JSON.stringify(proposal.command)} -> ${proposal.unit}; watches ${listOrNone(proposal.watched_paths)}${image}`);
   }
-  return { lines, expected: { semantic_sha256: semanticHash(front), metrics } };
+  // Bands are locked with the goal (spec §4.6). The configs are read once, so the hash is of what is shown.
+  const configs: Record<string, BandsConfig | null> = {};
+  for (const id of referencedMetrics(front)) {
+    configs[id] = readBands(status.dir, goalId, id);
+    out(`bands ${id}: ${describeBands(configs[id] ?? null)}`);
+  }
+  if (audit.approval !== null && audit.approval.bands_sha256 === null) {
+    out("bands not locked (approved before M2b): a change to a bands file is not a regime change until you approve again");
+  }
+  const bands = bandsLockInfoOf(configs);
+  return { lines, expected: { semantic_sha256: semanticHash(front), metrics, bands_sha256: bands.sha256 } };
 }
 
 function printGap(report: GapReport, file: string): void {
@@ -144,16 +173,11 @@ export function registerGoalCommands(program: Command): void {
     .action(async (goalId: string) => {
       const status = requireProject(process.cwd());
       // No silent approval (spec §6.2): without a terminal there is nobody to confirm.
-      if (!process.stdin.isTTY || !process.stdout.isTTY) {
-        throw new Error("J1 approval needs an interactive terminal; nothing was approved");
-      }
+      requireTerminal("J1 approval", "nothing was approved");
       const actor = humanActor(status.repo);
       const screen = approvalScreen(status, goalId);
       for (const line of screen.lines) console.log(line);
-      const prompt = createInterface({ input: process.stdin, output: process.stdout });
-      const answer = (await prompt.question(`Type ${goalId} to approve as ${actor}: `)).trim();
-      prompt.close();
-      if (answer !== goalId) {
+      if (!(await confirmByTyping(goalId, `Type ${goalId} to approve as ${actor}: `))) {
         console.error("not approved");
         process.exitCode = 1;
         return;
@@ -172,12 +196,12 @@ export function registerGoalCommands(program: Command): void {
     .option("--runner <runner>", "docker (isolated) or host (no isolation)", "docker")
     .option("--json", "print the gap report as JSON")
     .description("audit the goal, run its locked metrics, and write a gap report to host state")
-    .action((goalId: string, options: { runner: string; json?: boolean }) => {
+    .action(async (goalId: string, options: { runner: string; json?: boolean }) => {
       if (options.runner !== "docker" && options.runner !== "host") {
         throw new Error(`unknown runner ${options.runner}; use docker or host`);
       }
       const status = requireProject(process.cwd());
-      const { report, file } = measureGoal(status, goalId, { runner: options.runner });
+      const { report, file } = await measureGoal(status, goalId, { runner: options.runner });
       if (options.json) console.log(JSON.stringify(report, null, 2));
       else printGap(report, file);
       if (report.isolation === "none") console.error("warning: measured on the host without isolation (--runner host)");
@@ -208,6 +232,11 @@ export function registerGoalCommands(program: Command): void {
       if (proposal.watched_paths.length === 0) {
         console.error(
           `warning: ${proposal.metric_id} watches no path, so a change to the code it runs is not a regime change; add --watch <glob>`,
+        );
+      }
+      if (proposal.image !== null && !DIGEST_PINNED.test(proposal.image)) {
+        console.error(
+          `warning: ${proposal.metric_id} image ${proposal.image} is not pinned by digest, so the tag can be re-pointed after approval without a regime change; use <name>@sha256:<digest>`,
         );
       }
     });

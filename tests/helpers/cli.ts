@@ -18,18 +18,27 @@ function isInheritedLocation(key: string): boolean {
 }
 
 /**
- * Environment for a CLI run with HOME pointed at `home`. Inherited locations (see `isInheritedLocation`)
- * are stripped first. `extraEnv` is merged last so a test can set PATH or an agent config dir, but it may
- * not set HOME, OMF_HOME or GIT_*: those are fixed by the harness.
+ * Credentials and vendor settings a CLI run must never inherit: no test may reach a real model, and an
+ * inherited key would let a misconfigured adapter spend money (spec §7, M2b D8).
  */
-function harnessEnv(home: string, extraEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+function isCredential(key: string): boolean {
+  return key.endsWith("_API_KEY") || key.startsWith("ANTHROPIC_") || key.startsWith("OPENAI_");
+}
+
+/**
+ * Environment for a CLI run with HOME pointed at `home`. Inherited locations (see `isInheritedLocation`)
+ * and credentials (see `isCredential`) are stripped first. `extraEnv` is merged last so a test can set PATH,
+ * an agent config dir or a fixture key, but it may not set HOME, OMF_HOME or GIT_*: those are fixed by the
+ * harness.
+ */
+export function harnessEnv(home: string, extraEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   for (const key of Object.keys(extraEnv)) {
     if (key === "HOME" || key === "OMF_HOME" || key.startsWith("GIT_")) {
       throw new Error(`omf(): extraEnv may not set ${key}; the harness fixes it`);
     }
   }
   const env: NodeJS.ProcessEnv = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !isInheritedLocation(key)),
+    Object.entries(process.env).filter(([key]) => !isInheritedLocation(key) && !isCredential(key)),
   );
   env.HOME = home;
   Object.assign(env, extraEnv);

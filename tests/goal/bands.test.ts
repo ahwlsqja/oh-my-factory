@@ -1,7 +1,15 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { describe, expect, it } from "vitest";
-import { BandsError, bandsFile, baselineWindowMs, detectBand, readBands } from "../../src/goal/bands.js";
+import {
+  BandsError,
+  bandsFile,
+  bandsLockInfo,
+  bandsLockInfoOf,
+  baselineWindowMs,
+  detectBand,
+  readBands,
+} from "../../src/goal/bands.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
 /** 20 points alternating 12, 8, ...: mean 10, sigma 2, ending on 8 (below the mean). */
@@ -87,5 +95,59 @@ describe("bands files", () => {
     expect(() => readBands(dir, "g-a", "m-errors")).toThrow(/is for metric m-other/);
     write(dir, "m-errors", "metric: m-errors\nbaseline: rolling_30d\nrules: western_electric\ntiers:\n  1sigma: { action: deploy }\n");
     expect(() => readBands(dir, "g-a", "m-errors")).toThrow(BandsError);
+  });
+});
+
+describe("bandsLockInfo", () => {
+  const write = (dir: string, metricId: string, text: string): void => {
+    const file = bandsFile(dir, "g-fast", metricId);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, text);
+  };
+  const plain = (metricId: string, action = "propose"): string =>
+    `metric: ${metricId}\nbaseline: rolling_30d\nrules: western_electric\ntiers:\n  3sigma: { action: ${action} }\n`;
+
+  it("hashes the parsed config per metric and uses null where there is no file", () => {
+    const dir = makeTempDir();
+    write(dir, "m-errors", plain("m-errors"));
+    const info = bandsLockInfo(dir, "g-fast", ["m-p95", "m-errors"]);
+    expect(Object.keys(info.map).sort()).toEqual(["m-errors", "m-p95"]);
+    expect(info.map["m-p95"]).toBeNull();
+    expect(info.map["m-errors"]).toMatch(/^[0-9a-f]{64}$/);
+    expect(info.sha256).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("ignores comments, key order and metric order, and sees a changed tier", () => {
+    const dir = makeTempDir();
+    write(dir, "m-errors", plain("m-errors"));
+    const first = bandsLockInfo(dir, "g-fast", ["m-p95", "m-errors"]);
+    write(
+      dir,
+      "m-errors",
+      "# widened later? no, only reformatted\ntiers:\n  3sigma:\n    action: propose\nrules: western_electric\nbaseline: rolling_30d\nmetric: m-errors\n",
+    );
+    expect(bandsLockInfo(dir, "g-fast", ["m-errors", "m-p95"])).toEqual(first);
+    write(dir, "m-errors", plain("m-errors", "log"));
+    expect(bandsLockInfo(dir, "g-fast", ["m-p95", "m-errors"]).sha256).not.toBe(first.sha256);
+  });
+
+  it("changes when a file is created", () => {
+    const dir = makeTempDir();
+    const none = bandsLockInfo(dir, "g-fast", ["m-errors"]);
+    write(dir, "m-errors", plain("m-errors"));
+    const created = bandsLockInfo(dir, "g-fast", ["m-errors"]);
+    expect(created.sha256).not.toBe(none.sha256);
+    expect(created.map["m-errors"]).not.toBeNull();
+  });
+
+  it("throws BandsError for a file that is not valid bands", () => {
+    const dir = makeTempDir();
+    write(dir, "m-errors", "metric: [\n");
+    expect(() => bandsLockInfo(dir, "g-fast", ["m-errors"])).toThrow(BandsError);
+  });
+
+  it("bandsLockInfoOf hashes configs already read, independent of key order", () => {
+    expect(bandsLockInfoOf({ "m-b": null, "m-a": null })).toEqual(bandsLockInfoOf({ "m-a": null, "m-b": null }));
+    expect(bandsLockInfoOf({ "m-a": null }).map).toEqual({ "m-a": null });
   });
 });

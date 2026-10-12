@@ -20,3 +20,24 @@ export function validate(name: string, data: unknown): Validation {
   }
   return fn(data) ? { ok: true } : { ok: false, errors: ajv.errorsText(fn.errors) };
 }
+
+/**
+ * Validates `data` against one definition inside a schema file, for example `candidate` in
+ * `reconcile-output.schema.json` (`#/$defs/candidate`). A file that holds an envelope and the shape of its
+ * items needs both checks, and the second one runs once per item so that one bad item does not void the others.
+ */
+export function validateDef(name: string, def: string, data: unknown): Validation {
+  const key = `${name}#/$defs/${def}`;
+  let fn = compiled.get(key);
+  if (!fn) {
+    const schema = JSON.parse(readFileSync(schemaUrl(name), "utf8")) as { $defs?: Record<string, unknown> };
+    if (schema.$defs?.[def] === undefined) throw new Error(`${name} has no definition ${def}`);
+    fn = ajv.compile({
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $defs: schema.$defs,
+      $ref: `#/$defs/${def}`,
+    });
+    compiled.set(key, fn);
+  }
+  return fn(data) ? { ok: true } : { ok: false, errors: ajv.errorsText(fn.errors) };
+}

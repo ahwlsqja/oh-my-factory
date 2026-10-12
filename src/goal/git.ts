@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, rmSync, statSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import picomatch from "picomatch";
@@ -21,7 +21,13 @@ function git(repo: string, args: string[]): string {
       stdio: ["ignore", "pipe", "pipe"],
     }).trim();
     const index = join(scratch, "index");
-    if (existsSync(realIndex)) copyFileSync(realIndex, index);
+    if (existsSync(realIndex)) {
+      // The copy keeps the real index's timestamps: git trusts cached stat data for entries older than the
+      // index file, so a fresh mtime would hide a same-size edit made in the second of the last index write.
+      const stat = statSync(realIndex);
+      copyFileSync(realIndex, index);
+      utimesSync(index, stat.atime, stat.mtime);
+    }
     return execFileSync("git", args, {
       cwd: repo,
       encoding: "utf8",
@@ -43,6 +49,22 @@ function nulSeparated(text: string): string[] {
 
 export function headCommit(repo: string): string {
   return git(repo, ["rev-parse", "HEAD"]).trim();
+}
+
+/**
+ * Tracked files only (`git ls-files`), sorted. Untracked and ignored files are not listed: the risk class
+ * expands a declared directory through this list, and a file git does not track is not part of the project (spec §4.4).
+ */
+export function trackedFiles(repo: string): string[] {
+  return nulSeparated(git(repo, ["ls-files", "-z"])).sort();
+}
+
+/**
+ * Commits on the first-parent line from `commit` (exclusive) to HEAD, so a merged branch counts once, as the
+ * merge commit. Throws like the other helpers when `commit` is no longer in the repository.
+ */
+export function commitsSince(repo: string, commit: string): number {
+  return Number.parseInt(git(repo, ["rev-list", "--count", "--first-parent", `${commit}..HEAD`]).trim(), 10);
 }
 
 /**

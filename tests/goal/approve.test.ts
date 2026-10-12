@@ -4,9 +4,11 @@ import { describe, expect, it } from "vitest";
 import { Ledger } from "../../src/core/ledger.js";
 import { approveGoal } from "../../src/goal/approve.js";
 import { auditGoal } from "../../src/goal/audit.js";
+import { bandsLockInfo } from "../../src/goal/bands.js";
 import { semanticHash, readGoal } from "../../src/goal/goal-file.js";
+import { goalLockFile } from "../../src/goal/goal-lock.js";
 import { lockFile, metricSha256, proposeMetric, readProposal } from "../../src/goal/metrics.js";
-import { setupGoal } from "../helpers/goal.js";
+import { markStale, setupGoal, writeBands } from "../helpers/goal.js";
 import { commitAll } from "../helpers/tmp.js";
 
 const count = (dir: string, type: string): number => new Ledger(dir).readVerified().filter((e) => e.type === type).length;
@@ -43,9 +45,13 @@ describe("approveGoal", () => {
     approveGoal(fx.location, "g-fast", "human:dev");
     const file = lockFile(fx.location.dir, "g-fast", "m-p95");
     writeFileSync(file, readFileSync(file, "utf8").replace("bench/p95.sh\"", "bench/other.sh\""));
-    expect(auditGoal(fx.location, "g-fast").problems).toEqual(["metric lock tampered: m-p95"]);
+    const broken = auditGoal(fx.location, "g-fast");
+    expect(broken.problems).toEqual(["metric lock tampered: m-p95"]);
+    expect(broken.state).toBe("tampered");
     expect(approveGoal(fx.location, "g-fast", "human:dev").created).toBe(true);
-    expect(auditGoal(fx.location, "g-fast").problems).toEqual([]);
+    const repaired = auditGoal(fx.location, "g-fast");
+    expect(repaired.problems).toEqual([]);
+    expect(repaired.state).toBe("approved");
   });
 
   it("refuses agents and a draft with problems, and writes nothing", () => {
@@ -78,5 +84,48 @@ describe("approveGoal", () => {
 
     writeFileSync(fx.goalFile, readFileSync(fx.goalFile, "utf8").replace("value: 250", "value: 400"));
     expect(() => approveGoal(fx.location, "g-fast", "human:dev", undefined, expected)).toThrow(/changed after it was shown/);
+  });
+
+  it("re-approves a goal marked stale as the next regime even though nothing in it changed", () => {
+    const fx = setupGoal();
+    approveGoal(fx.location, "g-fast", "human:dev");
+    markStale(fx);
+    expect(auditGoal(fx.location, "g-fast").state).toBe("needs_reapproval");
+    const result = approveGoal(fx.location, "g-fast", "human:dev");
+    expect(result).toMatchObject({ created: true, approval: { regime: 2 } });
+    expect(auditGoal(fx.location, "g-fast")).toMatchObject({ state: "approved", regime_changes: [] });
+    expect(count(fx.location.dir, "budget.declared")).toBe(1);
+  });
+
+  it("starts the next regime after a bands file changed, and repairs a tampered bands lock", () => {
+    const fx = setupGoal();
+    const file = writeBands(fx, "m-errors");
+    approveGoal(fx.location, "g-fast", "human:dev");
+    writeFileSync(file, readFileSync(file, "utf8").replace("propose", "log"));
+    expect(approveGoal(fx.location, "g-fast", "human:dev")).toMatchObject({ created: true, approval: { regime: 2 } });
+
+    const lockPath = goalLockFile(fx.location.dir, "g-fast");
+    const lock = JSON.parse(readFileSync(lockPath, "utf8")) as { bands: Record<string, string | null> };
+    lock.bands["m-errors"] = "a".repeat(64);
+    writeFileSync(lockPath, JSON.stringify(lock));
+    expect(auditGoal(fx.location, "g-fast").state).toBe("tampered");
+    expect(approveGoal(fx.location, "g-fast", "human:dev").created).toBe(true);
+    expect(auditGoal(fx.location, "g-fast")).toMatchObject({ state: "approved", problems: [] });
+  });
+
+  it("refuses when a bands file changed after it was shown, and writes nothing", () => {
+    const fx = setupGoal();
+    const expected = {
+      semantic_sha256: semanticHash(readGoal(fx.location.dir, "g-fast").front),
+      metrics: {
+        "m-p95": metricSha256(readProposal(fx.location.dir, "m-p95")!),
+        "m-errors": metricSha256(readProposal(fx.location.dir, "m-errors")!),
+      },
+      bands_sha256: bandsLockInfo(fx.location.dir, "g-fast", ["m-p95", "m-errors"]).sha256,
+    };
+    writeBands(fx, "m-errors");
+    const before = new Ledger(fx.location.dir).readVerified().length;
+    expect(() => approveGoal(fx.location, "g-fast", "human:dev", undefined, expected)).toThrow(/changed after it was shown/);
+    expect(new Ledger(fx.location.dir).readVerified()).toHaveLength(before);
   });
 });

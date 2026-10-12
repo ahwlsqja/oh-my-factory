@@ -11,7 +11,7 @@ describe("omf CLI", () => {
   it("lists its commands", () => {
     const out = omf(["--help"], makeTempDir(), makeTempDir());
     expect(out.code).toBe(0);
-    for (const command of ["init", "doctor", "ledger"]) expect(out.stdout).toContain(command);
+    for (const command of ["init", "doctor", "ledger", "budget"]) expect(out.stdout).toContain(command);
   });
 
   it("prints the package version", () => {

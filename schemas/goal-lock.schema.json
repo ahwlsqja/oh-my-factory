@@ -28,6 +28,11 @@
     },
     "approved_by": { "type": "string", "pattern": "^human:\\S+$" },
     "approved_at": { "type": "string", "minLength": 1 },
-    "semantic": { "type": "object" }
+    "semantic": { "type": "object" },
+    "bands": {
+      "type": "object",
+      "propertyNames": { "pattern": "^m-[a-z0-9]+(-[a-z0-9]+)*$" },
+      "additionalProperties": { "anyOf": [{ "type": "string", "pattern": "^[0-9a-f]{64}$" }, { "type": "null" }] }
+    }
   }
 }

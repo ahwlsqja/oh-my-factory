@@ -1,0 +1,129 @@
+import { spawn, spawnSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { liveGroupCount, runProcessGroup } from "../../src/adapters/process-group.js";
+import { waitDead, waitForPids } from "../helpers/process.js";
+import { makeTempDir } from "../helpers/tmp.js";
+
+const options = (overrides: Partial<Parameters<typeof runProcessGroup>[1]> = {}): Parameters<typeof runProcessGroup>[1] => ({
+  cwd: makeTempDir(),
+  env: { PATH: process.env.PATH },
+  timeoutMs: 10_000,
+  maxOutputBytes: 1024 * 1024,
+  ...overrides,
+});
+
+// The shell backgrounds a long sleep, records "<shell pid> <sleep pid>", then either hangs or prints and exits.
+const BACKGROUND_THEN_HANG = 'sleep 30 & echo "$$ $!" > "$1"; wait';
+const BACKGROUND_THEN_EXIT = 'sleep 30 & echo "$$ $!" > "$1"; echo 5';
+
+describe("runProcessGroup", () => {
+  it("returns exit status, stdout and stderr", async () => {
+    const result = await runProcessGroup(["sh", "-c", "echo out; echo err >&2; exit 3"], options());
+    expect(result).toEqual({ kind: "exited", status: 3, signal: null, stdout: "out\n", stderr: "err\n" });
+  });
+
+  it("delivers stdin", async () => {
+    const result = await runProcessGroup(["cat"], options({ stdin: "hello" }));
+    expect(result).toMatchObject({ kind: "exited", status: 0, stdout: "hello" });
+  });
+
+  it("uses the given environment verbatim", async () => {
+    const result = await runProcessGroup(["sh", "-c", 'echo "$MARK:${HOME-unset}"'], options({ env: { PATH: process.env.PATH, MARK: "1" } }));
+    expect(result).toMatchObject({ kind: "exited", stdout: "1:unset\n" });
+  });
+
+  it("reports a missing program as an error, not a crash", async () => {
+    const result = await runProcessGroup(["omf-no-such-program-xyz"], options());
+    expect(result).toMatchObject({ kind: "error", code: "ENOENT" });
+    expect(liveGroupCount()).toBe(0);
+  });
+
+  it("reports an empty argv as an error", async () => {
+    expect(await runProcessGroup([], options())).toEqual({ kind: "error", code: null, message: "empty command" });
+  });
+
+  it("stops a command that prints more than the limit", async () => {
+    const result = await runProcessGroup(["yes", "x"], options({ maxOutputBytes: 1000 }));
+    expect(result.kind).toBe("output_limit");
+    if (result.kind === "output_limit") expect(result.stdout.length).toBeLessThanOrEqual(1000);
+  });
+
+  it("kills the whole group on timeout, including a background child", async () => {
+    const pidFile = join(makeTempDir(), "pids");
+    const result = await runProcessGroup(["sh", "-c", BACKGROUND_THEN_HANG, "sh", pidFile], options({ timeoutMs: 500 }));
+    expect(result.kind).toBe("timeout");
+    const [shell, background] = await waitForPids(pidFile);
+    expect(await waitDead(shell as number)).toBe(true);
+    expect(await waitDead(background as number)).toBe(true);
+    expect(liveGroupCount()).toBe(0);
+  });
+
+  it("leaves no orphan when the command exits but a background child keeps running", async () => {
+    const pidFile = join(makeTempDir(), "pids");
+    const result = await runProcessGroup(["sh", "-c", BACKGROUND_THEN_EXIT, "sh", pidFile], options());
+    expect(result).toMatchObject({ kind: "exited", status: 0, stdout: "5\n" });
+    const [, background] = await waitForPids(pidFile);
+    expect(await waitDead(background as number)).toBe(true);
+  });
+
+  it("counts a live group while it runs and none afterwards", async () => {
+    const running = runProcessGroup(["sh", "-c", "sleep 0.2"], options());
+    expect(liveGroupCount()).toBe(1);
+    await running;
+    expect(liveGroupCount()).toBe(0);
+  });
+});
+
+// The child is a separate node process that imports the built module, so a signal can be sent to it.
+const DIST_URL = new URL("../../dist/adapters/process-group.js", import.meta.url).href;
+const CHILD_SCRIPT = `
+const [distUrl, pidFile, mode] = process.argv.slice(2);
+const { runProcessGroup, liveGroupCount } = await import(distUrl);
+const opts = { cwd: process.cwd(), env: process.env, timeoutMs: 120000, maxOutputBytes: 1024 };
+const counts = () => ({ sigint: process.listenerCount("SIGINT"), sigterm: process.listenerCount("SIGTERM"), exit: process.listenerCount("exit") });
+if (mode === "hang") {
+  void runProcessGroup(["sh", "-c", ${JSON.stringify(BACKGROUND_THEN_HANG)}, "sh", pidFile], opts);
+} else {
+  const before = counts();
+  await runProcessGroup(["sh", "-c", "exit 0"], opts);
+  await runProcessGroup(["sh", "-c", "exit 0"], opts);
+  console.log(JSON.stringify({ before, after: counts(), live: liveGroupCount() }));
+}
+`;
+
+function childScript(): string {
+  const file = join(makeTempDir(), "child.mjs");
+  writeFileSync(file, CHILD_SCRIPT);
+  return file;
+}
+
+describe("runProcessGroup signal cleanup", () => {
+  it("installs its handlers once, however many commands run", () => {
+    const result = spawnSync(process.execPath, [childScript(), DIST_URL, "", "once"], { encoding: "utf8", cwd: makeTempDir() });
+    expect(result.status).toBe(0);
+    const seen = JSON.parse(result.stdout) as {
+      before: Record<string, number>;
+      after: Record<string, number>;
+      live: number;
+    };
+    expect(seen.after.sigint).toBe((seen.before.sigint as number) + 1);
+    expect(seen.after.sigterm).toBe((seen.before.sigterm as number) + 1);
+    expect(seen.after.exit).toBe((seen.before.exit as number) + 1);
+    expect(seen.live).toBe(0);
+  });
+
+  it.each(["SIGTERM", "SIGINT"] as const)("a %s to the process kills the running group and keeps the signal status", async (signal) => {
+    const pidFile = join(makeTempDir(), "pids");
+    const child = spawn(process.execPath, [childScript(), DIST_URL, pidFile, "hang"], { stdio: "ignore", cwd: makeTempDir() });
+    const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+      child.once("exit", (code, sig) => resolve({ code, signal: sig }));
+    });
+    const [shell, background] = await waitForPids(pidFile);
+    child.kill(signal);
+    expect(await exited).toEqual({ code: null, signal });
+    expect(await waitDead(shell as number)).toBe(true);
+    expect(await waitDead(background as number)).toBe(true);
+  });
+});
