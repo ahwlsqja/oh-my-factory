@@ -150,6 +150,7 @@ export class Ledger {
    * Appends the event that `build` returns. `build` sees the verified events while the ledger lock is
    * held, so a decision that depends on the ledger (budgets, claims) cannot race another writer.
    * If `build` throws, nothing is written.
+   * `build` must not call `append` or `appendWith` on this ledger: the lock is not reentrant, so the inner call would wait for the outer one and time out.
    */
   appendWith(build: (events: LedgerEvent[]) => NewEvent): LedgerEvent {
     return withLockSync(this.lockFile, () => {
