@@ -32,6 +32,17 @@ describe("classifyRisk default rules", () => {
     expect(classifyRisk(input([".GitHub/Workflows/"])).rules).toEqual(["ci"]);
   });
 
+  it("expands a declared directory case-insensitively over tracked files", () => {
+    const tracked = ["src/auth/login.ts", "bench/p95.sh"];
+    expect(classifyRisk(input(["SRC"], { tracked })).rules).toEqual(["auth"]);
+    expect(classifyRisk(input(["Src/"], { tracked })).class).toBe("high");
+    expect(classifyRisk(input(["BENCH"], { tracked, watchedGlobs: ["bench/p95.sh"] })).rules).toEqual(["watched-path"]);
+  });
+
+  it("rejects a declared path with a .git segment anywhere", () => {
+    expect(classifyRisk(input(["src/.git/config"])).rules).toEqual(["unclassifiable"]);
+  });
+
   it("collects every rule that fires, sorted, and the paths that fired", () => {
     expect(classifyRisk(input(["src/render/button.ts", "tests/a.test.ts", "db/migrations/001.sql", "tests/a.test.ts"]))).toEqual({
       class: "high",

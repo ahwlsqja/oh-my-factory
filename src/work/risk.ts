@@ -60,7 +60,7 @@ function isClassifiable(raw: string, normalized: string): boolean {
   if (raw.startsWith("/")) return false;
   const segments = normalized.split("/");
   if (segments.includes("..")) return false;
-  return segments[0]?.toLowerCase() !== ".git";
+  return !segments.some((segment) => segment.toLowerCase() === ".git");
 }
 
 /**
@@ -88,7 +88,8 @@ export function classifyRisk(input: RiskInput): RiskAssessment {
       found.add("unclassifiable");
       continue;
     }
-    const below = input.tracked.filter((file) => file.startsWith(`${path}/`));
+    const lower = path.toLowerCase();
+    const below = input.tracked.filter((file) => file.toLowerCase().startsWith(`${lower}/`));
     const candidates = [path, `${path}/_`, ...below];
     for (const { rule, matches } of rules) {
       if (candidates.some((candidate) => matches(candidate))) {
