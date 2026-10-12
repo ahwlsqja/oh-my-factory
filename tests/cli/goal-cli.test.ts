@@ -150,6 +150,13 @@ describe("omf goal approve", () => {
     expect(result.stderr).toContain("J1 approval needs an interactive terminal; nothing was approved");
     expect(new Ledger(fx.location.dir).readVerified().some((e) => e.type === "goal.approved")).toBe(false);
   });
+
+  it("checks for a terminal before it reads the goal, so a missing goal does not change the message", () => {
+    const { repo, home } = initialized();
+    const result = omf(["goal", "approve", "g-nope"], repo, home);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("J1 approval needs an interactive terminal; nothing was approved");
+  });
 });
 
 describe("omf goal measure", () => {

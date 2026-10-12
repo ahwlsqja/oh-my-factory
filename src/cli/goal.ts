@@ -1,4 +1,3 @@
-import { createInterface } from "node:readline/promises";
 import type { Command } from "commander";
 import { humanActor } from "../core/actor.js";
 import { Ledger } from "../core/ledger.js";
@@ -12,6 +11,7 @@ import { diffStat } from "../goal/git.js";
 import type { ApprovalExpectation } from "../goal/goal-lock.js";
 import { type GapReport, measureGoal } from "../goal/measure.js";
 import { metricSha256, proposeMetric, readProposal } from "../goal/metrics.js";
+import { confirmByTyping, requireTerminal } from "./confirm.js";
 
 function collect(value: string, previous: string[]): string[] {
   return [...previous, value];
@@ -173,16 +173,11 @@ export function registerGoalCommands(program: Command): void {
     .action(async (goalId: string) => {
       const status = requireProject(process.cwd());
       // No silent approval (spec §6.2): without a terminal there is nobody to confirm.
-      if (!process.stdin.isTTY || !process.stdout.isTTY) {
-        throw new Error("J1 approval needs an interactive terminal; nothing was approved");
-      }
+      requireTerminal("J1 approval", "nothing was approved");
       const actor = humanActor(status.repo);
       const screen = approvalScreen(status, goalId);
       for (const line of screen.lines) console.log(line);
-      const prompt = createInterface({ input: process.stdin, output: process.stdout });
-      const answer = (await prompt.question(`Type ${goalId} to approve as ${actor}: `)).trim();
-      prompt.close();
-      if (answer !== goalId) {
+      if (!(await confirmByTyping(goalId, `Type ${goalId} to approve as ${actor}: `))) {
         console.error("not approved");
         process.exitCode = 1;
         return;
