@@ -34,9 +34,9 @@ export interface ProjectStatus extends ProjectLocation {
 
 /** Reads the project's ledger once and decides whether the project is initialized. Writes nothing. */
 export function readProjectStatus(location: ProjectLocation): ProjectStatus {
-  const file = join(location.dir, "ledger.jsonl");
-  if (!existsSync(file)) return { ...location, ledger: null, initialized: false };
-  const { result, events } = new Ledger(location.dir).inspect();
+  const ledger = new Ledger(location.dir);
+  if (!existsSync(ledger.file)) return { ...location, ledger: null, initialized: false };
+  const { result, events } = ledger.inspect();
   return { ...location, ledger: result, initialized: result.ok && isInitialized(events) };
 }
 

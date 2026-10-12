@@ -92,3 +92,11 @@ describe("omf ledger verify on a ledger that holds no project.initialized", () =
     expect(out.stderr).toContain("project not initialized; run omf init");
   });
 });
+
+describe("omf() harness guard", () => {
+  it.each([["HOME"], ["OMF_HOME"], ["GIT_DIR"], ["GIT_WORK_TREE"]])("throws when extraEnv sets %s", (key) => {
+    expect(() => omf(["--help"], makeTempDir(), makeTempDir(), { [key]: "/x" })).toThrow(
+      `omf(): extraEnv may not set ${key}; the harness fixes it`,
+    );
+  });
+});

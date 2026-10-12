@@ -131,11 +131,13 @@ describe("case-insensitive repository paths", () => {
   const swapCase = (text: string): string =>
     [...text].map((c) => (c === c.toLowerCase() ? c.toUpperCase() : c.toLowerCase())).join("");
 
-  it("treats a repository path given in another letter case as the same repository", () => {
+  // Decided once at collection time: on a case-sensitive filesystem the test is reported as skipped.
+  const probe = makeTempDir("omf-case-");
+  const caseInsensitiveFs = existsSync(join(dirname(probe), swapCase(basename(probe))));
+
+  it.skipIf(!caseInsensitiveFs)("treats a repository path given in another letter case as the same repository", () => {
     const repo = makeGitRepo();
     const variant = join(dirname(repo), swapCase(basename(repo)));
-    // A case-sensitive filesystem has no such path: the comparison it tests cannot occur there.
-    if (!existsSync(variant)) return;
     const home = makeTempDir("omf-home-");
     expect(() => projectDir(repo, { HOME: home, OMF_HOME: join(variant, ".omf") })).toThrow(/must live outside the repository/);
     expect(repoToplevel(variant)).toBe(repoToplevel(repo));

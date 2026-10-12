@@ -7,14 +7,14 @@ function realUtility(name: string): string {
   return execFileSync("sh", ["-c", `command -v ${name}`], { encoding: "utf8" }).trim();
 }
 
+/** Appends the probe's HOME to homes.log beside the stub, so a test can see where each probe ran. */
+const LOG_HOME = 'printf "%s\\n" "$HOME" >> "${0%/*}/homes.log"';
+
 /**
  * Shell body that writes where a real agent CLI writes even for `--version`: under $HOME, under
  * CODEX_HOME / CLAUDE_CONFIG_DIR when set, and ~/.claude.json. Spec §11 rule 1 forbids any of it
  * reaching the caller's home.
  */
-/** Appends the probe's HOME to homes.log beside the stub, so a test can see where each probe ran. */
-const LOG_HOME = 'printf "%s\\n" "$HOME" >> "${0%/*}/homes.log"';
-
 const POLLUTE =
   'mkdir -p "$HOME/.codex/tmp" "${CODEX_HOME:-$HOME/.codex}" "$HOME/.claude" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" ' +
   '&& touch "$HOME/.codex/tmp/x" "${CODEX_HOME:-$HOME/.codex}/y" "$HOME/.claude/x" ' +
