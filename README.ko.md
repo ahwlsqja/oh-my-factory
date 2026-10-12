@@ -20,9 +20,9 @@
 </p>
 
 > [!WARNING]
-> **프리알파 단계입니다.** 지금은 기초만 들어 있습니다. 호스트 상태, 변조를 알아채는 원장,
-> 초기화되지 않는 예산, 그리고 명령 세 개(`omf init`, `omf doctor`, `omf ledger verify`)입니다.
-> 아래에 설명하는 목표 루프와 검증 라인은 설계만 끝났고 아직 만들지 않았습니다.
+> **프리알파 단계입니다.** 지금은 기초(호스트 상태, 변조를 알아채는 원장, 초기화되지 않는 예산)와
+> 목표를 정의하고 승인하고 측정하는 부분(J1 잠금, 목표값까지의 차이, 관리 한계)이 들어 있습니다.
+> 격차를 일로 바꾸는 부분(`omf goal tick`)과 검증 라인은 설계만 끝났고 아직 만들지 않았습니다.
 > [지금 되는 것](#지금-되는-것)을 보세요.
 
 ---
@@ -211,11 +211,18 @@ OMF 는 모든 것을 저장소 밖에, 프로젝트마다 폴더 하나로 둡�
 
 ```
 ~/.omf/projects/<project-id>/
-  ledger.jsonl        추가만 되는, 해시 체인으로 묶인 이벤트 기록
-  config.toml         역할과 격리 수준
-  preflight.json      마지막 점검 보고서
-  vault/              봉인 자료 (지금은 비어 있음)
-  runs/  worktrees/   다음 단계용
+  ledger.jsonl            추가만 되는, 해시 체인으로 묶인 이벤트 기록
+  config.toml             역할과 격리 수준
+  preflight.json          마지막 점검 보고서
+  goals/<goal-id>/
+    goal.md               목표: 목적, 목표값, 예산
+    bands/<metric>.yaml   관리 한계 (아직 잠기지 않음)
+    reports/              격차 보고서, <stamp>-gap.json
+  vault/
+    metrics/proposed/     지표 제안, <metric>.json
+    metrics/<goal-id>/    J1 잠금: <metric>.lock.json, goal.lock.json
+    scenarios/            봉인 시나리오 (M3 전까지 비어 있음)
+  runs/  worktrees/       다음 단계용
 ```
 
 다른 위치를 쓰려면 `OMF_HOME` 을 지정하세요. OMF 는 상태를 저장소 안이나 `~/.claude`, `~/.codex`

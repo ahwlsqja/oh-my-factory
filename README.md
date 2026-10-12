@@ -20,10 +20,10 @@
 </p>
 
 > [!WARNING]
-> **Pre-alpha.** Today oh-my-factory ships its foundation only: host state, a tamper-evident
-> ledger, budgets that never reset, and three commands (`omf init`, `omf doctor`,
-> `omf ledger verify`). The goal loop and the verification line described below are designed but
-> not built yet. See [What works today](#what-works-today).
+> **Pre-alpha.** Today oh-my-factory ships its foundation (host state, a tamper-evident ledger,
+> budgets that never reset) plus defining, approving and measuring goals: J1 locks, the gap to
+> the target and control bands. Turning the gap into work (`omf goal tick`) and the verification
+> line are designed but not built yet. See [What works today](#what-works-today).
 
 ---
 
@@ -213,11 +213,18 @@ OMF keeps everything outside your repository, one directory per project:
 
 ```
 ~/.omf/projects/<project-id>/
-  ledger.jsonl        append-only, hash-chained event log
-  config.toml         roles and isolation level
-  preflight.json      the last doctor report
-  vault/              sealed material (empty for now)
-  runs/  worktrees/   reserved for later stages
+  ledger.jsonl            append-only, hash-chained event log
+  config.toml             roles and isolation level
+  preflight.json          the last doctor report
+  goals/<goal-id>/
+    goal.md               the goal: objective, target, budgets
+    bands/<metric>.yaml   control bands (not locked yet)
+    reports/              gap reports, <stamp>-gap.json
+  vault/
+    metrics/proposed/     metric proposals, <metric>.json
+    metrics/<goal-id>/    J1 locks: <metric>.lock.json, goal.lock.json
+    scenarios/            sealed scenarios (empty until M3)
+  runs/  worktrees/       reserved for later stages
 ```
 
 Set `OMF_HOME` to use another location. OMF refuses to keep state inside the repository or inside
