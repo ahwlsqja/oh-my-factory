@@ -20,6 +20,44 @@ describe("canonicalize", () => {
     expect(() => canonicalize(undefined)).toThrow(TypeError);
     expect(() => canonicalize([1, undefined])).toThrow(TypeError);
   });
+
+  it("rejects Date, Map and class instances", () => {
+    class Point {
+      constructor(public x: number) {}
+    }
+    expect(() => canonicalize(new Date(0))).toThrow(TypeError);
+    expect(() => canonicalize(new Map([["a", 1]]))).toThrow(TypeError);
+    expect(() => canonicalize(new Point(1))).toThrow(TypeError);
+  });
+
+  it("rejects function, symbol and bigint values inside an object", () => {
+    expect(() => canonicalize({ f: () => 1 })).toThrow(TypeError);
+    expect(() => canonicalize({ s: Symbol("x") })).toThrow(TypeError);
+    expect(() => canonicalize({ n: BigInt(1) })).toThrow(TypeError);
+  });
+
+  it("rejects a sparse array", () => {
+    const sparse = [1, 2, 3];
+    delete sparse[1];
+    expect(() => canonicalize(sparse)).toThrow(TypeError);
+  });
+
+  it("canonicalizes -0 as 0", () => {
+    expect(canonicalize(-0)).toBe("0");
+  });
+
+  it("sorts non-ASCII keys by UTF-16 code unit", () => {
+    expect(canonicalize({ "é": 1, z: 2, a: 3 })).toBe('{"a":3,"z":2,"é":1}');
+  });
+
+  it("round-trips through JSON.parse(JSON.stringify(...))", () => {
+    const x = { b: [1, { d: "ü", c: null }], a: true };
+    expect(canonicalize(JSON.parse(JSON.stringify(x)))).toBe(canonicalize(x));
+  });
+
+  it("accepts objects without a prototype", () => {
+    expect(canonicalize(Object.assign(Object.create(null), { b: 1, a: 2 }))).toBe('{"a":2,"b":1}');
+  });
 });
 
 describe("sha256Hex", () => {
