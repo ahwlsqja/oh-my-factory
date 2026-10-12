@@ -2,7 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { budgetState } from "../../src/core/budget.js";
+import { budgetState, declareBudget } from "../../src/core/budget.js";
 import { Ledger } from "../../src/core/ledger.js";
 import { bandsLockInfo } from "../../src/goal/bands.js";
 import { semanticHash } from "../../src/goal/goal-file.js";
@@ -81,6 +81,13 @@ describe("lockGoal", () => {
     writeFileSync(fx.goalFile, readFileSync(fx.goalFile, "utf8").replace(/rounds: 10\b/, "rounds: 20"));
     expect(() => lockGoal(fx.location, "g-fast", "human:dev")).toThrow(/rounds.*J8/);
     expect(budgetState(fx.ledger, "g-fast", "rounds")?.remaining).toBe(10);
+  });
+
+  it("refuses a first approval when rounds were declared before J1 and differ from goal.md", () => {
+    const fx = setupGoal();
+    declareBudget(fx.ledger, "g-fast", "rounds", 1000, "human:dev");
+    expect(() => lockGoal(fx.location, "g-fast", "human:dev")).toThrow(/rounds.*J8/);
+    expect(latestApproval(fx.ledger.readVerified(), "g-fast")).toBeNull();
   });
 
   it("refuses re-approval while goal.md changes the wall time", () => {

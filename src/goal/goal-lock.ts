@@ -150,17 +150,11 @@ function requireShown(
 }
 
 /**
- * Re-approval does not move the budgets: rounds are enforced from the ledger and wall time from the first
+ * Approval does not move the budgets: rounds are enforced from the ledger and wall time from the first
  * approval, and raising either is a J8 decision. Refusing here keeps what the person sees at approval equal
  * to what is enforced.
  */
-function requireBudgetsUnchanged(
-  location: ProjectLocation,
-  ledger: Ledger,
-  goalId: string,
-  budget: { rounds: number; wall_time: string },
-  previous: GoalApproval,
-): void {
+function requireRoundsMatch(ledger: Ledger, goalId: string, budget: { rounds: number }): void {
   const state = budgetState(ledger, goalId, "rounds");
   if (state !== null && budget.rounds !== state.declared + state.raised) {
     throw new ApprovalError(
@@ -168,6 +162,14 @@ function requireBudgetsUnchanged(
         "Restore goal.md, or raise the budget as a separate J8 decision",
     );
   }
+}
+
+function requireWallTimeUnchanged(
+  location: ProjectLocation,
+  goalId: string,
+  budget: { wall_time: string },
+  previous: GoalApproval,
+): void {
   // The ledger records the approved wall time (D26); only a pre-M2b approval falls back to the lock file.
   const approved = previous.wall_time ?? lockedWallTime(location, goalId, previous);
   if (approved !== null && parseDuration(budget.wall_time) !== parseDuration(approved)) {
@@ -252,7 +254,9 @@ function lockGoalSerialized(
     );
   }
   const goal = readGoal(location.dir, goalId);
-  if (previous !== null) requireBudgetsUnchanged(location, ledger, goalId, goal.front.budget, previous);
+  // Rounds are checked on every approval: a budget declared before J1 must equal what goal.md shows.
+  requireRoundsMatch(ledger, goalId, goal.front.budget);
+  if (previous !== null) requireWallTimeUnchanged(location, goalId, goal.front.budget, previous);
   const metrics = referencedMetrics(goal.front);
   const proposals = metrics.map((id) => {
     const proposal = readProposal(location.dir, id);
