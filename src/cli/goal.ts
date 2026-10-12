@@ -205,5 +205,10 @@ export function registerGoalCommands(program: Command): void {
         owner,
       );
       console.log(`proposed ${proposal.metric_id} as ${owner}`);
+      if (proposal.watched_paths.length === 0) {
+        console.error(
+          `warning: ${proposal.metric_id} watches no path, so a change to the code it runs is not a regime change; add --watch <glob>`,
+        );
+      }
     });
 }

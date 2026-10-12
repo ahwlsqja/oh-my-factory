@@ -97,7 +97,8 @@ or **designed** and not built yet.
 - **Budgets never reset.** *Enforced today.* A restart does not refill a budget, and only a person
   can raise one.
 - **Metric code cannot change quietly.** *Enforced today.* A metric is measured only after you approve it,
-  an edited lock stops measurement, and a change to the metric's code or to the goal needs a new approval.
+  an edited lock stops measurement, and a change to the metric's command, to a path it watches (`--watch`), or to
+  the goal needs a new approval. Limits are listed under "Define and measure a goal".
 - **Goals over tasks.** *Partly built.* Work is derived from the gap between a measured value and a
   target. Goals, locks and measurement work today; turning the gap into work is next.
 - **Holdout, not homework.** *Designed.* Acceptance scenarios are sealed, written by the other
@@ -193,6 +194,18 @@ target m-demo: 7 ms; target <= 5 ms; gap 2 (decrease, medium)
 report: ~/.omf/projects/3186047891f1f0a0/goals/g-demo/reports/2026-10-12T06-27-24-995Z-gap.json
 warning: measured on the host without isolation (--runner host)
 ```
+
+Re-approval first shows why it is needed: lock problems, the regime changes, and the diff of any changed
+watched path. If the goal or a metric changes while you read it, nothing is approved. Re-approval never changes
+the budgets: if `goal.md` differs from the rounds or wall time already in force, `omf goal approve` refuses, and
+raising either is a separate decision (J8).
+
+Known limits of "metric code cannot change quietly":
+
+- Only the metric's command and the paths you declare with `--watch` are covered. `omf metric propose` warns when
+  you give none. Files a metric reads but does not watch, and gitignored inputs, can change without a new approval.
+- `bands.yaml` is not locked yet, so editing it changes guardrail verdicts without a new approval.
+- A container image tag is mutable; pin an image digest to pin the image.
 
 ## Where state lives
 

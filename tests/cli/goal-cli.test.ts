@@ -61,6 +61,16 @@ describe("omf metric propose", () => {
     });
   });
 
+  it("warns when no path is watched, because its code can then change without a new approval", () => {
+    const { repo, home } = initialized();
+    gitIn(repo, "config", "user.email", "dev@example.com");
+    const bare = omf(["metric", "propose", "m-p95", "--unit", "ms", "--", "sh", "bench/p95.sh"], repo, home);
+    expect(bare.code).toBe(0);
+    expect(bare.stderr).toContain("warning: m-p95 watches no path");
+    const watched = omf(["metric", "propose", "m-p95", "--unit", "ms", "--watch", "bench/**", "--", "sh", "bench/p95.sh"], repo, home);
+    expect(watched.stderr).not.toContain("warning");
+  });
+
   it("refuses when git user.email is not set", () => {
     const { repo, home } = initialized();
     const result = omf(["metric", "propose", "m-p95", "--unit", "ms", "--", "sh", "bench/p95.sh"], repo, home);
