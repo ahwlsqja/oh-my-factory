@@ -7,3 +7,11 @@ Status: pre-alpha. The design is in `docs/design/2026-10-12-omf-v0-design.md`
 (Korean: `docs/ko/design/`). Implementation plans are in `docs/plans/`.
 
 License: Apache-2.0.
+
+## Usage (M1)
+
+    npm install
+    npm run build
+    node dist/cli/main.js init          # host state under ~/.omf; nothing written to the repo
+    node dist/cli/main.js doctor        # tools, repo, ledger, isolation -> preflight.json
+    node dist/cli/main.js ledger verify # hash-chain check
