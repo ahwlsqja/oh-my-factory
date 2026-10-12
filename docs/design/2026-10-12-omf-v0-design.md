@@ -656,8 +656,8 @@ Ledger envelope:
   "actor": "omf | human:<id> | agent:<vendor>", "type": "<event type>", "payload": {} }
 ```
 
-`hash` is the SHA-256 of the event's canonical JSON (keys sorted, no whitespace) without the `hash`
-field. The first event's `prev_hash` is 64 zeros.
+`hash` is the SHA-256 of the event's canonical JSON (keys sorted by UTF-16 code unit, the order RFC
+8785 uses; no whitespace) without the `hash` field. The first event's `prev_hash` is 64 zeros.
 
 Every command verifies the chain before acting. If the chain is broken, OMF stops. Human signatures
 in v0.1 are `human:<git user.email>` plus an interactive TTY confirmation. This is not
@@ -671,9 +671,11 @@ corruption.
 
 **Limits.** The chain detects edits to recorded events. It does not detect events removed from the
 end of the file, or a full rewrite with consistent hashes. So it protects against accidents and
-against processes that cannot write to `~/.omf`, not against someone who can. In particular,
-budgets (E3) survive restarts but not a truncated ledger. Keeping agents away from host state is
-the job of isolation (§7).
+against processes that cannot write to `~/.omf`, not against someone who can. In particular, budgets
+(E3) survive restarts but not a truncated ledger. Keeping agents away from host state is the job of
+isolation (§7). The project is identified by the real path of the checkout's main working tree, so
+moving or renaming the checkout starts a new project with fresh state and fresh budgets. OMF keeps
+its directories at 0700 and its files at 0600, but it follows symlinks planted inside `~/.omf`.
 
 **Trackers.** Each artifact has exactly one source of truth. This follows the playbook's
 legacy-coexistence rule: the repo is the source, a legacy system is the source, or the two are
@@ -757,7 +759,9 @@ These rules are enforced by `tests/enforcement`.
 
 1. OMF only reads the user's `AGENTS.md`, `CLAUDE.md`, `.claude/`, `~/.claude` and `~/.codex`.
    Shells prefer `--plugin-dir` injection. Marketplace installation is opt-in and labeled "writes
-   user scope".
+   user scope". OMF refuses to keep its own state inside the repository or inside the agent CLIs'
+   config homes (`~/.claude`, `~/.codex`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`). `omf doctor` runs the
+   agent CLIs with a throwaway home, because they write caches even for `--version`.
 2. OMF never auto-commits to user branches and never merges. Candidates live on local `omf/*`
    branches in OMF-owned worktrees. Push and PR creation happen only through `omf ship`.
 3. Public artifacts (`goal.md`, `intent.md`, `spec.md`, `plan.md`) are written into the OMF
