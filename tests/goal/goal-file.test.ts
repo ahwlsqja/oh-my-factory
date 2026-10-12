@@ -3,6 +3,7 @@ import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   GoalFileError,
+  SEMANTIC_FIELDS,
   createGoal,
   goalTemplate,
   parseGoal,
@@ -33,6 +34,25 @@ describe("goal.md", () => {
     expect(semanticHash(reworded)).toBe(base);
     expect(semanticHash({ ...front, target: { ...front.target, value: 5 } })).not.toBe(base);
     expect(semanticHash({ ...front, guardrails: ["m-errors"] })).not.toBe(base);
+  });
+
+  it("changes the hash when any locked field changes", () => {
+    const front = parseGoal(goalTemplate("g-a")).front;
+    const base = semanticHash(front);
+    const changed = {
+      target: { ...front.target, operator: ">=" as const },
+      leading: ["m-cache-hits"],
+      lagging: ["m-other"],
+      link_hypothesis: "a different hypothesis",
+      guardrails: ["m-errors"],
+      prereg: { ...front.prereg, metrics_judged: 2 },
+      mode: "watch" as const,
+      budget: { ...front.budget, rounds: 11 },
+    };
+    expect(Object.keys(changed).sort()).toEqual([...SEMANTIC_FIELDS].sort());
+    for (const field of SEMANTIC_FIELDS) {
+      expect(semanticHash({ ...front, [field]: changed[field] }), field).not.toBe(base);
+    }
   });
 
   it("lists every referenced metric once, target first", () => {

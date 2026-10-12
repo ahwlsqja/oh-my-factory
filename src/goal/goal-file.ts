@@ -100,8 +100,7 @@ export function readGoal(projectDir: string, goalId: string): GoalDoc {
 }
 
 export function semanticOf(source: GoalSemantic): GoalSemantic {
-  const { target, leading, lagging, link_hypothesis, guardrails, prereg, mode, budget } = source;
-  return { target, leading, lagging, link_hypothesis, guardrails, prereg, mode, budget };
+  return Object.fromEntries(SEMANTIC_FIELDS.map((field) => [field, source[field]])) as GoalSemantic;
 }
 
 /** The hash J1 locks: canonical JSON of the semantic fields only. */
