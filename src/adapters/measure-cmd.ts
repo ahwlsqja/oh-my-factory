@@ -1,9 +1,9 @@
-import { type SpawnSyncReturns, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { MetricDefinition } from "../goal/metrics.js";
+import { type ProcessResult, runProcessGroup } from "./process-group.js";
 
 export type RunnerKind = "docker" | "host";
 export type Isolation = "container" | "none";
@@ -34,39 +34,42 @@ export function parseMeasurement(stdout: string): MeasureOutcome {
   return { ok: true, value };
 }
 
-function outcomeOf(result: SpawnSyncReturns<string>): MeasureOutcome {
-  if (result.error !== undefined) {
-    const code = (result.error as NodeJS.ErrnoException).code;
-    return { ok: false, reason: code === "ETIMEDOUT" ? "timed out" : `could not run: ${result.error.message}` };
+function outcomeOf(result: ProcessResult): MeasureOutcome {
+  switch (result.kind) {
+    case "error":
+      return { ok: false, reason: `could not run: ${result.message}` };
+    case "timeout":
+      return { ok: false, reason: "timed out" };
+    case "output_limit":
+      return { ok: false, reason: `output exceeded ${MAX_OUTPUT_BYTES} bytes` };
+    case "exited":
+      if (result.status !== 0) {
+        return { ok: false, reason: result.status === null ? `killed by ${result.signal ?? "a signal"}` : `exit code ${result.status}` };
+      }
+      return parseMeasurement(result.stdout);
   }
-  if (result.status !== 0) {
-    return { ok: false, reason: result.status === null ? `killed by ${result.signal ?? "a signal"}` : `exit code ${result.status}` };
-  }
-  return parseMeasurement(result.stdout);
 }
 
 /**
  * Runs the command on the host, without isolation; callers label the result "none". The child gets only
  * PATH, a throwaway HOME and TMPDIR, and the C locale, so credentials in the caller's environment do not
- * reach it.
+ * reach it. It runs in its own process group and the whole group is killed when the command ends, so a
+ * background process it started does not outlive the measurement.
  */
-export function runOnHost(
+export async function runOnHost(
   command: readonly string[],
   cwd: string,
   env: NodeJS.ProcessEnv = process.env,
   timeoutMs = MEASURE_TIMEOUT_MS,
-): MeasureOutcome {
-  const [program, ...args] = command;
-  if (program === undefined) return { ok: false, reason: "empty command" };
+): Promise<MeasureOutcome> {
+  if (command.length === 0) return { ok: false, reason: "empty command" };
   const scratch = mkdtempSync(join(tmpdir(), "omf-measure-"));
   try {
-    const result = spawnSync(program, args, {
+    const result = await runProcessGroup(command, {
       cwd,
-      encoding: "utf8",
-      timeout: timeoutMs,
-      killSignal: "SIGKILL",
-      maxBuffer: MAX_OUTPUT_BYTES,
       env: { PATH: env.PATH ?? "/usr/bin:/bin", HOME: scratch, TMPDIR: scratch, LC_ALL: "C" },
+      timeoutMs,
+      maxOutputBytes: MAX_OUTPUT_BYTES,
     });
     return outcomeOf(result);
   } finally {
@@ -114,32 +117,33 @@ export function dockerArgs(command: readonly string[], repo: string, image: stri
   ];
 }
 
-export function runInDocker(
+export async function runInDocker(
   command: readonly string[],
   repo: string,
   image: string,
   env: NodeJS.ProcessEnv = process.env,
   timeoutMs = MEASURE_TIMEOUT_MS,
-): MeasureOutcome {
+): Promise<MeasureOutcome> {
   const name = `omf-measure-${randomUUID().slice(0, 8)}`;
-  const result = spawnSync("docker", dockerArgs(command, repo, image, name), {
-    encoding: "utf8",
-    timeout: timeoutMs,
-    killSignal: "SIGKILL",
-    maxBuffer: MAX_OUTPUT_BYTES,
+  const result = await runProcessGroup(["docker", ...dockerArgs(command, repo, image, name)], {
+    cwd: repo,
     env,
+    timeoutMs,
+    maxOutputBytes: MAX_OUTPUT_BYTES,
   });
   // Killing the docker client does not stop the container, so remove it by name.
-  if (result.error !== undefined) spawnSync("docker", ["rm", "--force", name], { stdio: "ignore", env, timeout: 30_000 });
+  if (result.kind !== "exited") {
+    await runProcessGroup(["docker", "rm", "--force", name], { cwd: repo, env, timeoutMs: 30_000, maxOutputBytes: MAX_OUTPUT_BYTES });
+  }
   return outcomeOf(result);
 }
 
-export function runMeasurement(
+export async function runMeasurement(
   metric: MetricDefinition,
   repo: string,
   runner: RunnerKind,
   env: NodeJS.ProcessEnv = process.env,
-): MeasureOutcome {
+): Promise<MeasureOutcome> {
   if (runner === "host") return runOnHost(metric.command, repo, env);
   if (metric.image === null) {
     return { ok: false, reason: `metric ${metric.metric_id} has no image; propose it with --image or measure with --runner host` };

@@ -178,12 +178,12 @@ export function registerGoalCommands(program: Command): void {
     .option("--runner <runner>", "docker (isolated) or host (no isolation)", "docker")
     .option("--json", "print the gap report as JSON")
     .description("audit the goal, run its locked metrics, and write a gap report to host state")
-    .action((goalId: string, options: { runner: string; json?: boolean }) => {
+    .action(async (goalId: string, options: { runner: string; json?: boolean }) => {
       if (options.runner !== "docker" && options.runner !== "host") {
         throw new Error(`unknown runner ${options.runner}; use docker or host`);
       }
       const status = requireProject(process.cwd());
-      const { report, file } = measureGoal(status, goalId, { runner: options.runner });
+      const { report, file } = await measureGoal(status, goalId, { runner: options.runner });
       if (options.json) console.log(JSON.stringify(report, null, 2));
       else printGap(report, file);
       if (report.isolation === "none") console.error("warning: measured on the host without isolation (--runner host)");

@@ -123,13 +123,13 @@ function stop(ledger: Ledger, goalId: string, reasons: string[]): never {
  * One measurement pass (spec §4.4 steps 1 to 3): audit, run every locked metric, evaluate the gap to
  * the locked target and the bands, and write a host-only gap report. An unapproved goal or a lock that
  * does not verify stops before anything runs (E1). A regime change is recorded and labeled, and
- * measurement continues.
+ * measurement continues. Metrics run one after another, each in its own process group (spec §4.2).
  */
-export function measureGoal(
+export async function measureGoal(
   location: ProjectLocation,
   goalId: string,
   options: MeasureOptions,
-): { report: GapReport; file: string } {
+): Promise<{ report: GapReport; file: string }> {
   const now = options.now ?? ((): Date => new Date());
   const ledger = new Ledger(location.dir, now);
   const audit = auditGoal(location, goalId, now());
@@ -164,7 +164,7 @@ export function measureGoal(
       band: null,
       band_action: null,
     };
-    const outcome = runMeasurement(lock, location.repo, options.runner, options.env);
+    const outcome = await runMeasurement(lock, location.repo, options.runner, options.env);
     if (!outcome.ok) {
       entry.failure = outcome.reason;
       ledger.append({
