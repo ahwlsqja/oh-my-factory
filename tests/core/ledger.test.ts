@@ -70,6 +70,28 @@ describe("Ledger", () => {
     expect(ledger.verify()).toEqual({ ok: true, count: 0, head: GENESIS_HASH });
   });
 
+  it("inspect returns the verification result and the events it covered", () => {
+    const ledger = newLedger();
+    ledger.append({ actor: "omf", type: "project.initialized", payload: {} });
+    ledger.append({ actor: "omf", type: "project.touched", payload: {} });
+    const { result, events } = ledger.inspect();
+    expect(result).toEqual(ledger.verify());
+    expect(result).toMatchObject({ ok: true, count: 2 });
+    expect(events).toEqual(ledger.readVerified());
+    expect(events).toHaveLength(2);
+  });
+
+  it("inspect returns no events when the chain is broken", () => {
+    const ledger = newLedger();
+    ledger.append({ actor: "omf", type: "project.initialized", payload: { a: 1 } });
+    rewriteLine(ledger, 0, (event) => {
+      event.payload = { a: 2 };
+    });
+    const { result, events } = ledger.inspect();
+    expect(result).toEqual({ ok: false, seq: 1, reason: "hash mismatch" });
+    expect(events).toEqual([]);
+  });
+
   it("readVerified throws on a corrupt ledger", () => {
     const ledger = newLedger();
     ledger.append({ actor: "omf", type: "project.initialized", payload: { a: 1 } });
@@ -190,7 +212,7 @@ describe("Ledger", () => {
       return { actor: "omf", type: "project.touched", payload: { seen: events.length } };
     });
     expect(seen).toEqual([0, 1]);
-    expect(ledger.readAll().map((event) => event.payload)).toEqual([{ seen: 0 }, { seen: 1 }]);
+    expect(ledger.readVerified().map((event) => event.payload)).toEqual([{ seen: 0 }, { seen: 1 }]);
   });
 
   it("appendWith writes nothing when build throws", () => {

@@ -124,21 +124,27 @@ export class Ledger {
     return { headBytes, events, tornTail: tail, missingNewline: false };
   }
 
-  /** Raw read without verification. Prefer readVerified. */
-  readAll(): LedgerEvent[] {
-    return this.snapshot().events;
-  }
-
-  verify(): VerifyResult {
+  /** Verification result plus the events it covered (empty when the chain is broken). Reads the file once. */
+  inspect(): { result: VerifyResult; events: LedgerEvent[] } {
     let snap: Snapshot;
     try {
       snap = this.snapshot();
     } catch (err) {
-      if (err instanceof LedgerCorruptError) return { ok: false, seq: err.seq, reason: err.reason };
+      if (err instanceof LedgerCorruptError) {
+        return { result: { ok: false, seq: err.seq, reason: err.reason }, events: [] };
+      }
       throw err;
     }
     const result = verifyEvents(snap.events);
-    return result.ok && snap.tornTail !== null ? { ...result, tornTail: true } : result;
+    if (!result.ok) return { result, events: [] };
+    return {
+      result: snap.tornTail !== null ? { ...result, tornTail: true } : result,
+      events: snap.events,
+    };
+  }
+
+  verify(): VerifyResult {
+    return this.inspect().result;
   }
 
   /** Every command reads through here, so a broken chain stops the command. Reads the file once. */
