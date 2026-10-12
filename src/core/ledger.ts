@@ -114,11 +114,14 @@ export class Ledger {
     const bytes = readFileSync(this.file);
     const headBytes = bytes.lastIndexOf(0x0a) + 1;
     const head = bytes.subarray(0, headBytes).toString("utf8");
-    const events = head.length === 0 ? [] : head.slice(0, -1).split("\n").map((line, index) => parseLine(line, index + 1));
+    const lines = head.length === 0 ? [] : head.slice(0, -1).split("\n");
+    const events = lines.map((line, index) => parseLine(line, index + 1));
     const tail = bytes.subarray(headBytes);
     if (tail.length === 0) return { headBytes, events, tornTail: null, missingNewline: false };
     try {
-      const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(tail));
+      // ignoreBOM keeps a leading U+FEFF, so a BOM-prefixed tail fails to parse and counts as torn.
+      const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+      const parsed: unknown = JSON.parse(decoder.decode(tail));
       if (isPlainObject(parsed)) {
         return { headBytes, events: [...events, parsed as unknown as LedgerEvent], tornTail: null, missingNewline: true };
       }
@@ -185,6 +188,8 @@ export class Ledger {
       }
       const main = this.prepare(at, input);
       lines.push(main.line);
+      // Truncate and append are two writes. A crash between them loses the torn tail without a
+      // tail_discarded record; the chain stays valid because the torn bytes were never an event.
       if (snap.tornTail !== null) truncateSync(this.file, snap.headBytes);
       appendFileSync(this.file, `${snap.missingNewline ? "\n" : ""}${lines.join("")}`, { mode: 0o600 });
       return main.event;

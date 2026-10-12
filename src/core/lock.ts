@@ -172,7 +172,9 @@ function sleepSync(ms: number): void {
 /**
  * Runs `fn` while holding the lock, waiting up to `timeoutMs` for a held lock.
  * Not reentrant: nesting on the same path in one process waits out the timeout and throws.
- * The callback must be synchronous: a promise-returning callback would release the lock before its work ends.
+ * The callback must be synchronous. An async callback is refused with a TypeError after the lock is
+ * released: its work is not awaited, so it keeps running without the lock. Its eventual rejection is
+ * swallowed, so it cannot crash the process or hide the TypeError.
  */
 export function withLockSync<T>(path: string, fn: () => T, timeoutMs = 2000): T {
   const deadline = Date.now() + timeoutMs;
@@ -188,7 +190,12 @@ export function withLockSync<T>(path: string, fn: () => T, timeoutMs = 2000): T 
   let result: T;
   try {
     result = fn();
-    if (isThenable(result)) throw new TypeError("withLockSync callback must be synchronous");
+    if (isThenable(result)) {
+      // Nobody awaits this promise. Without a handler, a later rejection would be unhandled and could
+      // crash the process before the TypeError below reaches the caller.
+      Promise.resolve(result).catch(() => {});
+      throw new TypeError("withLockSync callback must be synchronous");
+    }
   } catch (err) {
     try {
       releaseLock(path);

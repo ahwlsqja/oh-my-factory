@@ -127,6 +127,27 @@ describe("withLockSync", () => {
     expect(withLockSync(path, () => 2)).toBe(2);
   });
 
+  it("does not crash on a later rejection of a refused async callback", async () => {
+    const path = lockPath();
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      expect(() =>
+        withLockSync(path, async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          throw new Error("late");
+        }),
+      ).toThrow(new TypeError("withLockSync callback must be synchronous"));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
   it("reports the callback's error when the lock was lost", () => {
     const path = lockPath();
     expect(() =>

@@ -122,6 +122,37 @@ describe("Ledger", () => {
     expect(ledger.verify()).toEqual({ ok: true, count: 3, head: last?.hash });
   });
 
+  it("treats a BOM-prefixed unterminated final line as torn", () => {
+    const ledger = newLedger();
+    ledger.append({ actor: "omf", type: "project.initialized", payload: {} });
+    const second = ledger.append({ actor: "omf", type: "project.touched", payload: {} });
+    ledger.append({ actor: "omf", type: "project.touched", payload: { third: true } });
+    // A genuine, valid third event, written as BOM + JSON with its newline removed.
+    const [kept1, kept2, third] = readFileSync(ledger.file, "utf8").trimEnd().split("\n");
+    writeFileSync(ledger.file, `${kept1}\n${kept2}\n﻿${third}`);
+    expect(ledger.verify()).toEqual({ ok: true, count: 2, head: second.hash, tornTail: true });
+  });
+
+  it("treats a file that is only a torn tail (no newline at all) as zero events", () => {
+    const ledger = newLedger();
+    writeFileSync(ledger.file, '{"schema_version":1,"se');
+    expect(ledger.verify()).toEqual({ ok: true, count: 0, head: GENESIS_HASH, tornTail: true });
+    ledger.append({ actor: "omf", type: "project.touched", payload: {} });
+    const events = ledger.readVerified();
+    expect(events.map((e) => [e.seq, e.type])).toEqual([
+      [1, "ledger.tail_discarded"],
+      [2, "project.touched"],
+    ]);
+    expect(ledger.verify()).toMatchObject({ ok: true, count: 2 });
+  });
+
+  it("treats a valid-UTF-8 non-object tail with no newline as torn", () => {
+    const ledger = newLedger();
+    const first = ledger.append({ actor: "omf", type: "project.initialized", payload: {} });
+    appendFileSync(ledger.file, "123");
+    expect(ledger.verify()).toEqual({ ok: true, count: 1, head: first.hash, tornTail: true });
+  });
+
   it("records a torn tail that splits a multibyte character by its raw bytes", () => {
     const ledger = newLedger();
     ledger.append({ actor: "omf", type: "project.initialized", payload: {} });
