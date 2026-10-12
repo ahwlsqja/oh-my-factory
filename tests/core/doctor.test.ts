@@ -1,11 +1,18 @@
-import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { chmodSync, existsSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runDoctor } from "../../src/core/doctor.js";
 import { initProject } from "../../src/core/project.js";
 import { makeGitRepo, makeTempDir } from "../helpers/tmp.js";
 
-const SYSTEM_PATH = "/usr/bin:/bin";
+const REAL_GIT = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
+
+/** Gives a stub directory the real git, so the git probe works while PATH holds nothing else. */
+function withGit(dir: string): string {
+  symlinkSync(REAL_GIT, join(dir, "git"));
+  return dir;
+}
 
 /** A directory of fake CLIs so the test does not depend on what is installed. */
 function stubBin(opts: { dockerDaemon: boolean }): string {
@@ -23,11 +30,11 @@ function stubBin(opts: { dockerDaemon: boolean }): string {
       ? 'if [ "$1" = "info" ]; then echo "29.0.0"; else echo "Docker version 29.0.0"; fi'
       : 'if [ "$1" = "info" ]; then exit 1; else echo "Docker version 29.0.0"; fi',
   );
-  return dir;
+  return withGit(dir);
 }
 
 function env(home: string, bin: string | null): NodeJS.ProcessEnv {
-  return { HOME: home, OMF_HOME: join(home, ".omf"), PATH: bin ? `${bin}:${SYSTEM_PATH}` : SYSTEM_PATH };
+  return { HOME: home, OMF_HOME: join(home, ".omf"), PATH: bin ?? makeTempDir("omf-emptybin-") };
 }
 
 describe("runDoctor", () => {
@@ -60,6 +67,7 @@ describe("runDoctor", () => {
     const docker = join(bin, "docker");
     writeFileSync(docker, '#!/bin/sh\nif [ "$1" = "info" ]; then exit 1; else echo "Docker version 29.0.0"; fi\n');
     chmodSync(docker, 0o755);
+    withGit(bin);
     const e = env(home, bin);
     initProject(repo, e);
     const report = runDoctor(repo, e);

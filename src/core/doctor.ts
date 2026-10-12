@@ -34,7 +34,7 @@ export interface PreflightReport {
 
 /** Runs `cmd args` with PATH taken from `env`; any failure means "not usable". */
 function probe(cmd: string, args: string[], env: NodeJS.ProcessEnv): ToolProbe {
-  const result = spawnSync(cmd, args, { encoding: "utf8", timeout: 5000, env });
+  const result = spawnSync(cmd, args, { encoding: "utf8", timeout: 5000, killSignal: "SIGKILL", env });
   if (result.error || result.status !== 0) return { found: false, version: null };
   const first = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim().split("\n")[0] ?? "";
   return { found: true, version: first.length > 0 ? first : null };
