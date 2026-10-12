@@ -1,6 +1,6 @@
-import { statSync, writeFileSync } from "node:fs";
+import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { Ledger } from "../../src/core/ledger.js";
+import { Ledger, LedgerCorruptError } from "../../src/core/ledger.js";
 import {
   MetricError,
   lockFile,
@@ -28,6 +28,17 @@ describe("metric proposals and locks", () => {
       type: "metric.proposed",
       payload: { metric_id: "m-p95-latency", sha256: metricSha256(metric) },
     });
+    writeFileSync(proposalFile(dir, "m-p95-latency"), JSON.stringify({ ...proposal, owner: "agent:claude" }));
+    expect(() => readProposal(dir, "m-p95-latency")).toThrow(/proposal for m-p95-latency is invalid/);
+  });
+
+  it("leaves no proposal behind when the ledger chain is broken", () => {
+    const dir = makeTempDir();
+    const ledger = new Ledger(dir);
+    ledger.append({ actor: "human:dev", type: "metric.locked", payload: { goal_id: "g-a" } });
+    writeFileSync(ledger.file, readFileSync(ledger.file, "utf8").replace('"g-a"', '"g-b"'));
+    expect(() => proposeMetric(ledger, dir, metric, "human:dev")).toThrow(LedgerCorruptError);
+    expect(readProposal(dir, "m-p95-latency")).toBeNull();
   });
 
   it("refuses agents, bad ids and invalid proposals, and writes nothing", () => {
@@ -65,6 +76,10 @@ describe("metric proposals and locks", () => {
     expect((statSync(lockFile(dir, "g-a", "m-p95-latency")).mode & 0o777).toString(8)).toBe("600");
     writeFileSync(lockFile(dir, "g-a", "m-p95-latency"), "{ not json");
     expect(() => readLock(dir, "g-a", "m-p95-latency")).toThrow(/not valid JSON/);
+    writeFileSync(lockFile(dir, "g-a", "m-p95-latency"), JSON.stringify({ ...lock, sha256: "abc" }));
+    expect(() => readLock(dir, "g-a", "m-p95-latency")).toThrow(/lock for m-p95-latency is invalid/);
+    expect(() => writeLock(dir, { ...lock, goal_id: "g-b", regime: 0 })).toThrow(/invalid metric lock/);
+    expect(readLock(dir, "g-b", "m-p95-latency")).toBeNull();
   });
 
   it("finds the last locked hash for a goal's metric", () => {
