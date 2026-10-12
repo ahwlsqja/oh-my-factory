@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { utimesSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { LockHeldError, acquireLock, processStartTime, releaseLock, withLockSync } from "../../src/core/lock.js";
@@ -52,6 +52,30 @@ describe("acquireLock", () => {
     utimesSync(path, old, old);
     expect(acquireLock(path).pid).toBe(process.pid);
   });
+
+  it("does not reclaim a stale lock while another process holds the reclaim guard", () => {
+    const path = lockPath();
+    const dead = spawnSync(process.execPath, ["-e", ""]).pid;
+    writeFileSync(path, JSON.stringify({ pid: dead, start_time: "x", acquired_at: "x" }));
+    writeFileSync(`${path}.reclaim`, "");
+    expect(() => acquireLock(path)).toThrow(LockHeldError);
+    expect(existsSync(path)).toBe(true);
+    rmSync(`${path}.reclaim`);
+    expect(acquireLock(path).pid).toBe(process.pid);
+  });
+
+  it("breaks a reclaim guard left behind by a crash", () => {
+    const path = lockPath();
+    const dead = spawnSync(process.execPath, ["-e", ""]).pid;
+    writeFileSync(path, JSON.stringify({ pid: dead, start_time: "x", acquired_at: "x" }));
+    const guard = `${path}.reclaim`;
+    writeFileSync(guard, "");
+    const old = new Date(Date.now() - 60_000);
+    utimesSync(guard, old, old);
+    expect(() => acquireLock(path)).toThrow(LockHeldError);
+    expect(acquireLock(path).pid).toBe(process.pid);
+    expect(existsSync(guard)).toBe(false);
+  });
 });
 
 describe("releaseLock", () => {
@@ -75,6 +99,28 @@ describe("withLockSync", () => {
 
   it("returns the callback result", () => {
     expect(withLockSync(lockPath(), () => 42)).toBe(42);
+  });
+
+  it("reports the callback's error when the lock was lost", () => {
+    const path = lockPath();
+    expect(() =>
+      withLockSync(path, () => {
+        writeFileSync(path, JSON.stringify({ pid: 1, start_time: null, acquired_at: "x" }));
+        throw new Error("boom");
+      }),
+    ).toThrow("boom");
+    rmSync(path, { force: true });
+  });
+
+  it("reports a lost lock when the callback succeeds", () => {
+    const path = lockPath();
+    expect(() =>
+      withLockSync(path, () => {
+        writeFileSync(path, JSON.stringify({ pid: 1, start_time: null, acquired_at: "x" }));
+        return 1;
+      }),
+    ).toThrow(/refusing to release/);
+    rmSync(path, { force: true });
   });
 });
 

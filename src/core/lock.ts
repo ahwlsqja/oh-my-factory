@@ -10,6 +10,9 @@ export interface LockOwner {
 /** A lock file with no readable owner is presumed mid-write for this long. */
 const UNREADABLE_GRACE_MS = 5000;
 
+/** A reclaim guard older than this was left by a crash and may be broken. */
+const RECLAIM_GUARD_STALE_MS = 10_000;
+
 export class LockHeldError extends Error {
   constructor(
     readonly path: string,
@@ -81,6 +84,31 @@ function tryOpenExclusive(path: string): number | null {
   }
 }
 
+/**
+ * Removes a stale lock while holding `<path>.reclaim`, re-checking staleness under the guard.
+ * Only reclaimers remove lock files, so a fresh lock cannot appear between the check and the removal.
+ */
+function tryReclaim(path: string): boolean {
+  const guard = `${path}.reclaim`;
+  const fd = tryOpenExclusive(guard);
+  if (fd === null) {
+    try {
+      if (Date.now() - statSync(guard).mtimeMs > RECLAIM_GUARD_STALE_MS) rmSync(guard, { force: true });
+    } catch {
+      // the guard vanished; another reclaimer finished
+    }
+    return false;
+  }
+  closeSync(fd);
+  try {
+    if (!canReclaim(path)) return false;
+    rmSync(path, { force: true });
+    return true;
+  } finally {
+    rmSync(guard, { force: true });
+  }
+}
+
 export function acquireLock(path: string): LockOwner {
   const owner: LockOwner = {
     pid: process.pid,
@@ -90,8 +118,7 @@ export function acquireLock(path: string): LockOwner {
   for (let attempt = 0; attempt < 2; attempt++) {
     const fd = tryOpenExclusive(path);
     if (fd === null) {
-      if (!canReclaim(path)) throw new LockHeldError(path, readOwner(path));
-      rmSync(path, { force: true });
+      if (!tryReclaim(path)) throw new LockHeldError(path, readOwner(path));
       continue;
     }
     try {
@@ -128,9 +155,17 @@ export function withLockSync<T>(path: string, fn: () => T, timeoutMs = 2000): T 
       sleepSync(20);
     }
   }
+  let result: T;
   try {
-    return fn();
-  } finally {
-    releaseLock(path);
+    result = fn();
+  } catch (err) {
+    try {
+      releaseLock(path);
+    } catch {
+      // the callback's error is the one to report
+    }
+    throw err;
   }
+  releaseLock(path);
+  return result;
 }
