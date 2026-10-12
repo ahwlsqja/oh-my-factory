@@ -46,6 +46,22 @@ export function headCommit(repo: string): string {
 }
 
 /**
+ * Tracked files only (`git ls-files`), sorted. Untracked and ignored files are not listed: the risk class
+ * expands a declared directory through this list, and a file git does not track is not part of the project (spec §4.4).
+ */
+export function trackedFiles(repo: string): string[] {
+  return nulSeparated(git(repo, ["ls-files", "-z"])).sort();
+}
+
+/**
+ * Commits on the first-parent line from `commit` (exclusive) to HEAD, so a merged branch counts once, as the
+ * merge commit. Throws like the other helpers when `commit` is no longer in the repository.
+ */
+export function commitsSince(repo: string, commit: string): number {
+  return Number.parseInt(git(repo, ["rev-list", "--count", "--first-parent", `${commit}..HEAD`]).trim(), 10);
+}
+
+/**
  * Paths that differ from `commit`: committed and uncommitted edits, deletions, and untracked files that
  * are not ignored. Renames count as a deletion plus an addition, so both paths are reported.
  */
