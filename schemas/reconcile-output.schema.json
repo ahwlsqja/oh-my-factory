@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OMF reconciler output envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidates"],
+  "properties": {
+    "candidates": { "type": "array", "maxItems": 5, "items": { "type": "object" } }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "candidate": {
+      "title": "One proposed work item (validated per candidate, against #/$defs/candidate)",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "problem",
+        "proposed_outcome",
+        "affected_users_systems",
+        "constraints",
+        "open_questions",
+        "rationale",
+        "affected_paths"
+      ],
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[^\\u0000-\\u001f\\u007f]+$" },
+        "problem": { "$ref": "#/$defs/text" },
+        "proposed_outcome": { "$ref": "#/$defs/text" },
+        "affected_users_systems": { "$ref": "#/$defs/text" },
+        "constraints": { "type": "string", "maxLength": 2000 },
+        "open_questions": {
+          "type": "array",
+          "maxItems": 10,
+          "items": { "type": "string", "minLength": 1, "maxLength": 300, "pattern": "^[^\\u0000-\\u001f\\u007f]+$" }
+        },
+        "rationale": { "$ref": "#/$defs/text" },
+        "affected_paths": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9._@+-]+(/[A-Za-z0-9._@+-]+)*/?$",
+            "not": { "pattern": "(^|/)\\.\\.?(/|$)" }
+          }
+        }
+      }
+    }
+  }
+}

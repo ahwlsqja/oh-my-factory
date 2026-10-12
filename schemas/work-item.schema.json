@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OMF work item front matter",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "work_id",
+    "goal_id",
+    "title",
+    "state",
+    "fingerprint",
+    "risk",
+    "affected_paths",
+    "has_open_questions",
+    "origin",
+    "created_at",
+    "updated_at",
+    "approval",
+    "veto"
+  ],
+  "not": {
+    "anyOf": [
+      { "properties": { "value": {} }, "required": ["value"] },
+      { "properties": { "threshold": {} }, "required": ["threshold"] },
+      { "properties": { "query": {} }, "required": ["query"] }
+    ]
+  },
+  "$defs": {
+    "timestamp": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$" },
+    "human": { "type": "string", "pattern": "^human:\\S+$" }
+  },
+  "properties": {
+    "schema_version": { "const": 1 },
+    "work_id": { "type": "string", "pattern": "^w-[0-9a-f]{12}$" },
+    "goal_id": { "type": "string", "pattern": "^g-[a-z0-9]+(-[a-z0-9]+)*$" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[^\\u0000-\\u001f\\u007f]+$" },
+    "state": {
+      "enum": [
+        "ready",
+        "awaiting_approval",
+        "in_progress",
+        "awaiting_review",
+        "done",
+        "failed",
+        "vetoed",
+        "cancelled"
+      ]
+    },
+    "fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class", "rules", "paths"],
+      "properties": {
+        "class": { "enum": ["normal", "high"] },
+        "rules": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "ci",
+              "auth",
+              "migration",
+              "test",
+              "goal-factory",
+              "lockfile",
+              "watched-path",
+              "extra",
+              "undeclared",
+              "unclassifiable"
+            ]
+          }
+        },
+        "paths": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 200 } }
+      }
+    },
+    "affected_paths": { "type": "array", "maxItems": 20, "items": { "type": "string", "minLength": 1, "maxLength": 200 } },
+    "has_open_questions": { "type": "boolean" },
+    "origin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "tick_id", "trigger"],
+      "properties": {
+        "kind": { "const": "reconcile" },
+        "tick_id": { "type": "string", "pattern": "^t-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}$" },
+        "trigger": { "enum": ["gap", "breach", "both"] }
+      }
+    },
+    "created_at": { "$ref": "#/$defs/timestamp" },
+    "updated_at": { "$ref": "#/$defs/timestamp" },
+    "approval": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["approved_by", "approved_at"],
+          "properties": { "approved_by": { "$ref": "#/$defs/human" }, "approved_at": { "$ref": "#/$defs/timestamp" } }
+        },
+        { "type": "null" }
+      ]
+    },
+    "veto": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["vetoed_by", "vetoed_at", "reason"],
+          "properties": {
+            "vetoed_by": { "$ref": "#/$defs/human" },
+            "vetoed_at": { "$ref": "#/$defs/timestamp" },
+            "reason": { "type": "string", "maxLength": 500 }
+          }
+        },
+        { "type": "null" }
+      ]
+    }
+  }
+}
