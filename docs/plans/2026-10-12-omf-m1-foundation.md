@@ -2029,6 +2029,41 @@ beyond the plan text; the code and tests are the source of truth.
   is read from `package.json`.
 - **Task 11.** Reuses `tests/helpers/cli.ts`. The test also checks the ledger bytes are unchanged
   after the refused commands. The README lists the contention tests.
-- **Task 12.** The final count is 109 tests in 15 files, not 60.
+- **Task 12.** The plan expected 60 tests; at Task 12 there were 109. After the final-review fixes
+  there are 144 tests in 15 files.
 - **After Task 12.** Tests are type-checked (`tsconfig.test.json`), the test setup builds `dist/`
   from scratch, and spec §8 documents the `hash` field, torn writes and the ledger's limits.
+
+### Final-review fixes
+
+A whole-branch review after Task 12 found three important issues and several minor ones. All
+were fixed on this branch with tests:
+
+- `omf doctor` ran `codex --version` and `claude --version` with the caller's home, and Codex wrote
+  into `~/.codex`. Agent CLIs are now probed with a throwaway home (under `TMPDIR` when set) that is
+  removed afterwards; E5 covers `doctor` as well as `init`.
+- On case-insensitive APFS, an `OMF_HOME` naming the repository in another letter case passed the
+  outside-the-repo check. Paths are now compared with `realpathSync.native`. `OMF_HOME` inside
+  `~/.claude`, `~/.codex`, `CLAUDE_CONFIG_DIR` or `CODEX_HOME` is refused, and the outside-the-repo
+  error says to set `OMF_HOME`.
+- "Initialized" meant three things. There is now one project location (`locateProject`,
+  `resolveProject`) and one status (`readProjectStatus`: the ledger verifies and holds
+  `project.initialized`). `doctor` reports a torn final line as a warning.
+- Ledger: a torn tail is recorded by its raw bytes; both events of an append are validated before
+  any repair, so a rejected append leaves the file unchanged; an empty line or a BOM-prefixed tail
+  is not accepted as an event; `inspect()` replaces the unverified `readAll()`.
+- `withLockSync` refuses an async callback.
+- Directory and file modes are enforced on existing paths too; the test suite removes its temp
+  directories; `npm run build` starts from a clean `dist/` and `prepack` builds.
+
+### Carried into M2
+
+- Settle the budget event shape before any real ledger exists: `goal.md` budgets also have
+  `wall_time` and `max_open_work_items`, and S6 has a disclosure budget, so budget events need a
+  kind field rather than `rounds` only.
+- Give `BudgetError` a code that separates "exhausted" (escalate to J6) from misuse, and return the
+  written event from `declareBudget` and `raiseBudget`.
+- When a third command needs the absent / corrupt / not-initialized decision, extract one helper
+  instead of repeating it (today `doctor` and `ledger verify`).
+- Symlinks planted inside `~/.omf` are followed (spec §8). Revisit with `O_NOFOLLOW` or `lstat`
+  checks when M3 starts writing sealed material there.
