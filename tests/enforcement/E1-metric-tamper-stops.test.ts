@@ -4,9 +4,10 @@ import { describe, expect, it } from "vitest";
 import { Ledger } from "../../src/core/ledger.js";
 import { approveGoal } from "../../src/goal/approve.js";
 import { auditGoal } from "../../src/goal/audit.js";
+import { goalLockFile } from "../../src/goal/goal-lock.js";
 import { type MetricLock, lockFile, metricSha256, proposeMetric } from "../../src/goal/metrics.js";
 import { omf } from "../helpers/cli.js";
-import { setupGoal } from "../helpers/goal.js";
+import { setupGoal, writeBands } from "../helpers/goal.js";
 import { commitAll } from "../helpers/tmp.js";
 
 // Spec §4.6: tampering with metric code is a regime change that J1 must approve; a metric the person did
@@ -90,5 +91,32 @@ describe("E1 metric-tamper-stops", () => {
     const report = JSON.parse(result.stdout) as { target: { value: number }; needs_reapproval: boolean };
     expect(report.target.value).toBe(250);
     expect(report.needs_reapproval).toBe(true);
+  });
+
+  it("labels an edit to a bands file as a regime change until J1 approves again", () => {
+    const fx = setupGoal();
+    const file = writeBands(fx, "m-errors");
+    approveGoal(fx.location, "g-fast", "human:dev");
+    writeFileSync(file, readFileSync(file, "utf8").replace("propose", "log"));
+    const changed = omf(["goal", "measure", "g-fast", "--runner", "host"], fx.repo, fx.home);
+    expect(changed.code).toBe(1);
+    expect(changed.stdout).toContain("needs re-approval (J1)");
+    expect(changed.stdout).toContain("bands changed: m-errors");
+
+    expect(approveGoal(fx.location, "g-fast", "human:dev").approval.regime).toBe(2);
+    expect(omf(["goal", "measure", "g-fast", "--runner", "host"], fx.repo, fx.home).code).toBe(0);
+  });
+
+  it("stops when the bands recorded in the goal lock were edited", () => {
+    const fx = setupGoal();
+    approveGoal(fx.location, "g-fast", "human:dev");
+    const file = goalLockFile(fx.location.dir, "g-fast");
+    const lock = JSON.parse(readFileSync(file, "utf8")) as { bands: Record<string, string | null> };
+    lock.bands["m-errors"] = "a".repeat(64);
+    writeFileSync(file, JSON.stringify(lock));
+    const result = omf(["goal", "measure", "g-fast", "--runner", "host"], fx.repo, fx.home);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("goal lock bands tampered");
+    expect(measured(fx.location.dir)).toBe(0);
   });
 });

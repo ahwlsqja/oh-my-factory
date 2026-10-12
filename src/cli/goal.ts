@@ -6,6 +6,7 @@ import type { ProjectLocation } from "../core/paths.js";
 import { requireProject } from "../core/project.js";
 import { approveGoal } from "../goal/approve.js";
 import { type AuditReport, auditGoal } from "../goal/audit.js";
+import { type BandsConfig, bandsLockInfoOf, readBands } from "../goal/bands.js";
 import { createGoal, readGoal, referencedMetrics, semanticHash } from "../goal/goal-file.js";
 import { diffStat } from "../goal/git.js";
 import type { ApprovalExpectation } from "../goal/goal-lock.js";
@@ -44,9 +45,21 @@ function printAudit(report: AuditReport): void {
 
 const listOrNone = (items: readonly string[]): string => (items.length === 0 ? "none" : items.join(", "));
 
+const BAND_TIERS = ["3sigma", "2sigma", "1sigma"] as const;
+
+/** One line per metric on the approval screen: the baseline and what each tier does, or that nothing is watched. */
+function describeBands(config: BandsConfig | null): string {
+  if (config === null) return "none (not monitored)";
+  const tiers = BAND_TIERS.flatMap((tier) => {
+    const entry = config.tiers[tier];
+    return entry === undefined ? [] : [`${tier} -> ${entry.action}`];
+  });
+  return `baseline ${config.baseline}; ${tiers.join(", ")}`;
+}
+
 /**
  * What the person approves, shown before the prompt: why approval is needed (problems and regime changes,
- * with the diff of watched paths), the locked fields and every metric command. `expected` holds the
+ * with the diff of watched paths), the locked fields, every metric command and the bands of every metric. `expected` holds the
  * hashes of what was shown; approveGoal refuses if either changed by the time the person confirms.
  */
 export function approvalScreen(
@@ -84,7 +97,17 @@ export function approvalScreen(
     const image = proposal.image === null ? "" : `; image ${proposal.image}`;
     out(`metric ${id}: ${JSON.stringify(proposal.command)} -> ${proposal.unit}; watches ${listOrNone(proposal.watched_paths)}${image}`);
   }
-  return { lines, expected: { semantic_sha256: semanticHash(front), metrics } };
+  // Bands are locked with the goal (spec §4.6). The configs are read once, so the hash is of what is shown.
+  const configs: Record<string, BandsConfig | null> = {};
+  for (const id of referencedMetrics(front)) {
+    configs[id] = readBands(status.dir, goalId, id);
+    out(`bands ${id}: ${describeBands(configs[id] ?? null)}`);
+  }
+  if (audit.approval !== null && audit.approval.bands_sha256 === null) {
+    out("bands not locked (approved before M2b): a change to a bands file is not a regime change until you approve again");
+  }
+  const bands = bandsLockInfoOf(configs);
+  return { lines, expected: { semantic_sha256: semanticHash(front), metrics, bands_sha256: bands.sha256 } };
 }
 
 function printGap(report: GapReport, file: string): void {

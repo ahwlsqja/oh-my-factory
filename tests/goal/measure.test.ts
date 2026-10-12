@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 import { Ledger } from "../../src/core/ledger.js";
 import { bandsFile } from "../../src/goal/bands.js";
 import { lockGoal } from "../../src/goal/goal-lock.js";
-import { GoalStopError, measureGoal } from "../../src/goal/measure.js";
+import { GoalStopError, aggregateGuardrails, measureGoal } from "../../src/goal/measure.js";
 import { lockFile } from "../../src/goal/metrics.js";
-import { setupGoal } from "../helpers/goal.js";
+import { setupGoal, writeBands } from "../helpers/goal.js";
 
 const types = (dir: string): string[] => new Ledger(dir).readVerified().map((e) => e.type);
 
@@ -53,13 +53,14 @@ describe("measureGoal", () => {
 
   it("evaluates a guardrail against its bands once the baseline is long enough", async () => {
     const fx = setupGoal();
-    lockGoal(fx.location, "g-fast", "human:dev");
     const file = bandsFile(fx.location.dir, "g-fast", "m-errors");
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(
       file,
       "metric: m-errors\nbaseline: rolling_30d\nrules: western_electric\ntiers:\n  3sigma: { action: propose, routes: [pull_request] }\n",
     );
+    // Bands are part of the J1 lock, so they must exist before approval or the readings are pending.
+    lockGoal(fx.location, "g-fast", "human:dev");
     for (let i = 0; i < 5; i++) {
       expect((await measureGoal(fx.location, "g-fast", { runner: "host" })).report.guardrails[0]?.status).toBe("unevaluated");
     }
@@ -73,10 +74,10 @@ describe("measureGoal", () => {
 
   it("reports a guardrail breach when only a lower tier has an action", async () => {
     const fx = setupGoal();
-    lockGoal(fx.location, "g-fast", "human:dev");
     const file = bandsFile(fx.location.dir, "g-fast", "m-errors");
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, "metric: m-errors\nbaseline: rolling_30d\nrules: western_electric\ntiers:\n  1sigma: { action: log }\n");
+    lockGoal(fx.location, "g-fast", "human:dev");
     for (let i = 0; i < 6; i++) await measureGoal(fx.location, "g-fast", { runner: "host" });
     writeFileSync(join(fx.repo, "bench", "errors.sh"), "echo 95\n");
     const { report } = await measureGoal(fx.location, "g-fast", { runner: "host" });
@@ -128,5 +129,72 @@ describe("measureGoal", () => {
     expect(first.needs_reapproval).toBe(true);
     expect(first.target.value).toBe(250);
     expect(types(fx.location.dir).filter((t) => t === "goal.regime_changed")).toHaveLength(1);
+  });
+});
+
+const lastGuardrails = (dir: string): unknown =>
+  new Ledger(dir).readVerified().filter((e) => e.type === "goal.measured").at(-1)?.payload.guardrails;
+
+describe("aggregateGuardrails", () => {
+  it("ranks breach over unevaluated over pass, and is none without guardrails", () => {
+    const g = (...statuses: ("pass" | "breach" | "unevaluated")[]): { status: "pass" | "breach" | "unevaluated" }[] =>
+      statuses.map((status) => ({ status }));
+    expect(aggregateGuardrails(g("breach", "unevaluated"))).toBe("breach");
+    expect(aggregateGuardrails(g("unevaluated", "pass"))).toBe("unevaluated");
+    expect(aggregateGuardrails(g("pass", "pass"))).toBe("pass");
+    expect(aggregateGuardrails(g("pass", "breach", "pass"))).toBe("breach");
+    expect(aggregateGuardrails([])).toBe("none");
+  });
+});
+
+describe("measureGoal guardrails and baseline", () => {
+  it("records none for a goal without guardrails and unevaluated for a guardrail with no bands", async () => {
+    const none = setupGoal({ guardrails: [] });
+    lockGoal(none.location, "g-fast", "human:dev");
+    await measureGoal(none.location, "g-fast", { runner: "host" });
+    expect(lastGuardrails(none.location.dir)).toBe("none");
+
+    const unbanded = setupGoal();
+    lockGoal(unbanded.location, "g-fast", "human:dev");
+    await measureGoal(unbanded.location, "g-fast", { runner: "host" });
+    expect(lastGuardrails(unbanded.location.dir)).toBe("unevaluated");
+  });
+
+  it("records pass once the baseline is long enough and breach when the guardrail moves", async () => {
+    const fx = setupGoal();
+    writeBands(fx, "m-errors");
+    lockGoal(fx.location, "g-fast", "human:dev");
+    for (let i = 0; i < 5; i++) {
+      await measureGoal(fx.location, "g-fast", { runner: "host" });
+      expect(lastGuardrails(fx.location.dir)).toBe("unevaluated");
+    }
+    await measureGoal(fx.location, "g-fast", { runner: "host" });
+    expect(lastGuardrails(fx.location.dir)).toBe("pass");
+    writeFileSync(join(fx.repo, "bench", "errors.sh"), "echo 5\n");
+    await measureGoal(fx.location, "g-fast", { runner: "host" });
+    expect(lastGuardrails(fx.location.dir)).toBe("breach");
+  });
+
+  it("leaves points measured under a pending regime change out of the baseline", async () => {
+    const fx = setupGoal();
+    writeBands(fx, "m-errors");
+    lockGoal(fx.location, "g-fast", "human:dev");
+    const original = readFileSync(fx.goalFile, "utf8");
+    const errors = join(fx.repo, "bench", "errors.sh");
+    for (let i = 0; i < 3; i++) await measureGoal(fx.location, "g-fast", { runner: "host" });
+
+    writeFileSync(fx.goalFile, original.replace("value: 250", "value: 400"));
+    writeFileSync(errors, "echo 9\n");
+    for (let i = 0; i < 3; i++) {
+      const { report } = await measureGoal(fx.location, "g-fast", { runner: "host" });
+      expect(report.needs_reapproval).toBe(true);
+    }
+
+    writeFileSync(fx.goalFile, original);
+    writeFileSync(errors, "echo 0.4\n");
+    const { report } = await measureGoal(fx.location, "g-fast", { runner: "host" });
+    expect(report.needs_reapproval).toBe(false);
+    // Six earlier points exist, three of them flagged: only the three clean ones are baseline.
+    expect(report.metrics[1]?.band).toEqual({ status: "insufficient_baseline", points: 3 });
   });
 });

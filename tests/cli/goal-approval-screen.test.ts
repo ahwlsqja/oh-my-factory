@@ -3,8 +3,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { approvalScreen } from "../../src/cli/goal.js";
 import { approveGoal } from "../../src/goal/approve.js";
+import { bandsLockInfo } from "../../src/goal/bands.js";
 import { lockFile } from "../../src/goal/metrics.js";
-import { setupGoal } from "../helpers/goal.js";
+import { approveLegacy, setupGoal, writeBands } from "../helpers/goal.js";
 import { commitAll } from "../helpers/tmp.js";
 import { readFileSync } from "node:fs";
 
@@ -44,5 +45,39 @@ describe("approvalScreen", () => {
     expect(expected.semantic_sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(Object.keys(expected.metrics).sort()).toEqual(["m-errors", "m-p95"]);
     expect(approveGoal(fx.location, "g-fast", "human:dev", undefined, expected).created).toBe(true);
+  });
+
+  it("shows the bands of every metric and returns the hash of what it showed", () => {
+    const fx = setupGoal();
+    writeBands(fx, "m-errors");
+    const { lines, expected } = approvalScreen(fx.location, "g-fast");
+    const text = lines.join("\n");
+    expect(text).toContain("bands m-errors: baseline rolling_30d; 3sigma -> propose");
+    expect(text).toContain("bands m-p95: none (not monitored)");
+    expect(text).not.toContain("bands not locked");
+    expect(expected.bands_sha256).toBe(bandsLockInfo(fx.location.dir, "g-fast", ["m-p95", "m-errors"]).sha256);
+  });
+
+  it("holds the approval to the bands that were shown", () => {
+    const fx = setupGoal();
+    const { expected } = approvalScreen(fx.location, "g-fast");
+    writeBands(fx, "m-errors");
+    expect(() => approveGoal(fx.location, "g-fast", "human:dev", undefined, expected)).toThrow(/changed after it was shown/);
+  });
+
+  it("names an edited bands file as a reason for approving again", () => {
+    const fx = setupGoal();
+    approveGoal(fx.location, "g-fast", "human:dev");
+    writeBands(fx, "m-errors");
+    const text = approvalScreen(fx.location, "g-fast").lines.join("\n");
+    expect(text).toContain("why approval is needed again");
+    expect(text).toContain("bands changed: m-errors");
+  });
+
+  it("says so when the approval being replaced never locked its bands", () => {
+    const fx = setupGoal();
+    approveLegacy(fx);
+    const text = approvalScreen(fx.location, "g-fast").lines.join("\n");
+    expect(text).toContain("bands not locked (approved before M2b)");
   });
 });

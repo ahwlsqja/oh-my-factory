@@ -9,6 +9,7 @@ import { writePrivateFile } from "../core/private-fs.js";
 import { validate } from "../core/schema.js";
 import { type GoalSemantic, assertGoalId, readGoal, referencedMetrics, semanticHash, semanticOf } from "./goal-file.js";
 import { parseDuration } from "./duration.js";
+import { type BandsLockInfo, bandsLockInfo } from "./bands.js";
 import { changedPathsSince, headCommit, matchWatched } from "./git.js";
 import { type MetricDefinition, definitionOf, metricSha256, readProposal, writeLock } from "./metrics.js";
 
@@ -23,6 +24,8 @@ export interface GoalLock {
   approved_by: string;
   approved_at: string;
   semantic: GoalSemantic;
+  /** metric id to the sha256 of its bands config, or null when it had no bands file; absent on locks written before M2b. */
+  bands?: Record<string, string | null>;
 }
 
 /** The latest J1 approval of a goal, as the ledger records it. */
@@ -35,6 +38,10 @@ export interface GoalApproval {
   approved_at: string;
   /** When the goal was first approved; wall time is counted from here (spec §4.4). */
   first_approved_at: string;
+  /** Hash of the bands map J1 locked; null for an approval written before M2b, whose bands were never locked. */
+  bands_sha256: string | null;
+  /** The wall time J1 approved, for example `72h`; null for an approval written before M2b. */
+  wall_time: string | null;
 }
 
 /** What the person was shown at approval; the lock is refused if the goal or a metric no longer matches. */
@@ -42,6 +49,8 @@ export interface ApprovalExpectation {
   semantic_sha256: string;
   /** metric id to the sha256 of the proposal that was shown. */
   metrics: Record<string, string>;
+  /** Hash of the bands that were shown; when present, lockGoal refuses if the bands moved since. */
+  bands_sha256?: string;
 }
 
 export class ApprovalError extends Error {
@@ -80,6 +89,14 @@ function invalidApproval(event: LedgerEvent, why: string): Error {
   return new Error(`invalid goal.approved event at seq ${event.seq}: ${why}`);
 }
 
+/** An optional string field of a goal.approved payload: absent reads as null, present must match `pattern`. */
+function optionalField(event: LedgerEvent, key: string, pattern: RegExp): string | null {
+  const value = event.payload[key];
+  if (value === undefined) return null;
+  if (typeof value !== "string" || !pattern.test(value)) throw invalidApproval(event, `malformed ${key}`);
+  return value;
+}
+
 /**
  * The latest goal.approved event for the goal, or null. An approval written by a non-person, or with a
  * malformed payload, was written outside lockGoal and stops the line.
@@ -100,6 +117,8 @@ export function latestApproval(events: readonly LedgerEvent[], goalId: string): 
     ) {
       throw invalidApproval(event, "malformed payload");
     }
+    const bands_sha256 = optionalField(event, "bands_sha256", /^[0-9a-f]{64}$/);
+    const wall_time = optionalField(event, "wall_time", /^[1-9][0-9]*(m|h|d)$/);
     firstApprovedAt ??= event.ts;
     latest = {
       regime,
@@ -109,16 +128,24 @@ export function latestApproval(events: readonly LedgerEvent[], goalId: string): 
       approved_by: event.actor,
       approved_at: event.ts,
       first_approved_at: firstApprovedAt,
+      bands_sha256,
+      wall_time,
     };
   }
   return latest;
 }
 
-function requireShown(expected: ApprovalExpectation, front: GoalSemantic, proposals: readonly MetricDefinition[]): void {
+function requireShown(
+  expected: ApprovalExpectation,
+  front: GoalSemantic,
+  proposals: readonly MetricDefinition[],
+  bands: BandsLockInfo,
+): void {
   const shown = Object.entries(expected.metrics).sort(([a], [b]) => a.localeCompare(b));
   const current = proposals.map((proposal) => [proposal.metric_id, metricSha256(proposal)] as const).sort(([a], [b]) => a.localeCompare(b));
-  if (semanticHash(front) !== expected.semantic_sha256 || canonicalize(shown) !== canonicalize(current)) {
-    throw new ApprovalError("the goal or a metric changed after it was shown; nothing was approved. Review it and approve again");
+  const bandsMoved = expected.bands_sha256 !== undefined && expected.bands_sha256 !== bands.sha256;
+  if (semanticHash(front) !== expected.semantic_sha256 || canonicalize(shown) !== canonicalize(current) || bandsMoved) {
+    throw new ApprovalError("the goal, a metric or a bands file changed after it was shown; nothing was approved. Review it and approve again");
   }
 }
 
@@ -141,20 +168,26 @@ function requireBudgetsUnchanged(
         "Restore goal.md, or raise the budget as a separate J8 decision",
     );
   }
+  // The ledger records the approved wall time (D26); only a pre-M2b approval falls back to the lock file.
+  const approved = previous.wall_time ?? lockedWallTime(location, goalId, previous);
+  if (approved !== null && parseDuration(budget.wall_time) !== parseDuration(approved)) {
+    throw new ApprovalError(
+      `goal.md says ${budget.wall_time} wall time but the approved wall time is ${approved}; re-approval does not change it. ` +
+        "Restore goal.md, or raise the budget as a separate J8 decision",
+    );
+  }
+}
+
+/** The wall time in a pre-M2b goal lock, or null when the lock is missing, unreadable or does not match the ledger (it is being repaired). */
+function lockedWallTime(location: ProjectLocation, goalId: string, previous: GoalApproval): string | null {
   let locked: GoalLock | null = null;
   try {
     locked = readGoalLock(location.dir, goalId);
   } catch (err) {
     if (!(err instanceof GoalLockError)) throw err;
   }
-  // A lock that does not match the ledger is being repaired, so it is no baseline.
-  if (locked === null || locked.semantic_sha256 !== previous.semantic_sha256) return;
-  if (parseDuration(budget.wall_time) !== parseDuration(locked.semantic.budget.wall_time)) {
-    throw new ApprovalError(
-      `goal.md says ${budget.wall_time} wall time but the approved wall time is ${locked.semantic.budget.wall_time}; re-approval does not change it. ` +
-        "Restore goal.md, or raise the budget as a separate J8 decision",
-    );
-  }
+  if (locked === null || locked.semantic_sha256 !== previous.semantic_sha256) return null;
+  return locked.semantic.budget.wall_time;
 }
 
 /** How long a second approval of the same goal waits for the first one to finish. */
@@ -226,7 +259,8 @@ function lockGoalSerialized(
     if (proposal === null) throw new ApprovalError(`metric ${id} has no proposal; run omf metric propose ${id}`);
     return proposal;
   });
-  if (expected !== undefined) requireShown(expected, goal.front, proposals);
+  const bands = bandsLockInfo(location.dir, goalId, metrics);
+  if (expected !== undefined) requireShown(expected, goal.front, proposals, bands);
   const targetProposal = proposals[0];
   if (targetProposal !== undefined && targetProposal.unit !== goal.front.target.unit) {
     throw new ApprovalError(
@@ -271,6 +305,7 @@ function lockGoalSerialized(
     approved_by: actor,
     approved_at: approvedAt,
     semantic,
+    bands: bands.map,
   };
   const check = validate("goal-lock.schema.json", lock);
   if (!check.ok) throw new GoalLockError(`invalid goal lock: ${check.errors}`);
@@ -278,7 +313,15 @@ function lockGoalSerialized(
   const approved = ledger.append({
     actor,
     type: "goal.approved",
-    payload: { goal_id: goalId, regime, semantic_sha256, head_commit, metrics },
+    payload: {
+      goal_id: goalId,
+      regime,
+      semantic_sha256,
+      head_commit,
+      metrics,
+      bands_sha256: bands.sha256,
+      wall_time: goal.front.budget.wall_time,
+    },
   });
   if (budgetState(ledger, goalId, "rounds") === null) {
     declareBudget(ledger, goalId, "rounds", goal.front.budget.rounds, actor);
@@ -291,5 +334,7 @@ function lockGoalSerialized(
     approved_by: actor,
     approved_at: approved.ts,
     first_approved_at: previous?.first_approved_at ?? approved.ts,
+    bands_sha256: bands.sha256,
+    wall_time: goal.front.budget.wall_time,
   };
 }

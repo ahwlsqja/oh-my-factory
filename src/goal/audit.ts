@@ -1,7 +1,10 @@
 import { BudgetError, type BudgetState, budgetStateFromEvents } from "../core/budget.js";
 import { Ledger, type LedgerEvent } from "../core/ledger.js";
 import type { ProjectLocation } from "../core/paths.js";
-import { parseDuration } from "./duration.js";
+import { canonicalize, sha256Hex } from "../core/canonical-json.js";
+import { BandsError, bandsLockInfo } from "./bands.js";
+import { staleReason } from "./stale-mark.js";
+import { wallTimeLimitMs } from "./wall-time.js";
 import { type GoalFront, GoalFileError, readGoal, referencedMetrics, semanticHash } from "./goal-file.js";
 import { type GoalApproval, type GoalLock, GoalLockError, latestApproval, readGoalLock } from "./goal-lock.js";
 import { changedPathsSince, matchWatched } from "./git.js";
@@ -57,6 +60,14 @@ function verifiedGoalLock(dir: string, goalId: string, approval: GoalApproval, p
     safeSemanticHash(lock) !== approval.semantic_sha256
   ) {
     problems.push(`goal lock tampered: ${goalId}`);
+    return null;
+  }
+  // The bands map in the lock must be the one the ledger approved; a legacy approval locked none (carried item 2).
+  if (
+    approval.bands_sha256 !== null &&
+    (lock.bands === undefined || sha256Hex(canonicalize(lock.bands)) !== approval.bands_sha256)
+  ) {
+    problems.push("goal lock bands tampered");
     return null;
   }
   return lock;
@@ -126,6 +137,29 @@ function watchedChanges(repo: string, commit: string, locks: readonly MetricLock
   };
 }
 
+/**
+ * Metrics whose bands file is not what J1 locked: edited, created or deleted. An unreadable file counts as
+ * changed (measureGoal will stop on it with the parse error). An approval from before M2b locked no bands, so
+ * there is nothing to compare and nothing is flagged.
+ */
+function bandsChanges(dir: string, goalId: string, approval: GoalApproval, lock: GoalLock): string[] {
+  if (approval.bands_sha256 === null) return [];
+  const locked = lock.bands ?? {};
+  const changed: string[] = [];
+  for (const id of [...approval.metrics].sort()) {
+    let current: string | null;
+    try {
+      current = bandsLockInfo(dir, goalId, [id]).map[id] ?? null;
+    } catch (err) {
+      if (!(err instanceof BandsError)) throw err;
+      changed.push(id);
+      continue;
+    }
+    if (current !== (locked[id] ?? null)) changed.push(id);
+  }
+  return changed.length === 0 ? [] : [`bands changed: ${changed.join(", ")}`];
+}
+
 function draftProblems(dir: string, front: GoalFront): string[] {
   const problems: string[] = [];
   for (const id of referencedMetrics(front)) {
@@ -192,9 +226,15 @@ export function auditGoal(location: ProjectLocation, goalId: string, now: Date =
   report.regime_changes.push(...watched.messages);
   report.watched_paths_changed = watched.paths;
 
-  if (goalLock !== null) {
-    const wallTime = parseDuration(goalLock.semantic.budget.wall_time);
-    report.wall_time_exceeded = now.getTime() - Date.parse(approval.first_approved_at) > wallTime;
+  if (goalLock !== null) report.regime_changes.push(...bandsChanges(location.dir, goalId, approval, goalLock));
+  // D21: a goal that refresh marked stale needs J1 again; the new approval is what clears the mark.
+  const stale = staleReason(events, goalId);
+  if (stale !== null) report.regime_changes.push(stale);
+
+  // Wall time comes from the ledger (the approved value plus J8 raises), so a deleted or edited lock cannot move it.
+  if (goalLock !== null || approval.wall_time !== null) {
+    const limit = wallTimeLimitMs(events, goalId, approval, goalLock);
+    report.wall_time_exceeded = now.getTime() - Date.parse(approval.first_approved_at) > limit;
   }
   // Problems first: a goal whose locks do not verify is tampered even when it also has regime changes.
   if (report.problems.length > 0) report.state = "tampered";
