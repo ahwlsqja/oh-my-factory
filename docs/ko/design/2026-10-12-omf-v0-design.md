@@ -1,0 +1,579 @@
+# oh-my-factory (OMF) — v0 설계
+
+- 상태: 소유자 검토용 초안
+- 날짜: 2026-10-12
+- 정본 언어: 영어. 이 문서는 번역본이며 내용이 다르면 영어 정본을 따른다. 영어 정본: `docs/design/2026-10-12-omf-v0-design.md`
+- 출처와 읽은 범위: `docs/design/references.md`
+
+## 0. 요약
+
+oh-my-factory(OMF)는 코딩 에이전트를 위한 오픈소스 소프트웨어 공장(software factory)이다. Claude Code와 Codex CLI 위에서 돌며, 둘 중 어느 쪽도 대체하지 않는다.
+
+사람은 **목표(goal)** 를 승인한다. 목표는 지향점, 측정 방법, 접근 방식으로 이루어진다. OMF는 현재 값과 목표 값의 차이를 재고, 그 차이를 작업으로 바꾼다. 작업 하나하나는 검증 라인(verification line)을 지난다. 설계 결정은 사람이 해결한다. 구현자가 보지 못하는 봉인 인수 시나리오(sealed acceptance scenario)는 다른 벤더가 쓴다. 구현자는 격리된 컨테이너에서 일한다. 믿을 수 있는 하네스(harness)가 두 번째 일회용 컨테이너에서 결과를 판정한다. 구현자는 가린 피드백(masked feedback)만 돌려받는다. 사람은 코드 한 줄 한 줄이 아니라 **결정과 증거** 를 검토한다. 병합(merge)도 사람이 하고, 목표를 달성했다는 서명도 사람이 한다.
+
+OMF가 아닌 것은 다음과 같다.
+
+- 새 에이전트 런타임이 아니다. 기존 CLI를 그대로 구동한다.
+- 자동 병합(auto-merge)이나 자동 배포(auto-deploy) 도구가 아니다.
+- 사용자의 `AGENTS.md`, `CLAUDE.md`, `.claude/`, `~/.claude`, `~/.codex` 를 고쳐 쓰는 설치기가 아니다.
+- 생각을 멈추게 하는 도구가 아니다. 사람의 판단을 가장 싸고 가장 쓸모 있는 자리로 옮긴다.
+- 효과가 있다는 주장이 아니다. OMF는 스스로를 측정하고 찾은 것을 보고한다(§12).
+
+## 1. 철학과 출처
+
+출처는 우선순위 순서로 나열한다. 출처끼리 충돌하면 높은 쪽이 이긴다. 다만 낮은 쪽이 높은 쪽이 다루지 못한 구체적 실패 양상을 짚고 있으면 예외로 한다.
+
+1. **Will Larson, "Trying the software factory pattern"** (lethain.com). 에이전트에게 티켓을 하나씩 건네지 않는다. 프로젝트의 목표와 그 측정값을 주고, 일을 스스로 찾아 하게 한다. 그의 루프는 이렇다. 목표를 확인한다. 진행을 잴 수 있는지 확인한다(측정이 없으면 사용자와 함께 만든다). 지표와 이슈 상태를 보고 일을 더하거나 고친다. 실행한다. 다음 단계를 정한다(설명이 낡았으면 첫 단계로 돌아간다). 출시 뒤에도 같은 루프를 낮은 빈도로 돌려 도입률이나 오류율의 변화를 잡는다. 세 기반이 맞물려야 한다. 목표 측정, 하나로 공유되는 작업 상태, 노트북에 의존하지 않는 실행 환경이다.
+2. **Anthropic, "The AI-native SDLC playbook"** (claude.com, 2026-08-21). 같은 발상을 전체 수명주기에 적용하고, 실제 Claude Code 기능에 맞춰 쓴 글이다. 각 단계는 산출물을 커밋하며 끝나고, 그 커밋이 다음 단계를 시작한다. `intent.md` → `spec.md` → `plan.md` → 병합된 PR → 파이프라인 순서다. 운영 단계에서는 관리 대역(control band)을 벗어나면 다음 `intent.md` 가 쓰인다. 감지는 결정론적(deterministic)이다. 플레이북은 이렇게 말한다. "Detection stays deterministic. Claude is invoked once a band is breached, and the tier sets what it may do." (감지는 결정론적으로 유지한다. 대역을 벗어난 뒤에야 Claude를 부르며, 허용 범위는 등급(tier)이 정한다.) 모든 활동은 선행 지표(leading indicator)와 후행 지표(lagging indicator)를 짝지운다. OMF는 이 플레이북을 **도구 계층과 산출물 사슬의 참조 구현** 으로 쓴다.
+3. **StrongDM, Software Factory** (factory.strongdm.ai). 루프는 시드(seed), 검증 하네스(validation harness), 피드백 순서다. 코드베이스 안에 있는 테스트는 속임수의 대상이 되므로, 시나리오는 코드베이스 밖에 홀드아웃(holdout)으로 둔다. 성공은 불리언이 아니라 확률("satisfaction")이다. 여기서 쓰는 다른 발상은 디지털 트윈 유니버스(Digital Twin Universe)와, 상호작용 작업과 완전히 명세된 작업을 가르는 시프트 워크(shift work)다.
+4. **Piotr Sarnacki, "I'm sorry, but you still have to think."** 명세가 모호하면 설계 결정이 동전 던지기가 된다. 호환성, 지연 대 처리량, 메모리, 장애 시 손실, 큐 한도가 그렇다. 지표 하나에 맞춘 벤치마크는 오해를 부른다.
+   **Addy Osmani, "Human judgment doesn't leave the software factory. It relocates."** 문제를 고르는 일, 아키텍처를 고르는 일, 품질 기준을 세우는 일, 어떤 검증 신호를 믿을지 정하는 일, 증거가 출시하기에 충분한 때를 정하는 일은 여전히 사람이 한다. Osmani는 공장을 검토자(reviewer)에게 맞춰 최적화하라고도 말한다.
+5. 맥락: DHH(손으로 쓴 코드는 대부분의 프로그래머에게 더는 경제적으로 생산적이지 않다), Tunguz("Thinking in Systems, Shipping in Loops"), Dan Shapiro(다섯 단계).
+
+**긴장을 푸는 방법.** StrongDM은 사람의 코드 리뷰를 없애려 한다. Sarnacki와 Osmani는 사람의 사고를 원한다. OMF는 사람을 없애는 대신 사람이 **무엇을** 하는지를 바꾼다. 사람은 작업이 시작되기 전에 목표와 측정을 승인한다(J1). 구현 전에 설계 결정을 해결한다(J2). 어떤 신호를 믿을지 고른다(J3). 병합할 때 증거를 판단하고(J4) 목표에 서명한다(J5). 코드를 읽는 일은 표적화된다. 고위험 경로에서는 필수이고 그 밖에서는 선택이다.
+
+**조사에서 바로잡은 점.** "task completion ≠ goal achievement" 라는 문장은 Larson의 글이 아니라 그 글의 GeekNews 요약에서 나왔다. OMF는 이것을 자체 불변식(invariant)으로 선언한다(F4).
+
+## 2. 제1원칙
+
+아래 각 메커니즘은 `tests/enforcement/` 의 강제 테스트(enforcement test)로 뒷받침되어야 한다(§13). 테스트 없는 주장에는 "not enforced"(미강제)를 붙인다.
+
+| # | 원칙 | 출처 | 메커니즘 |
+|---|---|---|---|
+| F1 | 최상위 단위는 목표다. 작업은 목표에서 파생된다. | Larson; 플레이북 | `goal.md` 가 진입점이다. 모든 작업 항목은 `goal_id` 를 가진다. `goal_id` 없는 수동 시드(seed)는 허용하되 경고한다. |
+| F2 | 측정 없이는 루프도 없다. 지표를 만든 쪽이 그 지표로 자기 성공을 판정해서는 안 된다. | Larson; Goodhart | `omf goal audit` 는 닫힌 채로 실패한다(fail closed). 에이전트가 제안한 지표는 J1이 승인할 때까지 `proposed` 로 남는다. 승인된 지표는 지표 금고(Metric Vault)에 해시로 잠긴다. |
+| F3 | 루프는 코드가 통제한다. 모델은 해석하고 구현한다. | Larson; 플레이북 | 결정론적 상태 기계, 결정론적 감지(대역), 세션 밖에 두는 예산, 자동 연장 없음. |
+| F4 | 작업 완료는 목표 달성이 아니다(OMF 불변식). | Larson 요약(GeekNews) | 에이전트는 많아야 `candidate`(후보)까지만 만든다. 목표는 사람의 서명(J5)으로만 닫힌다. |
+| F5 | 출시 뒤에도 계속 지켜본다. | Larson; 플레이북 6단계 | `bands.yaml` 을 쓰는 `mode: watch`. 퇴행(regression)이 생기면 목표를 다시 연다. |
+| F6 | 검증과 측정은 생성 바깥에 있다. | StrongDM | 금고(vault)는 호스트 전용이다. 즉 S4 의 하네스 컨테이너를 빼면 어떤 에이전트 세션이나 컨테이너도 읽지 못한다. 사람은 읽을 수 있다. 시나리오는 다른 벤더가 쓴다. 구현자는 시나리오, 지표 값, 임계값을 절대 보지 못한다. |
+| F7 | 성공은 불확실성과 함께 보고한다. 평가하지 못한 것은 통과가 아니라 미결정이다. | StrongDM; 평가(evals) 문헌 | 결정론적 검사를 먼저 돌린다. 평가되지 않은 것은 `undetermined` 다. 독립 시나리오가 충분해지면(v0.3) 구간 추정을 쓴다. |
+| F8 | 완전히 명세된 작업만 자율 실행한다. | StrongDM (시프트 워크) | 필수 결정이 하나라도 열려 있으면 실행이 막힌다. |
+| F9 | 결정은 사람이 하고, 공장은 그 결정을 싸게 만든다. | Sarnacki; Osmani | 결정 인터뷰, 맨 위에 "검증되지 않은 영역" 목록을 둔 증거 보고서, 필요한 결정을 명시하는 인계 패킷(handoff packet). |
+| F10 | 사람의 대역폭은 에이전트 수에 비례해 늘지 않는다. | Osmani; Larson | WIP 상한. `STOP_IF`: 검토받지 못한 증거가 쌓이면 새 생산을 멈춘다. |
+| F11 | 자율성은 다이얼이고, 쌓인 증거로만 넓힌다. | Osmani; 플레이북 등급 | 자율 수준 × 위험 등급 격자. 승격에는 기록된 증거가 필요하다. |
+
+포카요케(poka-yoke) 원칙("스킬은 위반을 드물게 만들고 훅은 거의 불가능하게 만든다", 플레이북)은 모든 규칙에 적용된다. 프롬프트와 스킬은 권고일 뿐이다. 컨테이너, 권한, 스키마, 결정론적 검사가 강제한다. 훅은 신호이지 보안 경계가 아니다.
+
+## 3. 계층 모델
+
+```
+human judgment   J1 goal/metrics/guardrails   J2 design decisions   J3 trusted signals,
+(before)                 |                         |                    high-risk paths
+                         |                         |                J7 isolation/security   J8 budget
+       +-----------------v---------- G  GOAL LOOP (Larson + playbook Stage 6) --------------------+
+       | audit -> measure -> evaluate (gap-to-target, bands) -> reconcile -> dispatch -> refresh  |
+       | mode: build (push toward target) | watch (low-frequency, after launch)                   |
+       +-----------------+-------------------------------------------------------^----------------+
+            down: goal_id + intent.md (no metric values,         up: outcome class, deterministic
+                  thresholds or queries)                             results, open decisions
+       +-----------------v---------- W  WORK VERIFICATION LOOP (StrongDM) -------+----------------+
+       | S1 decide (spec.md + ledger) -> S2 seal (other vendor) -> S3 implement (plan.md, code)    |
+       | -> S4 judge (two containers) -> S5 audit -> S6 masked feedback -> S7 evidence report      |
+       +--------------------------------------------------------------------------------------------+
+human judgment   J4 merge (gate)   J5 goal sign-off (async)   J6 stall / repeated blocker (async)
+(after / async)
+
+X  EXECUTION     L2 devcontainer (default) | L3 L2 + egress allowlist + leak red-team per run
+                 L1 local sandbox exists only as "no sealing guarantee"
+   SHARED STATE  host-only: ledger (hash chain), Metric Vault, Scenario Vault, run records
+                 public (opt-in, in repo, committed by humans): goal.md, intent.md, spec.md, plan.md
+                 tracker adapter: one source of truth per artifact
+```
+
+| 계층 | 책임 | 사람이 결정하는 것 | 사람이 결정하지 않는 것 |
+|---|---|---|---|
+| G 목표 루프 | 목표 감사, 측정, 격차 계산, 대역 검사, 작업 생성·갱신, 갱신 점검(refresh), 감시 | J1, J5 | 대역 안의 변동, 중복 제거, 상태 전이 |
+| W 작업 검증 루프 | 결정, 봉인 시나리오, 구현, 판정, 감사, 피드백, 증거 | J2, J3, J4 | 재시도 횟수, 결정론적 결과, 이미 정한 결정을 다시 묻는 일 |
+| X 실행 | 격리 수준 강제, 금고가 마운트되지 않았는지 확인, 외부 통신(egress) 통제 | J7 | 격리 검사를 통과한 뒤의 개별 권한 프롬프트 |
+| 공유 상태 | 추가 전용 원장, 예산, 단일 진실 공급원, 표식 댓글(marker comment) | 어느 트래커가 진실 공급원인지 | 원장 쓰기, 멱등성 키, 정체 서명(stall signature) |
+
+## 4. 목표 루프 (G)
+
+### 4.1 `goal.md`
+
+형식은 Larson의 RFC 요건(목표, 측정, 접근)을 따른다. 저장소의 선택 참여(opt-in) 디렉터리(기본값 `factory/goals/<goal_id>/goal.md`)에 두거나, 소유자가 저장소 파일을 원하지 않으면 호스트 상태에 둔다.
+
+```yaml
+---
+schema_version: 1
+goal_id: g-<slug>
+title: "..."
+mode: build            # build | watch
+kind: default          # default | migration
+objective: "..."       # 결과를 쉬운 말로 적는다
+target:                # "달성"이 무엇인지 정의한다. J1이 잠근다
+  metric_id: m-<slug>
+  operator: "<="       # <= | >= | ==
+  value: 250
+  unit: ms
+leading: [m-<slug>]    # 우리 작업으로 움직이는 지표
+lagging: [m-<slug>]    # 진짜 목표
+link_hypothesis: "..." # 선행 지표가 왜 후행 지표를 움직여야 하는지. 반증 가능해야 한다
+guardrails: [m-<slug>] # 추가 전용. 제거하려면 J1이 필요하다
+prereg:                # 사전 등록. 목표와 함께 잠긴다
+  min_observation: 7d
+  decision_rule: "target met for 2 consecutive measurements and no guardrail breach"
+  metrics_judged: 1
+budget:                # 필수. 기본 연장 없음
+  rounds: 10
+  wall_time: 72h
+  max_open_work_items: 2
+state_source: markdown # markdown | github | linear | jira  (정확히 하나)
+---
+## Approach
+...
+```
+
+J1이 승인하면 의미 필드(semantic field)를 정규화(canonicalize)하고 해시해서 지표 금고에 넣는다. 대상은 `target`, `leading`, `lagging`, `link_hypothesis`, `guardrails`, `prereg`, `mode`, `budget` 이다. 저장소의 복사본은 편의용 사본으로 본다. 그 해시가 잠긴 해시와 다르면 OMF는 **체제 변경(regime change)** 을 기록한다. 체제 변경은 J1이 다시 승인할 때까지 `candidate` 를 막는다.
+
+`kind: migration` 은 Larson의 "Migrations" 글에 나온 패턴을 더한다. 래칫(ratchet)으로 출혈을 멈추고, 쉬운 부분은 자동화하고, 긴 꼬리(long tail)는 사람에게 맡긴다. "끝"은 측정된 잔여량이 0인 상태다.
+
+### 4.2 지표 금고와 `metrics.lock`
+
+```json
+{
+  "schema_version": 1,
+  "metric_id": "m-p95-latency",
+  "command": "<argv run inside the measure container>",
+  "query": null,
+  "unit": "ms",
+  "owner": "human:<id>",
+  "approved_by": "human:<id>",
+  "approved_at": "<RFC3339>",
+  "sha256": "<hash of command+query+inputs>",
+  "watched_paths": ["src/telemetry/**", "..."],
+  "regime": 1
+}
+```
+
+- 측정은 네트워크가 제한된 일회용 컨테이너에서 **읽기 전용 자격증명** 으로 돈다. "읽기 전용"은 명령을 믿어서가 아니라 자격증명의 범위로 강제한다. 외부 시스템의 데이터는 호스트가 읽기 전용 자격증명으로 가져와 주입한다.
+- `watched_paths` 는 가능하면 기계적으로 도출한다. 질의가 참조하는 이벤트 이름, 로그 문자열, 컬럼을 소스 경로로 풀어낸다. 사람이 경로를 더할 수 있다(J3). 감시 경로를 건드리는 PR은 자동으로 고위험(§6)이 되며 J4에서 diff 검토를 거쳐야 한다.
+- 지표 출력은 신뢰할 수 없는 데이터다. 절대 지시로 해석하지 않는다.
+- 에이전트가 지표 초안을 쓸 수 있다(Larson의 "사용자와 함께 만든다"). 초안은 시나리오와 같은 분리 원칙을 따른다. 다른 벤더가 일회성 세션에서 쓴다. J1이 승인하기 전까지는 `proposed` 로 남는다. 승인을 싸게 하려고 J1에게 지표의 이력, 민감도 검사(어떤 변경이 이 지표를 움직이는가), 음성 대조(의도적으로 나쁜 변경이 지표를 나쁘게 만들어야 한다)를 보여 준다.
+
+### 4.3 트리거와 `bands.yaml`
+
+목표 루프는 세 가지 이유로 깨어난다.
+
+1. **목표 대비 격차** (Larson, build 모드): 잠긴 목표가 아직 달성되지 않았다.
+2. **대역 이탈(band breach)** (플레이북 6단계, watch 모드): 이동 기준선(rolling baseline)에 대한 결정론적 감지기가 발동한다. OMF는 플레이북의 `bands.yaml` 형식을 그대로 쓴다.
+
+   ```yaml
+   metric: ci_test_failure_rate
+   baseline: rolling_30d
+   rules: western_electric
+   tiers:
+     1sigma: { action: log }
+     2sigma: { action: diagnose, tools: "Read,Grep,Bash(gh run view *)" }
+     3sigma: { action: propose, routes: [pull_request, runbook:rollback-deploy] }
+   ```
+
+   감지는 버전이 매겨지고 단위 테스트가 있는 스크립트이며 모델이 끼지 않는다. `diagnose` 는 읽기 전용으로 돈다. `propose` 는 W와 병합 게이트를 거치는 작업을 열거나, 미리 승인된 런북(runbook)을 발동하는 일만 할 수 있다.
+3. **이벤트**: 티켓, 채널 메시지, 일정. 각각 `intent.md` 초안을 만들고, 그 초안은 같은 큐에 들어간다.
+
+격차나 이탈이 있어야만 작업 항목을 만들 수 있다. 대역 안에 있다고 해서 목표 대비 격차가 면제되지 않는다. 목표에 도달했다고 해서 이탈이 면제되지도 않는다.
+
+### 4.4 `omf goal tick`
+
+틱(tick) 한 번은 Larson 루프의 한 바퀴다. 틱은 비대화형이고 호스트 상태 말고는 상태가 없다. 그래서 스케줄러, CI, 사람 누구든 실행할 수 있다.
+
+1. **audit**: 목표 해시, 지표 잠금, 원장 해시 체인, 예산, 선행 조건을 확인한다. 하나라도 실패하면 틱을 멈추고 기록한다. 선행 조건이 없으면 인터뷰(J1)로 넘어간다.
+2. **measure**: 잠긴 측정을 돌리고 값, 입력 해시, 잠금 해시를 기록한다.
+3. **evaluate**: 목표 대비 격차를 계산한 뒤 대역을 계산한다. `log` 이탈은 기록만 한다.
+4. **reconcile**: 모델이 작업을 제안한다.
+   - 입력: 격차 요약(방향과 크기), 열려 있는 작업 항목, 최근 결과 집계, 목표의 접근 방식 본문.
+   - 출력: 플레이북 1단계 형식의 `intent.md` 후보. 각 후보에 근거 필드를 둔다.
+   - 이어서 결정론적 필터를 적용한다. 지문(fingerprint) 중복 제거, WIP 상한, 시드 린트(seed lint, §4.6), 기계적 위험 등급(§6)이다.
+5. **dispatch**: 승인된 목표 범위와 WIP 상한 안에 있는 후보는 자동으로 시작한다. 사람은 격차 보고서에서 비동기로 거부권(veto)을 가진다. 고위험 후보는 항목별 승인을 기다린다.
+6. **refresh**: 결정론적 신호로 `goal.md` 가 낡았는지 판단한다. 마지막 승인 이후 시간, 그 뒤에 병합된 PR, 지표의 움직임이다. 모델은 이 판단을 하지 않는다. 낡았으면 다음 틱은 J1 재인터뷰로 시작한다.
+
+종료 상태는 `finish`, `blocked_on_user`, `failed`, `cancelled` 로 고정한다. 진행은 작업 id, 갱신 시각, 지표 값으로 만든 서명(signature)으로 추적한다. 서명이 바뀌지 않았으면 재시도하지 않고 J6으로 올린다. 같은 막힘(blocker) 서명이 세 번 나타나도 J6으로 올린다. 예산은 호스트 원장에 누적된다. 재시작해도 초기화되지 않으며 자동으로 연장되지 않는다(J8).
+
+### 4.5 성공 선언
+
+에이전트는 `candidate` 까지만 만들 수 있다. 후보가 되려면 다음을 모두 만족해야 한다.
+
+- 사전 등록한 결정 규칙을 충족한다.
+- 모든 가드레일을 평가했고 통과했다. 평가되지 않은 가드레일이 있으면 결과는 `undetermined` 다.
+- 관찰 기간에 체제 변경이 없었고 모든 잠금 해시가 일치한다.
+- 최소 관찰 기간이 지났다.
+
+증거에는 귀인 등급(attribution grade)을 적는다. 실험, 준실험, 전후 비교 중 하나다. 전후 비교는 "correlational"(상관관계)로 표시한다. 목표는 J5로만 닫힌다. 서명 뒤에는 watch 모드가 최소 관찰 기간이 지난 시점에 다시 측정하고, 퇴행했으면 목표를 다시 연다. 신기함 효과(novelty effect)를 막기 위해서다.
+
+### 4.6 계층 간 부정행위 방지
+
+| 경로 | 차단 | 강제 테스트 |
+|---|---|---|
+| 지표 코드 변조 | `watched_paths`; 변경은 체제 변경으로 표시되고 J4의 diff 검토를 강제한다 | `E1 metric-tamper-stops` |
+| 에이전트가 자기 지표를 만들고 스스로 판정 | 별도 작성 세션, 이어서 J1 승인, 이어서 해시 잠금 | `E1` (승인되지 않은 지표 → 후보 없음) |
+| 지표 값이 작업 쪽으로 새는 것 | 작업 항목 스키마는 값, 임계값, 질의 필드를 거부한다. 시드 린트는 숫자 임계값과 지표 이름을 거부한다. 격차 보고서는 호스트 상태에만 쓴다. | `E2 canary-no-leak` |
+| 재시드(re-seeding)를 한도 없는 피드백 채널로 쓰는 것 | G의 재시드는 S6과 같은 공개 예산(disclosure budget)에서 차감된다 | `E3 budget-no-reset` |
+| 시나리오 본문이 G에 닿는 것 | G는 집계만 받는다 | `E2` |
+| 재시작으로 예산 초기화 | 호스트 원장 누적, 해시 체인 | `E3` |
+| 관측 도구에 쓰기 도구 노출 | Measure 어댑터는 읽기 전용 연산만 노출한다. 자격증명도 읽기 전용이다 | 적합성 시험 모음(conformance suite) |
+
+알려진 한계가 있다. 카나리(canary)는 문자 그대로의 유출은 잡지만 말을 바꿔 쓴 유출은 못 잡는다. 선언되지 않은 계측 경로는 구멍으로 남는다. 네트워크를 꺼도 데이터는 모델 API 경로로 나갈 수 있다. 사람이 승인한 나쁜 지표는 여전히 나쁘며, 잠금은 그것을 안정시킬 뿐이다.
+
+## 5. 작업 검증 루프 (W)
+
+### 5.1 산출물 사슬
+
+공개 사슬은 플레이북을 따른다. 이 파일들은 저장소의 선택 참여 디렉터리에 있고, 사람이 PR로 커밋한다. OMF는 이 파일을 사용자의 브랜치에 절대 커밋하지 않는다.
+
+| 산출물 | 생산자 | 내용 |
+|---|---|---|
+| `intent.md` | G reconcile, 이벤트, 또는 사람 | 플레이북 1단계 형식: Problem, Proposed outcome, Affected users and systems, Constraints, Open questions, 그리고 `goal_id` |
+| `spec.md` | S1 | 요구사항과 해결된 결정. 결정 원장(decision ledger)의 투영(projection)이다. |
+| `plan.md` | S3 (계획 먼저) | 구현 계획. 구현이 계획에서 벗어나면 같은 커밋에서 갱신한다. |
+| 후보 브랜치 `omf/<work-id>` | S3 | 코드와 구현자 자신의 테스트. OMF 소유 워크트리에 둔다 |
+| `evidence.md` 와 `evidence.json` | S7 | §5.8 |
+
+봉인 사슬은 호스트 전용이다. 결정 원장 이벤트, 시나리오, 판정(verdict), 실행 기록(run record)이 여기에 속한다.
+
+### 5.2 S1 decide: 결정 원장
+
+각 항목은 추가 전용 JSONL 로그의 이벤트 하나다. `spec.md` 는 이 로그에서 렌더링한다.
+
+```yaml
+id: NFR-queue-1
+class: interface | compatibility | latency | throughput | memory | durability
+     | queue_bound | data_model | error_semantics | security | other
+question: "..."
+qas: { source, stimulus, environment, artifact, response }  # SEI 품질 속성 시나리오
+response_measure: { metric, op, threshold, unit, percentile, window }
+status: open | resolved | deferred | na
+resolution: { choice, rationale, rejected: [], by: "human:<id>", at }
+deferral: { owner, reason, revisit_trigger, default, signed_by: "human:<id>", expires_at }
+```
+
+- `interface` 는 필수다. 빌드와 실행 명령, 블랙박스 종류(v0.1에서는 `cli` 또는 `http`), 입출력 계약을 담는다. 이것이 없으면 코드가 생기기 전에 시나리오를 쓸 수 없다.
+- 정량적인 class의 `resolved` 항목에는 숫자로 된 `response_measure` 가 필요하다.
+- `deferred` 항목에는 사람이 서명한 기본값이 필요하다.
+- 린트는 결정론적이다. 필수 필드가 있는지, 임계값이 숫자인지, 열려 있는 필수 class가 없는지, 해결된 결정마다 시나리오가 하나 이상 연결되어 있는지 본다. 시나리오 연결은 호스트 쪽에서 검사하고, 원장에는 불투명한 참조(opaque reference)만 저장한다.
+- **분기 탐침(Divergence probe)** (v0.2, v0.1에서는 선택): 같은 intent에서 값싼 독립 계획 세 개를 만든다. 계획 사이의 동작 차이가 아무도 말하지 않은 결정을 드러낸다. 차이마다 `open` 질문이 하나씩 생긴다. 이 장치는 열어 둔 채 방치된 결정이 아니라 애초에 적히지 않은 결정을 다룬다.
+
+필수 결정이 열려 있는 동안 실행은 막힌다(F8, J2).
+
+### 5.3 S2 seal
+
+- 작성자는 구현하지 않는 쪽 벤더다(기본값: Codex). `codex exec --ephemeral` 로, OMF 소유의 `CODEX_HOME` 에서 실행한다. 대화형 세션은 기록이 남기 때문에 대화형 세션에서의 봉인은 거부한다.
+- 입력은 `intent.md`, `spec.md`, 인터페이스 계약이다. 계획과 코드는 입력이 아니다.
+- 출력은 시나리오 금고(Scenario Vault)로만 간다.
+
+```yaml
+schema_version: 1
+scenario_id: <opaque random id>
+work_id: w-<id>
+author: { vendor: codex, model: "<id>", at: "<RFC3339>" }  # 구현 시작보다 앞서야 한다
+decision_refs: [NFR-queue-1]
+kind: behavior | nfr | contradiction_canary
+split: train | test
+interface: cli | http
+steps:
+  - invoke: { argv: [...], stdin: "..." }      # 또는 { method, path, body }
+    expect: { exit_code: 0, stdout_matches: "...", json_path: { ... } }
+nfr_probe: { arrival_rate, duration, thresholds: { p95_ms, error_rate, drop_rate } }  # 선택
+canary: "<per-scenario random GUID>"
+exposure: { count: 0, limit: 20 }
+status: active | retired | contaminated
+```
+
+**GATE-2: 시나리오 유효성.** 이 게이트는 구현이 시작되기 전에 돈다.
+
+- 널 구현(null implementation, 오류나 빈 출력을 돌려주는 인터페이스 스텁)은 모든 `behavior` 시나리오에서 실패해야 한다.
+- 시나리오끼리, 그리고 시나리오와 원장 임계값이 서로 모순되어서는 안 된다.
+- `contradiction_canary` 시나리오는 어떤 구현에서도 실패해야 한다. 하나라도 통과하면 판정기가 고장났거나 결과가 조작되고 있다는 뜻이다.
+- 사람이 금고에서 시나리오를 표본 추출할 수 있다(J3). 사람은 금고를 볼 수 있다. 증거 보고서에는 집계만 담긴다.
+
+### 5.4 S3 implement
+
+- 구현자는 다른 벤더다(기본값: Claude Code). L2 devcontainer에서 헤드리스(headless)로 돈다. 입력은 `intent.md`, `spec.md`, 저장소다. 금고, 호스트 상태, 다른 벤더의 CLI와 그 자격증명은 컨테이너에 없다.
+- 구현자는 계획으로 시작하고 `plan.md` 를 후보 브랜치에 커밋한다.
+- 설정은 OMF가 생성한 `--settings` 와 제한한 `--setting-sources` 에서 온다. `--bare` 는 쓰지 않는다. bare 모드는 구독 OAuth를 무시하기 때문이다. 사용자 저장소의 설정은 절대 고치지 않는다.
+- 무인 실행에서는 기존 테스트 파일 수정이 금지된다. 구현자가 테스트가 틀렸다고 판단하면 수정 대신 명세 충돌(spec-conflict) 요청을 올린다(J2 에게 `request_human_input`, §6.2).
+
+### 5.5 S4 judge: 두 컨테이너 계약
+
+이 계약은 "금고는 절대 마운트하지 않는다"와 "판정기는 시나리오를 실행해야 한다" 사이의 충돌을 푼다.
+
+```
+ [SUT container]  built from candidate sha; no vault; no persistent mounts;
+       ^          network: only the private harness bridge
+       |  interface calls only (argv/stdin via exec bridge, or HTTP on the bridge)
+ [harness container]  scenarios + runner; read-only; disposable; no internet
+       |
+       v  verdict JSON (schema-validated) -> host
+```
+
+SUT(시험 대상 시스템, system under test)는 각 호출의 **입력** 만 받는다. 시나리오 파일, 기대 출력, 단언문(assertion)은 절대 받지 않는다. 두 컨테이너는 라운드가 끝날 때마다 파괴되고, 라운드 사이에 캐시를 공유하지 않는다.
+
+검사 순서는 다음과 같다.
+
+1. 결정론적 게이트를 fast, full, deep 순서로 돌린다(검증 예산; addyosmani/factory `gates.sh` 패턴). 결과는 기계가 읽을 수 있는 한 줄이다. 예: `OMF_GATES: fast=pass full=pass deep=skip`. 필수 게이트가 없으면 `MISCONFIGURED` 이며 절대 초록(green)이 아니다.
+2. 봉인 시나리오를 k번 반복해서 불안정성(flakiness)을 잡는다. v0.1은 통과/실패와 불안정 재시도를 보고한다. 확률과 Wilson 구간은 독립 시나리오가 충분해지는 v0.3부터 쓴다. 결정론적 검사를 반복하면 일반화가 아니라 불안정성이 측정된다.
+3. `prove-test` (addyosmani/factory): 테스트가 아닌 hunk를 되돌리고 구현자 자신의 테스트가 실패하는지 확인한다. 보조 증거로 돈다.
+4. LLM 판정 (v0.3): 구현자와 다른 벤더의 세 번째 읽기 전용 세션이다. A/B 순서를 바꿔 두 번 채점하고, 의견이 갈리면 무승부로 기록한다.
+
+### 5.6 결과 분류
+
+OMF는 Osmani와 Vercel이 설명한 실행 결과 분류를 쓴다.
+
+| 결과 | 뜻 | 다음 단계 |
+|---|---|---|
+| `success` | 필수 게이트 전부 통과, 봉인 시나리오 통과, 감사 플래그 없음 | 증거 보고서 → J4 |
+| `flawed` | 겉으로는 초록이지만 감사 플래그가 발동했다. `prove-test` 실패, 카나리 적중, 테스트 수정, 또는 공개 테스트는 통과하는데 봉인 테스트는 실패하는 경우다 | 가린 피드백, 반복되면 J6 |
+| `blocked` | 환경, 인프라, 또는 빠진 결정 | 환경을 고친다, 또는 J2 |
+| `manual` | 사람이 직접 해야 한다 | 인계 패킷(§6.3). 사람이 다음에 무엇을 할지 알기 전에는 실행이 끝난 것이 아니다. |
+
+병합 권고를 달고 J4에 도달하는 것은 `success` 뿐이다.
+
+### 5.7 S6 가린 피드백
+
+- 피드백은 `train` 분할만 쓴다. `test` 분할은 마지막에 정확히 한 번만 쓴다.
+- 피드백에는 범주별 통과 비율을 담는다. 시나리오가 5개 미만인 범주는 공개 전에 더 큰 범주에 합친다.
+- 공개 규칙은 래더(Ladder)를 따른다. 새 점수는 지금까지 공개된 최고 점수를 `max(0.1, 1/sqrt(n))` 이상 넘을 때만 공개한다. `n` 은 공개 대상 범주에 든 시나리오 수다. 아니면 직전에 공개한 점수를 반복한다. 공개 횟수는 목표와 시나리오 집합 단위로 센다. 그래서 작업 항목을 바꿔도 예산이 초기화되지 않는다.
+- 피드백에는 시나리오 id, 입력, 기대 출력, 단언문 텍스트를 절대 담지 않는다.
+
+### 5.8 S7 증거 보고서
+
+`evidence.md` 는 사람용이고 `evidence.json` 은 기계용이다. 보고서 맨 위에는 **자동 검증이 다루지 못한 것** 을 나열한다. 검토자는 그곳을 봐야 한다.
+
+```yaml
+schema_version: 1
+work_id; goal_id; outcome: success|flawed|blocked|manual
+recommendation: merge_recommended | not_recommended | human_needed   # + 이유
+unverified_areas: [...]
+decisions: [{ id, threshold, measured, status }]   # 원장 대 현실
+gates: "OMF_GATES: ..."
+sealed: { train: {pass, total, flaky}, test: {pass, total} | "not yet run" }
+audit: { canary_hits, tests_edited, prove_test, judge_config_touched }
+isolation_level: L2
+high_risk_paths_touched: [...]                     # 비어 있지 않으면 J4에서 diff 검토 필수
+label: "pre-verified / goal impact not measured"
+noise_check: "gain within run-to-run variance → not_recommended"
+self_metrics: { stage_times, rounds, human_interventions_by_J, budget_used }
+untrusted_fields: [plan_summary, implementer_notes]  # 구현자가 쓴 필드
+```
+
+## 6. 사람 판단 지도
+
+| J | 시점 | 결정 | 기본값 |
+|---|---|---|---|
+| J1 | 이전 | 목표, 지표, 목표값, 가드레일, 사전 등록 ("문제를 고른다") | 없음 |
+| J2 | 이전 | 설계 결정과 인터페이스 계약 ("아키텍처를 고른다") | 없음. 열려 있는 동안 실행이 막힌다. |
+| J3 | 이전, 그리고 시나리오나 감시 경로가 바뀔 때마다 | 믿을 신호, 고위험 경로 목록, 시나리오 승격 ("품질 기준을 세운다", "어떤 신호를 믿을지 정한다") | 결정론적 검사만 믿는다. 고위험 목록은 아래 기본값에서 시작한다. |
+| J4 | 게이트 | 병합 ("증거가 충분한지 정한다") | 없음. 브랜치 보호는 OMF가 설정하지 않고 `omf doctor` 가 점검한다. |
+| J5 | 비동기 | 목표 서명과 재개 | 없음. 목표는 `candidate` 로 기다린다. |
+| J6 | 비동기 | 정체, 반복된 막힘, 예산 소진: 계속할지, 멈출지, 다시 정의할지 | 멈춘 채로 둔다 |
+| J7 | 이전 | 격리 수준, 보안 설정, 비상 우회(break-glass) | 모든 예외를 원장에 기록한다 |
+| J8 | 이전 | 예산 상한과 증액 | 자동 연장 없음 |
+
+**위험 등급은 기계적이다.** diff와 경로로 계산하며, 에이전트가 고르지 않는다. 기본 고위험 경로는 CI와 워크플로 파일, 인증, 마이그레이션, 감시(계측) 경로, 테스트 파일, 목표와 공장 파일, 잠금 파일(lockfile)이다. 사람은 J3에서 목록을 넓힌다.
+
+### 6.1 배압(back-pressure)
+
+`STOP_IF`: 검토받지 못한 증거 보고서가 세 개 이상이면 새 작업을 디스패치하지 않는다. 임계값은 J8에서 설정할 수 있다. addyosmani/factory 헌장 패턴과 F10을 따른다.
+
+### 6.2 사람에게 묻기
+
+OMF는 12-factor-agents Factor 7의 형태를 쓴다(CC BY-SA, 출처 표시). 루프는 답을 기다리며 멈춰 서 있지 않는다. 상태를 저장하고 종료했다가 답이 오면 재개한다.
+
+```yaml
+request_human_input:
+  id; j: J2; question; context; options: [...]; default: null
+  urgency: low|normal|high; format: choice|text
+  resume_token
+```
+
+승인(`approve`/`deny`)과 질문은 서로 다른 연산이다.
+
+### 6.3 인계 패킷(handoff packet)
+
+`manual` 결과, J6 에스컬레이션, 그 밖에 사람이 필요한 정지는 인계 패킷을 만든다. 패킷이 사람에게 다음에 할 일을 알려 줘야만 실행이 끝난 것으로 본다.
+
+```yaml
+handoff:
+  schema_version: 1
+  work_id; goal_id; outcome
+  state: "<루프가 어디서 왜 멈췄나>"
+  ran: ["<실행한 명령과 게이트, 결과>"]
+  remaining: ["<끝내지 못한 일>"]
+  risks: ["<알려진 위험과 검증되지 않은 영역>"]
+  decision_required: { j: J2|J3|J4|J6|J7|J8, question, options: [...] }
+  resume: "omf answer <request-id>"
+```
+
+## 7. 실행과 격리
+
+| 수준 | 구현자 (S3) | 판정기 (S4)와 측정 | 증거에 붙는 라벨 |
+|---|---|---|---|
+| L1 | 로컬 샌드박스 (거부 규칙, 비운 환경 변수) | 일회용 컨테이너 | "no sealing guarantee" (봉인 보장 없음) |
+| **L2 (기본값)** | devcontainer, 금고 마운트 없음, 구현자 벤더의 CLI와 자격증명만 | 두 컨테이너 계약 | "sealed (container)" |
+| L3 | L2에 외부 통신 허용 목록(모델 API만)을 더하고, 매 실행마다 유출 레드팀 테스트 | 동일 | "sealed (container, egress-restricted)" |
+
+**인증.**
+
+- 로컬에서는 두 벤더 모두 구독 사용을 지원한다. 구현자 컨테이너에는 구현자 벤더의 자격증명만 들어간다.
+- 위협 모델 참고: 그 컨테이너 안에서 실행되는 코드는 그 자격증명을 읽을 수 있다. L3은 유출을 줄이지만 없애지는 못한다.
+- 원격과 CI에서는 API 키를 기본으로 쓴다. OMF는 구독 토큰을 저장하거나 중개하지 않는다.
+- 작성 세션과 판정 세션은 OMF 소유의 설정 홈(config home)을 쓴다. OMF 호스트 상태 안에서 자격증명 파일만 0600 권한으로 복사한다.
+
+**신뢰할 수 없는 입력.** 이슈 본문, 채널 메시지, 지표 출력은 신뢰할 수 없는 데이터다. 트리거는 식별자만 전달하고, 내용은 OMF가 직접 읽는다(addyosmani/factory `factory-fire` 패턴).
+
+## 8. 공유 상태
+
+```
+~/.omf/projects/<repo-hash>/
+  ledger.jsonl          # 추가 전용, 해시 체인, omf 호스트 프로세스만 쓴다
+  vault/metrics/        # metrics.lock 파일, 목표 의미 해시, 사전 등록
+  vault/scenarios/      # 봉인 시나리오 (하네스 외에는 어떤 컨테이너에도 마운트하지 않는다)
+  runs/<UTC>-<stage>-<id>.md   # 불변 실행 기록
+  worktrees/<work-id>/  # OMF 소유 워크트리 (git 이 .git/worktrees 와 refs/heads/omf/* 에 쓴다)
+  config.toml
+```
+
+원장 봉투(envelope):
+
+```json
+{ "schema_version": 1, "seq": 42, "prev_hash": "<sha256>", "ts": "<RFC3339>",
+  "actor": "omf | human:<id> | agent:<vendor>", "type": "<event type>", "payload": {} }
+```
+
+모든 명령은 동작하기 전에 체인을 검증한다. 체인이 깨져 있으면 OMF는 멈춘다. v0.1의 사람 서명은 `human:<git user.email>` 에 대화형 TTY 확인을 더한 것이다. 암호학적 서명이 아니다. SSH 서명 승인은 v0.2에서 계획한다.
+
+**트래커.** 산출물마다 진실 공급원은 정확히 하나다. 플레이북의 레거시 공존 규칙을 따른다. 저장소가 공급원이거나, 레거시 시스템이 공급원이거나, 둘을 서로 연결한다. 어댑터 계약은 Symphony SPEC §11 을 따른다. 읽기 연산 둘이 필수다. `fetch_issues_by_states` 와 `fetch_issues_by_ids` 다. 쓰기는 선택이며 연산 하나에 동사 하나다. 범용 CRUD는 제공하지 않는다. 이슈마다 진행 상황용 표식 댓글을 하나 둔다. 지표 값은 트래커에 절대 쓰지 않고 요약과 참조만 쓴다.
+
+## 9. CLI (v0.1)
+
+| 명령 | 목적 |
+|---|---|
+| `omf init` | 호스트 상태만 만든다. 저장소에는 아무것도 쓰지 않는다. |
+| `omf doctor` | CLI, Docker, 인증, 격리 수준, 브랜치 보호를 감지한다. 이 환경에서 쓸 수 있는 보장을 보고한다. |
+| `omf goal new` / `audit` / `approve` | `goal.md` 생성, 인터뷰 진행, J1, 잠금 |
+| `omf goal tick` | G 한 바퀴 (§4.4) |
+| `omf goal sign` | J5 |
+| `omf decide <work-id>` | S1 인터뷰, `spec.md`, J2 |
+| `omf seal <work-id>` | S2와 GATE-2 |
+| `omf run <work-id>` | S3에서 S6까지의 루프. 예산으로 한정한다. |
+| `omf report <work-id>` | S7 |
+| `omf ship <work-id> --open-pr` | 후보 브랜치를 푸시하고 PR을 연다. 사람이 호출할 때만 실행한다. |
+| `omf veto <work-id>` | 자동 디스패치된 작업 항목에 대한 비동기 거부권 |
+| `omf answer <request-id>` | `request_human_input` 에 답하고 재개한다 |
+
+## 10. 도구 계층
+
+**패키징** 은 oh-my-* 관례를 따른다. npm 패키지 `oh-my-factory` 하나, bin `omf` 하나, Node 22 이상, TypeScript, Apache-2.0 이다.
+
+```
+oh-my-factory/
+  packages/core         state machine, ledger (hash chain), budgets, termination states, schema validation
+  packages/goal         audit, measure, evaluate (gap + bands), reconcile, dispatch, refresh, watch
+  packages/verify       decide, vault, seal, judge (two containers), gates, feedback, report
+  packages/adapters     state-markdown | measure-cmd | runner-devcontainer
+                        (later: state-github, state-linear, measure-mcp-readonly, runner-e2b)
+  packages/conformance  adapter conformance suites (third-party adapters must pass)
+  packages/cli          omf
+  shells/claude-code-plugin, shells/codex-skill    (v0.2: thin; they call the CLI only)
+  schemas/              *.schema.json (schema_version required)
+  tests/enforcement     one test per control claim
+  examples/hello-goal   offline end-to-end example
+  docs/                 concepts, getting started, threat model, limits; docs/ko/ Korean
+```
+
+**OMF가 따르는 참조** (새로 만들지 않고 가져온 것):
+
+| 무엇 | 출처 (라이선스) |
+|---|---|
+| 산출물 사슬, 대역, 등급, 선행/후행 지표, 검증기(verifier), 스킬 대 훅 | Anthropic AI-native SDLC playbook |
+| 플러그인과 스킬 배치, 헤드리스 설정 격리, 루프 가드(종료 상태 넷, 막힘 차단기, 진행 서명) | oh-my-claudecode, oh-my-codex, oh-my-openagent |
+| 게이트 라인, `MISCONFIGURED`, `prove-test`, `STOP_IF`, 불변 실행 기록, 버전이 매겨진 인계, 식별자 전용 트리거 | addyosmani/factory (MIT) |
+| 실행 결과 분류 | Vercel (블로그); Osmani |
+| 분류(triage) 상태, 읽기 전용 판정 작업과 쓰기 작업의 분리 | warpdotdev-demos/cloud-factory-demo (MIT) |
+| 트래커 어댑터 계약, 표식 댓글 | openai/symphony SPEC (Apache-2.0) |
+| 측정 제공자 계약, "N회 연속 실패" 임계값 | Argo Rollouts, Flagger (Apache-2.0) |
+| 사람 요청 계약, 저장 후 종료(persist-and-exit) | 12-factor-agents Factor 7 (CC BY-SA, 출처 표시) |
+| devcontainer 런타임; 이후 원격 샌드박스 | devcontainer spec 과 devcontainers/cli; E2B (Apache-2.0) |
+| 결정 필드; 봉인 테스트 점수 | SEI QAS; spec-kitty (MIT); shadow-score-spec (MIT) |
+| train/holdout 기준 유지/되돌리기 | Anthropic "Automating eval design and hillclimbing" |
+| 부하 탐침 | k6, 바이너리로만 호출 (AGPL, 코드 복사 없음) |
+
+**피할 것:**
+- AGPL 코드 복사 (skorokithakis/symphony, Unleash 번들).
+- 보관(archived)된 Kayenta.
+- 지원 중단된 HumanLayer SDK.
+- 비공개로 돌아선 Daytona 코어.
+- 대상 저장소를 고치는 설치기 (addyosmani/factory 설치기, Gas Town `bd init`, spec-kit).
+
+## 11. 비오염 및 안전 규칙
+
+이 규칙은 `tests/enforcement` 가 강제한다.
+
+1. OMF는 사용자의 `AGENTS.md`, `CLAUDE.md`, `.claude/`, `~/.claude`, `~/.codex` 를 읽기만 한다. 셸(shell)은 `--plugin-dir` 주입을 우선한다. 마켓플레이스 설치는 선택 참여이며 "writes user scope"(사용자 범위에 쓴다)라는 라벨을 붙인다.
+2. OMF는 사용자 브랜치에 자동 커밋하지 않고 병합도 하지 않는다. 후보는 OMF 소유 워크트리의 로컬 `omf/*` 브랜치에 둔다. 푸시와 PR 생성은 `omf ship` 으로만 일어난다.
+3. 공개 산출물(`goal.md`, `intent.md`, `spec.md`, `plan.md`)은 OMF 워크트리에 쓴다. 사람이 일반 PR 흐름으로 커밋한다.
+4. 봉인 자료(시나리오, 잠금, 카나리)가 저장소 안에 나타나면 포카요케 검사가 실행을 거부한다.
+5. 실행할 때마다 거버넌스 파일을 다시 읽는다. 읽을 수 없으면 기본값으로 물러서지 않고 OMF가 멈춘다.
+6. 비상 우회(break-glass) 예외는 원장에 사유와 만료 시각을 적은 J7 이벤트로 남긴다.
+
+## 12. OMF 자체 측정
+
+자체 지표는 플레이북의 선행/후행 지표와 Osmani의 "검토자에게 맞춰 최적화하라"에서 고른다.
+
+- 단계별 소요 시간 (intent → spec → plan → candidate → evidence → merge)
+- 첫 시도 `success` 비율
+- 재작업 라운드
+- J별 사람 개입 횟수와 J별 결정 시간
+- 증거 보고서당 검토 시간
+- 병합 뒤 발견된 유출 결함(escaped defect)
+- 병합된 변경당 비용
+
+**OMF의 사전 등록 중단 기준(kill criteria) (v0.1에서 v0.2까지).** 예제 프로젝트와 첫 도그푸딩(dogfood) 목표에서 평가한다.
+
+- 병합된 변경당 사람 개입 횟수가 같은 작업을 일반 에이전트 세션으로 한 경우보다 낮지 않으면 G 계층을 재검토한다.
+- 유출 결함이 일반 세션보다 많으면 기본 자율성을 낮춘다.
+- GATE-2가 널 구현이 통과하는 시나리오를 통과시키면 봉인을 보장으로 내놓지 않는다.
+
+## 13. v0.1 걸어다니는 뼈대(walking skeleton)
+
+뼈대는 목표 루프를 두 바퀴 끝에서 끝까지 돌려 증명해야 한다.
+
+1. `omf init` 과 `omf doctor`.
+2. `omf goal new`, 이어서 J1, 이어서 잠금: 목표 지표 하나, 가드레일 하나, 측정 명령 하나, 최소 사전 등록.
+3. `omf goal tick` 1회차: 컨테이너에서 측정, 격차와 대역, reconcile(`intent.md` 후보, 결정론적 필터), 범위 안에서 자동 디스패치.
+4. 항목마다 W: `decide`(`spec.md`, 원장), `seal`(Codex 일회성, 결정론적 CLI 시나리오, GATE-2), `run`(devcontainer의 Claude, `omf/<work-id>` 브랜치), `judge`(두 컨테이너, 게이트 라인, 결과 분류), 가린 피드백 한 라운드, `report`.
+5. 사람이 병합한다. 선택적으로 `omf ship --open-pr` 을 쓴다.
+6. `omf goal tick` 2회차: 다시 측정한다. 격차가 닫혔으면 후보를 만들고, 이어서 `omf goal sign`(J5)을 한다.
+7. 자체 지표를 기록한다.
+8. 강제 테스트:
+   - `E1 metric-tamper-stops`
+   - `E2 canary-no-leak`: 워크스페이스, 프롬프트, G 입력, 피드백을 다룬다
+   - `E3 budget-no-reset`
+   - `E4 unevaluated-is-undetermined`
+   - `E5 init-non-pollution`
+   - `E6 l2-leak-redteam`: 시나리오를 찾으라고 지시받은 구현자가 실패하고 카나리가 나타나지 않는다
+9. `examples/hello-goal`: 오프라인으로 측정할 수 있는 지표를 가진 작은 CLI. 예를 들면 고정된 입력 집합에 대한 로컬 연산의 p95 지연이다. 외부 서비스 없이 전체 루프가 돈다.
+
+**v0.1 범위 밖:**
+- LLM 판정과 확률 구간.
+- 선택적 프로토타입을 넘는 분기 탐침.
+- 외부 트래커와 관측 MCP.
+- 원격 러너와 L3.
+- 디지털 트윈 유니버스.
+- 스케줄링 (`omf goal tick` 을 cron이나 CI에서 쓰는 방법을 문서화하는 것은 제외).
+- Claude Code와 Codex 셸.
+- `migration` 템플릿.
+
+**로드맵:**
+- v0.2: 셸(플러그인과 스킬), GitHub 상태 어댑터, 예약 틱 워크플로 템플릿, SSH 서명 승인, 분기 탐침.
+- v0.3: 순서를 바꾸는 LLM 판정, Wilson 구간을 쓰는 확률, 전체 래더(Ladder), L3, 매 실행 유출 레드팀.
+- v0.4: 읽기 전용 MCP 측정 어댑터, E2B 러너, 첫 디지털 트윈 키트, `migration` kind.
+
+## 14. 열린 질문
+
+이 질문들은 미뤄 두며 v0.1을 막지 않는다.
+
+1. 팀 사용: 한 목표에 여러 사람과 여러 머신이 붙는 경우. v0.1의 호스트 금고는 머신별이고, 팀 모드는 범위 밖이다.
+2. 단일 벤더 사용자: 더 낮은 보장 라벨("same-vendor sealing", 같은 벤더 봉인)로 허용한다. 라벨의 정확한 문구는 미룬다.
+3. 벤더를 달리한 작성이 유출이나 상관된 사각지대를 실제로 줄이는지. 가설로 두고 측정한다. 주장하지 않는다.
+4. WIP 상한, `STOP_IF`, 래더 마진의 기본값은 시작점이며 자체 지표를 보고 조정한다.
+5. Windows 지원(L1만?)과 사내 프록시.
