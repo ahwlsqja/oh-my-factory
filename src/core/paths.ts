@@ -85,12 +85,33 @@ function realpathOfNearestExisting(path: string): string {
   return join(realpathSync.native(current), ...rest);
 }
 
+/** True when `dir` is `root` or inside it. Both sides are compared by real path, so symlinks cannot hide an overlap. */
+function isWithin(dir: string, root: string): boolean {
+  const rel = relative(realpathOfNearestExisting(root), realpathOfNearestExisting(dir));
+  const outside = rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel);
+  return rel === "" || !outside;
+}
+
 /** Throws when `dir` is the repository root or inside it (spec §11 rule 1). Compares real paths. */
 export function assertOutsideRepo(dir: string, repo: string): void {
-  const rel = relative(realpathOfNearestExisting(repo), realpathOfNearestExisting(dir));
-  const outside = rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel);
-  if (rel === "" || !outside) {
-    throw new Error(`OMF state must live outside the repository: ${dir}`);
+  if (isWithin(dir, repo)) {
+    throw new Error(`OMF state must live outside the repository: ${dir} (set OMF_HOME to a directory outside ${repo})`);
+  }
+}
+
+/**
+ * Throws when `dir` is inside a config home that the agent CLIs own: ~/.claude, ~/.codex, and
+ * CLAUDE_CONFIG_DIR / CODEX_HOME when they are set to absolute paths (spec §11 rule 1).
+ */
+export function assertOutsideAgentHomes(dir: string, env: NodeJS.ProcessEnv = process.env): void {
+  const home = env.HOME !== undefined && env.HOME !== "" ? env.HOME : homedir();
+  const roots = [join(home, ".claude"), join(home, ".codex")];
+  for (const key of ["CLAUDE_CONFIG_DIR", "CODEX_HOME"] as const) {
+    const value = env[key];
+    if (value !== undefined && value !== "" && isAbsolute(value)) roots.push(value);
+  }
+  for (const root of roots) {
+    if (isWithin(dir, root)) throw new Error(`OMF state must not live inside ${root} (spec §11 rule 1): ${dir}`);
   }
 }
 
@@ -98,5 +119,6 @@ export function projectDir(cwd: string, env: NodeJS.ProcessEnv = process.env): s
   const repo = repoToplevel(cwd);
   const dir = join(omfHome(env), "projects", projectId(repo));
   assertOutsideRepo(dir, repo);
+  assertOutsideAgentHomes(dir, env);
   return dir;
 }

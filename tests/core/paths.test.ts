@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  assertOutsideAgentHomes,
   assertOutsideRepo,
   NotAGitRepoError,
   omfHome,
@@ -138,5 +139,50 @@ describe("case-insensitive repository paths", () => {
     const home = makeTempDir("omf-home-");
     expect(() => projectDir(repo, { HOME: home, OMF_HOME: join(variant, ".omf") })).toThrow(/must live outside the repository/);
     expect(repoToplevel(variant)).toBe(repoToplevel(repo));
+  });
+});
+
+describe("OMF state outside the agent CLIs' config homes", () => {
+  it("refuses OMF_HOME inside ~/.claude", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    expect(() => projectDir(repo, { HOME: home, OMF_HOME: join(home, ".claude", "omf") })).toThrow(/must not live inside/);
+  });
+
+  it("refuses OMF_HOME inside ~/.codex", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    expect(() => projectDir(repo, { HOME: home, OMF_HOME: join(home, ".codex", "x") })).toThrow(/must not live inside/);
+  });
+
+  it("refuses OMF_HOME inside CODEX_HOME when it points elsewhere", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const codexHome = makeTempDir("omf-codex-");
+    expect(() =>
+      projectDir(repo, { HOME: home, CODEX_HOME: codexHome, OMF_HOME: join(codexHome, "omf") }),
+    ).toThrow(/must not live inside/);
+  });
+
+  it("refuses OMF_HOME inside CLAUDE_CONFIG_DIR when it points elsewhere", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const claudeHome = makeTempDir("omf-claude-");
+    expect(() =>
+      projectDir(repo, { HOME: home, CLAUDE_CONFIG_DIR: claudeHome, OMF_HOME: join(claudeHome, "omf") }),
+    ).toThrow(/must not live inside/);
+  });
+
+  it("accepts OMF_HOME elsewhere", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    expect(() => projectDir(repo, { HOME: home, OMF_HOME: join(makeTempDir("omf-state-"), ".omf") })).not.toThrow();
+  });
+
+  it("names the repository and how to fix it when OMF state would sit inside it", () => {
+    const repo = makeGitRepo();
+    expect(() => projectDir(repo, { OMF_HOME: join(repo, ".omf") })).toThrow(
+      `(set OMF_HOME to a directory outside ${realpathSync.native(repo)})`,
+    );
   });
 });
