@@ -1,15 +1,39 @@
 import { execFileSync } from "node:child_process";
+import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import picomatch from "picomatch";
 import { canonicalize, sha256Hex } from "../core/canonical-json.js";
 import { gitEnv } from "../core/paths.js";
 
+/**
+ * Runs git against a throwaway copy of the index. Even read commands such as `git diff` refresh the index
+ * and take `.git/index.lock`, which would collide with the user's own git commands, so the real index is
+ * only ever read.
+ */
 function git(repo: string, args: string[]): string {
+  const scratch = mkdtempSync(join(tmpdir(), "omf-git-"));
   try {
-    return execFileSync("git", args, { cwd: repo, encoding: "utf8", env: gitEnv(), stdio: ["ignore", "pipe", "pipe"] });
+    const realIndex = execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-path", "index"], {
+      cwd: repo,
+      encoding: "utf8",
+      env: gitEnv(),
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+    const index = join(scratch, "index");
+    if (existsSync(realIndex)) copyFileSync(realIndex, index);
+    return execFileSync("git", args, {
+      cwd: repo,
+      encoding: "utf8",
+      env: { ...gitEnv(), GIT_INDEX_FILE: index, GIT_OPTIONAL_LOCKS: "0" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
   } catch (err) {
     const stderr = (err as { stderr?: unknown }).stderr;
     const detail = typeof stderr === "string" && stderr.trim() !== "" ? stderr.trim() : (err as Error).message;
     throw new Error(`git ${args.join(" ")} failed: ${detail}`);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
   }
 }
 

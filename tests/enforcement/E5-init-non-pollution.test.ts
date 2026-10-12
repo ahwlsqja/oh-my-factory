@@ -1,11 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { delimiter, join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "../../src/core/canonical-json.js";
 import { initProject } from "../../src/core/project.js";
+import { approveGoal } from "../../src/goal/approve.js";
 import { writePollutingAgentStubs } from "../helpers/agent-stubs.js";
 import { omf } from "../helpers/cli.js";
+import { setupGoal } from "../helpers/goal.js";
 import { makeGitRepo, makeTempDir } from "../helpers/tmp.js";
 
 /** Map of relative path -> content hash for every file under root (skipping .git). */
@@ -99,5 +101,27 @@ describe("E5 init-non-pollution", () => {
     expect(snapshot(repo)).toEqual(before.repo);
     expect(agentHomeState(home)).toEqual(before.agents);
     expect(gitStatus()).toBe(before.status);
+  });
+
+  it("goal audit, approve and measure leave the repository's git index untouched", () => {
+    const fx = setupGoal();
+    approveGoal(fx.location, "g-fast", "human:dev");
+    // A stale stat entry is what makes git rewrite its index on a read.
+    const touched = new Date(Date.now() - 60_000);
+    utimesSync(join(fx.repo, "bench", "p95.sh"), touched, touched);
+    utimesSync(join(fx.repo, "bench", "errors.sh"), touched, touched);
+    const index = join(fx.repo, ".git", "index");
+    const state = (): { bytes: string; mtime: bigint } => ({
+      bytes: readFileSync(index).toString("hex"),
+      mtime: statSync(index, { bigint: true }).mtimeNs,
+    });
+    const before = state();
+
+    omf(["goal", "audit", "g-fast"], fx.repo, fx.home);
+    omf(["goal", "measure", "g-fast", "--runner", "host"], fx.repo, fx.home);
+    approveGoal(fx.location, "g-fast", "human:dev");
+
+    expect(state()).toEqual(before);
+    expect(existsSync(`${index}.lock`)).toBe(false);
   });
 });
