@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -30,5 +31,32 @@ describe("ledger-tamper-stops", () => {
     expect(init.code).toBe(2);
     expect(init.stderr).toContain("ledger corrupt at seq 1: hash mismatch");
     expect(readFileSync(file, "utf8")).toBe(tampered);
+  });
+
+  it("the goal and metric commands refuse a tampered ledger and leave it unchanged", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    expect(omf(["init"], repo, home).code).toBe(0);
+    // metric propose names the actor from the repo's git identity; set it so the command reaches the ledger check.
+    execFileSync("git", ["config", "user.email", "tester@example.com"], { cwd: repo });
+
+    const file = join(projectDir(repo, { HOME: home }), "ledger.jsonl");
+    const event = JSON.parse(readFileSync(file, "utf8")) as { payload: Record<string, unknown> };
+    event.payload.repo = "/somewhere/else";
+    writeFileSync(file, `${JSON.stringify(event)}\n`);
+    const tampered = readFileSync(file, "utf8");
+
+    const commands = [
+      ["goal", "new", "g-x"],
+      ["goal", "audit", "g-x"],
+      ["goal", "measure", "g-x", "--runner", "host"],
+      ["metric", "propose", "m-x", "--unit", "ms", "--", "sh", "-c", "echo 1"],
+    ];
+    for (const args of commands) {
+      const result = omf(args, repo, home);
+      expect(result.code, args.join(" ")).toBe(2);
+      expect(result.stderr, args.join(" ")).toContain("ledger corrupt at seq 1");
+      expect(readFileSync(file, "utf8"), args.join(" ")).toBe(tampered);
+    }
   });
 });

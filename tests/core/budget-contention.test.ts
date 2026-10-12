@@ -14,7 +14,7 @@ const { consumeBudget, BudgetError } = await import(process.argv[1]);
 const { Ledger } = await import(process.argv[2]);
 const dir = process.argv[3];
 try {
-  consumeBudget(new Ledger(dir), "g-race");
+  consumeBudget(new Ledger(dir), "g-race", "rounds");
   process.exit(0);
 } catch (err) {
   process.exit(err instanceof BudgetError ? 3 : 1);
@@ -34,9 +34,9 @@ function runChild(dir: string): Promise<number> {
 describe("budget consumption across processes", () => {
   it("consumes the last round exactly once when processes race", async () => {
     const dir = makeTempDir("omf-budget-race-");
-    declareBudget(new Ledger(dir), "g-race", 1, "human:dev");
+    declareBudget(new Ledger(dir), "g-race", "rounds", 1, "human:dev");
     const codes = await Promise.all([1, 2, 3, 4].map(() => runChild(dir)));
     expect(codes.sort()).toEqual([0, 3, 3, 3]);
-    expect(budgetState(new Ledger(dir), "g-race")).toMatchObject({ remaining: 0, consumed: 1 });
+    expect(budgetState(new Ledger(dir), "g-race", "rounds")).toMatchObject({ remaining: 0, consumed: 1 });
   });
 });

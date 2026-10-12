@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { TORN_TAIL_WARNING, type VerifyResult } from "./ledger.js";
 import { NotAGitRepoError, type ProjectLocation, UnsupportedRepoError, locateProject, repoToplevel } from "./paths.js";
-import { NOT_INITIALIZED_MESSAGE, readProjectStatus } from "./project.js";
+import { projectProblem, readProjectStatus } from "./project.js";
 
 export interface ToolProbe {
   found: boolean;
@@ -113,13 +113,8 @@ export function runDoctor(
       const status = readProjectStatus(location);
       initialized = status.initialized;
       ledgerResult = status.ledger;
-      if (status.ledger === null) {
-        problems.push(NOT_INITIALIZED_MESSAGE);
-      } else if (!status.ledger.ok) {
-        problems.push(`ledger corrupt at seq ${status.ledger.seq}: ${status.ledger.reason}`);
-      } else if (!status.initialized) {
-        problems.push(NOT_INITIALIZED_MESSAGE);
-      }
+      const problem = projectProblem(status);
+      if (problem !== null) problems.push(problem);
       if (status.ledger?.ok && status.ledger.tornTail) warnings.push(TORN_TAIL_WARNING);
     }
   }

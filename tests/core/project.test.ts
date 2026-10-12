@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Ledger } from "../../src/core/ledger.js";
 import { NotAGitRepoError, projectDir, resolveProject } from "../../src/core/paths.js";
-import { DEFAULT_CONFIG, PROJECT_SUBDIRS, initProject, readProjectStatus } from "../../src/core/project.js";
+import { DEFAULT_CONFIG, PROJECT_SUBDIRS, initProject, projectProblem, readProjectStatus, requireProject } from "../../src/core/project.js";
 import { makeGitRepo, makeTempDir } from "../helpers/tmp.js";
 
 describe("initProject", () => {
@@ -107,5 +107,20 @@ describe("readProjectStatus", () => {
     const status = readProjectStatus(resolveProject(repo, env));
     expect(status.ledger).toMatchObject({ ok: true, count: 1 });
     expect(status.initialized).toBe(true);
+  });
+});
+
+describe("projectProblem and requireProject", () => {
+  it("names what keeps a command from using the project", () => {
+    const repo = makeGitRepo();
+    const env = { OMF_HOME: join(makeTempDir("omf-home-"), ".omf") };
+    const location = resolveProject(repo, env);
+    expect(projectProblem(readProjectStatus(location))).toBe("project not initialized; run omf init");
+    expect(() => requireProject(repo, env)).toThrow("project not initialized; run omf init");
+    initProject(repo, env);
+    expect(projectProblem(readProjectStatus(location))).toBeNull();
+    expect(requireProject(repo, env).initialized).toBe(true);
+    writeFileSync(join(location.dir, "ledger.jsonl"), "{}\n");
+    expect(projectProblem(readProjectStatus(location))).toMatch(/^ledger corrupt at seq 1: /);
   });
 });

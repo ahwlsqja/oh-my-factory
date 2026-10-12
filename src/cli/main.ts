@@ -4,6 +4,7 @@ import { Command } from "commander";
 import { runDoctor } from "../core/doctor.js";
 import { TORN_TAIL_WARNING } from "../core/ledger.js";
 import { resolveProject } from "../core/paths.js";
+import { registerGoalCommands } from "./goal.js";
 import { NOT_INITIALIZED_MESSAGE, initProject, readProjectStatus } from "../core/project.js";
 
 const { version } = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { version: string };
@@ -68,6 +69,8 @@ ledgerCommand
       if (ledger.tornTail) console.error(`warning: ${TORN_TAIL_WARNING}`);
     }
   });
+
+registerGoalCommands(program);
 
 program.parseAsync().catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : String(err));

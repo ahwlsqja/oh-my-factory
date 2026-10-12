@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OMF bands.yaml (the playbook's control-band format, spec §4.3)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["metric", "baseline", "rules", "tiers"],
+  "$defs": {
+    "tier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action"],
+      "properties": {
+        "action": { "enum": ["log", "diagnose", "propose"] },
+        "tools": { "type": "string" },
+        "routes": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    }
+  },
+  "properties": {
+    "metric": { "type": "string", "pattern": "^m-[a-z0-9]+(-[a-z0-9]+)*$" },
+    "baseline": { "type": "string", "pattern": "^rolling_[1-9][0-9]*d$" },
+    "rules": { "const": "western_electric" },
+    "tiers": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "1sigma": { "$ref": "#/$defs/tier" },
+        "2sigma": { "$ref": "#/$defs/tier" },
+        "3sigma": { "$ref": "#/$defs/tier" }
+      }
+    }
+  }
+}

@@ -20,10 +20,10 @@
 </p>
 
 > [!WARNING]
-> **Pre-alpha.** Today oh-my-factory ships its foundation only: host state, a tamper-evident
-> ledger, budgets that never reset, and three commands (`omf init`, `omf doctor`,
-> `omf ledger verify`). The goal loop and the verification line described below are designed but
-> not built yet. See [What works today](#what-works-today).
+> **Pre-alpha.** Today oh-my-factory ships its foundation (host state, a tamper-evident ledger,
+> budgets that never reset) plus defining, approving and measuring goals: J1 locks, the gap to
+> the target and control bands. Turning the gap into work (`omf goal tick`) and the verification
+> line are designed but not built yet. See [What works today](#what-works-today).
 
 ---
 
@@ -96,8 +96,11 @@ or **designed** and not built yet.
   stops if it is broken.
 - **Budgets never reset.** *Enforced today.* A restart does not refill a budget, and only a person
   can raise one.
-- **Goals over tasks.** *Designed.* Work is derived from the gap between a measured value and a
-  target.
+- **Metric code cannot change quietly.** *Enforced today.* A metric is measured only after you approve it,
+  an edited lock stops measurement, and a change to the metric's command, to a path it watches (`--watch`), or to
+  the goal needs a new approval. Limits are listed under "Define and measure a goal".
+- **Goals over tasks.** *Partly built.* Work is derived from the gap between a measured value and a
+  target. Goals, locks and measurement work today; turning the gap into work is next.
 - **Holdout, not homework.** *Designed.* Acceptance scenarios are sealed, written by the other
   vendor, and never shown to the implementer.
 - **Isolation is measured, not declared.** *Designed.* `omf doctor` will measure the isolation in
@@ -113,11 +116,15 @@ or **designed** and not built yet.
 | `omf init` | Creates host state for the current repository under `~/.omf`. Writes nothing to the repository or to the agent CLIs' configuration. |
 | `omf doctor` | Checks git, Docker, Claude Code and Codex, the repository and the ledger, and writes `preflight.json`. Runs the agent CLIs with a throwaway home. |
 | `omf ledger verify` | Checks the ledger's hash chain. |
+| `omf goal new <id>` | Creates `goal.md` in host state from a template. |
+| `omf metric propose <id> --unit <u> -- <command>` | Proposes a metric: the command that prints its value, the unit, and the paths whose change is a regime change. |
+| `omf goal audit <id>` | Checks the goal, its locks and the ledger, and reports regime changes. Writes nothing. |
+| `omf goal approve <id>` | J1: shows what will be locked and approves it after you type the goal id in a terminal. |
+| `omf goal measure <id>` | Runs the locked metrics (in Docker, or on the host with `--runner host`), computes the gap to target and the control bands, and writes a gap report to host state. |
 
 Exit codes: `0` ok, `1` problems found, `2` the command could not run.
 
-Not built yet: the goal loop, the decision ledger and sealed scenarios, the container runner and
-judge, evidence reports, and asking people for input. The
+Not built yet: turning the gap into work (`omf goal tick`: reconcile, filters, dispatch), the decision ledger and sealed scenarios, the container runner and judge, evidence reports, and asking people for input. The
 [design](docs/design/2026-10-12-omf-v0-design.md) describes all of them.
 
 ## Quick start
@@ -151,17 +158,73 @@ problems:
 
 `omf doctor --json` prints the full report.
 
+## Define and measure a goal
+
+```console
+$ omf init
+initialized ~/.omf/projects/3186047891f1f0a0
+
+$ omf goal new g-demo
+created ~/.omf/projects/3186047891f1f0a0/goals/g-demo/goal.md
+edit it, propose its metrics with omf metric propose, then run omf goal audit g-demo
+
+$ # edit goal.md: target m-demo <= 5 ms, lagging: [m-demo]
+$ omf metric propose m-demo --unit ms -- sh -c 'echo 7'
+proposed m-demo as human:you@example.com
+
+$ omf goal audit g-demo
+goal g-demo: draft
+ready for J1: run omf goal approve g-demo
+
+$ omf goal approve g-demo
+goal g-demo: Say what this goal is in a few words
+objective: The outcome you want, in plain words
+target: m-demo <= 5 ms
+leading: none; lagging: m-demo; guardrails: none
+budget: 10 rounds, 72h wall time, at most 2 open work items
+decision rule: target met for 2 consecutive measurements and no guardrail breach (minimum observation 7d)
+metric m-demo: ["sh","-c","echo 7"] -> ms; watches none
+Type g-demo to approve as human:you@example.com: g-demo
+approved g-demo (regime 1)
+
+$ omf goal measure g-demo --runner host
+goal g-demo (regime 1), runner host
+target m-demo: 7 ms; target <= 5 ms; gap 2 (decrease, medium)
+  m-demo [target, lagging]: 7 ms
+report: ~/.omf/projects/3186047891f1f0a0/goals/g-demo/reports/2026-10-12T06-27-24-995Z-gap.json
+warning: measured on the host without isolation (--runner host)
+```
+
+Re-approval first shows why it is needed: lock problems, the regime changes, and the diff of any changed
+watched path. If the goal or a metric changes while you read it, nothing is approved. Re-approval never changes
+the budgets: if `goal.md` differs from the rounds or wall time already in force, `omf goal approve` refuses, and
+raising either is a separate decision (J8).
+
+Known limits of "metric code cannot change quietly":
+
+- Only the metric's command and the paths you declare with `--watch` are covered. `omf metric propose` warns when
+  you give none. Files a metric reads but does not watch, and gitignored inputs, can change without a new approval.
+- `bands.yaml` is not locked yet, so editing it changes guardrail verdicts without a new approval.
+- A container image tag is mutable; pin an image digest to pin the image.
+
 ## Where state lives
 
 OMF keeps everything outside your repository, one directory per project:
 
 ```
 ~/.omf/projects/<project-id>/
-  ledger.jsonl        append-only, hash-chained event log
-  config.toml         roles and isolation level
-  preflight.json      the last doctor report
-  vault/              sealed material (empty for now)
-  runs/  worktrees/   reserved for later stages
+  ledger.jsonl            append-only, hash-chained event log
+  config.toml             roles and isolation level
+  preflight.json          the last doctor report
+  goals/<goal-id>/
+    goal.md               the goal: objective, target, budgets
+    bands/<metric>.yaml   control bands (not locked yet)
+    reports/              gap reports, <stamp>-gap.json
+  vault/
+    metrics/proposed/     metric proposals, <metric>.json
+    metrics/<goal-id>/    J1 locks: <metric>.lock.json, goal.lock.json
+    scenarios/            sealed scenarios (empty until M3)
+  runs/  worktrees/       reserved for later stages
 ```
 
 Set `OMF_HOME` to use another location. OMF refuses to keep state inside the repository or inside
