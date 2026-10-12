@@ -18,7 +18,7 @@ describe("Ledger", () => {
   it("chains events and verifies", () => {
     const ledger = newLedger();
     const first = ledger.append({ actor: "omf", type: "project.initialized", payload: { a: 1 } });
-    const second = ledger.append({ actor: "human:dev", type: "budget.declared", payload: { goal_id: "g-x", rounds: 3 } });
+    const second = ledger.append({ actor: "human:dev", type: "budget.declared", payload: { goal_id: "g-x", kind: "rounds", amount: 3 } });
     expect(first.seq).toBe(1);
     expect(first.prev_hash).toBe(GENESIS_HASH);
     expect(second.seq).toBe(2);

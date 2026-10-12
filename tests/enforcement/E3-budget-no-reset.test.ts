@@ -10,28 +10,28 @@ describe("E3 budget-no-reset", () => {
   it("survives a restart: a new Ledger instance sees the same consumption", () => {
     const dir = makeTempDir("omf-e3-");
     const before = new Ledger(dir);
-    declareBudget(before, "g-a", 3, "human:dev");
-    consumeBudget(before, "g-a");
-    consumeBudget(before, "g-a");
+    declareBudget(before, "g-a", "rounds", 3, "human:dev");
+    consumeBudget(before, "g-a", "rounds");
+    consumeBudget(before, "g-a", "rounds");
 
     const afterRestart = new Ledger(dir);
-    expect(budgetState(afterRestart, "g-a")?.remaining).toBe(1);
-    consumeBudget(afterRestart, "g-a");
-    expect(() => consumeBudget(afterRestart, "g-a")).toThrow(/budget exhausted/);
+    expect(budgetState(afterRestart, "g-a", "rounds")?.remaining).toBe(1);
+    consumeBudget(afterRestart, "g-a", "rounds");
+    expect(() => consumeBudget(afterRestart, "g-a", "rounds")).toThrow(/budget exhausted/);
   });
 
   it("cannot be re-declared to reset it", () => {
     const ledger = new Ledger(makeTempDir("omf-e3-"));
-    declareBudget(ledger, "g-a", 1, "human:dev");
-    consumeBudget(ledger, "g-a");
-    expect(() => declareBudget(ledger, "g-a", 5, "human:dev")).toThrow(/already declared/);
+    declareBudget(ledger, "g-a", "rounds", 1, "human:dev");
+    consumeBudget(ledger, "g-a", "rounds");
+    expect(() => declareBudget(ledger, "g-a", "rounds", 5, "human:dev")).toThrow(/already declared/);
   });
 
   it("cannot be raised by omf or an agent", () => {
     const ledger = new Ledger(makeTempDir("omf-e3-"));
-    declareBudget(ledger, "g-a", 1, "human:dev");
-    expect(() => raiseBudget(ledger, "g-a", 1, "omf")).toThrow(BudgetError);
-    expect(() => raiseBudget(ledger, "g-a", 1, "agent:codex")).toThrow(BudgetError);
-    expect(budgetState(ledger, "g-a")?.remaining).toBe(1);
+    declareBudget(ledger, "g-a", "rounds", 1, "human:dev");
+    expect(() => raiseBudget(ledger, "g-a", "rounds", 1, "omf")).toThrow(BudgetError);
+    expect(() => raiseBudget(ledger, "g-a", "rounds", 1, "agent:codex")).toThrow(BudgetError);
+    expect(budgetState(ledger, "g-a", "rounds")?.remaining).toBe(1);
   });
 });
