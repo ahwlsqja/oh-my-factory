@@ -137,4 +137,29 @@ describe("Ledger", () => {
     writeFileSync(ledger.file, `${lines[0]}\n`);
     expect(ledger.verify()).toEqual({ ok: true, count: 1, head: first.hash });
   });
+
+  it("appendWith builds the event from the verified events", () => {
+    const ledger = newLedger();
+    const seen: number[] = [];
+    ledger.appendWith((events) => {
+      seen.push(events.length);
+      return { actor: "omf", type: "project.touched", payload: { seen: events.length } };
+    });
+    ledger.appendWith((events) => {
+      seen.push(events.length);
+      return { actor: "omf", type: "project.touched", payload: { seen: events.length } };
+    });
+    expect(seen).toEqual([0, 1]);
+    expect(ledger.readAll().map((event) => event.payload)).toEqual([{ seen: 0 }, { seen: 1 }]);
+  });
+
+  it("appendWith writes nothing when build throws", () => {
+    const ledger = newLedger();
+    expect(() =>
+      ledger.appendWith(() => {
+        throw new Error("no");
+      }),
+    ).toThrow("no");
+    expect(ledger.verify()).toEqual({ ok: true, count: 0, head: GENESIS_HASH });
+  });
 });

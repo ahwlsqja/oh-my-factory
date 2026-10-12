@@ -146,11 +146,17 @@ export class Ledger {
     return snap.events;
   }
 
-  append(input: NewEvent): LedgerEvent {
+  /**
+   * Appends the event that `build` returns. `build` sees the verified events while the ledger lock is
+   * held, so a decision that depends on the ledger (budgets, claims) cannot race another writer.
+   * If `build` throws, nothing is written.
+   */
+  appendWith(build: (events: LedgerEvent[]) => NewEvent): LedgerEvent {
     return withLockSync(this.lockFile, () => {
       const snap = this.snapshot();
       const verified = verifyEvents(snap.events);
       if (!verified.ok) throw new LedgerCorruptError(verified.seq, verified.reason);
+      const input = build(snap.events);
       let head = { count: verified.count, head: verified.head };
       if (snap.missingNewline) appendFileSync(this.file, "\n");
       if (snap.tornTail !== null) {
@@ -165,6 +171,10 @@ export class Ledger {
       }
       return this.write(head, input);
     });
+  }
+
+  append(input: NewEvent): LedgerEvent {
+    return this.appendWith(() => input);
   }
 
   private write(at: { count: number; head: string }, input: NewEvent): LedgerEvent {

@@ -33,4 +33,36 @@ describe("budgets", () => {
   it("refuses to consume an undeclared budget", () => {
     expect(() => consumeBudget(newLedger(), "g-a")).toThrow(/no budget declared/);
   });
+
+  it("stops on a raise written by a non-person", () => {
+    const ledger = newLedger();
+    declareBudget(ledger, "g-a", 3, "human:dev");
+    ledger.append({ actor: "agent:codex", type: "budget.raised", payload: { goal_id: "g-a", rounds: 5 } });
+    expect(() => budgetState(ledger, "g-a")).toThrow(/budget.raised by agent:codex/);
+  });
+
+  it("stops on a second declaration written directly", () => {
+    const ledger = newLedger();
+    declareBudget(ledger, "g-a", 3, "human:dev");
+    ledger.append({ actor: "human:dev", type: "budget.declared", payload: { goal_id: "g-a", rounds: 9 } });
+    expect(() => budgetState(ledger, "g-a")).toThrow(/declared twice/);
+  });
+
+  it("stops on rounds that are not positive integers", () => {
+    const negative = newLedger();
+    declareBudget(negative, "g-a", 3, "human:dev");
+    negative.append({ actor: "omf", type: "budget.consumed", payload: { goal_id: "g-a", rounds: -5 } });
+    expect(() => budgetState(negative, "g-a")).toThrow(/positive integer/);
+
+    const text = newLedger();
+    declareBudget(text, "g-a", 3, "human:dev");
+    text.append({ actor: "omf", type: "budget.consumed", payload: { goal_id: "g-a", rounds: "x" } });
+    expect(() => budgetState(text, "g-a")).toThrow(/positive integer/);
+  });
+
+  it("agents cannot record consumption", () => {
+    const ledger = newLedger();
+    declareBudget(ledger, "g-a", 3, "human:dev");
+    expect(() => consumeBudget(ledger, "g-a", 1, "agent:claude")).toThrow(BudgetError);
+  });
 });

@@ -3,8 +3,9 @@ import { BudgetError, budgetState, consumeBudget, declareBudget, raiseBudget } f
 import { Ledger } from "../../src/core/ledger.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
-// Spec §4.4, J8: budgets accumulate in the host ledger, never reset on restart,
-// and are never extended automatically.
+// Spec §4.4, J8: budgets accumulate in the host ledger. A restart or a re-declaration cannot reset them,
+// and only people declare or raise them. Known limit (spec §8): removing events from the end of the
+// ledger is not detected, so someone who can edit ~/.omf can undo consumption.
 describe("E3 budget-no-reset", () => {
   it("survives a restart: a new Ledger instance sees the same consumption", () => {
     const dir = makeTempDir("omf-e3-");
