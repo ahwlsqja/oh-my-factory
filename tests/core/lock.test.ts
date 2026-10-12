@@ -53,6 +53,15 @@ describe("acquireLock", () => {
     expect(acquireLock(path).pid).toBe(process.pid);
   });
 
+  it("treats a lock file with an invalid pid as unreadable", () => {
+    const path = lockPath();
+    writeFileSync(path, JSON.stringify({ pid: 0, start_time: null, acquired_at: "x" }));
+    expect(() => acquireLock(path)).toThrow(LockHeldError);
+    const old = new Date(Date.now() - 60_000);
+    utimesSync(path, old, old);
+    expect(acquireLock(path).pid).toBe(process.pid);
+  });
+
   it("does not reclaim a stale lock while another process holds the reclaim guard", () => {
     const path = lockPath();
     const dead = spawnSync(process.execPath, ["-e", ""]).pid;
@@ -83,6 +92,15 @@ describe("releaseLock", () => {
     const path = lockPath();
     writeFileSync(path, JSON.stringify({ pid: 1, start_time: null, acquired_at: "x" }));
     expect(() => releaseLock(path)).toThrow(/pid 1/);
+  });
+
+  it("refuses a lock with our pid but another start time", () => {
+    const path = lockPath();
+    writeFileSync(
+      path,
+      JSON.stringify({ pid: process.pid, start_time: "Thu Jan  1 00:00:00 1970", acquired_at: "x" }),
+    );
+    expect(() => releaseLock(path)).toThrow(/refusing to release/);
   });
 });
 
