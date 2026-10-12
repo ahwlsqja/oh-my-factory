@@ -157,6 +157,14 @@ export function releaseLock(path: string): void {
   rmSync(path, { force: true });
 }
 
+function isThenable(value: unknown): boolean {
+  return (
+    value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    typeof (value as { then?: unknown }).then === "function"
+  );
+}
+
 function sleepSync(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
@@ -164,6 +172,7 @@ function sleepSync(ms: number): void {
 /**
  * Runs `fn` while holding the lock, waiting up to `timeoutMs` for a held lock.
  * Not reentrant: nesting on the same path in one process waits out the timeout and throws.
+ * The callback must be synchronous: a promise-returning callback would release the lock before its work ends.
  */
 export function withLockSync<T>(path: string, fn: () => T, timeoutMs = 2000): T {
   const deadline = Date.now() + timeoutMs;
@@ -179,6 +188,7 @@ export function withLockSync<T>(path: string, fn: () => T, timeoutMs = 2000): T 
   let result: T;
   try {
     result = fn();
+    if (isThenable(result)) throw new TypeError("withLockSync callback must be synchronous");
   } catch (err) {
     try {
       releaseLock(path);

@@ -119,6 +119,14 @@ describe("withLockSync", () => {
     expect(withLockSync(lockPath(), () => 42)).toBe(42);
   });
 
+  it("refuses an async callback and releases the lock before throwing", () => {
+    const path = lockPath();
+    expect(() => withLockSync(path, async () => 1)).toThrow(
+      new TypeError("withLockSync callback must be synchronous"),
+    );
+    expect(withLockSync(path, () => 2)).toBe(2);
+  });
+
   it("reports the callback's error when the lock was lost", () => {
     const path = lockPath();
     expect(() =>
