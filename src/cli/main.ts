@@ -15,7 +15,7 @@ const program = new Command()
 
 program.addHelpText(
   "after",
-  "\nExit codes: 0 ok, 1 problems found or usage error, 2 unexpected error (for example a corrupt ledger).",
+  "\nExit codes: 0 ok, 1 problems found (including a failed ledger verify) or usage error, 2 the command could not run (for example outside a git repository, or a command refusing a corrupt ledger).",
 );
 
 program
