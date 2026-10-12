@@ -1,10 +1,20 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+/** Every directory this process created through makeTempDir; removeTempDirs deletes them. */
+const createdTempDirs: string[] = [];
+
 export function makeTempDir(prefix = "omf-test-"): string {
-  return mkdtempSync(join(tmpdir(), prefix));
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  createdTempDirs.push(dir);
+  return dir;
+}
+
+/** Deletes every directory made by makeTempDir so far and forgets them. Run after each test file. */
+export function removeTempDirs(): void {
+  for (const dir of createdTempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 }
 
 /** A fresh git repository with one commit and no remote. */
