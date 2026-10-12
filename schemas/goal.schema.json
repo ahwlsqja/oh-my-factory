@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OMF goal.md front matter",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "goal_id",
+    "title",
+    "mode",
+    "kind",
+    "objective",
+    "target",
+    "leading",
+    "lagging",
+    "link_hypothesis",
+    "guardrails",
+    "prereg",
+    "budget",
+    "state_source"
+  ],
+  "$defs": {
+    "metricId": { "type": "string", "pattern": "^m-[a-z0-9]+(-[a-z0-9]+)*$" },
+    "duration": { "type": "string", "pattern": "^[1-9][0-9]*(m|h|d)$" },
+    "metricList": { "type": "array", "items": { "$ref": "#/$defs/metricId" }, "uniqueItems": true }
+  },
+  "properties": {
+    "schema_version": { "const": 1 },
+    "goal_id": { "type": "string", "pattern": "^g-[a-z0-9]+(-[a-z0-9]+)*$" },
+    "title": { "type": "string", "minLength": 1 },
+    "mode": { "enum": ["build", "watch"] },
+    "kind": { "enum": ["default", "migration"] },
+    "objective": { "type": "string", "minLength": 1 },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric_id", "operator", "value", "unit"],
+      "properties": {
+        "metric_id": { "$ref": "#/$defs/metricId" },
+        "operator": { "enum": ["<=", ">=", "=="] },
+        "value": { "type": "number" },
+        "unit": { "type": "string", "minLength": 1 }
+      }
+    },
+    "leading": { "$ref": "#/$defs/metricList" },
+    "lagging": { "type": "array", "items": { "$ref": "#/$defs/metricId" }, "uniqueItems": true, "minItems": 1 },
+    "link_hypothesis": { "type": "string", "minLength": 1 },
+    "guardrails": { "$ref": "#/$defs/metricList" },
+    "prereg": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min_observation", "decision_rule", "metrics_judged"],
+      "properties": {
+        "min_observation": { "$ref": "#/$defs/duration" },
+        "decision_rule": { "type": "string", "minLength": 1 },
+        "metrics_judged": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rounds", "wall_time", "max_open_work_items"],
+      "properties": {
+        "rounds": { "type": "integer", "minimum": 1 },
+        "wall_time": { "$ref": "#/$defs/duration" },
+        "max_open_work_items": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "state_source": { "const": "markdown" }
+  }
+}

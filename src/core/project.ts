@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { Ledger, type LedgerEvent, type VerifyResult } from "./ledger.js";
 import { type ProjectLocation, resolveProject } from "./paths.js";
 
-export const PROJECT_SUBDIRS = ["vault/metrics", "vault/scenarios", "runs", "worktrees"] as const;
+export const PROJECT_SUBDIRS = ["vault/metrics", "vault/scenarios", "runs", "worktrees", "goals"] as const;
 
 export const DEFAULT_CONFIG = `# oh-my-factory project configuration (host state; never inside the repository)
 

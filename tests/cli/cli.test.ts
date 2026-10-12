@@ -102,7 +102,7 @@ describe("omf() harness guard", () => {
 });
 
 describe("OMF host state modes", () => {
-  const PRIVATE_DIRS = ["", "vault", "vault/metrics", "vault/scenarios", "runs", "worktrees"];
+  const PRIVATE_DIRS = ["", "vault", "vault/metrics", "vault/scenarios", "runs", "worktrees", "goals"];
   const PRIVATE_FILES = ["config.toml", "ledger.jsonl"];
   const modeOf = (path: string): string => (statSync(path).mode & 0o777).toString(8);
 
