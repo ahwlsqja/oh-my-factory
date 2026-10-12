@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import type { Command } from "commander";
+import { createMarkdownStore, findWorkItem } from "../adapters/state-markdown.js";
 import { humanActor } from "../core/actor.js";
 import {
   BUDGET_KINDS,
@@ -18,6 +19,12 @@ import { parseDuration } from "../goal/duration.js";
 import { GoalFileError, assertGoalId, goalFile } from "../goal/goal-file.js";
 import { type GoalLock, GoalLockError, latestApproval, readGoalLock } from "../goal/goal-lock.js";
 import { raiseWallTime, wallTimeLimitMs } from "../goal/wall-time.js";
+import { type ClaimStatus, claimStatus } from "../work/claim.js";
+import { renderIntent } from "../work/intent-md.js";
+import { verifiedItems, verifyItemAgainstLedger } from "../work/ledger-verify.js";
+import { canTransition } from "../work/transitions.js";
+import { OPEN_STATES, TERMINAL_WORK_STATES, type WorkItem, type WorkState } from "../work/types.js";
+import { renderWorkItem } from "../work/work-item.js";
 import { confirmByTyping, requireTerminal } from "./confirm.js";
 
 /** What a person typed after `omf budget declare|raise`: strings, because validation is `parseBudgetArgs`'s job. */
@@ -238,4 +245,164 @@ export function registerBudgetCommands(program: Command): void {
   };
   change("declare", "J8: declare a rounds or disclosure budget (needs an interactive terminal)");
   change("raise", "J8: raise a rounds, disclosure or wall_time cap (needs an interactive terminal)");
+}
+
+const ALL_STATES: readonly WorkState[] = [...OPEN_STATES, ...TERMINAL_WORK_STATES];
+
+function collectStates(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
+
+function requireItem(projectDir: string, workId: string): WorkItem {
+  const item = findWorkItem(projectDir, workId);
+  if (item === null) throw new Error(`unknown work item ${workId}`);
+  return item;
+}
+
+/**
+ * Read-only checks before an approval: the actor is a person, the item exists, the ledger accounts for
+ * it (a hand-edited item is never approved, spec §6.2) and it is waiting for a person. Returns the item.
+ */
+function assertApprovable(location: ProjectLocation, workId: string, actor: string): WorkItem {
+  if (!/^human:\S+$/.test(actor)) throw new Error(`approval needs a human actor, got ${actor}`);
+  const item = requireItem(location.dir, workId);
+  const verdict = verifyItemAgainstLedger(item.front, new Ledger(location.dir).readVerified());
+  if (!verdict.ok) throw new Error(`work item ${workId} is malformed (${verdict.reason}); nothing was approved`);
+  if (item.front.state !== "awaiting_approval") {
+    throw new Error(`work item ${workId} is ${item.front.state}; only awaiting_approval items can be approved`);
+  }
+  return item;
+}
+
+/**
+ * Approves an `awaiting_approval` item. The ledger event comes first, then item.md (the ledger is
+ * authoritative, D27): a crash in between leaves a recorded approval and an item still awaiting one,
+ * which `omf work approve` can finish. No J number: the spec has no item-approval judgment (D5).
+ */
+export function runWorkApprove(location: ProjectLocation, workId: string, actor: string, now: Date = new Date()): WorkItem {
+  const item = assertApprovable(location, workId, actor);
+  new Ledger(location.dir).append({
+    actor,
+    type: "work.approved",
+    payload: { goal_id: item.front.goal_id, work_id: workId },
+  });
+  return createMarkdownStore(location.dir).approveWorkItem(workId, actor, now);
+}
+
+/**
+ * Vetoes an item from any open state, also while a run holds its claim (D28): a veto only restricts, so
+ * it needs no terminal. The run sees the new state when it re-reads the item at its next station.
+ */
+export function runVeto(
+  location: ProjectLocation,
+  workId: string,
+  actor: string,
+  reason: string,
+  now: Date = new Date(),
+): { item: WorkItem; previous: WorkState; claim: ClaimStatus } {
+  if (!/^human:\S+$/.test(actor)) throw new Error(`veto needs a human actor, got ${actor}`);
+  const text = reason.trim();
+  if (text.length === 0 || text.length > 500) throw new Error("veto reason must be 1 to 500 characters");
+  const item = requireItem(location.dir, workId);
+  const previous = item.front.state;
+  if (!canTransition(previous, "vetoed")) throw new Error(`work item ${workId} is already ${previous}; nothing to veto`);
+  const claim = claimStatus(item.dir);
+  new Ledger(location.dir).append({
+    actor,
+    type: "work.vetoed",
+    payload: { goal_id: item.front.goal_id, work_id: workId, reason: text },
+  });
+  return { item: createMarkdownStore(location.dir).vetoWorkItem(workId, actor, text, now), previous, claim };
+}
+
+/** Work item and veto commands (spec §4.4 step 5, §9). Errors propagate to main.ts, which exits 2. */
+export function registerWorkCommands(program: Command): void {
+  const work = program.command("work").description("list, inspect and approve work items");
+
+  work
+    .command("list")
+    .argument("<goal_id>")
+    .option("--state <state>", "only items in this state (repeatable)", collectStates, [])
+    .option("--json", "print the items as JSON")
+    .description("list a goal's work items; items the ledger does not account for are reported as malformed (exit 1)")
+    .action((goalId: string, options: { state: string[]; json?: boolean }) => {
+      const status = requireProject(process.cwd());
+      for (const state of options.state) {
+        if (!ALL_STATES.includes(state as WorkState)) throw new Error(`unknown state ${state}; use ${ALL_STATES.join(", ")}`);
+      }
+      const events = new Ledger(status.dir).readVerified();
+      const { items, malformed } = verifiedItems(createMarkdownStore(status.dir), events, goalId);
+      const shown = options.state.length === 0 ? items : items.filter((item) => options.state.includes(item.front.state));
+      if (options.json) {
+        console.log(JSON.stringify({ goal_id: goalId, items: shown.map((item) => item.front), malformed }, null, 2));
+      } else {
+        if (shown.length === 0 && malformed.length === 0) console.log("no work items");
+        for (const { front } of shown) {
+          console.log(`${front.work_id}  ${front.state.padEnd(17)} ${front.risk.class.padEnd(6)} ${front.title}`);
+        }
+        for (const entry of malformed) console.log(`malformed ${entry.work_id ?? "(no id)"}: ${entry.reason}`);
+      }
+      if (malformed.length > 0) {
+        console.error(`warning: ${malformed.length} malformed work item(s) are never dispatched or counted as open work`);
+      }
+      process.exitCode = malformed.length > 0 ? 1 : 0;
+    });
+
+  work
+    .command("show")
+    .argument("<work_id>")
+    .description("print a work item's item.md, claim and intent.md")
+    .action((workId: string) => {
+      const status = requireProject(process.cwd());
+      const item = requireItem(status.dir, workId);
+      const verdict = verifyItemAgainstLedger(item.front, new Ledger(status.dir).readVerified());
+      console.log(`work ${workId} (${item.front.state}) of goal ${item.front.goal_id}`);
+      console.log(verdict.ok ? "ledger: consistent" : `ledger: MALFORMED (${verdict.reason}); this item is never dispatched`);
+      const claim = claimStatus(item.dir);
+      if (claim.held) console.log(`claim: held by pid ${claim.owner === null ? "unknown" : claim.owner.pid}`);
+      console.log("--- item.md ---");
+      console.log(renderWorkItem(item.front, item.progress).trimEnd());
+      console.log("--- intent.md ---");
+      console.log(renderIntent(item.intent).trimEnd());
+    });
+
+  work
+    .command("approve")
+    .argument("<work_id>")
+    .description("approve a high-risk work item so it can be dispatched (needs an interactive terminal)")
+    .action(async (workId: string) => {
+      const status = requireProject(process.cwd());
+      // No silent approval (spec §6.2): without a terminal there is nobody to confirm.
+      requireTerminal("work approval");
+      const actor = humanActor(status.repo);
+      const { front } = assertApprovable(status, workId, actor);
+      console.log(`work ${workId} of goal ${front.goal_id}: ${front.title}`);
+      console.log(`risk: ${front.risk.class} (${front.risk.rules.join(", ")})`);
+      console.log(`affected paths: ${front.affected_paths.join(", ")}`);
+      if (front.has_open_questions) console.log("the intent lists open questions; read them with omf work show first");
+      const confirmed = await confirmByTyping(workId, `Type ${workId} to approve as ${actor}: `);
+      if (!confirmed) {
+        console.error("not approved");
+        process.exitCode = 1;
+        return;
+      }
+      runWorkApprove(status, workId, actor);
+      console.log(`approved ${workId}; it is ready for dispatch`);
+    });
+
+  program
+    .command("veto")
+    .argument("<work_id>")
+    .option("--reason <text>", "why, at most 500 characters", "vetoed")
+    .description("veto a work item from any open state; no terminal needed, because a veto only restricts")
+    .action((workId: string, options: { reason: string }) => {
+      const status = requireProject(process.cwd());
+      const actor = humanActor(status.repo);
+      const result = runVeto(status, workId, actor, options.reason);
+      console.log(`vetoed ${workId} (was ${result.previous})`);
+      if (result.claim.held) {
+        const pid = result.claim.owner === null ? "unknown" : String(result.claim.owner.pid);
+        console.log(`note: a run holds the claim (pid ${pid}); it stops when it re-reads the item at its next station`);
+      }
+    });
 }
