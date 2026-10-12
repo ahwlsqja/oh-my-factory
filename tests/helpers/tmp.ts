@@ -41,3 +41,27 @@ export function makeGitRepo(): string {
   );
   return dir;
 }
+
+function testGitEnv(): NodeJS.ProcessEnv {
+  return {
+    ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
+    LC_ALL: "C",
+  };
+}
+
+/** Runs git in `repo` and returns stdout. Throws with git's stderr on failure. */
+export function gitIn(repo: string, ...args: string[]): string {
+  return execFileSync("git", args, { cwd: repo, encoding: "utf8", env: testGitEnv(), stdio: ["ignore", "pipe", "pipe"] });
+}
+
+/** Stages everything and commits it with a fixed test identity. */
+export function commitAll(repo: string, message: string): void {
+  gitIn(repo, "add", "-A");
+  gitIn(
+    repo,
+    "-c", "user.name=omf-test",
+    "-c", "user.email=omf-test@example.invalid",
+    "-c", "commit.gpgsign=false",
+    "commit", "-q", "-m", message,
+  );
+}

@@ -40,6 +40,22 @@ export function readProjectStatus(location: ProjectLocation): ProjectStatus {
   return { ...location, ledger: result, initialized: result.ok && isInitialized(events) };
 }
 
+/** What keeps a command from using the project, or null. One wording for doctor and the goal commands. */
+export function projectProblem(status: ProjectStatus): string | null {
+  if (status.ledger === null) return NOT_INITIALIZED_MESSAGE;
+  if (!status.ledger.ok) return `ledger corrupt at seq ${status.ledger.seq}: ${status.ledger.reason}`;
+  if (!status.initialized) return NOT_INITIALIZED_MESSAGE;
+  return null;
+}
+
+/** For commands that need an initialized project with a sound ledger. The CLI reports the error with exit 2. */
+export function requireProject(cwd: string, env: NodeJS.ProcessEnv = process.env): ProjectStatus {
+  const status = readProjectStatus(resolveProject(cwd, env));
+  const problem = projectProblem(status);
+  if (problem !== null) throw new Error(problem);
+  return status;
+}
+
 export interface InitResult {
   projectDir: string;
   repo: string;
