@@ -6,6 +6,7 @@ import type { ProjectLocation } from "../core/paths.js";
 import { writePrivateFile } from "../core/private-fs.js";
 import { validate } from "../core/schema.js";
 import { type GoalSemantic, readGoal, referencedMetrics, semanticHash, semanticOf } from "./goal-file.js";
+import { parseDuration } from "./duration.js";
 import { changedPathsSince, headCommit, matchWatched } from "./git.js";
 import { definitionOf, metricSha256, readProposal, writeLock } from "./metrics.js";
 
@@ -105,6 +106,41 @@ export function latestApproval(events: readonly LedgerEvent[], goalId: string): 
 }
 
 /**
+ * Re-approval does not move the budgets: rounds are enforced from the ledger and wall time from the first
+ * approval, and raising either is a J8 decision. Refusing here keeps what the person sees at approval equal
+ * to what is enforced.
+ */
+function requireBudgetsUnchanged(
+  location: ProjectLocation,
+  ledger: Ledger,
+  goalId: string,
+  budget: { rounds: number; wall_time: string },
+  previous: GoalApproval,
+): void {
+  const state = budgetState(ledger, goalId, "rounds");
+  if (state !== null && budget.rounds !== state.declared + state.raised) {
+    throw new ApprovalError(
+      `goal.md says ${budget.rounds} rounds but the enforced budget is ${state.declared + state.raised}; re-approval does not change it. ` +
+        "Restore goal.md, or raise the budget as a separate J8 decision",
+    );
+  }
+  let locked: GoalLock | null = null;
+  try {
+    locked = readGoalLock(location.dir, goalId);
+  } catch (err) {
+    if (!(err instanceof GoalLockError)) throw err;
+  }
+  // A lock that does not match the ledger is being repaired, so it is no baseline.
+  if (locked === null || locked.semantic_sha256 !== previous.semantic_sha256) return;
+  if (parseDuration(budget.wall_time) !== parseDuration(locked.semantic.budget.wall_time)) {
+    throw new ApprovalError(
+      `goal.md says ${budget.wall_time} wall time but the approved wall time is ${locked.semantic.budget.wall_time}; re-approval does not change it. ` +
+        "Restore goal.md, or raise the budget as a separate J8 decision",
+    );
+  }
+}
+
+/**
  * J1: locks the goal's semantic fields and every metric it refers to, as a new regime (spec §4.1,
  * §4.2). Lock files are written before their ledger events, and goal.approved comes last. A crash part
  * way leaves a lock that does not match the ledger, which audit reports and approving again repairs.
@@ -120,6 +156,7 @@ export function lockGoal(
   const ledger = new Ledger(location.dir, now);
   const previous = latestApproval(ledger.readVerified(), goalId);
   const goal = readGoal(location.dir, goalId);
+  if (previous !== null) requireBudgetsUnchanged(location, ledger, goalId, goal.front.budget, previous);
   const metrics = referencedMetrics(goal.front);
   const proposals = metrics.map((id) => {
     const proposal = readProposal(location.dir, id);

@@ -71,4 +71,19 @@ describe("lockGoal", () => {
     });
     expect(() => latestApproval(fx.ledger.readVerified(), "g-fast")).toThrow(/goal.approved by agent:claude/);
   });
+
+  it("refuses re-approval while goal.md changes the rounds budget, which only J8 may raise", () => {
+    const fx = setupGoal();
+    lockGoal(fx.location, "g-fast", "human:dev");
+    writeFileSync(fx.goalFile, readFileSync(fx.goalFile, "utf8").replace(/rounds: 10\b/, "rounds: 20"));
+    expect(() => lockGoal(fx.location, "g-fast", "human:dev")).toThrow(/rounds.*J8/);
+    expect(budgetState(fx.ledger, "g-fast", "rounds")?.remaining).toBe(10);
+  });
+
+  it("refuses re-approval while goal.md changes the wall time", () => {
+    const fx = setupGoal();
+    lockGoal(fx.location, "g-fast", "human:dev");
+    writeFileSync(fx.goalFile, readFileSync(fx.goalFile, "utf8").replace(/wall_time: \S+/, "wall_time: 999d"));
+    expect(() => lockGoal(fx.location, "g-fast", "human:dev")).toThrow(/wall.time.*J8/);
+  });
 });
