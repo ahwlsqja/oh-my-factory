@@ -64,7 +64,7 @@ ledgerCommand
       console.error(NOT_INITIALIZED_MESSAGE);
       process.exitCode = 1;
     } else {
-      console.log(`ok: ${ledger.count} events, head ${ledger.head}`);
+      console.log(`ok: ${ledger.count} ${ledger.count === 1 ? "event" : "events"}, head ${ledger.head}`);
       if (ledger.tornTail) console.error(`warning: ${TORN_TAIL_WARNING}`);
     }
   });

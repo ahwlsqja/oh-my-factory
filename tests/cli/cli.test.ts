@@ -34,7 +34,7 @@ describe("omf CLI", () => {
     expect(again.stdout).toMatch(/^already initialized /);
     const verify = omf(["ledger", "verify"], repo, home);
     expect(verify.code).toBe(0);
-    expect(verify.stdout).toMatch(/^ok: 1 events, head [0-9a-f]{64}\n$/);
+    expect(verify.stdout).toMatch(/^ok: 1 event, head [0-9a-f]{64}\n$/);
   });
 
   it("ledger verify fails before init", () => {
@@ -50,7 +50,7 @@ describe("omf CLI", () => {
     appendFileSync(join(projectDir(repo, { HOME: home }), "ledger.jsonl"), '{"schema_version":1,"se');
     const out = omf(["ledger", "verify"], repo, home);
     expect(out.code).toBe(0);
-    expect(out.stdout).toMatch(/^ok: 1 events/);
+    expect(out.stdout).toMatch(/^ok: 1 event,/);
     expect(out.stderr).toContain("torn final line");
   });
 
