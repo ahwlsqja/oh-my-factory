@@ -1,9 +1,11 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { projectDir } from "../../src/core/paths.js";
+import { lockGoal } from "../../src/goal/goal-lock.js";
 import { readProposal } from "../../src/goal/metrics.js";
 import { omf } from "../helpers/cli.js";
+import { setupGoal } from "../helpers/goal.js";
 import { gitIn, makeGitRepo, makeTempDir } from "../helpers/tmp.js";
 
 function initialized(): { repo: string; home: string } {
@@ -63,5 +65,25 @@ describe("omf metric propose", () => {
     const result = omf(["metric", "propose", "m-p95", "--unit", "ms", "--", "sh", "bench/p95.sh"], repo, home);
     expect(result.code).toBe(2);
     expect(result.stderr).toMatch(/user\.email/);
+  });
+});
+
+describe("omf goal audit", () => {
+  it("reports a draft that is ready for J1", () => {
+    const fx = setupGoal();
+    const result = omf(["goal", "audit", "g-fast"], fx.repo, fx.home);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("goal g-fast: draft");
+    expect(result.stdout).toContain("ready for J1: run omf goal approve g-fast");
+  });
+
+  it("exits 1 when the goal needs re-approval", () => {
+    const fx = setupGoal();
+    lockGoal(fx.location, "g-fast", "human:dev");
+    writeFileSync(fx.goalFile, readFileSync(fx.goalFile, "utf8").replace("value: 250", "value: 400"));
+    const result = omf(["goal", "audit", "g-fast"], fx.repo, fx.home);
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain("goal g-fast: needs re-approval (regime 1)");
+    expect(result.stdout).toContain("- goal.md changed since approval");
   });
 });
