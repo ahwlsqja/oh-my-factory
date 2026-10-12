@@ -339,7 +339,7 @@ This guards against novelty effects.
 | Metric values leaking down into work | The work item schema rejects value, threshold and query fields. Seed lint rejects numeric thresholds and metric names. The gap report is written to host state only. | `E2 canary-no-leak` |
 | Re-seeding as an unbounded feedback channel | Re-seeds from G count against the same disclosure budget as S6 | `E3 budget-no-reset` |
 | Scenario text reaching G | G receives aggregates only | `E2` |
-| Budget reset by restart | Host ledger accumulation, hash chain | `E3` |
+| Budget reset by restart | Host ledger accumulation, hash chain. Truncating the ledger is not detected (§8). | `E3` |
 | Write tools on observability | The Measure adapter exposes read-only operations; credentials are read-only | conformance suite |
 
 Known limits: canaries catch verbatim leaks, not paraphrase. Undeclared instrumentation paths
@@ -652,13 +652,28 @@ pattern).
 Ledger envelope:
 
 ```json
-{ "schema_version": 1, "seq": 42, "prev_hash": "<sha256>", "ts": "<RFC3339>",
+{ "schema_version": 1, "seq": 42, "prev_hash": "<sha256>", "hash": "<sha256>", "ts": "<RFC3339>",
   "actor": "omf | human:<id> | agent:<vendor>", "type": "<event type>", "payload": {} }
 ```
+
+`hash` is the SHA-256 of the event's canonical JSON (keys sorted, no whitespace) without the `hash`
+field. The first event's `prev_hash` is 64 zeros.
 
 Every command verifies the chain before acting. If the chain is broken, OMF stops. Human signatures
 in v0.1 are `human:<git user.email>` plus an interactive TTY confirmation. This is not
 cryptographic. SSH-signed approvals are planned for v0.2.
+
+**Torn writes.** A crash can leave the final line without a newline. If that line is a complete
+event, the next append adds the newline. If it is not, `omf ledger verify` warns and exits 0, and
+the next append removes the partial line and records a `ledger.tail_discarded` event with the byte
+count and SHA-256 of what it removed. Any other line that does not parse as a JSON object is
+corruption.
+
+**Limits.** The chain detects edits to recorded events. It does not detect events removed from the
+end of the file, or a full rewrite with consistent hashes. So it protects against accidents and
+against processes that cannot write to `~/.omf`, not against someone who can. In particular,
+budgets (E3) survive restarts but not a truncated ledger. Keeping agents away from host state is
+the job of isolation (§7).
 
 **Trackers.** Each artifact has exactly one source of truth. This follows the playbook's
 legacy-coexistence rule: the repo is the source, a legacy system is the source, or the two are
