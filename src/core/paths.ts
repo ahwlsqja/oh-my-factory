@@ -64,12 +64,12 @@ export function repoToplevel(cwd: string): string {
   if (mainEntry.includes("bare")) throw new UnsupportedRepoError(cwd, "bare repositories are not supported");
   const worktreeLine = mainEntry.find((line) => line.startsWith("worktree "));
   if (worktreeLine === undefined) throw new Error(`unexpected 'git worktree list' output in ${cwd}`);
-  return realpathSync(worktreeLine.slice("worktree ".length));
+  return realpathSync.native(worktreeLine.slice("worktree ".length));
 }
 
 /** First 16 hex characters of the SHA-256 of a repository root's real path. */
 export function projectId(toplevel: string): string {
-  return sha256Hex(realpathSync(toplevel)).slice(0, 16);
+  return sha256Hex(realpathSync.native(toplevel)).slice(0, 16);
 }
 
 /** Real path of `path`, resolving symlinks in its nearest existing ancestor (the rest may not exist yet). */
@@ -82,7 +82,7 @@ function realpathOfNearestExisting(path: string): string {
     rest.unshift(basename(current));
     current = parent;
   }
-  return join(realpathSync(current), ...rest);
+  return join(realpathSync.native(current), ...rest);
 }
 
 /** Throws when `dir` is the repository root or inside it (spec §11 rule 1). Compares real paths. */

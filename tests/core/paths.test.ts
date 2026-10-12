@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, realpathSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, symlinkSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   assertOutsideRepo,
@@ -122,5 +122,21 @@ describe("assertOutsideRepo", () => {
   it("throws for an in-repo directory whose first segment starts with '..'", () => {
     const repo = makeGitRepo();
     expect(() => assertOutsideRepo(join(repo, "..foo", "omf"), repo)).toThrow(/outside the repository/);
+  });
+});
+
+describe("case-insensitive repository paths", () => {
+  /** Swaps the letter case of every character, so the same directory can be named two ways. */
+  const swapCase = (text: string): string =>
+    [...text].map((c) => (c === c.toLowerCase() ? c.toUpperCase() : c.toLowerCase())).join("");
+
+  it("treats a repository path given in another letter case as the same repository", () => {
+    const repo = makeGitRepo();
+    const variant = join(dirname(repo), swapCase(basename(repo)));
+    // A case-sensitive filesystem has no such path: the comparison it tests cannot occur there.
+    if (!existsSync(variant)) return;
+    const home = makeTempDir("omf-home-");
+    expect(() => projectDir(repo, { HOME: home, OMF_HOME: join(variant, ".omf") })).toThrow(/must live outside the repository/);
+    expect(repoToplevel(variant)).toBe(repoToplevel(repo));
   });
 });
