@@ -75,7 +75,7 @@ export function assertGoalId(goalId: string): void {
 
 /** Splits `---\n<yaml>\n---\n<body>` and validates the front matter against goal.schema.json. */
 export function parseGoal(text: string): GoalDoc {
-  const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(text);
+  const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(text.replace(/\r\n/g, "\n"));
   if (match === null) throw new GoalFileError("goal.md must start with a --- front matter block");
   let front: unknown;
   try {

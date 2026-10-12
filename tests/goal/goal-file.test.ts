@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
@@ -43,10 +44,16 @@ describe("goal.md", () => {
     expect(referencedMetrics(front)).toEqual(["m-replace-me", "m-cache-hits", "m-errors"]);
   });
 
+  it("parses a goal.md saved with CRLF line endings", () => {
+    const crlf = goalTemplate("g-a").replace(/\n/g, "\r\n");
+    expect(parseGoal(crlf).front.goal_id).toBe("g-a");
+  });
+
   it("creates a goal once, private to the owner", () => {
     const dir = makeTempDir();
     const file = createGoal(dir, "g-a");
     expect((statSync(file).mode & 0o777).toString(8)).toBe("600");
+    expect((statSync(dirname(file)).mode & 0o777).toString(8)).toBe("700");
     expect(readGoal(dir, "g-a").front.goal_id).toBe("g-a");
     expect(() => createGoal(dir, "g-a")).toThrow(/already exists/);
   });
