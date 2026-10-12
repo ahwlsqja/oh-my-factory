@@ -15,6 +15,13 @@ author = { vendor = "codex" }
 implementer = { vendor = "claude" }
 judge = { vendor = "codex" }
 reconciler = { vendor = "claude" }
+
+# Optional. Without this section the code defaults apply (kind "claude", 120 s timeout, no budget cap).
+# [reconciler]
+# kind = "claude"        # or "command"; "command" also needs command = ["node", "stub.js"]
+# model = "..."          # omit for the vendor default
+# timeout_ms = 120000    # 1000..600000
+# max_budget_usd = 1.5
 `;
 
 export const PROJECT_INITIALIZED = "project.initialized";
