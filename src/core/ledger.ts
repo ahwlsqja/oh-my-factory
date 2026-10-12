@@ -42,10 +42,11 @@ export function hashEvent(body: Omit<LedgerEvent, "hash">): string {
 }
 
 interface Snapshot {
-  text: string;
+  /** Byte length of the head: everything up to and including the last newline. */
+  headBytes: number;
   events: LedgerEvent[];
-  /** An unterminated, unparseable final segment: residue of a write interrupted by a crash. */
-  tornTail: string | null;
+  /** Raw bytes of an unterminated, unparseable final segment: residue of a write interrupted by a crash. */
+  tornTail: Buffer | null;
   /** The final event is intact but lacks its trailing newline. */
   missingNewline: boolean;
 }
@@ -55,6 +56,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 function parseLine(line: string, seq: number): LedgerEvent {
+  if (line.length === 0) throw new LedgerCorruptError(seq, "empty line");
   let parsed: unknown;
   try {
     parsed = JSON.parse(line);
@@ -104,21 +106,22 @@ export class Ledger {
   }
 
   private snapshot(): Snapshot {
-    if (!existsSync(this.file)) return { text: "", events: [], tornTail: null, missingNewline: false };
-    const text = readFileSync(this.file, "utf8");
-    const segments = text.split("\n");
-    const last = segments.pop() ?? "";
-    const events = segments.filter((line) => line.length > 0).map((line, index) => parseLine(line, index + 1));
-    if (last.length === 0) return { text, events, tornTail: null, missingNewline: false };
+    if (!existsSync(this.file)) return { headBytes: 0, events: [], tornTail: null, missingNewline: false };
+    const bytes = readFileSync(this.file);
+    const headBytes = bytes.lastIndexOf(0x0a) + 1;
+    const head = bytes.subarray(0, headBytes).toString("utf8");
+    const events = head.length === 0 ? [] : head.slice(0, -1).split("\n").map((line, index) => parseLine(line, index + 1));
+    const tail = bytes.subarray(headBytes);
+    if (tail.length === 0) return { headBytes, events, tornTail: null, missingNewline: false };
     try {
-      const parsed: unknown = JSON.parse(last);
+      const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(tail));
       if (isPlainObject(parsed)) {
-        return { text, events: [...events, parsed as unknown as LedgerEvent], tornTail: null, missingNewline: true };
+        return { headBytes, events: [...events, parsed as unknown as LedgerEvent], tornTail: null, missingNewline: true };
       }
     } catch {
-      // unparseable: a torn write
+      // not valid UTF-8 or not JSON: a torn write
     }
-    return { text, events, tornTail: last, missingNewline: false };
+    return { headBytes, events, tornTail: tail, missingNewline: false };
   }
 
   /** Raw read without verification. Prefer readVerified. */
@@ -158,19 +161,23 @@ export class Ledger {
       const verified = verifyEvents(snap.events);
       if (!verified.ok) throw new LedgerCorruptError(verified.seq, verified.reason);
       const input = build(snap.events);
-      let head = { count: verified.count, head: verified.head };
-      if (snap.missingNewline) appendFileSync(this.file, "\n");
+      // Prepare every line before touching the file, so a rejected event leaves the ledger unchanged.
+      let at = { count: verified.count, head: verified.head };
+      const lines: string[] = [];
       if (snap.tornTail !== null) {
-        const tailBytes = Buffer.byteLength(snap.tornTail, "utf8");
-        truncateSync(this.file, Buffer.byteLength(snap.text, "utf8") - tailBytes);
-        const discarded = this.write(head, {
+        const discarded = this.prepare(at, {
           actor: "omf",
           type: "ledger.tail_discarded",
-          payload: { bytes: tailBytes, sha256: sha256Hex(snap.tornTail) },
+          payload: { bytes: snap.tornTail.length, sha256: sha256Hex(snap.tornTail) },
         });
-        head = { count: discarded.seq, head: discarded.hash };
+        lines.push(discarded.line);
+        at = { count: discarded.event.seq, head: discarded.event.hash };
       }
-      return this.write(head, input);
+      const main = this.prepare(at, input);
+      lines.push(main.line);
+      if (snap.tornTail !== null) truncateSync(this.file, snap.headBytes);
+      appendFileSync(this.file, `${snap.missingNewline ? "\n" : ""}${lines.join("")}`, { mode: 0o600 });
+      return main.event;
     });
   }
 
@@ -178,7 +185,8 @@ export class Ledger {
     return this.appendWith(() => input);
   }
 
-  private write(at: { count: number; head: string }, input: NewEvent): LedgerEvent {
+  /** Builds, hashes and validates the event after `at`. Writes nothing. */
+  private prepare(at: { count: number; head: string }, input: NewEvent): { event: LedgerEvent; line: string } {
     const body: Omit<LedgerEvent, "hash"> = {
       schema_version: 1,
       seq: at.count + 1,
@@ -197,7 +205,6 @@ export class Ledger {
     const event: LedgerEvent = { ...body, hash };
     const shape = validate("ledger-event.schema.json", event);
     if (!shape.ok) throw new Error(`invalid event: ${shape.errors}`);
-    appendFileSync(this.file, `${JSON.stringify(event)}\n`, { mode: 0o600 });
-    return event;
+    return { event, line: `${JSON.stringify(event)}\n` };
   }
 }

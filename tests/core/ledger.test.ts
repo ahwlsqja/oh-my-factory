@@ -1,5 +1,6 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { sha256Hex } from "../../src/core/canonical-json.js";
 import { GENESIS_HASH, Ledger, LedgerCorruptError } from "../../src/core/ledger.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
@@ -97,6 +98,45 @@ describe("Ledger", () => {
     expect(events[1]?.payload.bytes).toBe(Buffer.byteLength(torn));
     const last = events[events.length - 1];
     expect(ledger.verify()).toEqual({ ok: true, count: 3, head: last?.hash });
+  });
+
+  it("records a torn tail that splits a multibyte character by its raw bytes", () => {
+    const ledger = newLedger();
+    ledger.append({ actor: "omf", type: "project.initialized", payload: {} });
+    const torn = Buffer.concat([Buffer.from('{"x":"a'), Buffer.from("가").subarray(0, 2)]);
+    appendFileSync(ledger.file, torn);
+    ledger.append({ actor: "omf", type: "project.touched", payload: {} });
+    const discarded = ledger.readVerified().find((event) => event.type === "ledger.tail_discarded");
+    expect(discarded?.payload).toEqual({ bytes: torn.length, sha256: sha256Hex(torn) });
+    expect(readFileSync(ledger.file).includes(torn)).toBe(false);
+    expect(ledger.verify()).toMatchObject({ ok: true, count: 3 });
+  });
+
+  it("leaves a torn tail untouched when the next append is rejected", () => {
+    const ledger = newLedger();
+    ledger.append({ actor: "omf", type: "project.initialized", payload: {} });
+    appendFileSync(ledger.file, '{"schema_version":1,"seq":2,"pre');
+    const before = readFileSync(ledger.file);
+    expect(() => ledger.append({ actor: "robot", type: "project.touched", payload: {} })).toThrow(/invalid event/);
+    expect(readFileSync(ledger.file)).toEqual(before);
+  });
+
+  it("leaves a missing newline untouched when the next append is rejected", () => {
+    const ledger = newLedger();
+    ledger.append({ actor: "omf", type: "project.initialized", payload: {} });
+    writeFileSync(ledger.file, readFileSync(ledger.file, "utf8").trimEnd());
+    const before = readFileSync(ledger.file);
+    expect(() => ledger.append({ actor: "robot", type: "project.touched", payload: {} })).toThrow(/invalid event/);
+    expect(readFileSync(ledger.file)).toEqual(before);
+  });
+
+  it("reports a blank line between events as corruption", () => {
+    const ledger = newLedger();
+    ledger.append({ actor: "omf", type: "project.initialized", payload: {} });
+    ledger.append({ actor: "omf", type: "project.touched", payload: {} });
+    const [first, second] = readFileSync(ledger.file, "utf8").trimEnd().split("\n");
+    writeFileSync(ledger.file, `${first}\n\n${second}\n`);
+    expect(ledger.verify()).toEqual({ ok: false, seq: 2, reason: "empty line" });
   });
 
   it("keeps an intact final event that lost its newline", () => {

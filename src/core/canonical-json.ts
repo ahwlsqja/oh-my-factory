@@ -43,6 +43,8 @@ export function canonicalize(value: unknown): string {
   return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalize(record[key])}`).join(",")}}`;
 }
 
-export function sha256Hex(text: string): string {
-  return createHash("sha256").update(text, "utf8").digest("hex");
+/** Hex SHA-256. Strings are hashed as UTF-8; byte arrays are hashed as-is. */
+export function sha256Hex(data: string | Uint8Array): string {
+  const hash = createHash("sha256");
+  return typeof data === "string" ? hash.update(data, "utf8").digest("hex") : hash.update(data).digest("hex");
 }
