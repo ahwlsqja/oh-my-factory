@@ -24,6 +24,11 @@ describe("parseMeasurement", () => {
     expect(parseMeasurement("n/a\n")).toEqual({ ok: false, reason: "the last line of stdout is not a number" });
     expect(parseMeasurement("0x10")).toEqual({ ok: false, reason: "the last line of stdout is not a number" });
   });
+
+  it("fails on a value that is not finite, which the ledger cannot store", () => {
+    expect(parseMeasurement("1e999")).toEqual({ ok: false, reason: "the value is not a finite number" });
+    expect(parseMeasurement("-1e999")).toEqual({ ok: false, reason: "the value is not a finite number" });
+  });
 });
 
 describe("runOnHost", () => {

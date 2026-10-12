@@ -29,7 +29,9 @@ export function parseMeasurement(stdout: string): MeasureOutcome {
     .at(-1);
   if (last === undefined) return { ok: false, reason: "the command printed nothing" };
   if (!NUMBER.test(last)) return { ok: false, reason: "the last line of stdout is not a number" };
-  return { ok: true, value: Number(last) };
+  const value = Number(last);
+  if (!Number.isFinite(value)) return { ok: false, reason: "the value is not a finite number" };
+  return { ok: true, value };
 }
 
 function outcomeOf(result: SpawnSyncReturns<string>): MeasureOutcome {
