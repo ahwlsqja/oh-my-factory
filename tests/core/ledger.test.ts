@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { GENESIS_HASH, Ledger, LedgerCorruptError } from "../../src/core/ledger.js";
 import { makeTempDir } from "../helpers/tmp.js";
@@ -76,5 +76,65 @@ describe("Ledger", () => {
       event.actor = "human:mallory";
     });
     expect(() => ledger.readVerified()).toThrow(LedgerCorruptError);
+  });
+  it("reports a non-object line instead of throwing", () => {
+    const ledger = newLedger();
+    ledger.append({ actor: "omf", type: "project.initialized", payload: {} });
+    appendFileSync(ledger.file, "null\n");
+    expect(ledger.verify()).toEqual({ ok: false, seq: 2, reason: "not an object" });
+  });
+
+  it("ignores a torn final line and discards it on the next append", () => {
+    const ledger = newLedger();
+    const first = ledger.append({ actor: "omf", type: "project.initialized", payload: {} });
+    const torn = '{"schema_version":1,"seq":2,"pre';
+    appendFileSync(ledger.file, torn);
+    expect(ledger.verify()).toEqual({ ok: true, count: 1, head: first.hash, tornTail: true });
+    expect(ledger.readVerified()).toHaveLength(1);
+    ledger.append({ actor: "omf", type: "project.touched", payload: {} });
+    const events = ledger.readVerified();
+    expect(events.map((e) => e.type)).toEqual(["project.initialized", "ledger.tail_discarded", "project.touched"]);
+    expect(events[1]?.payload.bytes).toBe(Buffer.byteLength(torn));
+    const last = events[events.length - 1];
+    expect(ledger.verify()).toEqual({ ok: true, count: 3, head: last?.hash });
+  });
+
+  it("keeps an intact final event that lost its newline", () => {
+    const ledger = newLedger();
+    ledger.append({ actor: "omf", type: "project.initialized", payload: {} });
+    writeFileSync(ledger.file, readFileSync(ledger.file, "utf8").trimEnd());
+    const result = ledger.verify();
+    expect(result.ok).toBe(true);
+    expect(result).toMatchObject({ count: 1 });
+    expect(result).not.toHaveProperty("tornTail");
+    ledger.append({ actor: "omf", type: "project.touched", payload: {} });
+    const after = ledger.verify();
+    expect(after.ok).toBe(true);
+    expect(after).toMatchObject({ count: 2 });
+  });
+
+  it("rejects a non-plain payload as an invalid event", () => {
+    const ledger = newLedger();
+    expect(() => ledger.append({ actor: "omf", type: "project.touched", payload: { at: new Date() } })).toThrow(/invalid event/);
+    expect(ledger.verify()).toMatchObject({ ok: true, count: 0 });
+  });
+
+  it("detects an edited prev_hash", () => {
+    const ledger = newLedger();
+    ledger.append({ actor: "omf", type: "project.initialized", payload: {} });
+    ledger.append({ actor: "omf", type: "project.touched", payload: {} });
+    rewriteLine(ledger, 1, (event) => {
+      event.prev_hash = "1".repeat(64);
+    });
+    expect(ledger.verify()).toEqual({ ok: false, seq: 2, reason: "prev_hash mismatch" });
+  });
+
+  it("known limit (spec §8): removing events from the end is not detected", () => {
+    const ledger = newLedger();
+    const first = ledger.append({ actor: "omf", type: "project.initialized", payload: {} });
+    ledger.append({ actor: "omf", type: "project.touched", payload: {} });
+    const lines = readFileSync(ledger.file, "utf8").trimEnd().split("\n");
+    writeFileSync(ledger.file, `${lines[0]}\n`);
+    expect(ledger.verify()).toEqual({ ok: true, count: 1, head: first.hash });
   });
 });
