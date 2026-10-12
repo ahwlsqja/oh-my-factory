@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { sha256Hex } from "./canonical-json.js";
 
 export class NotAGitRepoError extends Error {
@@ -88,7 +88,8 @@ function realpathOfNearestExisting(path: string): string {
 /** Throws when `dir` is the repository root or inside it (spec §11 rule 1). Compares real paths. */
 export function assertOutsideRepo(dir: string, repo: string): void {
   const rel = relative(realpathOfNearestExisting(repo), realpathOfNearestExisting(dir));
-  if (rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))) {
+  const outside = rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel);
+  if (rel === "" || !outside) {
     throw new Error(`OMF state must live outside the repository: ${dir}`);
   }
 }

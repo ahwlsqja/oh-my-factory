@@ -118,4 +118,9 @@ describe("assertOutsideRepo", () => {
   it("does not throw for a directory outside the repository", () => {
     expect(() => assertOutsideRepo("/x/omf", "/a/b")).not.toThrow();
   });
+
+  it("throws for an in-repo directory whose first segment starts with '..'", () => {
+    const repo = makeGitRepo();
+    expect(() => assertOutsideRepo(join(repo, "..foo", "omf"), repo)).toThrow(/outside the repository/);
+  });
 });
