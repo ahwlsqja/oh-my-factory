@@ -23,16 +23,33 @@ OMF가 아닌 것은 다음과 같다.
 
 출처는 우선순위 순서로 나열한다. 출처끼리 충돌하면 높은 쪽이 이긴다. 다만 낮은 쪽이 높은 쪽이 다루지 못한 구체적 실패 양상을 짚고 있으면 예외로 한다.
 
-1. **Will Larson, "Trying the software factory pattern"** (lethain.com). 에이전트에게 티켓을 하나씩 건네지 않는다. 프로젝트의 목표와 그 측정값을 주고, 일을 스스로 찾아 하게 한다. 그의 루프는 이렇다. 목표를 확인한다. 진행을 잴 수 있는지 확인한다(측정이 없으면 사용자와 함께 만든다). 지표와 이슈 상태를 보고 일을 더하거나 고친다. 실행한다. 다음 단계를 정한다(설명이 낡았으면 첫 단계로 돌아간다). 출시 뒤에도 같은 루프를 낮은 빈도로 돌려 도입률이나 오류율의 변화를 잡는다. 세 기반이 맞물려야 한다. 목표 측정, 하나로 공유되는 작업 상태, 노트북에 의존하지 않는 실행 환경이다.
-2. **Anthropic, "The AI-native SDLC playbook"** (claude.com, 2026-08-21). 같은 발상을 전체 수명주기에 적용하고, 실제 Claude Code 기능에 맞춰 쓴 글이다. 각 단계는 산출물을 커밋하며 끝나고, 그 커밋이 다음 단계를 시작한다. `intent.md` → `spec.md` → `plan.md` → 병합된 PR → 파이프라인 순서다. 운영 단계에서는 관리 대역(control band)을 벗어나면 다음 `intent.md` 가 쓰인다. 감지는 결정론적(deterministic)이다. 플레이북은 이렇게 말한다. "Detection stays deterministic. Claude is invoked once a band is breached, and the tier sets what it may do." (감지는 결정론적으로 유지한다. 대역을 벗어난 뒤에야 Claude를 부르며, 허용 범위는 등급(tier)이 정한다.) 모든 활동은 선행 지표(leading indicator)와 후행 지표(lagging indicator)를 짝지운다. OMF는 이 플레이북을 **도구 계층과 산출물 사슬의 참조 구현** 으로 쓴다.
-3. **StrongDM, Software Factory** (factory.strongdm.ai). 루프는 시드(seed), 검증 하네스(validation harness), 피드백 순서다. 코드베이스 안에 있는 테스트는 속임수의 대상이 되므로, 시나리오는 코드베이스 밖에 홀드아웃(holdout)으로 둔다. 성공은 불리언이 아니라 확률("satisfaction")이다. 여기서 쓰는 다른 발상은 디지털 트윈 유니버스(Digital Twin Universe)와, 상호작용 작업과 완전히 명세된 작업을 가르는 시프트 워크(shift work)다.
-4. **Piotr Sarnacki, "I'm sorry, but you still have to think."** 명세가 모호하면 설계 결정이 동전 던지기가 된다. 호환성, 지연 대 처리량, 메모리, 장애 시 손실, 큐 한도가 그렇다. 지표 하나에 맞춘 벤치마크는 오해를 부른다.
-   **Addy Osmani, "Human judgment doesn't leave the software factory. It relocates."** 문제를 고르는 일, 아키텍처를 고르는 일, 품질 기준을 세우는 일, 어떤 검증 신호를 믿을지 정하는 일, 증거가 출시하기에 충분한 때를 정하는 일은 여전히 사람이 한다. Osmani는 공장을 검토자(reviewer)에게 맞춰 최적화하라고도 말한다.
+1. **Will Larson, "Trying the software factory pattern"** (lethain.com, 전문 읽음). "The software factory pattern is looping on a broad goal, and then relying on the harness to drive progress towards that goal."(소프트웨어 팩토리 패턴은 넓은 목표 위에서 루프를 돌고, 그 목표를 향한 진척은 하네스에 맡기는 것이다.) 그의 `/linear-project-loop` 는 네 단계다.
+   1. 프로젝트의 목표 정의를 점검한다. 목표, 측정 방법, 접근을 적은 RFC 와, 목표 대비 진척을 재는 대시보드나 쿼리가 있어야 한다. 하나라도 없으면 사용자와 함께 만든다.
+   2. 지표와 이슈 상태를 본다. 새로 찾은 일은 이슈로 더하고, 움직인 이슈는 상태를 갱신한다.
+   3. 막히지 않은 작업을 한다. PR 을 쓰거나 고치고, 리뷰를 요청하고, 확인 질문을 한다.
+   4. 작업이 끝나면, 프로젝트 설명이 최신이면 다음 작업으로 넘어간다. 한동안 갱신되지 않았으면 1단계부터 다시 돈다.
+
+   핵심 통찰은 이것이다. 예전에는 에이전트가 "didn't have the ability to evaluate if they were going in the right direction, or if it was missing necessary tasks. Now it does."(옳은 방향으로 가는지, 빠진 작업이 있는지 판단할 수 없었다. 이제는 할 수 있다.) Larson 은 자신이 "accidentally hoarding parts of the state for myself regarding the goals of the project"(프로젝트 목표에 관한 상태 일부를 무심코 혼자 쥐고 있었다)고 썼다. 같은 루프를 "a less frequent post-release mode"(출시 후 저빈도 모드)로 돌리면 도입률 급증이나 오류율 상승을 잡는다. 조각들은 함께 있을 때만 복리로 쌓인다. 목표 추적(Datadog MCP, Snowflake), 회사 작업의 "single source of state"(단일 상태 원천)인 Linear, 그리고 "an orchestrated harness that can perform work independently from your laptop"(노트북과 무관하게 일하는 오케스트레이션 하네스)이다. Larson 은 이 용어의 출처를 StrongDM 의 Justin McCarthy(2026년 2월)로 조심스럽게 추정한다.
+2. **Anthropic, "The AI-native SDLC playbook"** (claude.com, 2026-08-21, PDF 읽음). 같은 발상을 전체 수명주기에 적용하고, 실제 Claude Code 기능에 맞춰 쓴 글이다. "A stage ends by committing an artifact with the commit initiating the next stage"(단계는 산출물 커밋으로 끝나고 그 커밋이 다음 단계를 시작한다). 순서는 `intent.md` → `spec.md` → `plan.md` → 머지된 PR → 파이프라인이고, "a breached control band in production writes the next intent.md and so the loop continues"(운영에서 관리 대역을 벗어나면 다음 intent.md 를 쓰고 루프가 이어진다). "Detection stays deterministic. Claude is invoked once a band is breached, and the tier sets what it may do."(감지는 결정론으로 한다. 대역을 벗어나야 Claude 를 부르고, 등급이 할 수 있는 일을 정한다.) 모든 플레이는 선행 지표와 후행 지표를 짝으로 둔다. OMF 는 이 플레이북을 **도구 층과 산출물 체인의 레퍼런스 구현**으로 쓴다.
+3. **StrongDM, Software Factory** (factory.strongdm.ai, 전 페이지 읽음). "Seed → Validation harness → Feedback loop. Tokens are the fuel." "The loop runs until the holdout scenarios pass (and stay passing)."(루프는 holdout 시나리오가 통과하고, 통과를 유지할 때까지 돈다.) 코드베이스 안의 테스트는 "can be lazily rewritten to match the code"(코드에 맞게 대충 고쳐질 수 있다). 그래서 시나리오는 "an end-to-end 'user story', often stored outside the codebase (similar to a 'holdout' set in model training)"이다. 만족도(satisfaction)는 "of all the observed trajectories through all the scenarios, what fraction of them likely satisfy the user?"(모든 시나리오를 지나는 관찰된 궤적 중 사용자를 만족시켰을 비율)를 묻는다. 여기서 함께 쓰는 생각은 다음과 같다.
+   - 디지털 트윈 유니버스(Digital Twin Universe): "replicate behavior at the boundary"(경계에서 행동을 복제한다). 실제 의존 서비스와 대조해 "until we stop finding behavioral differences"(행동 차이가 더 나오지 않을 때까지) 검증한다.
+   - 시프트 워크(shift work): 대화형 작업과 완전히 명세된 작업을 나눈다.
+   - 기능 대 비기능 구분: 그럴듯한 Instagram 클론의 어려움은 "lies primarily outside the functional specification: scalability, performance, availability, security, efficiency"(주로 기능 명세 바깥, 즉 확장성·성능·가용성·보안·효율에 있다).
+   - Attractor: 단계 그래프 파이프라인의 공개 명세. 커뮤니티 구현이 많다.
+   - Weather Report: 어떤 모델이 어떤 역할을 맡는지 공개하는 문서.
+4. **Piotr Sarnacki, "I'm sorry, but you still have to think"** (전문 읽음). "If your prompt is not specific enough, many decisions are a coin flip."(프롬프트가 충분히 구체적이지 않으면 많은 결정이 동전 던지기다.) 하위 호환, 지연 대 처리량, 부하 시 메모리, 장애 후 알림 유실이 그 예다. 지표 하나는 오해를 부른다. 그는 일정 도착률(constant arrival rate)로 부하를 걸고 전달률, 오류, 지연, 메모리를 함께 비교했다. "If you want a reliable system you should know when to fail."(신뢰할 수 있는 시스템을 원한다면 언제 실패해야 하는지 알아야 한다.)
+   **Addy Osmani, "Human judgment doesn't leave the software factory. It relocates."** (전문 읽음). "Someone still chooses the problem. Someone still chooses the architecture. Someone still sets the quality bar. Someone decides which verification signals deserve trust. Someone decides when the evidence is sufficient to ship."(문제를 고르고, 아키텍처를 고르고, 품질 기준을 세우고, 어떤 검증 신호를 믿을지 정하고, 출시할 만큼 증거가 충분한지 정하는 것은 여전히 누군가의 몫이다.) 또 "Consider optimising the software factory for your reviewer."(팩토리를 리뷰어에 맞춰 최적화하라.) "Verification buys you trust, and it buys the ability to grant more autonomy to your agents."(검증은 신뢰를 사고, 에이전트에게 더 많은 자율을 줄 수 있는 능력을 산다.) 팩토리가 쓸모를 갖는 지점 중 하나는 "stopping production when human review is falling behind"(사람의 리뷰가 밀릴 때 생산을 멈추는 것)다.
 5. 맥락: DHH(손으로 쓴 코드는 대부분의 프로그래머에게 더는 경제적으로 생산적이지 않다), Tunguz("Thinking in Systems, Shipping in Loops"), Dan Shapiro(다섯 단계).
 
-**긴장을 푸는 방법.** StrongDM은 사람의 코드 리뷰를 없애려 한다. Sarnacki와 Osmani는 사람의 사고를 원한다. OMF는 사람을 없애는 대신 사람이 **무엇을** 하는지를 바꾼다. 사람은 작업이 시작되기 전에 목표와 측정을 승인한다(J1). 구현 전에 설계 결정을 해결한다(J2). 어떤 신호를 믿을지 고른다(J3). 병합할 때 증거를 판단하고(J4) 목표에 서명한다(J5). 코드를 읽는 일은 표적화된다. 고위험 경로에서는 필수이고 그 밖에서는 선택이다.
+**긴장을 푸는 방법.** StrongDM 의 규칙은 "Code must not be written by humans", "Code must not be reviewed by humans" 다. 검증 제약은 코드를 "validated automatically without semantic inspection of source"(소스의 의미를 들여다보지 않고 자동으로 검증)하고, "opaque weights whose correctness is inferred exclusively from externally observable behavior"(외부에서 관찰되는 행동으로만 정확성을 추론하는 불투명한 가중치)처럼 다룬다. Sarnacki 와 Osmani 는 사람의 사고를 원하고, Osmani 는 표적 리뷰가 있는 "lights-on" 팩토리를 원한다. OMF 는 한 가지 점에서 StrongDM 과 의도적으로 갈라선다. **표적 코드 리뷰를 남긴다.** 고위험 경로에서는 필수이고 그 밖에서는 선택이다. 그 밖의 부분은 사람을 없애는 대신 사람이 **무엇을** 하는지를 바꾼다.
+- 작업이 시작되기 전에 목표와 측정을 승인한다(J1).
+- 구현 전에 설계 결정을 해결한다(J2).
+- 어떤 신호를 믿을지 고른다(J3).
+- 머지할 때 증거를 판단하고(J4) 목표 달성에 서명한다(J5).
 
-**조사에서 바로잡은 점.** "task completion ≠ goal achievement" 라는 문장은 Larson의 글이 아니라 그 글의 GeekNews 요약에서 나왔다. OMF는 이것을 자체 불변식(invariant)으로 선언한다(F4).
+**원문을 읽고 바로잡은 점.**
+- "task completion ≠ goal achievement" 라는 문장은 Larson 의 글에 없다. GeekNews 요약이 덧붙인 해석이다. OMF 는 이것을 자체 불변식(invariant)으로 선언한다(F4).
+- Larson 의 루프는 다섯 단계가 아니라 네 단계다. 측정 확인은 1단계 안에 들어 있다.
 
 ## 2. 제1원칙
 
@@ -126,7 +143,7 @@ state_source: markdown # markdown | github | linear | jira  (정확히 하나)
 
 J1이 승인하면 의미 필드(semantic field)를 정규화(canonicalize)하고 해시해서 지표 금고에 넣는다. 대상은 `target`, `leading`, `lagging`, `link_hypothesis`, `guardrails`, `prereg`, `mode`, `budget` 이다. 저장소의 복사본은 편의용 사본으로 본다. 그 해시가 잠긴 해시와 다르면 OMF는 **체제 변경(regime change)** 을 기록한다. 체제 변경은 J1이 다시 승인할 때까지 `candidate` 를 막는다.
 
-`kind: migration` 은 Larson의 "Migrations" 글에 나온 패턴을 더한다. 래칫(ratchet)으로 출혈을 멈추고, 쉬운 부분은 자동화하고, 긴 꼬리(long tail)는 사람에게 맡긴다. "끝"은 측정된 잔여량이 0인 상태다.
+`kind: migration` 은 Larson 의 "Migrations" 글(2018)의 절차를 더한다. 순서는 위험 줄이기(derisk), 도구 갖추기(enable), 마무리(finish)다. 먼저 "stop the bleeding"(출혈을 멈춘다). 새로 쓰는 코드는 모두 새 방식을 쓰게 하는 것으로, 예를 들면 린터 래칫(ratchet)이다. 다음으로 "build tooling to programmatically migrate the easy ninety-percent"(쉬운 90%를 프로그램으로 옮기는 도구를 만든다). 도구는 "incremental and reversible"(점진적이고 되돌릴 수 있게) 만든다. 긴 꼬리(long tail)는 이전을 이끄는 팀이 직접 마무리한다. "끝"은 측정된 잔여량이 0인 상태다.
 
 ### 4.2 지표 금고와 `metrics.lock`
 
@@ -184,7 +201,7 @@ J1이 승인하면 의미 필드(semantic field)를 정규화(canonicalize)하�
    - 입력: 격차 요약(방향과 크기), 열려 있는 작업 항목, 최근 결과 집계, 목표의 접근 방식 본문.
    - 출력: 플레이북 1단계 형식의 `intent.md` 후보. 각 후보에 근거 필드를 둔다.
    - 이어서 결정론적 필터를 적용한다. 지문(fingerprint) 중복 제거, WIP 상한, 시드 린트(seed lint, §4.6), 기계적 위험 등급(§6)이다.
-5. **dispatch**: 승인된 목표 범위와 WIP 상한 안에 있는 후보는 자동으로 시작한다. 사람은 격차 보고서에서 비동기로 거부권(veto)을 가진다. 고위험 후보는 항목별 승인을 기다린다.
+5. **dispatch**: 승인된 목표 범위와 WIP 상한 안에 있는 후보는 자동으로 시작한다. 사람은 격차 보고서에서 비동기로 거부권(veto)을 가진다. 고위험 후보는 항목별 승인을 기다린다. 시작된 항목은 호스트 상태에 선점 잠금(claim lock)을 잡는다. 그래서 `omf` 프로세스 두 개가 같은 항목을 동시에 맡지 못한다(Osmani: "avoiding different sessions from claiming the same issue").
 6. **refresh**: 결정론적 신호로 `goal.md` 가 낡았는지 판단한다. 마지막 승인 이후 시간, 그 뒤에 병합된 PR, 지표의 움직임이다. 모델은 이 판단을 하지 않는다. 낡았으면 다음 틱은 J1 재인터뷰로 시작한다.
 
 종료 상태는 `finish`, `blocked_on_user`, `failed`, `cancelled` 로 고정한다. 진행은 작업 id, 갱신 시각, 지표 값으로 만든 서명(signature)으로 추적한다. 서명이 바뀌지 않았으면 재시도하지 않고 J6으로 올린다. 같은 막힘(blocker) 서명이 세 번 나타나도 J6으로 올린다. 예산은 호스트 원장에 누적된다. 재시작해도 초기화되지 않으며 자동으로 연장되지 않는다(J8).
@@ -321,11 +338,11 @@ OMF는 Osmani와 Vercel이 설명한 실행 결과 분류를 쓴다.
 | 결과 | 뜻 | 다음 단계 |
 |---|---|---|
 | `success` | 필수 게이트 전부 통과, 봉인 시나리오 통과, 감사 플래그 없음 | 증거 보고서 → J4 |
-| `flawed` | 겉으로는 초록이지만 감사 플래그가 발동했다. `prove-test` 실패, 카나리 적중, 테스트 수정, 또는 공개 테스트는 통과하는데 봉인 테스트는 실패하는 경우다 | 가린 피드백, 반복되면 J6 |
-| `blocked` | 환경, 인프라, 또는 빠진 결정 | 환경을 고친다, 또는 J2 |
-| `manual` | 사람이 직접 해야 한다 | 인계 패킷(§6.3). 사람이 다음에 무엇을 할지 알기 전에는 실행이 끝난 것이 아니다. |
+| `flawed` | "The wrong thing was implemented or maybe it didn't have full context"(잘못된 것을 구현했거나 맥락이 부족했다, Osmani). OMF 는 겉으로 초록이지만 틀린 결과도 여기에 넣는다. `prove-test` 실패, 카나리 적중, 테스트 수정, 또는 공개 테스트는 통과하는데 봉인 테스트는 실패하는 경우다. | 가린 피드백, 반복되면 J6 |
+| `blocked` | "The environment may have been missing a credential"(환경에 자격 증명이 없었을 수 있다, Osmani), 그 밖의 인프라 장애, 또는 빠진 결정 | 환경을 고친다, 또는 J2 |
+| `manual` | "A boundary the factory may not be allowed to cross yet"(팩토리가 아직 넘어서는 안 되는 경계, Osmani). 신뢰의 경계이고, 사람이 행동해야 한다. | 인계 패킷(§6.3). "A manual run isn't finished when the factory stops but when the human knows what to do next."(manual 실행은 팩토리가 멈출 때가 아니라 사람이 다음에 할 일을 알 때 끝난다.) |
 
-병합 권고를 달고 J4에 도달하는 것은 `success` 뿐이다.
+머지 권고를 달고 J4 에 도달하는 것은 `success` 뿐이다. Osmani 는 나머지 셋 중 둘은 "may have mechanical fixes and the last one is about trust"(기계적으로 고칠 수 있고, 마지막 하나는 신뢰의 문제)라고 쓴다. 이 분류는 항상 단계별 소요 시간과 함께 보고한다. 시간이 없으면 "you know a run came back flawed without knowing what finding out cost you"(실행이 flawed 로 돌아왔다는 것만 알고, 그걸 알아내는 데 든 비용은 모른다).
 
 ### 5.7 S6 가린 피드백
 
@@ -429,7 +446,8 @@ handoff:
   vault/scenarios/      # 봉인 시나리오 (하네스 외에는 어떤 컨테이너에도 마운트하지 않는다)
   runs/<UTC>-<stage>-<id>.md   # 불변 실행 기록
   worktrees/<work-id>/  # OMF 소유 워크트리 (git 이 .git/worktrees 와 refs/heads/omf/* 에 쓴다)
-  config.toml
+  config.toml           # [roles] 포함: 역할별(작성자, 구현자, 판정자, 조정자) 모델과 effort.
+                        # StrongDM Weather Report 의 정신을 따른다
 ```
 
 원장 봉투(envelope):
@@ -495,6 +513,8 @@ oh-my-factory/
 | devcontainer 런타임; 이후 원격 샌드박스 | devcontainer spec 과 devcontainers/cli; E2B (Apache-2.0) |
 | 결정 필드; 봉인 테스트 점수 | SEI QAS; spec-kitty (MIT); shadow-score-spec (MIT) |
 | train/holdout 기준 유지/되돌리기 | Anthropic "Automating eval design and hillclimbing" |
+| 그래프로 표현한 파이프라인(v0.2 에서 검토): 단계 노드, 사람 게이트, 체크포인트, 목표 게이트 | strongdm/attractor 명세(Apache-2.0)와 커뮤니티 구현. 특히 Kilroy(Dan Shapiro, Go, git worktree), Arc(TypeScript, holdout 시나리오, 수렴 루프), amolstrongdm 의 Attractor(holdout 과 트윈 대상 만족도 채점) |
+| 역할별 모델 배정을 공개하고 버전 관리 | StrongDM Weather Report |
 | 부하 탐침 | k6, 바이너리로만 호출 (AGPL, 코드 복사 없음) |
 
 **피할 것:**
@@ -577,3 +597,4 @@ oh-my-factory/
 3. 벤더를 달리한 작성이 유출이나 상관된 사각지대를 실제로 줄이는지. 가설로 두고 측정한다. 주장하지 않는다.
 4. WIP 상한, `STOP_IF`, 래더 마진의 기본값은 시작점이며 자체 지표를 보고 조정한다.
 5. Windows 지원(L1만?)과 사내 프록시.
+6. v0.2 에서 W 의 공정 그래프를 공개 명세인 Attractor DOT 형식으로 표현할지. 그러면 OMF 파이프라인을 기존 Attractor 엔진에서 돌릴 수 있다. 게이트 의미는 OMF 것을 유지한다. 명세의 `goal_gate` 는 `PARTIAL_SUCCESS` 도 통과시키지만 OMF 게이트는 그러지 않는다.

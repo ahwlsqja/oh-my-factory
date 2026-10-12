@@ -32,47 +32,81 @@ OMF is not:
 The sources are listed in priority order. When they conflict, the higher one wins, unless a
 lower one names a concrete failure mode that the higher one does not address.
 
-1. **Will Larson, "Trying the software factory pattern"** (lethain.com). Stop handing agents one
-   ticket at a time. Give them the project's goal and its measurements, and let them find and do
-   the work. His loop: confirm the goal, confirm progress can be measured (build the measurement
-   with the user if it is missing), review metrics and issue state to add or update work, execute,
-   and decide the next step (go back to the first step if the description is stale). The same loop
-   runs at low frequency after launch to catch changes in adoption or error rates. Three
-   foundations have to fit together: goal measurement, one shared work state, and an execution
-   environment that does not depend on a laptop.
-2. **Anthropic, "The AI-native SDLC playbook"** (claude.com, 2026-08-21). This is the same idea
-   applied to the whole lifecycle, written against real Claude Code features. Each stage ends by
-   committing an artifact, and that commit starts the next stage: `intent.md` → `spec.md` →
-   `plan.md` → merged PR → pipeline. In production, a breached control band writes the next
-   `intent.md`. Detection is deterministic. The playbook puts it this way: "Detection stays
-   deterministic. Claude is invoked once a band is breached, and the tier sets what it may do."
-   Every play pairs a leading indicator with a lagging indicator. OMF uses the playbook as its
-   **reference implementation for the tool layer and the artifact chain**.
-3. **StrongDM, Software Factory** (factory.strongdm.ai). The loop is seed, then validation harness,
-   then feedback. Tests that live in the codebase get gamed, so scenarios are kept outside the
-   codebase as a holdout. Success is a probability ("satisfaction"), not a boolean. Other ideas
-   used here are the Digital Twin Universe and shift work, which separates interactive work from
-   fully specified work.
-4. **Piotr Sarnacki, "I'm sorry, but you still have to think."** A vague spec turns design
-   decisions into coin flips: compatibility, latency versus throughput, memory, loss on failure,
-   queue bounds. A benchmark built on one metric misleads.
-   **Addy Osmani, "Human judgment doesn't leave the software factory. It relocates."** Someone
-   still chooses the problem, chooses the architecture, sets the quality bar, decides which
-   verification signals to trust, and decides when the evidence is enough to ship. Osmani also
-   says to optimize the factory for the reviewer.
+1. **Will Larson, "Trying the software factory pattern"** (lethain.com; read in full). "The
+   software factory pattern is looping on a broad goal, and then relying on the harness to drive
+   progress towards that goal." His `/linear-project-loop` has four steps:
+   1. Audit the project's goal definition. This means an RFC that describes the goals, how they are
+      measured, and the approach, plus dashboards or queries that measure progress against them.
+      If any of these is missing, iterate with the user to create it.
+   2. Review the state of the metrics and the issues. Add newly identified work, and update issues
+      that have moved.
+   3. Work on the non-blocked tasks: write or update a pull request, ping for review, ask a
+      clarifying question.
+   4. When a task completes, take the next one if the project description is fresh. If it has not
+      been updated in a while, rerun the loop from step 1.
+
+   The insight behind it: agents "didn't have the ability to evaluate if they were going in the
+   right direction, or if it was missing necessary tasks. Now it does." Larson had been
+   "accidentally hoarding parts of the state for myself regarding the goals of the project." The
+   same loop in "a less frequent post-release mode" catches adoption spikes or rising error rates.
+   The pieces compound only together: goal tracking (Datadog MCP, Snowflake), Linear as "the single
+   source of state for the company's work", and "an orchestrated harness that can perform work
+   independently from your laptop". Larson tentatively attributes the term to Justin McCarthy of
+   StrongDM (February 2026).
+2. **Anthropic, "The AI-native SDLC playbook"** (claude.com, 2026-08-21; PDF read). This is the same
+   idea applied to the whole lifecycle, written against real Claude Code features. "A stage ends by
+   committing an artifact with the commit initiating the next stage": `intent.md` → `spec.md` →
+   `plan.md` → merged PR → pipeline, "and a breached control band in production writes the next
+   intent.md and so the loop continues." "Detection stays deterministic. Claude is invoked once a
+   band is breached, and the tier sets what it may do." Every play pairs a leading indicator with a
+   lagging indicator. OMF uses the playbook as its **reference implementation for the tool layer
+   and the artifact chain**.
+3. **StrongDM, Software Factory** (factory.strongdm.ai; all pages read). "Seed → Validation
+   harness → Feedback loop. Tokens are the fuel." "The loop runs until the holdout scenarios pass
+   (and stay passing)." A test stored in the codebase "can be lazily rewritten to match the code",
+   so a scenario is "an end-to-end 'user story', often stored outside the codebase (similar to a
+   'holdout' set in model training)". Satisfaction asks: "of all the observed trajectories through
+   all the scenarios, what fraction of them likely satisfy the user?" Other ideas used here:
+   - The Digital Twin Universe: "replicate behavior at the boundary", validated against the live
+     dependency "until we stop finding behavioral differences".
+   - Shift work, which separates interactive work from fully specified work.
+   - The functional versus non-functional split: the difficulty of a plausible Instagram clone
+     "lies primarily outside the functional specification: scalability, performance,
+     availability, security, efficiency".
+   - Attractor, an open spec for a graph-of-phases pipeline with many community implementations.
+   - The Weather Report, which publishes which model plays which role.
+4. **Piotr Sarnacki, "I'm sorry, but you still have to think"** (read in full). "If your prompt is
+   not specific enough, many decisions are a coin flip": backwards compatibility, latency versus
+   throughput, memory under load, losing notifications after a crash. A single metric misleads.
+   His benchmarks used constant arrival rate and compared delivery, errors, latency and memory
+   together. "If you want a reliable system you should know when to fail."
+   **Addy Osmani, "Human judgment doesn't leave the software factory. It relocates."** (read in
+   full). "Someone still chooses the problem. Someone still chooses the architecture. Someone still
+   sets the quality bar. Someone decides which verification signals deserve trust. Someone decides
+   when the evidence is sufficient to ship." Also: "Consider optimising the software factory for
+   your reviewer." "Verification buys you trust, and it buys the ability to grant more autonomy to
+   your agents." A factory earns its keep when it is "stopping production when human review is
+   falling behind".
 5. Context: DHH (hand-written code is no longer economically productive for most programmers),
    Tunguz ("Thinking in Systems, Shipping in Loops"), Dan Shapiro (the five levels).
 
-**How the tension is resolved.** StrongDM wants no human code review. Sarnacki and Osmani want
-human thinking. OMF changes **what** people work on rather than removing them. People approve
-goals and measurements before work starts (J1). They resolve design decisions before
-implementation (J2). They choose which signals to trust (J3). They judge evidence at merge (J4) and
-sign off on the goal (J5). Reading code becomes targeted: it is required for high-risk paths and
-optional elsewhere.
+**How the tension is resolved.** StrongDM's rules are "Code must not be written by humans" and
+"Code must not be reviewed by humans". Its validation constraint says code is "validated
+automatically without semantic inspection of source", treated like "opaque weights whose
+correctness is inferred exclusively from externally observable behavior". Sarnacki and Osmani want
+human thinking, and Osmani wants a "lights-on" factory with targeted review. OMF deliberately
+departs from StrongDM on one point: **targeted code review stays**. It is required on high-risk
+paths and optional elsewhere. Everything else changes **what** people work on rather than removing
+them:
+- People approve goals and measurements before work starts (J1).
+- They resolve design decisions before implementation (J2).
+- They choose which signals to trust (J3).
+- They judge evidence at merge (J4) and sign off on the goal (J5).
 
-**Correction carried from research.** The sentence "task completion ≠ goal achievement" comes from
-the GeekNews summary of Larson's post, not from the post itself. OMF states it as its own
-invariant (F4).
+**Corrections from reading the originals.**
+- The sentence "task completion ≠ goal achievement" is not in Larson's post. It is the GeekNews
+  summary's reading of it. OMF states it as its own invariant (F4).
+- Larson's loop has four steps, not five. Measurement is checked inside step 1.
 
 ## 2. First principles
 
@@ -174,9 +208,11 @@ When J1 approves, the semantic fields are canonicalized and hashed into the Metr
 treated as a convenience copy. If its hash differs from the locked one, OMF records a **regime
 change**. A regime change blocks `candidate` until J1 re-approves.
 
-`kind: migration` adds the pattern from Larson's "Migrations" post: stop the bleeding with a
-ratchet, automate the easy part, assign the long tail to people. "Done" is a measured remainder of
-zero.
+`kind: migration` adds the playbook from Larson's "Migrations" post (2018): derisk, enable,
+finish. First "stop the bleeding" so that all new code uses the new approach, for example with a
+linter ratchet. Then "build tooling to programmatically migrate the easy ninety-percent", keeping
+the tools "incremental and reversible". The long tail is finished by the team leading the
+migration. "Done" is a measured remainder of zero.
 
 ### 4.2 Metric Vault and `metrics.lock`
 
@@ -253,7 +289,8 @@ state, so a scheduler, CI, or a person can run it.
      and a mechanical risk class (§6).
 5. **dispatch**: candidates inside the approved goal scope and WIP cap start automatically. The
    human gets an asynchronous veto in the gap report. High-risk candidates wait for per-item
-   approval.
+   approval. Each started item takes a claim lock in host state, so two `omf` processes cannot
+   work the same item (Osmani: "avoiding different sessions from claiming the same issue").
 6. **refresh**: decide whether `goal.md` is stale using deterministic signals: time since the last
    approval, merged PRs since then, and metric movement. A model does not make this call. If the
    goal is stale, the next tick starts with a J1 re-interview.
@@ -430,11 +467,14 @@ OMF uses the run outcome classes described by Osmani and Vercel.
 | Outcome | Meaning | Next step |
 |---|---|---|
 | `success` | All required gates passed, sealed scenarios passed, no audit flag | Evidence report → J4 |
-| `flawed` | Green on the surface, but an audit flag fired: `prove-test` failed, a canary was hit, a test was edited, or open tests pass while sealed ones fail | Masked feedback, or J6 if repeated |
-| `blocked` | Environment, infrastructure, or a missing decision | Fix the environment, or J2 |
-| `manual` | A person must act | Handoff packet (§6.3). The run is not finished until the person knows what to do next. |
+| `flawed` | "The wrong thing was implemented or maybe it didn't have full context" (Osmani). OMF also files green-but-wrong results here: `prove-test` failed, a canary was hit, a test was edited, or open tests pass while sealed ones fail. | Masked feedback, or J6 if repeated |
+| `blocked` | "The environment may have been missing a credential" (Osmani), other infrastructure faults, or a missing decision | Fix the environment, or J2 |
+| `manual` | "A boundary the factory may not be allowed to cross yet" (Osmani). This is a trust boundary, and a person must act. | Handoff packet (§6.3). "A manual run isn't finished when the factory stops but when the human knows what to do next." |
 
-Only `success` reaches J4 with a merge recommendation.
+Only `success` reaches J4 with a merge recommendation. Osmani notes that two of the three
+non-success classes "may have mechanical fixes and the last one is about trust". The taxonomy is
+always reported together with per-stage timing. Without the timing, "you know a run came back
+flawed without knowing what finding out cost you".
 
 ### 5.7 S6 masked feedback
 
@@ -554,7 +594,8 @@ pattern).
   vault/scenarios/      # sealed scenarios (never mounted into any container except the harness)
   runs/<UTC>-<stage>-<id>.md   # immutable run records
   worktrees/<work-id>/  # OMF-owned worktrees (git writes .git/worktrees and refs/heads/omf/*)
-  config.toml
+  config.toml           # includes [roles]: model and effort per role (author, implementer,
+                        # judge, reconciler), in the spirit of StrongDM's Weather Report
 ```
 
 Ledger envelope:
@@ -628,6 +669,8 @@ oh-my-factory/
 | Devcontainer runtime; remote sandbox later | devcontainer spec and devcontainers/cli; E2B (Apache-2.0) |
 | Decision fields; sealed-test score | SEI QAS; spec-kitty (MIT); shadow-score-spec (MIT) |
 | Keep/revert on train/holdout | Anthropic "Automating eval design and hillclimbing" |
+| Pipeline-as-graph (evaluate for v0.2): phases as nodes, human gates, checkpoints, goal gates | strongdm/attractor spec (Apache-2.0) and community implementations, especially Kilroy (Dan Shapiro, Go, git worktrees), Arc (TypeScript, holdout scenarios, convergence loops) and amolstrongdm's Attractor (satisfaction scoring against holdouts and twins) |
+| Role-to-model routing, published and versioned | StrongDM Weather Report |
 | Load probes | k6, invoked as a binary only (AGPL, no code copied) |
 
 **Avoid:**
@@ -733,3 +776,6 @@ These are deferred and do not block v0.1.
 4. Defaults for the WIP cap, `STOP_IF` and the Ladder margin are starting points to be tuned from
    self-metrics.
 5. Windows support (L1 only?) and corporate proxies.
+6. Whether W's station graph should be expressed in the open Attractor DOT format in v0.2, so that
+   OMF pipelines run on existing Attractor engines. OMF would keep its own gate semantics. The spec's
+   `goal_gate` also accepts `PARTIAL_SUCCESS`, which OMF gates do not.
