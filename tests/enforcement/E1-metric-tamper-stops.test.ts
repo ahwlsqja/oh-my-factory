@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { Ledger } from "../../src/core/ledger.js";
 import { approveGoal } from "../../src/goal/approve.js";
 import { auditGoal } from "../../src/goal/audit.js";
-import { lockFile } from "../../src/goal/metrics.js";
+import { lockFile, metricSha256, proposeMetric } from "../../src/goal/metrics.js";
 import { omf } from "../helpers/cli.js";
 import { setupGoal } from "../helpers/goal.js";
 import { commitAll } from "../helpers/tmp.js";
@@ -33,6 +33,36 @@ describe("E1 metric-tamper-stops", () => {
     expect(result.code).toBe(2);
     expect(result.stderr).toContain("metric lock tampered: m-p95");
     expect(measured(fx.location.dir)).toBe(0);
+  });
+
+  it("stops when a metric lock was edited and its own hash recomputed", () => {
+    const fx = setupGoal();
+    approveGoal(fx.location, "g-fast", "human:dev");
+    const file = lockFile(fx.location.dir, "g-fast", "m-p95");
+    const lock = JSON.parse(readFileSync(file, "utf8")) as Parameters<typeof metricSha256>[0];
+    lock.command = ["sh", "-c", "echo 1"];
+    lock.sha256 = metricSha256(lock);
+    writeFileSync(file, JSON.stringify(lock));
+    const result = omf(["goal", "measure", "g-fast", "--runner", "host"], fx.repo, fx.home);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("metric lock tampered: m-p95");
+    expect(measured(fx.location.dir)).toBe(0);
+  });
+
+  it("never runs a re-proposed definition of an approved metric", () => {
+    const fx = setupGoal();
+    approveGoal(fx.location, "g-fast", "human:dev");
+    proposeMetric(
+      fx.ledger,
+      fx.location.dir,
+      { metric_id: "m-p95", command: ["sh", "-c", "echo 1"], unit: "ms", watched_paths: ["bench/p95.sh"], image: null },
+      "human:dev",
+    );
+    const result = omf(["goal", "measure", "g-fast", "--runner", "host", "--json"], fx.repo, fx.home);
+    expect(result.code).toBe(1);
+    const report = JSON.parse(result.stdout) as { target: { measured: number }; regime_changes: string[] };
+    expect(report.target.measured).toBe(312);
+    expect(report.regime_changes).toContain("metric m-p95 definition changed");
   });
 
   it("labels a change to the metric's code as a regime change until J1 approves again", () => {
