@@ -43,7 +43,9 @@ Raw research notes and the extracted original texts are kept outside this reposi
 | spec-kitty (MIT), BMAD-METHOD | https://github.com/spec-kitty/spec-kitty | text | decision ledger fields, undecided lint |
 | shadow-score-spec (MIT) | https://github.com/DUBSOpenHub/shadow-score-spec | text | sealed-test score |
 | Anthropic, "Automating eval design and hillclimbing" | https://claude.dev/blog/automating-eval-design-and-hillclimbing/ | fetch-summary | keep/revert, train/holdout |
-| Attractor community implementations (Kilroy, Arc, amolstrongdm's Attractor, attractor-pi-dev) | https://factory.strongdm.ai/products/attractor | text (listing only; repositories not yet read) | candidate pipeline-definition format (v0.2) |
+| danshapiro/kilroy (MIT, copyright StrongDM, Inc.) | https://github.com/danshapiro/kilroy | text (code read statically, 2026-10-12; not built or run) | loop guards, claim lock, checkpoints, preflight, parity matrix |
+| point-labs-dev/arc (README states MIT; no LICENSE file or copyright holder, so ideas only) | https://github.com/point-labs-dev/arc | text (code read statically, 2026-10-12; not built or run) | empty-means-fail, require_scenarios, node execution cap |
+| Other Attractor community implementations (amolstrongdm's Attractor, attractor-pi-dev, Fabro, ...) | https://factory.strongdm.ai/products/attractor | listing only | not used in v0.1 |
 | StrongDM Weather Report | https://factory.strongdm.ai/weather-report | text | role-to-model routing config |
 | Claude Code docs (sandboxing, settings, headless) | https://code.claude.com/docs | fetch-summary + local `claude --help` | isolation flags |
 | Codex CLI (`codex exec --help`) | https://developers.openai.com/codex | local help | ephemeral sessions |

@@ -206,6 +206,12 @@ J1이 승인하면 의미 필드(semantic field)를 정규화(canonicalize)하�
 
 종료 상태는 `finish`, `blocked_on_user`, `failed`, `cancelled` 로 고정한다. 진행은 작업 id, 갱신 시각, 지표 값으로 만든 서명(signature)으로 추적한다. 서명이 바뀌지 않았으면 재시도하지 않고 J6으로 올린다. 같은 막힘(blocker) 서명이 세 번 나타나도 J6으로 올린다. 예산은 호스트 원장에 누적된다. 재시작해도 초기화되지 않으며 자동으로 연장되지 않는다(J8).
 
+루프 가드는 기본으로 켜져 있다. Kilroy 구현(MIT)을 따르되 그 빈틈을 막는다.
+
+- **실패 서명 차단기(failure-signature breaker).** 서명은 `공정 | 결과 분류 | 정규화한 사유` 다. 실패일 때만이 아니라 모든 결과에 대해 센다. 실패하지 않는 루프가 차단기를 우회하면 안 된다. Kilroy 는 이 빈틈을 자기 스킬 문서에 스스로 적어 두었다. 성공해도 횟수를 초기화하지 않는다. 세 번 걸리면 J6 으로 올린다.
+- **방문 상한(visit cap).** W 의 각 공정에는 작업 항목별 방문 상한이 있고, 작업 항목 전체에는 공정 실행 총 상한이 있다. 기본값은 회전당 공정별 3회 방문, 총 `max(10, 20 × rounds)` 회 실행이다. Arc 의 `maxNodeExecutions` 와 같은 모양이다. 게이트 재진입도 방문으로 센다. Kilroy 의 기본값 0(꺼짐)은 따르지 않는다.
+- **선점 잠금(claim lock).** 작업 항목 단위로 `O_EXCL` 로 만든다. PID 와 프로세스 시작 시각을 기록해서, PID 가 재사용된 오래된 잠금을 가려낸다. Kilroy 의 `run_ownership_lock` 을 따른다. 단일 호스트를 전제하며, 팀 모드는 범위 밖이다(§14).
+
 ### 4.5 성공 선언
 
 에이전트는 `candidate` 까지만 만들 수 있다. 후보가 되려면 다음을 모두 만족해야 한다.
@@ -232,6 +238,17 @@ J1이 승인하면 의미 필드(semantic field)를 정규화(canonicalize)하�
 알려진 한계가 있다. 카나리(canary)는 문자 그대로의 유출은 잡지만 말을 바꿔 쓴 유출은 못 잡는다. 선언되지 않은 계측 경로는 구멍으로 남는다. 네트워크를 꺼도 데이터는 모델 API 경로로 나갈 수 있다. 사람이 승인한 나쁜 지표는 여전히 나쁘며, 잠금은 그것을 안정시킬 뿐이다.
 
 ## 5. 작업 검증 루프 (W)
+
+### 5.0 게이트
+
+모든 게이트는 닫힌 쪽으로 실패한다(fail closed). **비어 있으면 실패다.** 시나리오 0개, 빠진 필수 게이트, 없는 판정 파일이나 결과 파일, 한 번도 방문하지 않은 게이트 노드는 모두 통과하지 못한 것으로 본다. Kilroy 의 `checkGoalGates` 는 존재하는 결과만 순회하기 때문에, 결과가 없는 goal-gate 노드가 통과해 버린다. 이것이 반면교사다. Arc 는 결과가 없으면 미충족으로 보고, OMF 는 이쪽을 따른다.
+
+| 게이트 | 위치 | 통과 조건 | 아니면 |
+|---|---|---|---|
+| GATE-1 결정 | S2 전 | 필수 결정 class 에 미결이 없고, `interface` 계약이 있고, 모든 유예가 사람 서명을 받았다 | `blocked_on_user` (J2) |
+| GATE-2 시나리오 유효성 | S3 전 | §5.3 | S2 로 되돌림, 또는 J3 |
+| GATE-3 무결성 | S4, S5 | canary 적중 없음, 판정 설정 변경 없음, 통과한 모순 카나리 없음, 게이트 줄이 `MISCONFIGURED` 가 아님, 실측한 격리 수준이 선언한 수준 이상 | 라인 정지 (J6 또는 J7) |
+| GATE-4 한도 | S6 뒤 | 회전 수, 방문 상한, 예산, 정체 서명이 한도 안에 있다 | `paused`, 그다음 J6 또는 J8 |
 
 ### 5.1 산출물 사슬
 
@@ -296,6 +313,8 @@ status: active | retired | contaminated
 ```
 
 **GATE-2: 시나리오 유효성.** 이 게이트는 구현이 시작되기 전에 돈다.
+
+- 활성 시나리오가 0개면 GATE-2 실패다(Arc 의 `require_scenarios` 아이디어, 기본 켜짐).
 
 - 널 구현(null implementation, 오류나 빈 출력을 돌려주는 인터페이스 스텁)은 모든 `behavior` 시나리오에서 실패해야 한다.
 - 시나리오끼리, 그리고 시나리오와 원장 임계값이 서로 모순되어서는 안 된다.
@@ -404,6 +423,8 @@ request_human_input:
 
 승인(`approve`/`deny`)과 질문은 서로 다른 연산이다.
 
+**조용한 승인은 없다.** 비교한 두 프로젝트는 모두 어떤 경로에서는 기본으로 승인한다. Kilroy 의 CLI 는 자동 승인 인터뷰어를 주입하고, 타임아웃이면 `human.default_choice` 로 가는 경로가 있다. Arc 는 TTY 가 없으면 자동 승인하고, 맞지 않는 답을 첫 선택지로 처리한다. OMF 는 이 중 어느 것도 하지 않는다. TTY 가 없으면 요청을 저장하고 종료한다. 맞지 않는 답은 다시 묻는다. 타임아웃이면 항목은 멈춘 상태로 남는다. 집행 테스트는 `E8 no-auto-approve` 다.
+
 ### 6.3 인계 패킷(handoff packet)
 
 `manual` 결과, J6 에스컬레이션, 그 밖에 사람이 필요한 정지는 인계 패킷을 만든다. 패킷이 사람에게 다음에 할 일을 알려 줘야만 실행이 끝난 것으로 본다.
@@ -434,6 +455,13 @@ handoff:
 - 위협 모델 참고: 그 컨테이너 안에서 실행되는 코드는 그 자격증명을 읽을 수 있다. L3은 유출을 줄이지만 없애지는 못한다.
 - 원격과 CI에서는 API 키를 기본으로 쓴다. OMF는 구독 토큰을 저장하거나 중개하지 않는다.
 - 작성 세션과 판정 세션은 OMF 소유의 설정 홈(config home)을 쓴다. OMF 호스트 상태 안에서 자격증명 파일만 0600 권한으로 복사한다.
+
+**격리는 선언이 아니라 실측이다.** 비교한 두 프로젝트 모두 선언한 격리 설정이 실제로는 집행되지 않았다. Arc 의 `useWorktrees` 는 이 값을 읽는 코드가 없다. Kilroy 의 worktree 경계는 프롬프트의 한 문장일 뿐이고, review 명령은 원본 레포에서 권한 우회로 실행된다.
+
+- `omf doctor` 는 실제로 적용된 격리를 실측한다. 금고 미마운트, 자격 증명 범위, 샌드박스 값, 외부 통신 규칙이 대상이다. 결과는 사전 점검 보고서(`preflight.json`, Kilroy 의 `--preflight` 를 따름)로 남긴다. 증거 리포트에는 이 실측 등급을 싣는다. 실측 등급이 선언 등급보다 낮으면 GATE-3 이 실패한다.
+- 권한 우회 플래그는 L2·L3 컨테이너 안에서만 허용한다. 호스트나 사용자의 원본 체크아웃에서는 절대 쓰지 않는다.
+- 구현자 세션은 OMF 소유의 설정 디렉터리를 받는다. 사용자의 `~/.claude` 나 `~/.codex` 를 물려받지 않는다.
+- worktree 는 추적되는 파일로만 만든다. Kilroy 는 gitignore 된 파일을 전부 worktree 로 복사하는데, 여기에 비밀이 섞일 수 있다. OMF 는 그러지 않는다.
 
 **신뢰할 수 없는 입력.** 이슈 본문, 채널 메시지, 지표 출력은 신뢰할 수 없는 데이터다. 트리거는 식별자만 전달하고, 내용은 OMF가 직접 읽는다(addyosmani/factory `factory-fire` 패턴).
 
@@ -513,6 +541,7 @@ oh-my-factory/
 | devcontainer 런타임; 이후 원격 샌드박스 | devcontainer spec 과 devcontainers/cli; E2B (Apache-2.0) |
 | 결정 필드; 봉인 테스트 점수 | SEI QAS; spec-kitty (MIT); shadow-score-spec (MIT) |
 | train/holdout 기준 유지/되돌리기 | Anthropic "Automating eval design and hillclimbing" |
+| 루프 가드(실패 서명 차단기, 방문 상한), 선점 잠금, 공정별 체크포인트와 재개, 사전 점검 보고서, parity matrix 와 CLI 사용법 드리프트 테스트 | danshapiro/kilroy (MIT, 저작권 StrongDM, Inc.; 고지를 남기면 코드 차용 가능) |
 | 그래프로 표현한 파이프라인(v0.2 에서 검토): 단계 노드, 사람 게이트, 체크포인트, 목표 게이트 | strongdm/attractor 명세(Apache-2.0)와 커뮤니티 구현. 특히 Kilroy(Dan Shapiro, Go, git worktree), Arc(TypeScript, holdout 시나리오, 수렴 루프), amolstrongdm 의 Attractor(holdout 과 트윈 대상 만족도 채점) |
 | 역할별 모델 배정을 공개하고 버전 관리 | StrongDM Weather Report |
 | 부하 탐침 | k6, 바이너리로만 호출 (AGPL, 코드 복사 없음) |
@@ -571,6 +600,9 @@ oh-my-factory/
    - `E4 unevaluated-is-undetermined`
    - `E5 init-non-pollution`
    - `E6 l2-leak-redteam`: 시나리오를 찾으라고 지시받은 구현자가 실패하고 카나리가 나타나지 않는다
+   - `E7 empty-means-fail`: 시나리오 0개, 빠진 게이트, 없는 결과는 절대 통과하지 않는다
+   - `E8 no-auto-approve`: TTY 없음, 맞지 않는 답, 타임아웃은 절대 승인으로 이어지지 않는다
+   - CLI 사용법 드리프트 테스트와 요구사항-테스트 적합성 매트릭스(Kilroy 의 parity matrix)
 9. `examples/hello-goal`: 오프라인으로 측정할 수 있는 지표를 가진 작은 CLI. 예를 들면 고정된 입력 집합에 대한 로컬 연산의 p95 지연이다. 외부 서비스 없이 전체 루프가 돈다.
 
 **v0.1 범위 밖:**
@@ -597,4 +629,9 @@ oh-my-factory/
 3. 벤더를 달리한 작성이 유출이나 상관된 사각지대를 실제로 줄이는지. 가설로 두고 측정한다. 주장하지 않는다.
 4. WIP 상한, `STOP_IF`, 래더 마진의 기본값은 시작점이며 자체 지표를 보고 조정한다.
 5. Windows 지원(L1만?)과 사내 프록시.
-6. v0.2 에서 W 의 공정 그래프를 공개 명세인 Attractor DOT 형식으로 표현할지. 그러면 OMF 파이프라인을 기존 Attractor 엔진에서 돌릴 수 있다. 게이트 의미는 OMF 것을 유지한다. 명세의 `goal_gate` 는 `PARTIAL_SUCCESS` 도 통과시키지만 OMF 게이트는 그러지 않는다.
+6. **v0.1 결정(Kilroy 와 Arc 를 읽은 뒤):** W 는 OMF 고유의 결정론 상태기계로 돈다. Attractor DOT 는 v0.2 에서 내보내기·보기 형식으로만 검토한다. 이유는 셋이다.
+   - Attractor 명세 자체가 바뀌어 왔다. Kilroy 는 예전 번들 판본을 구현했는데, 그 판본에서는 조건이 맞지 않으면 아무 엣지로나 넘어간다. 현재 명세는 아무 엣지도 고르지 않는다.
+   - `goal_gate` 는 `PARTIAL_SUCCESS` 도 통과시키지만 OMF 게이트는 그러지 않는다.
+   - OMF 보증의 대부분은 그래프 밖에 있다. 격리, 금고, 예산, 가림이 그렇다.
+
+   Kilroy 에 의존하거나 포크하는 안은 기각한다. 비테스트 Go 코드만 약 5.5만 줄이고, OMF 는 TypeScript 패키지이며, Kilroy 의 권한·격리 기본값이 OMF 와 충돌한다. 대신 MIT 인 작은 조각만 가져온다(§10).

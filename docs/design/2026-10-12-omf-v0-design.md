@@ -301,6 +301,20 @@ is not retried; it escalates to J6. The same blocker signature appearing three t
 escalates to J6. Budgets accumulate in the host ledger. They do not reset on restart and are never
 extended automatically (J8).
 
+Loop guards are on by default. They follow Kilroy's implementation (MIT), with its gaps closed:
+
+- **Failure-signature breaker.** The signature is `station | outcome class | normalized reason`.
+  It is counted for every outcome, not only for failures. A non-failing loop must not bypass the
+  breaker, which is a gap Kilroy documents in its own skill notes. Success does not reset the
+  count. Three hits escalate to J6.
+- **Visit caps.** Each W station has a per-work-item visit cap, and every work item has a total
+  station-execution cap. The defaults are 3 visits per station per round and `max(10, 20 × rounds)`
+  executions in total; Arc's `maxNodeExecutions` uses the same shape. Re-entering a gate counts as a
+  visit. Kilroy's default of 0, which means off, is not followed.
+- **Claim lock.** The lock is per work item and is created with `O_EXCL`. It records the PID and
+  the process start time, so a stale lock is detected when the PID was reused. This follows Kilroy's
+  `run_ownership_lock`. It assumes a single host, and team mode is out of scope (§14).
+
 ### 4.5 Declaring success
 
 An agent can only produce a `candidate`. A candidate requires all of the following:
@@ -333,6 +347,20 @@ remain a hole. Data can still leave through the model API path even with the net
 bad metric approved by a person stays bad, and the lock only makes it stable.
 
 ## 5. Work verification loop (W)
+
+### 5.0 Gates
+
+Every gate fails closed. **Empty means fail**: zero scenarios, a missing required gate, a missing
+verdict or outcome file, and a gate node that was never visited all count as not passed. Kilroy's
+`checkGoalGates` only iterates outcomes that exist, so a missing goal-gate node passes. That is the
+counter-example. Arc treats a missing outcome as unmet, which is the behavior OMF follows.
+
+| Gate | Where | Passes only if | Otherwise |
+|---|---|---|---|
+| GATE-1 decisions | before S2 | No required decision class is open, the `interface` contract exists, and every deferral is human-signed | `blocked_on_user` (J2) |
+| GATE-2 scenario validity | before S3 | §5.3 | back to S2, or J3 |
+| GATE-3 integrity | S4 and S5 | No canary hit, no judge-config change, no contradiction canary passing, the gate line is not `MISCONFIGURED`, and the isolation level is measured as at least the declared one | stop the line (J6 or J7) |
+| GATE-4 limits | after S6 | Rounds, visit caps, budget and the stall signature are within bounds | `paused`, then J6 or J8 |
 
 ### 5.1 Artifact chain
 
@@ -407,6 +435,8 @@ status: active | retired | contaminated
 ```
 
 **GATE-2: scenario validity.** This gate runs before implementation starts.
+
+- Zero active scenarios fails GATE-2 (Arc's `require_scenarios` idea, default on).
 
 - A null implementation (an interface stub that returns errors or empty output) must fail every
   `behavior` scenario.
@@ -546,6 +576,12 @@ request_human_input:
 
 Approvals (`approve`/`deny`) and questions are separate operations.
 
+**No silent approval.** Both compared projects approve by default on some path. Kilroy's CLI
+injects an auto-approving interviewer and has a timeout path to `human.default_choice`. Arc
+auto-approves when there is no TTY and maps an unmatched answer to the first choice. OMF never
+does any of these. With no TTY, it persists the request and exits. An unmatched answer is asked
+again. A timeout leaves the item stopped. Enforcement test `E8 no-auto-approve`.
+
 ### 6.3 Handoff packet
 
 A `manual` outcome, a J6 escalation, or any stop that needs a person produces a handoff packet.
@@ -580,6 +616,21 @@ handoff:
 - Remote and CI use defaults to API keys. OMF never stores or brokers subscription tokens.
 - Authoring and judging sessions use OMF-owned config homes. They copy only the credential file,
   with 0600 permissions, inside OMF host state.
+
+**Isolation is measured, not declared.** In both compared projects, declared isolation settings
+were not enforced. Arc's `useWorktrees` has no consumer. Kilroy's worktree boundary is a sentence
+in a prompt, and its review command runs with permission bypass in the source repo.
+
+- `omf doctor` measures the isolation actually in effect: the vault is not mounted, the credential
+  scope, the sandbox values and the egress rules. It writes the result as a preflight report
+  (`preflight.json`, after Kilroy's `--preflight`). The evidence report carries this measured
+  level. GATE-3 fails if the measured level is lower than the declared one.
+- Permission-bypass flags are allowed only inside an L2 or L3 container. They are never used on the
+  host or in the user's source checkout.
+- Implementer sessions get an OMF-owned config directory. They never inherit the user's `~/.claude`
+  or `~/.codex`.
+- Worktrees are created from tracked files only. Kilroy copies every gitignored file into the
+  worktree, which can include secrets. OMF does not.
 
 **Untrusted input.** Issue bodies, channel messages and metric outputs are untrusted data. Triggers
 pass identifiers only, and OMF reads the content itself (addyosmani/factory `factory-fire`
@@ -669,6 +720,7 @@ oh-my-factory/
 | Devcontainer runtime; remote sandbox later | devcontainer spec and devcontainers/cli; E2B (Apache-2.0) |
 | Decision fields; sealed-test score | SEI QAS; spec-kitty (MIT); shadow-score-spec (MIT) |
 | Keep/revert on train/holdout | Anthropic "Automating eval design and hillclimbing" |
+| Loop guards (failure-signature breaker, visit caps), claim lock, per-station checkpoint and resume, preflight report, parity matrix and CLI usage drift test | danshapiro/kilroy (MIT, copyright StrongDM, Inc.; code may be borrowed with notice) |
 | Pipeline-as-graph (evaluate for v0.2): phases as nodes, human gates, checkpoints, goal gates | strongdm/attractor spec (Apache-2.0) and community implementations, especially Kilroy (Dan Shapiro, Go, git worktrees), Arc (TypeScript, holdout scenarios, convergence loops) and amolstrongdm's Attractor (satisfaction scoring against holdouts and twins) |
 | Role-to-model routing, published and versioned | StrongDM Weather Report |
 | Load probes | k6, invoked as a binary only (AGPL, no code copied) |
@@ -742,6 +794,9 @@ The skeleton must prove two full turns of the goal loop, end to end.
    - `E4 unevaluated-is-undetermined`
    - `E5 init-non-pollution`
    - `E6 l2-leak-redteam`: an implementer told to find the scenarios fails, and no canary appears
+   - `E7 empty-means-fail`: zero scenarios, a missing gate or a missing outcome never passes
+   - `E8 no-auto-approve`: no TTY, an unmatched answer or a timeout never approves
+   - CLI usage drift test and a requirement-to-test conformance matrix (Kilroy's parity matrix)
 9. `examples/hello-goal`: a small CLI with an offline-measurable metric, such as the p95 latency of
    a local operation over a fixed input set. The whole loop runs without external services.
 
@@ -776,6 +831,13 @@ These are deferred and do not block v0.1.
 4. Defaults for the WIP cap, `STOP_IF` and the Ladder margin are starting points to be tuned from
    self-metrics.
 5. Windows support (L1 only?) and corporate proxies.
-6. Whether W's station graph should be expressed in the open Attractor DOT format in v0.2, so that
-   OMF pipelines run on existing Attractor engines. OMF would keep its own gate semantics. The spec's
-   `goal_gate` also accepts `PARTIAL_SUCCESS`, which OMF gates do not.
+6. **Decided for v0.1 (after reading Kilroy and Arc):** W runs on OMF's own deterministic state
+   machine. Attractor DOT is evaluated in v0.2 as an export and view format only. The reasons:
+   - The Attractor spec itself has moved. Kilroy implements an older bundled snapshot in which a
+     non-matching condition falls back to any edge. The current spec returns none.
+   - `goal_gate` accepts `PARTIAL_SUCCESS`, which OMF gates do not.
+   - Most of OMF's guarantees live outside any graph: isolation, the vault, budgets and masking.
+
+   Depending on or forking Kilroy is rejected. It is about 55k lines of non-test Go, OMF is a
+   TypeScript package, and its permission and isolation defaults conflict with OMF's. Small MIT
+   pieces are borrowed instead (§10).
