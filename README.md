@@ -21,8 +21,9 @@
 
 > [!WARNING]
 > **Pre-alpha.** Today oh-my-factory ships its foundation (host state, a tamper-evident ledger,
-> budgets that never reset) plus defining, approving and measuring goals: J1 locks, the gap to
-> the target and control bands. Turning the gap into work (`omf goal tick`) and the verification
+> budgets that never reset) plus defining, approving and measuring goals (J1 locks, the gap to
+> the target and control bands), the J8 budget commands, and the work-item store with its
+> `work` and `veto` commands. Turning the gap into work (`omf goal tick`) and the verification
 > line are designed but not built yet. See [What works today](#what-works-today).
 
 ---
@@ -97,8 +98,8 @@ or **designed** and not built yet.
 - **Budgets never reset.** *Enforced today.* A restart does not refill a budget, and only a person
   can raise one.
 - **Metric code cannot change quietly.** *Enforced today.* A metric is measured only after you approve it,
-  an edited lock stops measurement, and a change to the metric's command, to a path it watches (`--watch`), or to
-  the goal needs a new approval. Limits are listed under "Define and measure a goal".
+  an edited lock stops measurement, and a change to the metric's command, to a path it watches (`--watch`), to its
+  bands file, or to the goal needs a new approval. Limits are listed under "Define and measure a goal".
 - **Goals over tasks.** *Partly built.* Work is derived from the gap between a measured value and a
   target. Goals, locks and measurement work today; turning the gap into work is next.
 - **Holdout, not homework.** *Designed.* Acceptance scenarios are sealed, written by the other
@@ -119,8 +120,16 @@ or **designed** and not built yet.
 | `omf goal new <id>` | Creates `goal.md` in host state from a template. |
 | `omf metric propose <id> --unit <u> -- <command>` | Proposes a metric: the command that prints its value, the unit, and the paths whose change is a regime change. |
 | `omf goal audit <id>` | Checks the goal, its locks and the ledger, and reports regime changes. Writes nothing. |
-| `omf goal approve <id>` | J1: shows what will be locked and approves it after you type the goal id in a terminal. |
+| `omf goal approve <id>` | J1: shows what will be locked (metrics and their bands) and approves it after you type the goal id in a terminal. |
 | `omf goal measure <id>` | Runs the locked metrics (in Docker, or on the host with `--runner host`), computes the gap to target and the control bands, and writes a gap report to host state. |
+
+| `omf budget show <id> [--json]` | Prints the rounds, disclosure and wall-time budgets: declared, raised, consumed and remaining. |
+| `omf budget declare <id> <kind> <amount>` | J8: declares a `rounds` or `disclosure` budget, in an interactive terminal. |
+| `omf budget raise <id> <kind> <amount>` | J8: raises a `rounds`, `disclosure` or `wall_time` cap, in an interactive terminal. Wall time can only be raised, never declared. |
+| `omf work list <goal-id> [--state <s>] [--json]` | Lists a goal's work items. Items the ledger does not account for are reported as malformed (exit 1). |
+| `omf work show <work-id>` | Prints a work item's `item.md`, claim and `intent.md`. |
+| `omf work approve <work-id>` | Approves a high-risk work item so it can be dispatched, in an interactive terminal. |
+| `omf veto <work-id> [--reason <text>]` | Vetoes a work item from any open state. Needs no terminal, because a veto only restricts. |
 
 Exit codes: `0` ok, `1` problems found, `2` the command could not run.
 
@@ -204,7 +213,6 @@ Known limits of "metric code cannot change quietly":
 
 - Only the metric's command and the paths you declare with `--watch` are covered. `omf metric propose` warns when
   you give none. Files a metric reads but does not watch, and gitignored inputs, can change without a new approval.
-- `bands.yaml` is not locked yet, so editing it changes guardrail verdicts without a new approval.
 - A container image tag is mutable; pin an image digest to pin the image.
 
 ## Where state lives
@@ -218,7 +226,7 @@ OMF keeps everything outside your repository, one directory per project:
   preflight.json          the last doctor report
   goals/<goal-id>/
     goal.md               the goal: objective, target, budgets
-    bands/<metric>.yaml   control bands (not locked yet)
+    bands/<metric>.yaml   control bands (locked at J1)
     reports/              gap reports, <stamp>-gap.json
   vault/
     metrics/proposed/     metric proposals, <metric>.json
