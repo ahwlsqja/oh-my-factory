@@ -6,7 +6,7 @@ import { Ledger, type LedgerEvent } from "../core/ledger.js";
 import type { ProjectLocation } from "../core/paths.js";
 import { writePrivateFile } from "../core/private-fs.js";
 import { auditGoal } from "./audit.js";
-import { type BandAction, type BandResult, type BandsConfig, BandsError, baselineWindowMs, detectBand, readBands } from "./bands.js";
+import { type BandAction, type BandResult, type BandsConfig, BandsError, type Tier, baselineWindowMs, detectBand, readBands } from "./bands.js";
 import { type TargetResult, evaluateTarget } from "./evaluate.js";
 import { type GoalSemantic, type GoalTarget, goalDir } from "./goal-file.js";
 import { workingTreeFingerprint } from "./git.js";
@@ -80,7 +80,21 @@ function guardrailStatus(entry: MetricMeasurement | undefined): GuardrailStatus 
   if (entry === undefined || entry.value === null || entry.band === null || entry.band.status === "insufficient_baseline") {
     return "unevaluated";
   }
-  return entry.band_action !== null ? "breach" : "pass";
+  return entry.band.status === "breach" ? "breach" : "pass";
+}
+
+const TIER_ORDER: readonly Tier[] = ["3sigma", "2sigma", "1sigma"];
+
+/**
+ * The action for a breach. A point beyond 3 sigma is also beyond 2 and 1 sigma, so a tier with no action
+ * falls back to the next lower tier that has one.
+ */
+function actionFor(config: BandsConfig, tier: Tier): BandAction | null {
+  for (const candidate of TIER_ORDER.slice(TIER_ORDER.indexOf(tier))) {
+    const action = config.tiers[candidate]?.action;
+    if (action !== undefined) return action;
+  }
+  return null;
 }
 
 class Unchanged extends Error {}
@@ -134,6 +148,8 @@ export function measureGoal(
   }
   if (audit.regime_changes.length > 0) recordRegimeChange(ledger, goalId, regime, audit.regime_changes);
 
+  // Measurements taken while a regime change is pending carry the mark, so nothing downstream reads them as approved.
+  const pending = audit.regime_changes.length > 0;
   const history = ledger.readVerified();
   const inputSha = workingTreeFingerprint(location.repo);
   const measuredAt = now();
@@ -171,6 +187,7 @@ export function measureGoal(
           isolation: isolationOf(options.runner),
           input_sha256: inputSha,
           lock_sha256: lock.sha256,
+          needs_reapproval: pending,
         },
       });
       const config = bands.get(lock.metric_id) ?? null;
@@ -179,15 +196,13 @@ export function measureGoal(
         const band = detectBand(pastValues(history, goalId, lock.metric_id, regime, since), outcome.value);
         entry.band = band;
         if (band.status === "breach") {
-          const action = config.tiers[band.tier]?.action ?? null;
+          const action = actionFor(config, band.tier);
           entry.band_action = action;
-          if (action !== null) {
-            ledger.append({
-              actor: "omf",
-              type: "band.breached",
-              payload: { goal_id: goalId, metric_id: lock.metric_id, tier: band.tier, rule: band.rule, action },
-            });
-          }
+          ledger.append({
+            actor: "omf",
+            type: "band.breached",
+            payload: { goal_id: goalId, metric_id: lock.metric_id, tier: band.tier, rule: band.rule, action, regime, needs_reapproval: pending },
+          });
         }
       }
     }
@@ -210,7 +225,7 @@ export function measureGoal(
       status: guardrailStatus(metrics.find((m) => m.metric_id === id)),
     })),
     regime_changes: audit.regime_changes,
-    needs_reapproval: audit.regime_changes.length > 0,
+    needs_reapproval: pending,
     budget: audit.budget,
     wall_time_exceeded: audit.wall_time_exceeded,
   };
@@ -220,7 +235,14 @@ export function measureGoal(
   ledger.append({
     actor: "omf",
     type: "goal.measured",
-    payload: { goal_id: goalId, regime, report: relative(location.dir, file), target_met: report.target.result?.met ?? null },
+    payload: {
+      goal_id: goalId,
+      regime,
+      report: relative(location.dir, file),
+      // Not a verdict while a regime change is pending: consumers must not count it as met.
+      target_met: pending ? null : (report.target.result?.met ?? null),
+      needs_reapproval: pending,
+    },
   });
   return { report, file };
 }

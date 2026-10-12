@@ -71,6 +71,45 @@ describe("measureGoal", () => {
     expect(types(fx.location.dir)).toContain("band.breached");
   });
 
+  it("reports a guardrail breach when only a lower tier has an action", () => {
+    const fx = setupGoal();
+    lockGoal(fx.location, "g-fast", "human:dev");
+    const file = bandsFile(fx.location.dir, "g-fast", "m-errors");
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, "metric: m-errors\nbaseline: rolling_30d\nrules: western_electric\ntiers:\n  1sigma: { action: log }\n");
+    for (let i = 0; i < 6; i++) measureGoal(fx.location, "g-fast", { runner: "host" });
+    writeFileSync(join(fx.repo, "bench", "errors.sh"), "echo 95\n");
+    const { report } = measureGoal(fx.location, "g-fast", { runner: "host" });
+    expect(report.metrics[1]).toMatchObject({ band: { status: "breach", tier: "3sigma" }, band_action: "log" });
+    expect(report.guardrails[0]?.status).toBe("breach");
+    const breached = new Ledger(fx.location.dir).readVerified().filter((e) => e.type === "band.breached");
+    expect(breached).toHaveLength(1);
+    expect(breached[0]?.payload).toMatchObject({ tier: "3sigma", action: "log" });
+  });
+
+  it("marks measurements taken while a regime change is pending", () => {
+    const fx = setupGoal();
+    lockGoal(fx.location, "g-fast", "human:dev");
+    writeFileSync(join(fx.repo, "bench", "p95.sh"), "echo 100\n");
+    const { report } = measureGoal(fx.location, "g-fast", { runner: "host" });
+    expect(report.needs_reapproval).toBe(true);
+    const events = new Ledger(fx.location.dir).readVerified();
+    const measured = events.filter((e) => e.type === "metric.measured");
+    expect(measured.length).toBeGreaterThan(0);
+    for (const event of measured) expect(event.payload.needs_reapproval).toBe(true);
+    const goalMeasured = events.filter((e) => e.type === "goal.measured").at(-1);
+    expect(goalMeasured?.payload).toMatchObject({ needs_reapproval: true, target_met: null });
+  });
+
+  it("marks measurements of an unchanged goal as approved", () => {
+    const fx = setupGoal();
+    lockGoal(fx.location, "g-fast", "human:dev");
+    measureGoal(fx.location, "g-fast", { runner: "host" });
+    const events = new Ledger(fx.location.dir).readVerified();
+    expect(events.find((e) => e.type === "metric.measured")?.payload.needs_reapproval).toBe(false);
+    expect(events.find((e) => e.type === "goal.measured")?.payload).toMatchObject({ needs_reapproval: false, target_met: false });
+  });
+
   it("stops on a tampered lock without measuring", () => {
     const fx = setupGoal();
     lockGoal(fx.location, "g-fast", "human:dev");
