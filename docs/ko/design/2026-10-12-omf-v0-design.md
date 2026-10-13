@@ -214,6 +214,8 @@ J1이 승인하면 의미 필드(semantic field)를 정규화(canonicalize)하�
 - **방문 상한(visit cap).** W 의 각 공정에는 작업 항목별 방문 상한이 있고, 작업 항목 전체에는 공정 실행 총 상한이 있다. 기본값은 회전당 공정별 3회 방문, 총 `max(10, 20 × rounds)` 회 실행이다. Arc 의 `maxNodeExecutions` 와 같은 모양이다. 게이트 재진입도 방문으로 센다. Kilroy 의 기본값 0(꺼짐)은 따르지 않는다.
 - **선점 잠금(claim lock).** 작업 항목 단위로 `O_EXCL` 로 만든다. PID 와 프로세스 시작 시각을 기록해서, PID 가 재사용된 오래된 잠금을 가려낸다. Kilroy 의 `run_ownership_lock` 을 따른다. 단일 호스트를 전제하며, 팀 모드는 범위 밖이다(§14).
 
+M2b 에서 이 절의 모호한 점을 정리했다. 라운드의 정의, 성공 후보를 기계적으로 판정하는 방법, 틱이 쓰는 이벤트, 목표를 멈추고 재개할 수 있는 사람이 그것이다. 기록은 [M2b 부록](../../design/2026-10-12-omf-m2b-addendum.md)(영어)에 있고, 만들어진 루프가 어떻게 동작하는지는 그쪽이 기준이다.
+
 ### 4.5 성공 선언
 
 에이전트는 `candidate` 까지만 만들 수 있다. 후보가 되려면 다음을 모두 만족해야 한다.
@@ -507,6 +509,9 @@ handoff:
 | `omf metric propose` | J1 에 올릴 지표(명령, 단위, 감시 경로)를 제안 |
 | `omf goal measure` | §4.4 의 1~3단계만 단독 실행: 감사, 측정, 평가, 격차 보고서 |
 | `omf goal tick` | G 한 바퀴 (§4.4) |
+| `omf goal status` / `resume` / `cancel` | 실행 상태와 다음 단계 보기, J6 계속, J6 중지 |
+| `omf work list` / `show` / `approve` | 작업 항목 조회, 고위험 항목 승인 (J 번호 없음, M2b 부록 참고) |
+| `omf budget show` / `declare` / `raise` | 예산 조회, 선언, 증액(J8). `raise ... wall_time` 은 벽시계 시간을 늘린다 |
 | `omf goal sign` | J5 |
 | `omf decide <work-id>` | S1 인터뷰, `spec.md`, J2 |
 | `omf seal <work-id>` | S2와 GATE-2 |

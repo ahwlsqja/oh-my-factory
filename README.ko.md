@@ -20,10 +20,11 @@
 </p>
 
 > [!WARNING]
-> **프리알파 단계입니다.** 지금은 기초(호스트 상태, 변조를 알아채는 원장, 초기화되지 않는 예산)와
+> **프리알파 단계입니다.** 지금은 기초(호스트 상태, 변조를 알아채는 원장, 초기화되지 않는 예산),
 > 목표를 정의하고 승인하고 측정하는 부분(J1 잠금, 목표값까지의 차이, 관리 한계), J8 예산 명령,
-> 작업 항목 저장소와 `work`, `veto` 명령이 들어 있습니다.
-> 격차를 일로 바꾸는 부분(`omf goal tick`)과 검증 라인은 설계만 끝났고 아직 만들지 않았습니다.
+> 작업 항목 저장소와 `work`, `veto` 명령, 그리고 목표 루프가 들어 있습니다. `omf goal tick` 은
+> 모델이 숫자를 보지 못하게 한 채 격차를 작업 항목으로 바꿉니다.
+> 작업을 실제로 수행하는 검증 라인은 설계만 끝났고 아직 만들지 않았습니다.
 > [지금 되는 것](#지금-되는-것)을 보세요.
 
 ---
@@ -99,7 +100,10 @@ OMF 는 루프 두 개를 돌립니다.
 - **지표 코드는 조용히 바뀌지 않습니다.** *지금 지켜짐.* 지표는 승인한 뒤에만 측정하고, 잠금을 고치면
   측정이 멈추며, 지표의 명령이나 `--watch` 로 지정한 경로, 관리 한계 파일, 또는 목표가 바뀌면 새 승인이 필요합니다.
   한계는 "목표를 정하고 재기" 절에 적혀 있습니다.
-- **작업보다 목표.** *일부 구현됨.* 작업은 측정값과 목표값의 차이에서 나옵니다. 목표, 잠금, 측정은 지금 되고, 격차를 일로 바꾸는 부분이 다음입니다.
+- **모델은 숫자를 보지 못합니다.** *지금 지켜짐, 목표 루프 쪽.* 작업을 제안하는 모델은 격차의 방향과 대략적인
+  크기 구간만 받고, 값, 임계값, 지표 이름, 명령은 받지 못합니다. 모델의 답은 데이터로만 읽고, 작업 항목이
+  되기 전에 코드가 걸러 냅니다. 봉인 시나리오 쪽은 설계됨.
+- **작업보다 목표.** *일부 구현됨.* 작업은 측정값과 목표값의 차이에서 나옵니다. 목표, 잠금, 측정, 목표 루프는 지금 되고, 작업 항목을 실제로 수행하는 검증 라인이 다음입니다.
 - **숙제가 아니라 홀드아웃.** *설계됨.* 인수 시나리오는 봉인되고, 다른 벤더가 쓰며, 구현자에게
   보이지 않습니다.
 - **격리는 선언이 아니라 측정.** *설계됨.* `omf doctor` 가 실제로 걸린 격리를 재고, 선언보다
@@ -121,7 +125,10 @@ OMF 는 루프 두 개를 돌립니다.
 | `omf goal audit <id>` | 목표, 잠금, 원장을 점검하고 체제 변경을 알려 줍니다. 아무것도 쓰지 않습니다. |
 | `omf goal approve <id>` | J1: 잠글 내용(지표와 그 관리 한계)을 보여 주고, 터미널에서 목표 id 를 직접 입력하면 승인합니다. |
 | `omf goal measure <id>` | 잠긴 지표를 실행하고(Docker, 또는 `--runner host` 로 호스트에서), 목표값까지의 차이와 관리 한계(control band)를 계산해 격차 보고서를 호스트 상태에 씁니다. |
-
+| `omf goal tick <id>` | 목표 루프를 한 바퀴 돕니다(명세 §4.4). 점검, 측정, 모델에게 작업 요청, 후보를 코드로 걸러 내기, 작업 항목 내보내기, 낡음과 루프 보호 장치 확인. 조정 모델이 필요합니다("목표 루프 돌리기" 참고). |
+| `omf goal status <id>` | 실행 상태(`running`, `blocked_on_user`, `failed`, `finish`, `cancelled`), 열린 에스컬레이션과 풀 수 있는 명령, 남은 라운드, 열린 작업 항목을 보여 줍니다. |
+| `omf goal resume <id>` | J6 계속: 멈추게 한 원인을 고친 뒤, 터미널에서 확인을 입력하면 틱이 다시 돕니다. |
+| `omf goal cancel <id>` | J6 중지: 터미널에서 확인을 입력하면 목표와 열린 작업 항목을 모두 취소합니다. |
 | `omf budget show <id> [--json]` | 라운드, 공개, 벽시계 시간 예산의 선언값, 상향값, 사용량, 남은 양을 출력합니다. |
 | `omf budget declare <id> <kind> <amount>` | J8: `rounds` 또는 `disclosure` 예산을 선언합니다. 대화형 터미널이 필요합니다. |
 | `omf budget raise <id> <kind> <amount>` | J8: `rounds`, `disclosure`, `wall_time` 상한을 올립니다. 대화형 터미널이 필요하고, 벽시계 시간은 올리기만 되고 선언은 안 됩니다. |
@@ -130,9 +137,9 @@ OMF 는 루프 두 개를 돌립니다.
 | `omf work approve <work-id>` | 위험도가 높은 작업 항목을 승인해 디스패치할 수 있게 합니다. 대화형 터미널이 필요합니다. |
 | `omf veto <work-id> [--reason <text>]` | 열려 있는 어느 상태에서든 작업 항목을 거부합니다. 거부는 제한만 하므로 터미널이 필요 없습니다. |
 
-종료 코드: `0` 정상, `1` 문제 발견, `2` 명령을 실행할 수 없음.
+종료 코드: `0` 정상, `1` 확인이 필요함(문제 발견, 거절된 확인, 멈췄거나 승인을 기다리는 틱), `2` 명령을 실행할 수 없음.
 
-아직 만들지 않은 것: 격차를 일로 바꾸는 부분(`omf goal tick`: 조정, 필터, 디스패치), 결정 원장과 봉인 시나리오, 컨테이너 실행기와 판정기, 증거 보고서, 사람에게 입력을 요청하는 흐름. 모두 [설계 문서](docs/ko/design/2026-10-12-omf-v0-design.md)에
+아직 만들지 않은 것: 결정 원장과 봉인 시나리오, 컨테이너 실행기와 판정기, 증거 보고서, `omf ship`, 목표 달성 확인(`omf goal sign`), 실행 도중 사람에게 입력을 요청하는 흐름. 모두 [설계 문서](docs/ko/design/2026-10-12-omf-v0-design.md)에
 적혀 있습니다.
 
 ## 빠른 시작
@@ -192,6 +199,7 @@ leading: none; lagging: m-demo; guardrails: none
 budget: 10 rounds, 72h wall time, at most 2 open work items
 decision rule: target met for 2 consecutive measurements and no guardrail breach (minimum observation 7d)
 metric m-demo: ["sh","-c","echo 7"] -> ms; watches none
+bands m-demo: none (not monitored)
 Type g-demo to approve as human:you@example.com: g-demo
 approved g-demo (regime 1)
 
@@ -212,6 +220,79 @@ warning: measured on the host without isolation (--runner host)
 - 지표의 명령과 `--watch` 로 지정한 경로만 대상입니다. 지정하지 않으면 `omf metric propose` 가 경고합니다.
   지표가 읽지만 감시하지 않는 파일과 gitignore 된 입력은 새 승인 없이 바뀔 수 있습니다.
 - 컨테이너 이미지 태그는 바뀔 수 있습니다. 이미지를 고정하려면 digest 를 쓰세요.
+- `bands/<metric>.yaml` 은 목표와 함께 잠깁니다. 해시가 J1 승인에 들어가므로, 고치거나 새로 만들거나 지우면
+  체제 변경입니다. 관리 한계가 잠기기 전에 승인한 목표는 다시 승인할 때까지 한계가 잠기지 않고, 승인 화면이
+  그렇게 알려 줍니다.
+
+## 목표 루프 돌리기
+
+`omf goal tick <id>` 는 목표 루프를 한 번 도는 비대화형 명령이라서 cron, CI, 사람 누구나 실행할 수 있습니다.
+틱은 목표를 점검하고, 잠긴 지표를 재고, 목표값과 관리 한계에 견줍니다. 움직일 이유가 있으면(목표에 못
+미쳤거나 관리 한계가 `propose` 를 가리킬 때) 모델에게 작업 항목 후보를 묻고, 코드로 걸러서, 살아남은 것만
+호스트 상태에 작업 항목으로 씁니다. 목표값을 충분히 오래 채웠고 모든 가드레일이 통과하면 달성 후보를 기록하고
+목표가 끝납니다.
+
+모델이 받는 것은 `goal.md` 의 목적과 `## Approach` 절, 격차의 방향과 크기 구간(`small`, `medium`, `large`),
+열린 작업 항목, 결과 집계입니다. 값, 목표값, 임계값, 지표 이름이나 명령, 감시 경로는 받지 못합니다. 모델의
+답은 데이터로만 읽습니다. 숫자 임계값이나 지표 이름이 들어 있거나, 이미 있는 항목(어떤 상태든)과 겹치거나,
+동시 진행 상한을 넘거나, 저장소 밖을 가리키는 후보는 아무것도 쓰기 전에 버립니다.
+
+오프라인으로 보려면 [`examples/hello-goal`](examples/hello-goal/README.md) 을 실행하세요. 모델 대역을 쓰는
+목표 루프 두 바퀴가 돕니다. 이 예제의 설명은 영어입니다.
+
+### 조정 모델 (reconciler)
+
+모델은 `config.toml` 에서 정합니다. OMF 는 이 파일을 다시 쓰지 않습니다. 파일이 없으면 오류이고, `[reconciler]`
+절만 없으면 아래 기본값이 적용됩니다.
+
+```toml
+[reconciler]
+kind = "claude"          # 또는 "command": 프롬프트를 stdin 으로 읽고 JSON 을 출력하는 프로그램
+# model = "..."
+# timeout_ms = 120000
+```
+
+`kind = "claude"` 는 호스트에서 `claude` CLI 를 도구를 모두 끈 채, 세션을 저장하지 않고, 빈 임시 폴더를 작업
+폴더로 삼아, 환경 변수는 `ANTHROPIC_API_KEY` 하나만 넘겨 실행합니다. 틱을 돌리기 전에 그 변수를 지정하세요.
+키체인이나 로그인 파일 로그인은 쓰지 않습니다. `kind = "command"` 는 `command` 에 적은 argv 를 실행하며,
+시험과 예제가 씁니다. `kind = "codex"` 와 `auth = "login_file"` 은 컨테이너 실행기가 생길 때까지 거부됩니다.
+
+`claude` 종류는 실제 모델로 검증하지 않았습니다. `scripts/smoke-reconciler.sh` 가 수동 확인 수단입니다.
+
+### 라운드, 종료 상태, 종료 코드
+
+라운드는 모델을 부른 틱이 쓰는 것이고, 목표의 라운드는 그 틱만 소비합니다. 기다리는 틱(목표가 `observing`
+또는 `idle` 이거나, 동시 진행 상한이 찼거나, 검토를 기다리는 항목이 너무 많을 때)은 아무것도 소비하지
+않으며, 이런 틱은 벽시계 시간으로 제한합니다.
+
+| 상태 | 언제 | 할 일 |
+|---|---|---|
+| `running` | 기본 | 없음 |
+| `blocked_on_user` | 사람의 결정이 필요함: 재승인(J1), 멈춘 진행이나 되풀이되는 결과(J6), 소진된 라운드나 시간 예산(J8) | `omf goal status <id>` 가 정확한 명령을 알려 줍니다. 그다음 `omf goal resume <id>` |
+| `failed` | 틱 안의 예상치 못한 오류 | 오류를 읽은 뒤 `omf goal resume <id>` |
+| `finish` | 달성 후보(명세 §4.5)가 기록됨 | 달성 확인(J5)은 아직 만들지 않았습니다 |
+| `cancelled` | `omf goal cancel <id>` | 최종 |
+
+`omf goal tick` 은 틱이 이어지거나 목표가 끝나면 `0` 으로 끝납니다. 사람을 기다리며 멈추면(막힘, 실패,
+`omf work approve <work-id>` 를 기다리는 항목) `1`, 실행 자체를 못 하면(다른 틱이 잠금을 쥐고 있음,
+`config.toml` 이 없거나 잘못됨, 원장 손상) `2` 입니다. 출력에는 결과, 격차의 방향과 크기 구간, 작업 id, 서명
+코드, 다음 단계만 나오고 측정값이나 목표값은 나오지 않습니다. 그 값은 호스트 상태의 보고서에만 있습니다.
+
+### 작업 항목
+
+내보낸 항목은 `goals/<id>/work/<work-id>/` 에 있습니다. 위험도는 후보가 선언한 경로로 코드가 계산합니다. CI,
+인증, 마이그레이션, 시험, 락 파일, 목표와 팩토리 파일, 감시 경로는 고위험입니다. 고위험 항목은
+`awaiting_approval` 에서 `omf work approve` 를 기다리고, 나머지는 `ready` 로 시작합니다. 열려 있는 항목은
+언제든 `omf veto <work-id>` 로 거부할 수 있습니다. 항목의 승인, 거부, 취소 여부는 항목 파일이 아니라 원장이
+정합니다. 승인된 것처럼 손으로 고친 `item.md` 는 `omf work list` 가 손상된 항목으로 알리고, 내보내지 않습니다.
+
+목표 루프의 한계:
+
+- 시드 린트는 숫자와 지표 이름을 잡을 뿐, 말 바꾸기는 잡지 못합니다. 임계값을 다른 말로 다시 쓰면 통과합니다.
+- 중복 검사는 제목의 낱말과 선언한 경로를 비교합니다. 같은 변경을 제목만 바꿔 내면 새 항목입니다.
+- 공개량 예산을 선언하지 않으면 모델을 부르는 횟수는 라운드로만 제한됩니다.
+- 조정 모델에는 아직 구독이나 키체인 로그인을 쓸 수 없습니다. API 키를 쓰세요.
+- 재승인하면 벽시계 시간 한도가 `goal.md` 의 값으로 돌아갑니다. 그 전에 `omf budget raise <id> wall_time` 으로 늘린 만큼은 이어지지 않고 승인 화면에도 나오지 않습니다. 낡은(stale) 목표를 다시 승인한 뒤에도 계속 돌려야 하면 다시 늘리세요.
 
 ## 상태가 저장되는 곳
 
@@ -220,12 +301,15 @@ OMF 는 모든 것을 저장소 밖에, 프로젝트마다 폴더 하나로 둡�
 ```
 ~/.omf/projects/<project-id>/
   ledger.jsonl            추가만 되는, 해시 체인으로 묶인 이벤트 기록
-  config.toml             역할과 격리 수준
+  config.toml             역할, 격리 수준, 선택 사항인 [reconciler]
   preflight.json          마지막 점검 보고서
   goals/<goal-id>/
     goal.md               목표: 목적, 목표값, 예산
-    bands/<metric>.yaml   관리 한계 (J1 에서 잠김)
-    reports/              격차 보고서, <stamp>-gap.json
+    bands/<metric>.yaml   관리 한계 (목표와 함께 잠김)
+    reports/              격차 보고서(<stamp>-gap.json)와 틱 보고서(<stamp>-tick.md)
+    reconcile/            틱마다 모델에 준 입력과 받은 원본 출력
+    work/<work-id>/       item.md (상태와 진행)와 intent.md
+    tick.lock             틱이 도는 동안 쥐는 잠금
   vault/
     metrics/proposed/     지표 제안, <metric>.json
     metrics/<goal-id>/    J1 잠금: <metric>.lock.json, goal.lock.json
@@ -236,6 +320,8 @@ OMF 는 모든 것을 저장소 밖에, 프로젝트마다 폴더 하나로 둡�
 다른 위치를 쓰려면 `OMF_HOME` 을 지정하세요. OMF 는 상태를 저장소 안이나 `~/.claude`, `~/.codex`
 안에 두는 것을 거부합니다. 폴더 권한은 `0700`, 파일 권한은 `0600` 입니다.
 
+보고서와 `reconcile/` 파일에는 실제 측정값이 들어 있습니다. 호스트 상태 안에만 있고, 모델은 읽지 못합니다.
+
 지우려면 `npm unlink -g oh-my-factory` 를 실행하고 `~/.omf` 를 삭제하세요.
 
 ## 문서
@@ -243,6 +329,8 @@ OMF 는 모든 것을 저장소 밖에, 프로젝트마다 폴더 하나로 둡�
 - [설계 명세](docs/ko/design/2026-10-12-omf-v0-design.md) ([English](docs/design/2026-10-12-omf-v0-design.md))
 - [출처와 읽은 상태](docs/design/references.md)
 - [강제 시험과 그 시험이 확인하는 주장](tests/enforcement/README.md)
+- [목표 루프의 결정과 열린 질문 (M2b 부록, 영어)](docs/design/2026-10-12-omf-m2b-addendum.md)
+- [`examples/hello-goal`](examples/hello-goal/README.md): 목표 루프를 오프라인으로 끝까지 돌려 보는 예제 (영어)
 
 ## 영감을 받은 곳
 
@@ -261,6 +349,9 @@ npm install
 npm run typecheck   # 소스와 시험
 npm test            # dist/ 를 빌드하고 시험을 돌립니다
 ```
+
+`sh scripts/smoke-reconciler.sh` 는 실제 `claude` CLI 를 무해한 프롬프트로 한 번 실행하고 답이 해석되는지
+확인합니다. API 토큰을 쓰고 `ANTHROPIC_API_KEY` 가 필요하므로 `npm test` 에는 들어 있지 않습니다.
 
 커밋 메시지는 [Conventional Commits](https://www.conventionalcommits.org/) 를 따릅니다.
 

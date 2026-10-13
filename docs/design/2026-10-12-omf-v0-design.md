@@ -317,6 +317,8 @@ Loop guards are on by default. They follow Kilroy's implementation (MIT), with i
   the process start time, so a stale lock is detected when the PID was reused. This follows Kilroy's
   `run_ownership_lock`. It assumes a single host, and team mode is out of scope (§14).
 
+M2b resolved the ambiguities in this section: what a round is, how a success candidate is decided mechanically, which events a tick writes and who may stop and resume a goal. They are recorded in [the M2b addendum](2026-10-12-omf-m2b-addendum.md), which describes the loop as built.
+
 ### 4.5 Declaring success
 
 An agent can only produce a `candidate`. A candidate requires all of the following:
@@ -696,6 +698,9 @@ written to trackers, only summaries and references.
 | `omf metric propose` | Propose a metric (command, unit, watched paths) for J1 |
 | `omf goal measure` | §4.4 steps 1 to 3 on their own: audit, measure, evaluate, gap report |
 | `omf goal tick` | One G pass (§4.4) |
+| `omf goal status` / `resume` / `cancel` | Show the run state and the next steps; J6 continue; J6 stop |
+| `omf work list` / `show` / `approve` | Inspect work items; approve a high-risk item (no J number, see the M2b addendum) |
+| `omf budget show` / `declare` / `raise` | Inspect, declare and raise budgets (J8); `raise ... wall_time` raises the wall time |
 | `omf goal sign` | J5 |
 | `omf decide <work-id>` | S1 interview, `spec.md`, J2 |
 | `omf seal <work-id>` | S2 and GATE-2 |

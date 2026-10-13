@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 export const CLI = fileURLToPath(new URL("../../dist/cli/main.js", import.meta.url));
@@ -68,4 +68,22 @@ export function omfWithUmask(
     encoding: "utf8",
   });
   return { code: result.status ?? -1, stdout: result.stdout, stderr: result.stderr };
+}
+
+/** Like `omf`, but does not block the test process, so two CLI runs can overlap. */
+export function omfAsync(
+  args: string[],
+  cwd: string,
+  home: string,
+  extraEnv: NodeJS.ProcessEnv = {},
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((done, fail) => {
+    const child = spawn(process.execPath, [CLI, ...args], { cwd, env: harnessEnv(home, extraEnv), stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8").on("data", (chunk: string) => void (stdout += chunk));
+    child.stderr.setEncoding("utf8").on("data", (chunk: string) => void (stderr += chunk));
+    child.on("error", fail);
+    child.on("close", (code) => done({ code: code ?? -1, stdout, stderr }));
+  });
 }
