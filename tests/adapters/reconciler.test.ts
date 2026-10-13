@@ -9,7 +9,6 @@ import {
 import { CONFIG_DEFAULTS, type ReconcilerConfig } from "../../src/core/config.js";
 
 const claude: ReconcilerConfig = { ...CONFIG_DEFAULTS.reconciler, kind: "claude" };
-const SCHEMA = '{"type":"object"}';
 
 function valueAfter(args: readonly string[], flag: string): string | undefined {
   const at = args.indexOf(flag);
@@ -28,10 +27,11 @@ function parseError(fn: () => unknown): ReconcileParseError {
 
 describe("buildClaudeArgs", () => {
   it("disables tools, MCP, hooks, sessions and prompts, and takes the prompt from stdin", () => {
-    const args = buildClaudeArgs(claude, SCHEMA);
+    const args = buildClaudeArgs(claude);
     expect(args).toContain("-p");
     expect(valueAfter(args, "--output-format")).toBe("json");
-    expect(valueAfter(args, "--json-schema")).toBe(SCHEMA);
+    // No --json-schema: Claude Code implements it with a synthetic tool call, which adds turns. OMF validates the answer itself.
+    expect(args).not.toContain("--json-schema");
     // `--tools ""` is two argv elements: the flag and an empty string (an empty string disables every tool).
     expect(args.indexOf("--tools")).toBeGreaterThanOrEqual(0);
     expect(valueAfter(args, "--tools")).toBe("");
@@ -42,7 +42,7 @@ describe("buildClaudeArgs", () => {
   });
 
   it("never asks for a permission bypass or an allow-list (spec §7: bypass only in L2/L3 containers)", () => {
-    const joined = buildClaudeArgs({ ...claude, model: "claude-haiku-5-5", max_budget_usd: 1 }, SCHEMA).join("\n");
+    const joined = buildClaudeArgs({ ...claude, model: "claude-haiku-5-5", max_budget_usd: 1 }).join("\n");
     expect(joined).not.toContain("--dangerously-skip-permissions");
     expect(joined).not.toContain("bypassPermissions");
     expect(joined).not.toContain("--allowedTools");
@@ -51,10 +51,10 @@ describe("buildClaudeArgs", () => {
   });
 
   it("adds the model and budget flags only when configured", () => {
-    const plain = buildClaudeArgs(claude, SCHEMA);
+    const plain = buildClaudeArgs(claude);
     expect(plain).not.toContain("--model");
     expect(plain).not.toContain("--max-budget-usd");
-    const configured = buildClaudeArgs({ ...claude, model: "claude-haiku-5-5", max_budget_usd: 0.5 }, SCHEMA);
+    const configured = buildClaudeArgs({ ...claude, model: "claude-haiku-5-5", max_budget_usd: 0.5 });
     expect(valueAfter(configured, "--model")).toBe("claude-haiku-5-5");
     expect(valueAfter(configured, "--max-budget-usd")).toBe("0.5");
   });

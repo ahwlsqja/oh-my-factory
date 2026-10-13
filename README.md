@@ -262,7 +262,9 @@ variable before a tick. Keychain and login-file logins are not used. `kind = "co
 under `command`; the tests and the example use it. `kind = "codex"` and `auth = "login_file"` are refused until
 the container runner exists.
 
-The `claude` kind is unverified against a real model; `scripts/smoke-reconciler.sh` is the manual check.
+The `claude` kind is unverified against a real model; `scripts/smoke-reconciler.sh` is the manual check. It does
+not pass `--json-schema` (Claude Code implements that with an extra tool-call turn, which the one-turn check
+rejects); OMF validates the answer against its own schema.
 
 ### Rounds, ending states and exit codes
 

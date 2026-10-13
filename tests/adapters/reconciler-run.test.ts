@@ -191,7 +191,7 @@ describe("createReconciler: claude kind", () => {
 
     const argv = recorded<string[]>(r, "argv.json");
     expect(argv[0]).toBe("-p");
-    expect(argv[argv.indexOf("--json-schema") + 1]).toBe('{"type":"object"}');
+    expect(argv).not.toContain("--json-schema");
     expect(argv[argv.indexOf("--tools") + 1]).toBe("");
     for (const flag of ["--strict-mcp-config", "--bare", "--no-session-persistence"]) expect(argv).toContain(flag);
     expect(argv[argv.indexOf("--permission-mode") + 1]).toBe("dontAsk");

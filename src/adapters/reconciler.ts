@@ -51,17 +51,17 @@ export const RECONCILE_MAX_OUTPUT_BYTES = 1024 * 1024;
  * Argv for `claude` after the program name (spec §4.4 step 4, §2). The prompt is NOT in argv: it
  * goes on stdin, so a prompt that starts with `-` or contains YAML front matter cannot be mis-parsed as a
  * flag. `--tools ""` removes the built-in tools; `--strict-mcp-config` ignores every MCP configuration
- * not passed explicitly (none is); `--bare` skips hooks, plugins, CLAUDE.md discovery and keychain reads
+ * not passed explicitly (none is); `--json-schema` is deliberately absent, because Claude Code implements it
+ * with a synthetic tool call that adds turns and would defeat the one-turn check in `usedTools`; the answer is
+ * parsed from `result` and validated against the schema by OMF itself; `--bare` skips hooks, plugins, CLAUDE.md discovery and keychain reads
  * and makes ANTHROPIC_API_KEY the only credential. Permission-bypass flags are never added: they are
  * for containers only (spec §7).
  */
-export function buildClaudeArgs(config: ReconcilerConfig, schemaJson: string): string[] {
+export function buildClaudeArgs(config: ReconcilerConfig): string[] {
   const args = [
     "-p",
     "--output-format",
     "json",
-    "--json-schema",
-    schemaJson,
     "--tools",
     "",
     "--strict-mcp-config",
@@ -132,8 +132,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Pulls the model's JSON out of stdout. `claude --output-format json` prints one envelope object; with
- * `--json-schema` the answer is in `structured_output`, otherwise in `result` as bare or fenced JSON. A
+ * Pulls the model's JSON out of stdout. `claude --output-format json` prints one envelope object; the
+ * answer is in `result` as bare or fenced JSON (`structured_output` is read if present). A
  * `command` prints the JSON itself. The value is returned as unvalidated data: Task 9 validates it
  * against `reconcile-output.schema.json` (spec §4.4 step 4: the model's output is parsed, never trusted).
  */
@@ -204,7 +204,7 @@ class ProcessReconciler implements Reconciler {
     try {
       if (isClaude) mkdirSync(join(scratch, "claude-config"), { mode: 0o700 });
       const argv = isClaude
-        ? ["claude", ...buildClaudeArgs(this.config, JSON.stringify(request.outputSchema))]
+        ? ["claude", ...buildClaudeArgs(this.config)]
         : [...(this.config.command ?? [])];
       const result = await runProcessGroup(argv, {
         cwd: scratch,
