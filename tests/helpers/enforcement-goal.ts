@@ -23,6 +23,7 @@ export const TARGET_METRIC = CANARY.metricId;
 export const GUARDRAIL_METRIC = "m-errors";
 
 const DEFAULTS = {
+  goalId: GOAL_ID as string,
   objective: "Make the checkout page respond faster",
   approach: "Move expensive work off the request path.",
   /** Outside `## Approach`, so it must never reach the model (spec §4.6). */
@@ -65,7 +66,7 @@ function goalText(o: typeof DEFAULTS): string {
   const guardrails = o.guardrail === "none" ? "" : GUARDRAIL_METRIC;
   return `---
 schema_version: 1
-goal_id: ${GOAL_ID}
+goal_id: ${o.goalId}
 title: "Faster checkout"
 mode: build
 kind: default
@@ -121,7 +122,7 @@ export function setupEnforcementGoal(options: EnforcementOptions = {}): Enforcem
   writeFileSync(join(repo, "bench", "errors.txt"), "0.4\n");
   commitAll(repo, "add bench");
 
-  writePrivateFile(goalFile(location.dir, GOAL_ID), goalText(o));
+  writePrivateFile(goalFile(location.dir, o.goalId), goalText(o));
   const ledger = new Ledger(location.dir);
   proposeMetric(
     ledger,
@@ -140,12 +141,12 @@ export function setupEnforcementGoal(options: EnforcementOptions = {}): Enforcem
   if (o.guardrail === "bands") {
     // The bands file is part of what J1 locks, so it exists before the approval.
     writePrivateFile(
-      bandsFile(location.dir, GOAL_ID, GUARDRAIL_METRIC),
+      bandsFile(location.dir, o.goalId, GUARDRAIL_METRIC),
       `metric: ${GUARDRAIL_METRIC}\nbaseline: ${o.baseline}\nrules: western_electric\ntiers:\n  3sigma:\n    action: log\n`,
     );
   }
-  approveGoal(location, GOAL_ID, "human:dev");
-  if (options.disclosure !== undefined) declareBudget(ledger, GOAL_ID, "disclosure", options.disclosure, "human:dev");
+  approveGoal(location, o.goalId, "human:dev");
+  if (options.disclosure !== undefined) declareBudget(ledger, o.goalId, "disclosure", options.disclosure, "human:dev");
 
   return {
     repo,
@@ -153,8 +154,8 @@ export function setupEnforcementGoal(options: EnforcementOptions = {}): Enforcem
     env,
     location,
     ledger,
-    goalId: GOAL_ID,
-    goalPath: goalDir(location.dir, GOAL_ID),
+    goalId: o.goalId,
+    goalPath: goalDir(location.dir, o.goalId),
     record: makeTempDir("omf-rec-"),
     baseConfig: readFileSync(join(location.dir, "config.toml"), "utf8"),
   };

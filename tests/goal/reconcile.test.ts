@@ -119,7 +119,6 @@ function inputFor(overrides: { front?: GoalDoc["front"]; body?: string; items?: 
   const doc = canaryGoal();
   const front = overrides.front ?? doc.front;
   return buildReconcilerInput({
-    goalId: "g-canary",
     front,
     body: overrides.body ?? doc.body,
     summary: SUMMARY,
@@ -152,6 +151,8 @@ describe("buildReconcilerInput", () => {
       items: [workItem("Trim the render path", "ready", ["canary-qwerty.sh", "src/render"])],
     });
     expect("problem" in input).toBe(false);
+    // The goal id is free text a person picked (it may name the metric), so the model never sees it.
+    expect(input).not.toHaveProperty("goal_id");
     const text = JSON.stringify(input);
     for (const canary of ["3719.25", "4817.39", "3719", "4817", "furlongs", "m-zebra-quokka", "zebra", "quokka", "canary-qwerty", "secretbench"]) {
       expect(text).not.toContain(canary);

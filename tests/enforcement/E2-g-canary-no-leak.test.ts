@@ -74,7 +74,6 @@ describe("E2 canary-no-leak, goal-loop side", () => {
       "approach",
       "breach",
       "gap",
-      "goal_id",
       "max_candidates",
       "objective",
       "open_items",
@@ -140,6 +139,20 @@ describe("E2 canary-no-leak, goal-loop side", () => {
       "cli stderr": run.stderr,
       "escalation event": payloadText(fx, "goal.escalated", "goal.terminated"),
     });
+  });
+
+  it("does not show the model the goal id, even when it is named after the metric", () => {
+    const fx = setupEnforcementGoal({ goalId: `g-${CANARY.metricId.replace(/^m-/, "")}` });
+    useCleanModel(fx);
+    const run = tickCli(fx);
+    expect(run.code, run.stderr).toBe(0);
+    const inputs = reconcileInputs(fx);
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0]).not.toHaveProperty("goal_id");
+    const prompt = readFileSync(join(fx.record, "stdin.txt"), "utf8");
+    expect(prompt).not.toContain(fx.goalId);
+    expect(canaryHits(prompt)).toEqual([]);
+    expect(canaryHits(reconcileTexts(fx, "input").join("\n"))).toEqual([]);
   });
 
   it("keeps the metric id out of `omf goal tick --json` when the audit stops on a tampered metric lock", () => {

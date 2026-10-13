@@ -32,7 +32,7 @@ const WITHHELD_TITLE = "(title withheld)";
  * a direction and a size bucket, and names of work and files, and nothing that says where the metric is.
  */
 export interface ReconcilerInput {
-  goal_id: string;
+  // No goal id: it is free text a person chose and may name the metric, and the model does not need it.
   /** Linted. */
   objective: string;
   /** The "## Approach" section of goal.md, linted; "" if absent. */
@@ -102,7 +102,6 @@ function layoutOf(tracked: readonly string[], watchedGlobs: readonly string[], t
  * is spent. `cap` comes from the locked semantic.
  */
 export function buildReconcilerInput(args: {
-  goalId: string;
   front: GoalFront;
   body: string;
   summary: GapSummary;
@@ -120,7 +119,6 @@ export function buildReconcilerInput(args: {
   const open = items.filter((item) => OPEN_STATES.includes(item.front.state));
   const count = (state: WorkState): number => items.filter((item) => item.front.state === state).length;
   return {
-    goal_id: args.goalId,
     objective: args.front.objective,
     approach,
     trigger: args.summary.trigger,
@@ -275,7 +273,6 @@ export async function reconcileGoal(ctx: ReconcileContext): Promise<ReconcileSta
   const cap = ctx.locked.goal.semantic.budget.max_open_work_items;
 
   const input = buildReconcilerInput({
-    goalId,
     front: ctx.front,
     body: ctx.body,
     summary,
