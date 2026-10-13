@@ -21,10 +21,11 @@
 
 > [!WARNING]
 > **Pre-alpha.** Today oh-my-factory ships its foundation (host state, a tamper-evident ledger,
-> budgets that never reset) plus defining, approving and measuring goals (J1 locks, the gap to
-> the target and control bands), the J8 budget commands, and the work-item store with its
-> `work` and `veto` commands. Turning the gap into work (`omf goal tick`) and the verification
-> line are designed but not built yet. See [What works today](#what-works-today).
+> budgets that never reset), defining, approving and measuring goals (J1 locks, the gap to the
+> target, control bands), the J8 budget commands, the work-item store with its `work` and `veto`
+> commands, and the goal loop: `omf goal tick` turns the gap into work items with a model that
+> never sees the numbers. The verification line that does the work is designed but not built yet.
+> See [What works today](#what-works-today).
 
 ---
 
@@ -100,8 +101,12 @@ or **designed** and not built yet.
 - **Metric code cannot change quietly.** *Enforced today.* A metric is measured only after you approve it,
   an edited lock stops measurement, and a change to the metric's command, to a path it watches (`--watch`), to its
   bands file, or to the goal needs a new approval. Limits are listed under "Define and measure a goal".
+- **The model never sees the numbers.** *Enforced today, goal-loop side.* The model that proposes work gets a
+  direction and a coarse size bucket, never a value, a threshold, a metric name or a command. Its answer is
+  parsed as data and filtered by code before it becomes a work item. The sealed-scenario side is designed.
 - **Goals over tasks.** *Partly built.* Work is derived from the gap between a measured value and a
-  target. Goals, locks and measurement work today; turning the gap into work is next.
+  target. Goals, locks, measurement and the goal loop work today; the verification line that carries
+  out a work item is next.
 - **Holdout, not homework.** *Designed.* Acceptance scenarios are sealed, written by the other
   vendor, and never shown to the implementer.
 - **Isolation is measured, not declared.** *Designed.* `omf doctor` will measure the isolation in
@@ -122,7 +127,10 @@ or **designed** and not built yet.
 | `omf goal audit <id>` | Checks the goal, its locks and the ledger, and reports regime changes. Writes nothing. |
 | `omf goal approve <id>` | J1: shows what will be locked (metrics and their bands) and approves it after you type the goal id in a terminal. |
 | `omf goal measure <id>` | Runs the locked metrics (in Docker, or on the host with `--runner host`), computes the gap to target and the control bands, and writes a gap report to host state. |
-
+| `omf goal tick <id>` | One pass of the goal loop (spec §4.4): audit, measure, ask a model for work, filter its candidates with code, dispatch work items, check staleness and the loop guards. Needs a reconciler (see "Run the goal loop"). |
+| `omf goal status <id>` | Shows the run state (`running`, `blocked_on_user`, `failed`, `finish`, `cancelled`), the open escalation with the commands that unblock it, the rounds left and the open work items. |
+| `omf goal resume <id>` | J6 continue: after you fixed what stopped the goal, a typed confirmation in a terminal lets ticks run again. |
+| `omf goal cancel <id>` | J6 stop: a typed confirmation in a terminal cancels the goal and every open work item. |
 | `omf budget show <id> [--json]` | Prints the rounds, disclosure and wall-time budgets: declared, raised, consumed and remaining. |
 | `omf budget declare <id> <kind> <amount>` | J8: declares a `rounds` or `disclosure` budget, in an interactive terminal. |
 | `omf budget raise <id> <kind> <amount>` | J8: raises a `rounds`, `disclosure` or `wall_time` cap, in an interactive terminal. Wall time can only be raised, never declared. |
@@ -131,9 +139,9 @@ or **designed** and not built yet.
 | `omf work approve <work-id>` | Approves a high-risk work item so it can be dispatched, in an interactive terminal. |
 | `omf veto <work-id> [--reason <text>]` | Vetoes a work item from any open state. Needs no terminal, because a veto only restricts. |
 
-Exit codes: `0` ok, `1` problems found, `2` the command could not run.
+Exit codes: `0` ok, `1` needs attention (problems found, a declined confirmation, a tick that stopped or is waiting for your approval), `2` the command could not run.
 
-Not built yet: turning the gap into work (`omf goal tick`: reconcile, filters, dispatch), the decision ledger and sealed scenarios, the container runner and judge, evidence reports, and asking people for input. The
+Not built yet: the decision ledger and sealed scenarios, the container runner and judge, evidence reports, `omf ship`, goal sign-off (`omf goal sign`) and asking people for input in the middle of a run. The
 [design](docs/design/2026-10-12-omf-v0-design.md) describes all of them.
 
 ## Quick start
@@ -193,6 +201,7 @@ leading: none; lagging: m-demo; guardrails: none
 budget: 10 rounds, 72h wall time, at most 2 open work items
 decision rule: target met for 2 consecutive measurements and no guardrail breach (minimum observation 7d)
 metric m-demo: ["sh","-c","echo 7"] -> ms; watches none
+bands m-demo: none (not monitored)
 Type g-demo to approve as human:you@example.com: g-demo
 approved g-demo (regime 1)
 
@@ -214,6 +223,85 @@ Known limits of "metric code cannot change quietly":
 - Only the metric's command and the paths you declare with `--watch` are covered. `omf metric propose` warns when
   you give none. Files a metric reads but does not watch, and gitignored inputs, can change without a new approval.
 - A container image tag is mutable; pin an image digest to pin the image.
+- `bands/<metric>.yaml` is locked with the goal: its hash is part of the J1 approval, so editing, adding or
+  deleting one is a regime change. A goal approved before bands were locked keeps unlocked bands until it is
+  approved again, and the approval screen says so.
+
+## Run the goal loop
+
+`omf goal tick <id>` is one non-interactive pass of the loop, so cron, CI or a person can run it. A tick audits
+the goal, measures the locked metrics and compares them with the target and the control bands. When there is a
+reason to act (the target is not met, or a band says `propose`), it asks a model for work item candidates,
+filters them with code and writes the survivors as work items in host state. When the target has been met long
+enough with every guardrail passing, it records a success candidate and the goal finishes.
+
+The model sees the objective and the `## Approach` section of `goal.md`, the direction of the gap with a size
+bucket (`small`, `medium` or `large`), the open work items and outcome counts. It never sees a value, a target, a
+threshold, a metric name or command, or a watched path. Its answer is parsed as data. Candidates that carry a
+numeric threshold or a metric name, repeat an existing item (in any state), exceed the work-in-progress cap or
+point outside the repository are dropped before anything is written.
+
+To see it work offline, run [`examples/hello-goal`](examples/hello-goal/README.md): two turns of the loop with a
+stand-in for the model.
+
+### The reconciler
+
+The model is configured in `config.toml`, which OMF never rewrites. A missing file is an error; a missing
+`[reconciler]` section means these defaults:
+
+```toml
+[reconciler]
+kind = "claude"          # or "command": a program that reads the prompt on stdin and prints JSON
+# model = "..."
+# timeout_ms = 120000
+```
+
+`kind = "claude"` runs the `claude` CLI on the host with every tool disabled, no saved session, an empty
+temporary directory as its working directory and only `ANTHROPIC_API_KEY` in its environment, so export that
+variable before a tick. Keychain and login-file logins are not used. `kind = "command"` runs the argv you list
+under `command`; the tests and the example use it. `kind = "codex"` and `auth = "login_file"` are refused until
+the container runner exists.
+
+The `claude` kind is unverified against a real model; `scripts/smoke-reconciler.sh` is the manual check.
+
+### Rounds, ending states and exit codes
+
+A round is a tick that called the model, and only that tick spends one of the goal's rounds. A tick that waits
+(the goal is `observing` or `idle`, the work-in-progress cap is full, too many items await review) spends
+nothing; wall time bounds those.
+
+| State | How it happens | What you do |
+|---|---|---|
+| `running` | the default | nothing |
+| `blocked_on_user` | the goal needs a decision: re-approval (J1), a stall or a repeated outcome (J6), a spent round or time budget (J8) | `omf goal status <id>` prints the exact commands; then `omf goal resume <id>` |
+| `failed` | an unexpected error inside a tick | read the error, then `omf goal resume <id>` |
+| `finish` | a success candidate (spec §4.5) was recorded | sign-off (J5) is not built yet |
+| `cancelled` | `omf goal cancel <id>` | final |
+
+`omf goal tick` exits `0` when the tick went on or the goal finished. It exits `1` when it stopped for you
+(blocked, failed, or an item is waiting for `omf work approve <work-id>`) and `2` when it could not run (another
+tick holds the lock, `config.toml` is missing or invalid, the ledger is corrupt). Its output carries outcomes,
+the gap direction and size bucket, work ids, signature codes and next steps, never a measured value or a target:
+those stay in the report under host state.
+
+### Work items
+
+Dispatched items live in `goals/<id>/work/<work-id>/`. Risk is classified by code from the paths a candidate
+declares. CI, auth, migrations, tests, lockfiles, goal and factory files and your watched paths are high risk: a
+high-risk item waits in `awaiting_approval` for `omf work approve`, any other item starts `ready`. You can
+`omf veto <work-id>` anything that is open. The ledger, not the item file, decides whether an item was approved,
+vetoed or cancelled: an `item.md` edited by hand to look approved is listed by `omf work list` as malformed and
+is never dispatched.
+
+Known limits of the goal loop:
+
+- The seed lint catches numbers and metric names, not paraphrase. A model that restates a threshold in other
+  words gets through.
+- Duplicate detection compares the title words and the declared paths. A reworded title for the same change is a
+  new item.
+- With no disclosure budget declared, the number of times the model is asked is bounded by the rounds only.
+- Subscription and keychain logins are not supported for the reconciler yet; use an API key.
+- A re-approval resets the wall-time limit to the value in `goal.md`: raises made earlier with `omf budget raise <id> wall_time` do not carry over, and the approval screen does not show them. After re-approving a stale goal that should keep running, raise the wall time again.
 
 ## Where state lives
 
@@ -222,12 +310,15 @@ OMF keeps everything outside your repository, one directory per project:
 ```
 ~/.omf/projects/<project-id>/
   ledger.jsonl            append-only, hash-chained event log
-  config.toml             roles and isolation level
+  config.toml             roles, isolation level, optional [reconciler]
   preflight.json          the last doctor report
   goals/<goal-id>/
     goal.md               the goal: objective, target, budgets
-    bands/<metric>.yaml   control bands (locked at J1)
-    reports/              gap reports, <stamp>-gap.json
+    bands/<metric>.yaml   control bands (locked with the goal)
+    reports/              gap reports (<stamp>-gap.json) and tick reports (<stamp>-tick.md)
+    reconcile/            the exact model input and raw output of each tick
+    work/<work-id>/       item.md (state and progress) and intent.md
+    tick.lock             held while a tick runs
   vault/
     metrics/proposed/     metric proposals, <metric>.json
     metrics/<goal-id>/    J1 locks: <metric>.lock.json, goal.lock.json
@@ -238,6 +329,8 @@ OMF keeps everything outside your repository, one directory per project:
 Set `OMF_HOME` to use another location. OMF refuses to keep state inside the repository or inside
 `~/.claude` or `~/.codex`. Directories are `0700` and files `0600`.
 
+Reports and the `reconcile/` files hold real measured values. They stay in host state, and the model never reads them.
+
 To uninstall, run `npm unlink -g oh-my-factory` and delete `~/.omf`.
 
 ## Documentation
@@ -245,6 +338,8 @@ To uninstall, run `npm unlink -g oh-my-factory` and delete `~/.omf`.
 - [Design specification](docs/design/2026-10-12-omf-v0-design.md) ([한국어](docs/ko/design/2026-10-12-omf-v0-design.md))
 - [Sources and reading status](docs/design/references.md)
 - [Enforcement tests and the claims they cover](tests/enforcement/README.md)
+- [Goal-loop decisions and open questions (M2b addendum)](docs/design/2026-10-12-omf-m2b-addendum.md)
+- [`examples/hello-goal`](examples/hello-goal/README.md): the goal loop end to end, offline
 
 ## Inspiration
 
@@ -263,6 +358,9 @@ npm install
 npm run typecheck   # source and tests
 npm test            # builds dist/ and runs the suite
 ```
+
+`sh scripts/smoke-reconciler.sh` runs the real `claude` CLI once with a harmless prompt and checks that the
+answer parses. It spends API tokens and needs `ANTHROPIC_API_KEY`, so it is not part of `npm test`.
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/).
 

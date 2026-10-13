@@ -17,5 +17,7 @@ The leak tests use `tests/helpers/reconciler-stub.mjs` in `leaky` mode and the p
 `tests/helpers/canary.ts`. A change to what the goal loop discloses is a change to E2: update the
 test in the same commit.
 
-Planned in later milestones: E2 canary-no-leak for the W side (M3), E6 l2-leak-redteam (M3),
-E7 empty-means-fail (M3), E8 no-auto-approve (M4).
+Planned in later milestones: E2 canary-no-leak for the sealed-scenario side (M3), E6 l2-leak-redteam (M3),
+E7 empty-means-fail (M3), E8 no-auto-approve (M4). E2 on the goal-loop side and E4 landed in M2b, together with
+the two-turn walking skeleton in `tests/examples/hello-goal.test.ts`. The command table in the READMEs is
+checked against `omf --help` by `tests/cli/help-drift.test.ts`.
