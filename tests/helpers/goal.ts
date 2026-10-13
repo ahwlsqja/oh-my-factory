@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { declareBudget } from "../../src/core/budget.js";
 import { Ledger } from "../../src/core/ledger.js";
@@ -8,9 +8,15 @@ import { initProject } from "../../src/core/project.js";
 import { bandsFile } from "../../src/goal/bands.js";
 import { createGoal, goalTemplate, readGoal, referencedMetrics, semanticHash, semanticOf } from "../../src/goal/goal-file.js";
 import { headCommit } from "../../src/goal/git.js";
-import { goalLockFile } from "../../src/goal/goal-lock.js";
+import { goalLockFile, lockGoal } from "../../src/goal/goal-lock.js";
 import { definitionOf, metricSha256, proposeMetric, readProposal, writeLock } from "../../src/goal/metrics.js";
 import type { IntentCandidate } from "../../src/work/types.js";
+import type { ReconcileOutcome, ReconcileRequest, Reconciler } from "../../src/adapters/reconciler.js";
+import { type StateStore, createMarkdownStore } from "../../src/adapters/state-markdown.js";
+import { readConfig } from "../../src/core/config.js";
+import { auditGoal } from "../../src/goal/audit.js";
+import type { GapSummary } from "../../src/goal/gap-summary.js";
+import type { ReconcileContext } from "../../src/goal/reconcile.js";
 import { commitAll, makeGitRepo, makeTempDir } from "./tmp.js";
 
 export interface GoalFixture {
@@ -156,5 +162,98 @@ export function makeCandidate(title: string, paths: string[], overrides: Partial
     rationale: "Reusing work keeps pages quick without changing behavior.",
     affected_paths: paths,
     ...overrides,
+  };
+}
+
+/**
+ * The command reconciler used by fixtures: it drains stdin, then prints the response file named by its
+ * first argument. A real subprocess, but no model and no network.
+ */
+const STUB_SCRIPT =
+  'process.stdin.on("data",()=>{});process.stdin.on("end",()=>{process.stdout.write(require("node:fs").readFileSync(process.argv[1],"utf8"))})';
+
+export interface TickGoalFixture extends GoalFixture {
+  /** The file the command reconciler prints. Rewrite it with `stubResponse`. */
+  stubFile: string;
+}
+
+/**
+ * An approved goal (J1 done, regime 1) ready for the goal loop: build mode, target m-p95 <= 250 ms,
+ * `max_open_work_items: 2`, `rounds: 10`. The metric runs `sh bench/p95.sh`, which prints whatever
+ * `bench/p95.value` holds (312 at first), and only the script is watched, so a later turn can change the
+ * value file without a regime change. `config.toml` gets a `[reconciler]` section that runs the stub
+ * command. Guardrails default to none, so the success proof does not need bands.
+ */
+export function setupTickGoal(options: { guardrails?: string[] } = {}): TickGoalFixture {
+  const fx = setupGoal({ guardrails: options.guardrails ?? [] });
+  writeFileSync(join(fx.repo, "bench", "p95.sh"), "echo $(cat bench/p95.value)\n");
+  writeFileSync(join(fx.repo, "bench", "p95.value"), "312\n");
+  commitAll(fx.repo, "make the p95 bench read its value from a file");
+  lockGoal(fx.location, "g-fast", "human:dev");
+  const stubFile = join(fx.home, "reconciler-response.json");
+  writeFileSync(stubFile, JSON.stringify({ candidates: [] }));
+  appendFileSync(
+    join(fx.location.dir, "config.toml"),
+    `\n[reconciler]\nkind = "command"\ncommand = ${JSON.stringify([process.execPath, "-e", STUB_SCRIPT, stubFile])}\n`,
+  );
+  return { ...fx, stubFile };
+}
+
+/** Makes the command reconciler answer with `{ candidates }`. Takes unknown items so a test can send malformed ones. */
+export function stubResponse(fx: TickGoalFixture, candidates: readonly unknown[]): void {
+  writeFileSync(fx.stubFile, JSON.stringify({ candidates }));
+}
+
+export interface FakeReconciler extends Reconciler {
+  /** Every request, in order: how a test proves the model was or was not called. */
+  calls: ReconcileRequest[];
+}
+
+/** An in-process reconciler that answers with the given outcomes in order and repeats the last one. */
+export function fakeReconciler(...responses: ReconcileOutcome[]): FakeReconciler {
+  const calls: ReconcileRequest[] = [];
+  return {
+    id: "fake",
+    isolation: "host-tool-less",
+    calls,
+    async run(request: ReconcileRequest): Promise<ReconcileOutcome> {
+      calls.push(request);
+      const next = responses[Math.min(calls.length - 1, responses.length - 1)];
+      if (next === undefined) throw new Error("fakeReconciler needs at least one response");
+      return next;
+    },
+  };
+}
+
+/** A successful model call whose stdout is `{ candidates }`. */
+export function okResponse(candidates: readonly unknown[]): ReconcileOutcome {
+  return { ok: true, stdout: JSON.stringify({ candidates }), durationMs: 5 };
+}
+
+/** The gap the fixture goal has at first: 312 against 250 is a medium decrease. */
+export const MEDIUM_GAP: GapSummary = { trigger: "gap", gap: { direction: "decrease", size: "medium" }, breach: null };
+
+/** Everything `reconcileGoal` needs, read from the approved fixture the way a tick reads it. */
+export function reconcileContext(
+  fx: TickGoalFixture,
+  reconciler: Reconciler,
+  extra: { summary?: GapSummary; store?: StateStore; tickId?: string } = {},
+): ReconcileContext {
+  const { front, body } = readGoal(fx.location.dir, "g-fast");
+  const audit = auditGoal(fx.location, "g-fast", new Date());
+  if (audit.locked === null) throw new Error("the fixture goal is not approved");
+  return {
+    location: fx.location,
+    ledger: fx.ledger,
+    store: extra.store ?? createMarkdownStore(fx.location.dir),
+    reconciler,
+    config: readConfig(fx.location.dir),
+    goalId: "g-fast",
+    tickId: extra.tickId ?? TICK,
+    front,
+    body,
+    locked: audit.locked,
+    summary: extra.summary ?? MEDIUM_GAP,
+    now: () => new Date("2026-10-12T09:00:00.000Z"),
   };
 }
