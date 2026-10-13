@@ -11,6 +11,13 @@ import { diffStat } from "../goal/git.js";
 import type { ApprovalExpectation } from "../goal/goal-lock.js";
 import { type GapReport, measureGoal } from "../goal/measure.js";
 import { metricSha256, proposeMetric, readProposal } from "../goal/metrics.js";
+import { createMarkdownStore } from "../adapters/state-markdown.js";
+import { type BudgetState, budgetStateFromEvents } from "../core/budget.js";
+import { cancelGoal, cancelProblem, resumeGoal, resumeProblem, stoppedNextSteps } from "../goal/lifecycle.js";
+import { type Escalation, type RunState, runStateFromEvents } from "../goal/run-state.js";
+import { assertGoalExists, withTickLock } from "../goal/tick-lock.js";
+import { verifiedItems } from "../work/ledger-verify.js";
+import { OPEN_STATES, type WorkState } from "../work/types.js";
 import { confirmByTyping, requireTerminal } from "./confirm.js";
 
 function collect(value: string, previous: string[]): string[] {
@@ -138,6 +145,37 @@ function printGap(report: GapReport, file: string): void {
   console.log(`report: ${file}`);
 }
 
+interface GoalStatusReport {
+  goal_id: string;
+  state: RunState["status"];
+  since: string | null;
+  reason_code: string | null;
+  ticks: number;
+  audit_state: AuditReport["state"];
+  rounds: BudgetState | null;
+  disclosure: BudgetState | null;
+  open_escalation: Escalation | null;
+  next_steps: string[];
+  work: Record<WorkState, number> & { malformed: number };
+}
+
+function budgetLine(kind: string, state: BudgetState | null): string {
+  return state === null ? `${kind}: not declared` : `${kind}: ${state.remaining} of ${state.declared + state.raised} left`;
+}
+
+function printStatus(report: GoalStatusReport): void {
+  const audit = report.audit_state.replace("needs_reapproval", "needs re-approval");
+  console.log(`goal ${report.goal_id}: ${report.state} (audit: ${audit}; ${report.ticks} ${report.ticks === 1 ? "tick" : "ticks"})`);
+  if (report.open_escalation !== null) {
+    console.log(`${report.open_escalation.j} ${report.open_escalation.reason_code}: ${report.open_escalation.question}`);
+    console.log(`default: ${report.open_escalation.default}`);
+  }
+  console.log(budgetLine("rounds", report.rounds));
+  console.log(budgetLine("disclosure", report.disclosure));
+  console.log(`work: ${Object.entries(report.work).map(([name, count]) => `${name.replace(/_/g, " ")} ${count}`).join(", ")}`);
+  printList("next steps", report.next_steps);
+}
+
 /** Goal and metric commands (spec §9). Errors propagate to main.ts, which exits 2. */
 export function registerGoalCommands(program: Command): void {
   const goal = program.command("goal").description("define, approve and measure goals");
@@ -208,6 +246,99 @@ export function registerGoalCommands(program: Command): void {
       const failed = report.metrics.some((m) => m.failure !== null);
       process.exitCode = report.needs_reapproval || failed ? 1 : 0;
     });
+
+  goal
+    .command("status")
+    .argument("<goal_id>")
+    .option("--json", "print the status as JSON")
+    .description("show the run state, budgets, open escalation and work items of a goal (writes nothing)")
+    .action((goalId: string, options: { json?: boolean }) => {
+      const status = requireProject(process.cwd());
+      assertGoalExists(status.dir, goalId);
+      const events = new Ledger(status.dir).readVerified();
+      const run = runStateFromEvents(events, goalId);
+      const verified = verifiedItems(createMarkdownStore(status.dir), events, goalId);
+      const work: Record<WorkState, number> = {
+        ready: 0,
+        awaiting_approval: 0,
+        in_progress: 0,
+        awaiting_review: 0,
+        done: 0,
+        failed: 0,
+        vetoed: 0,
+        cancelled: 0,
+      };
+      for (const item of verified.items) work[item.front.state] += 1;
+      const report: GoalStatusReport = {
+        goal_id: goalId,
+        state: run.status,
+        since: run.since,
+        reason_code: run.reason_code,
+        ticks: run.ticks,
+        audit_state: auditGoal(status, goalId).state,
+        rounds: budgetStateFromEvents(events, goalId, "rounds"),
+        disclosure: budgetStateFromEvents(events, goalId, "disclosure"),
+        open_escalation: run.open_escalation,
+        next_steps: stoppedNextSteps(run, goalId),
+        work: { ...work, malformed: verified.malformed.length },
+      };
+      if (options.json) console.log(JSON.stringify(report, null, 2));
+      else printStatus(report);
+    });
+
+  goal
+    .command("resume")
+    .argument("<goal_id>")
+    .description("J6 continue: let a blocked or failed goal tick again (needs an interactive terminal)")
+    .action(async (goalId: string) => {
+      const status = requireProject(process.cwd());
+      // The tick lock comes first: a running tick is reported before anything else, and no tick can start
+      // between what the person reads below and the resume that follows (D23).
+      await withTickLock(status, goalId, async () => {
+        requireTerminal("goal resume");
+        const actor = humanActor(status.repo);
+        const ledger = new Ledger(status.dir);
+        const run = runStateFromEvents(ledger.readVerified(), goalId);
+        const problem = resumeProblem(run, goalId);
+        if (problem !== null) throw new Error(problem);
+        console.log(`goal ${goalId} is ${run.status}${run.reason_code === null ? "" : ` (${run.reason_code})`}`);
+        if (run.open_escalation !== null) console.log(`${run.open_escalation.j}: ${run.open_escalation.question}`);
+        if (!(await confirmByTyping(goalId, `Type ${goalId} to resume as ${actor}: `))) {
+          console.error("not resumed");
+          process.exitCode = 1;
+          return;
+        }
+        resumeGoal(ledger, goalId, actor);
+        console.log(`resumed ${goalId}; the next tick runs it again`);
+      });
+    });
+
+  goal
+    .command("cancel")
+    .argument("<goal_id>")
+    .description("J6 stop: end the goal and cancel its open work items (needs an interactive terminal)")
+    .action(async (goalId: string) => {
+      const status = requireProject(process.cwd());
+      await withTickLock(status, goalId, async () => {
+        requireTerminal("goal cancel");
+        const actor = humanActor(status.repo);
+        const ledger = new Ledger(status.dir);
+        const store = createMarkdownStore(status.dir);
+        const run = runStateFromEvents(ledger.readVerified(), goalId);
+        const problem = cancelProblem(run, goalId);
+        if (problem !== null) throw new Error(problem);
+        const open = store.fetchWorkItemsByStates(goalId, OPEN_STATES).length;
+        console.log(`goal ${goalId} is ${run.status}; cancelling ends it for good and cancels ${open} open work ${open === 1 ? "item" : "items"}`);
+        if (!(await confirmByTyping(goalId, `Type ${goalId} to cancel as ${actor}: `))) {
+          console.error("not cancelled");
+          process.exitCode = 1;
+          return;
+        }
+        const result = cancelGoal(ledger, store, goalId, actor, new Date());
+        console.log(`cancelled ${goalId}; ${result.cancelled.length} work ${result.cancelled.length === 1 ? "item" : "items"} cancelled`);
+      });
+    });
+
 
   const metric = program.command("metric").description("propose metrics for J1");
 
