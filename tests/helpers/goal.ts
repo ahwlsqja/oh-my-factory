@@ -10,6 +10,7 @@ import { createGoal, goalTemplate, readGoal, referencedMetrics, semanticHash, se
 import { headCommit } from "../../src/goal/git.js";
 import { goalLockFile } from "../../src/goal/goal-lock.js";
 import { definitionOf, metricSha256, proposeMetric, readProposal, writeLock } from "../../src/goal/metrics.js";
+import type { IntentCandidate } from "../../src/work/types.js";
 import { commitAll, makeGitRepo, makeTempDir } from "./tmp.js";
 
 export interface GoalFixture {
@@ -135,4 +136,25 @@ export function markStale(fx: GoalFixture, tripped: string[] = ["age"]): void {
       signals: { age_ms: 1_209_600_001, commits_since: null, target_move: null },
     },
   });
+}
+
+/** A tick id in the shape work items require (`origin.tick_id`). */
+export const TICK = "t-20261012T090000Z-0001";
+
+/**
+ * A candidate that passes schema, scope and seed lint for the fixture goal: no digits, no metric names.
+ * The title and paths decide its fingerprint, so tests make candidates distinct by title.
+ */
+export function makeCandidate(title: string, paths: string[], overrides: Partial<IntentCandidate> = {}): IntentCandidate {
+  return {
+    title,
+    problem: "The render path does extra work on every request.",
+    proposed_outcome: "The render path reuses work it already did.",
+    affected_users_systems: "Visitors of the site and the rendering code.",
+    constraints: "",
+    open_questions: [],
+    rationale: "Reusing work keeps pages quick without changing behavior.",
+    affected_paths: paths,
+    ...overrides,
+  };
 }
