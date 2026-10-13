@@ -1,4 +1,7 @@
 import type { Command } from "commander";
+import { createReconciler } from "../adapters/reconciler.js";
+import { readConfig } from "../core/config.js";
+import { type TickResult, tickGoal } from "../goal/tick.js";
 import { humanActor } from "../core/actor.js";
 import { Ledger } from "../core/ledger.js";
 import type { ProjectLocation } from "../core/paths.js";
@@ -17,7 +20,7 @@ import { cancelGoal, cancelProblem, resumeGoal, resumeProblem, stoppedNextSteps 
 import { type Escalation, type RunState, runStateFromEvents } from "../goal/run-state.js";
 import { assertGoalExists, withTickLock } from "../goal/tick-lock.js";
 import { verifiedItems } from "../work/ledger-verify.js";
-import { OPEN_STATES, type WorkState } from "../work/types.js";
+import { OPEN_STATES, type RiskClass, type WorkState } from "../work/types.js";
 import { confirmByTyping, requireTerminal } from "./confirm.js";
 
 function collect(value: string, previous: string[]): string[] {
@@ -174,6 +177,49 @@ function printStatus(report: GoalStatusReport): void {
   console.log(budgetLine("disclosure", report.disclosure));
   console.log(`work: ${Object.entries(report.work).map(([name, count]) => `${name.replace(/_/g, " ")} ${count}`).join(", ")}`);
   printList("next steps", report.next_steps);
+}
+
+/** What `omf goal tick` may print or emit as JSON: the TickResult without the model's titles (D29). */
+type PublicTick = Omit<TickResult, "created"> & { created: { work_id: string; state: WorkState; risk: RiskClass }[] };
+
+/**
+ * A tick runs under cron and CI, whose logs other agents may read (spec §4.6: G receives aggregates only).
+ * The TickResult holds no measured or target value; the model's titles are untrusted text, so ids stand in for them.
+ * Values and the gap line stay in the host tick report.
+ */
+function publicTick(result: TickResult): PublicTick {
+  const { created, ...rest } = result;
+  return { ...rest, created: created.map(({ work_id, state, risk }) => ({ work_id, state, risk })) };
+}
+
+/**
+ * Exit code of `omf goal tick` (spec §8). 0: the goal ticked on or finished. 1: a person has to act, which
+ * includes a goal parked for a person, a tick the audit or a failed model call stopped, and any open item
+ * awaiting approval (D18), so a cron user hears about it. Errors that stop the command exit 2 in main.ts.
+ */
+export function tickExitCode(result: TickResult): number {
+  if (result.status === "finish") return 0;
+  if (result.status !== "continue") return 1;
+  if (result.outcome === "stopped" || result.outcome === "failed") return 1;
+  return result.awaiting_approval.length > 0 ? 1 : 0;
+}
+
+function printTick(goalId: string, result: TickResult): void {
+  const reason = result.reason_code === null ? "" : `: ${result.reason_code}`;
+  console.log(`goal ${goalId}: tick ${result.tick_id} ${result.status} (${result.outcome}${reason})`);
+  if (result.escalation !== null) {
+    console.log(`${result.escalation.j} ${result.escalation.reason_code}: ${result.escalation.question}`);
+  }
+  for (const item of result.created) {
+    console.log(`  dispatched ${item.work_id} (${item.state}, risk ${item.risk}); veto with: omf veto ${item.work_id}`);
+  }
+  if (result.rejected.length > 0) {
+    const codes = [...new Set(result.rejected.map((r) => `${r.filter}:${r.reason_code}`))];
+    console.log(`  rejected ${result.rejected.length} candidate(s): ${codes.join(", ")}`);
+  }
+  printList("awaiting approval", result.awaiting_approval);
+  printList("next steps", result.next_steps);
+  if (result.report !== null) console.log(`report: ${result.report}`);
 }
 
 /** Goal and metric commands (spec §9). Errors propagate to main.ts, which exits 2. */
@@ -339,6 +385,27 @@ export function registerGoalCommands(program: Command): void {
       });
     });
 
+
+  goal
+    .command("tick")
+    .argument("<goal_id>")
+    .option("--runner <runner>", "docker (isolated) or host (no isolation)", "docker")
+    .option("--json", "print the tick result as JSON")
+    .description("run one pass of the goal loop: audit, measure, reconcile, dispatch, refresh (non-interactive)")
+    .action(async (goalId: string, options: { runner: string; json?: boolean }) => {
+      if (options.runner !== "docker" && options.runner !== "host") {
+        throw new Error(`unknown runner ${options.runner}; use docker or host`);
+      }
+      const status = requireProject(process.cwd());
+      // spec §11.5: an unreadable config.toml stops the command; there is no silent fallback to defaults.
+      const config = readConfig(status.dir);
+      const reconciler = createReconciler(status.dir, config.reconciler);
+      if (options.runner === "host") console.error("warning: ticking on the host without isolation (--runner host)");
+      const result = await tickGoal(status, goalId, { runner: options.runner, reconciler, config });
+      if (options.json) console.log(JSON.stringify(publicTick(result), null, 2));
+      else printTick(goalId, result);
+      process.exitCode = tickExitCode(result);
+    });
 
   const metric = program.command("metric").description("propose metrics for J1");
 

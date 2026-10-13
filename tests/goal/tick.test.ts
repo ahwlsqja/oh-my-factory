@@ -446,6 +446,9 @@ describe("tickGoal: WIP cap and STOP_IF back-pressure", () => {
     writeFileSync(file, readFileSync(file, "utf8").replace(/^state: .*$/m, "state: ready"));
     fx.reconciler.reply([candidateOf("Cache the render path")]);
     fx.clock.advance(MINUTE);
+    // The excluded item leaves the verified state unchanged, which the stall guard (Task 13) would call no
+    // progress; a new measurement makes this a different state, so the test keeps asking about the exclusion.
+    writeFileSync(join(fx.repo, "bench", "p95.value"), "311\n");
 
     const second = await fx.tick();
 
