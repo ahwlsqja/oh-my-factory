@@ -61,7 +61,7 @@ describe("ledger-tamper-stops", () => {
     }
   });
 
-  it("the loop, work and budget commands refuse a tampered ledger and write nothing", () => {
+  it("the loop, work, budget and decide commands refuse a tampered ledger and write nothing", () => {
     const repo = makeGitRepo();
     const home = makeTempDir("omf-home-");
     expect(omf(["init"], repo, home).code).toBe(0);
@@ -81,6 +81,15 @@ describe("ledger-tamper-stops", () => {
       ["budget", "declare", "g-x", "rounds", "3"],
       ["budget", "raise", "g-x", "rounds", "1"],
       ["budget", "raise", "g-x", "wall_time", "2h"],
+      // The chain is verified before the item or the --file is looked at (T9/T10 check order), so a missing
+      // file is never what these report once the ledger is broken.
+      ["decide", "add", "w-0123456789ab", "--file", "/nonexistent/entry.json"],
+      ["decide", "resolve", "w-0123456789ab", "d-interface", "--file", "/nonexistent/resolution.json"],
+      ["decide", "resolve", "w-0123456789ab", "d-interface", "--na", "--file", "/nonexistent/na.json"],
+      ["decide", "defer", "w-0123456789ab", "d-interface", "--file", "/nonexistent/deferral.json"],
+      ["decide", "lint", "w-0123456789ab"],
+      ["decide", "lint", "w-0123456789ab", "--render"],
+      ["decide", "show", "w-0123456789ab"],
     ];
 
     // Control: on an intact ledger the same commands fail for their own reasons (no such goal, no terminal),
