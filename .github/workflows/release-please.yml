@@ -1,0 +1,34 @@
+name: release-please
+
+# Opens and updates a release pull request (version bump and CHANGELOG) from the
+# Conventional Commits on main. It never publishes to npm: package.json is
+# "private": true and there is no publish step anywhere in this repository.
+# Inert until the repository variable RELEASE_PLEASE_ENABLED is set to 'true'.
+# See docs/maintainers/release.md for the prerequisites (token decision) and
+# why the release PR needs a manual nudge before the required "ci" check runs.
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: release-please
+    if: ${{ vars.RELEASE_PLEASE_ENABLED == 'true' }}
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
