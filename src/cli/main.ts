@@ -4,6 +4,7 @@ import { Command } from "commander";
 import { runDoctor } from "../core/doctor.js";
 import { TORN_TAIL_WARNING } from "../core/ledger.js";
 import { resolveProject } from "../core/paths.js";
+import { assertStateTreeClean } from "../core/safe-fs.js";
 import { registerDecideCommands } from "./decide.js";
 import { registerDecideSigningCommands } from "./decide-sign.js";
 import { registerGoalCommands } from "./goal.js";
@@ -56,7 +57,10 @@ ledgerCommand
   .command("verify")
   .description("verify the ledger hash chain")
   .action(() => {
-    const status = readProjectStatus(resolveProject(process.cwd()));
+    const location = resolveProject(process.cwd());
+    // A planted link stops the command with exit 2 (the catch at the bottom of this file) before the ledger is read.
+    assertStateTreeClean(location);
+    const status = readProjectStatus(location);
     const { ledger } = status;
     if (ledger === null) {
       console.error(NOT_INITIALIZED_MESSAGE);
