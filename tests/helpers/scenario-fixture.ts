@@ -1,4 +1,5 @@
 import { stringify } from "yaml";
+import type { Ids, IntakeContext } from "../../src/scenario/intake.js";
 import type { AuthorStamp, StoredScenario } from "../../src/scenario/types.js";
 
 export const WORK_ID = "w-0123456789ab";
@@ -59,4 +60,21 @@ export function authoredScenario(over: Record<string, unknown> = {}): Record<str
 /** A multi-document YAML stream, as the author prints it. */
 export function authoredYaml(...documents: Record<string, unknown>[]): string {
   return documents.map((document) => stringify(document)).join("---\n");
+}
+
+/** Counters written as fixed-width hex: ids differ, match their patterns, and are predictable in assertions. */
+export function fakeIds(): Ids {
+  let scenario = 0;
+  let canary = 0;
+  let seal = 0;
+  const hex = (n: number, width: number): string => n.toString(16).padStart(width, "0");
+  return {
+    scenarioId: () => `s-${hex(++scenario, 32)}`,
+    canary: () => `omf-canary-${hex(++canary, 32)}`,
+    sealId: () => `seal-${hex(++seal, 16)}`,
+  };
+}
+
+export function intakeContext(over: Partial<IntakeContext> = {}): IntakeContext {
+  return { workId: WORK_ID, author: { ...AUTHOR }, ids: fakeIds(), ...over };
 }
