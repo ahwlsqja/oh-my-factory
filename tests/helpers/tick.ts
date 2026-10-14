@@ -13,6 +13,7 @@ import { bandsFile } from "../../src/goal/bands.js";
 import { lockGoal } from "../../src/goal/goal-lock.js";
 import { type TickOptions, type TickResult, tickGoal } from "../../src/goal/tick.js";
 import { fingerprintOf, workIdOf } from "../../src/work/fingerprint.js";
+import { wEvent } from "../../src/work/w-events.js";
 import type { IntentCandidate, RiskAssessment, WorkState } from "../../src/work/types.js";
 import { type GoalFixture, setupGoal } from "./goal.js";
 import { commitAll } from "./tmp.js";
@@ -232,5 +233,23 @@ export function seedWorkItem(
     const file = join(workItemDir(fx.location.dir, TICK_GOAL, workId), "item.md");
     writeFileSync(file, readFileSync(file, "utf8").replace(/^state: .*$/m, `state: ${state}`));
   }
+  return workId;
+}
+
+/**
+ * An item whose ledger is one W edge ahead of item.md, as a crash between the event and the file leaves it:
+ * `in_progress` is a `ready` file whose ledger says `work.started`; `awaiting_review` is an `in_progress` file
+ * whose ledger says `work.submitted`. The verifier reports it as `w_repairable` and nothing here repairs it.
+ */
+export function seedRepairable(fx: TickFixture, title: string, to: "in_progress" | "awaiting_review"): string {
+  const workId = seedWorkItem(fx, { title, state: to === "in_progress" ? "ready" : "in_progress" });
+  const scope = { goal_id: TICK_GOAL, work_id: workId, run_id: "r-20261014T091500Z-ab12" };
+  fx.ledger.append(
+    wEvent(
+      to === "in_progress"
+        ? { type: "work.started", payload: { ...scope, from: "ready" } }
+        : { type: "work.submitted", payload: { ...scope, outcome: "flawed", recommendation: "not_recommended" } },
+    ),
+  );
   return workId;
 }

@@ -115,7 +115,7 @@ const TRACKED = [
   "src/deep/b.ts",
 ];
 
-function inputFor(overrides: { front?: GoalDoc["front"]; body?: string; items?: WorkItem[]; cap?: number } = {}): ReturnType<typeof buildReconcilerInput> {
+function inputFor(overrides: { front?: GoalDoc["front"]; body?: string; items?: WorkItem[]; cap?: number; repairableOpen?: number } = {}): ReturnType<typeof buildReconcilerInput> {
   const doc = canaryGoal();
   const front = overrides.front ?? doc.front;
   return buildReconcilerInput({
@@ -127,6 +127,7 @@ function inputFor(overrides: { front?: GoalDoc["front"]; body?: string; items?: 
     watchedGlobs: ["canary-qwerty.sh", "secretbench/**"],
     terms: forbiddenTermsFor(doc.front),
     cap: overrides.cap ?? 3,
+    repairableOpen: overrides.repairableOpen,
   });
 }
 
@@ -209,6 +210,14 @@ describe("buildReconcilerInput", () => {
     expect(max(2)).toBe(0);
     expect(max(1)).toBe(0);
     expect(max(20)).toBe(MAX_CANDIDATES);
+  });
+
+  it("counts repairable items as open for the cap and in the open count, without listing them", () => {
+    const input = inputFor({ cap: 3, repairableOpen: 2 });
+    if ("problem" in input) throw new Error(input.problem);
+    expect(input.max_candidates).toBe(1);
+    expect(input.outcomes.open).toBe(2);
+    expect(input.open_items).toEqual([]);
   });
 
   it("shows the Approach section only, never the rest of goal.md", () => {
