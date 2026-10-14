@@ -89,6 +89,18 @@ describe("leak lint, rules target-value and number-value", () => {
     expect(lintDecisionStrings({ response_measure: { threshold: 250 } }, ctx)).toEqual([]);
   });
 
+  it("lets a lone single-digit integer through unless it is the locked target itself (A16a)", () => {
+    const readings = ctxFor(Number(CANARY.target), [0, 2.3, 1.42, 4.7]);
+    expect(lintDecisionStrings({ question: "Should we keep 2 replicas per region?" }, readings)).toEqual([]);
+    expect(lintDecisionStrings({ interface: { io_contract: "exit 0 on success, 1 on error", run: ["make", "-j", "4"] } }, readings)).toEqual([]);
+    expect(lintDecisionStrings({ response_measure: { threshold: 2 } }, readings)).toEqual([]);
+    const target = ctxFor(3, [2.3]);
+    expect(rulesOf({ question: "Keep 3 retries?" }, target)).toEqual(["number-value", "target-value"]);
+    // two digits and up still match a reading exactly, and by integer part
+    expect(rulesOf({ question: "Keep 12 replicas?" }, ctxFor(Number(CANARY.target), [12.7]))).toEqual(["number-value"]);
+    expect(rulesOf({ question: "Keep 12.7 replicas?" }, ctxFor(Number(CANARY.target), [12.7]))).toEqual(["number-value"]);
+  });
+
   it("does not refuse an integer part of 0", () => {
     const ctx = ctxFor(0.25);
     expect(lintDecisionStrings({ question: "no more than 0 failures" }, ctx)).toEqual([]);

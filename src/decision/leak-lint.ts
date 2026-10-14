@@ -110,7 +110,15 @@ function hasLiteral(text: string, value: string): boolean {
   return pattern.test(text);
 }
 
-/** Equal, or equal to the reference's integer part (3719 for 3719.25). An integer part of 0 carries nothing, so it is not refused. */
+/** An integer below 10 in magnitude (0 included): one digit cannot carry a target, and seed lint lets it through (A16a). */
+function isLoneDigit(value: number): boolean {
+  return Number.isInteger(value) && Math.abs(value) < 10;
+}
+
+/**
+ * Equal to the reference, or equal to its integer part (3719 for 3719.25). An integer part of 0 carries nothing, so
+ * it is not refused. `numberLeaks` decides which references a lone digit is compared with.
+ */
 function sameNumber(value: number, reference: number): boolean {
   const v = Math.abs(value);
   const r = Math.abs(reference);
@@ -121,7 +129,11 @@ function sameNumber(value: number, reference: number): boolean {
 
 function numberLeaks(value: number, ctx: LeakContext): boolean {
   if (!Number.isFinite(value)) return false;
-  return [...ctx.targetNumbers, ...ctx.measuredNumbers].some((reference) => sameNumber(value, reference));
+  if (ctx.targetNumbers.some((target) => (isLoneDigit(value) ? Math.abs(value) === Math.abs(target) : sameNumber(value, target)))) {
+    return true;
+  }
+  if (isLoneDigit(value)) return false;
+  return ctx.measuredNumbers.some((reading) => sameNumber(value, reading));
 }
 
 function numberTokens(text: string): number[] {
