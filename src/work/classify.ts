@@ -1,4 +1,17 @@
-import { NOT_RUN, type NotRun, ROUND_SCOPED_INPUTS } from "./line-types.js";
+import type { Gate4Reason, Gate4Severity, Gate4Warning } from "./gate4.js";
+import type { GateAggregate } from "./gates.js";
+import {
+  type GateId,
+  NOT_RUN,
+  type NotRun,
+  ROUND_SCOPED_INPUTS,
+  STATION_IDS,
+  type StationId,
+  type StationStatus,
+  type UnverifiedArea,
+} from "./line-types.js";
+import type { OutcomeInput, WOutcome } from "./outcome.js";
+import type { ReasonCode, Recommendation } from "./w-events.js";
 
 /**
  * The outcome classifier and the inputs it reads (M3b2-D5, D9, D15, D19; spec §4.4 step 5, §5.0). Pure: no ledger, no
@@ -61,4 +74,162 @@ export function resetRoundScopedInputs(inputs: EvidenceInputs): void {
   const fresh = emptyEvidenceInputs() as unknown as Record<string, unknown>;
   const target = inputs as unknown as Record<string, unknown>;
   for (const key of ROUND_SCOPED_INPUTS) target[key] = fresh[key];
+}
+
+/** Why the line stopped before it reached the end. `none` means every node was visited. */
+export type LineStop =
+  | { kind: "none" }
+  | { kind: "gate"; gate: Exclude<GateId, "GATE-4">; verdict: "fail" | "not_run"; reasons: readonly string[] }
+  // round 0 means before S3 of the first round (the S1/S2 loop or the line-entry guard).
+  | { kind: "gate4"; severity: Exclude<Gate4Severity, "none">; reasons: readonly Gate4Reason[]; round: number }
+  | { kind: "station"; station: StationId; result: "blocked" | "manual" | "error"; reason_code: ReasonCode };
+
+/** Which row fired. Evidence records it as the first of `recommendation_reasons`. */
+export type ClassifierRule =
+  | "station_error"
+  | "station_manual"
+  | "station_blocked"
+  | "gate_not_run"
+  | "gate1_open"
+  | "gate3_flawed"
+  | "gate3_blocked"
+  | "gate4_integrity"
+  | "gate4_hard"
+  | "gate4_hard_round0"
+  | "gate4_reentry"
+  | "gate4_soft"
+  | "station_skipped"
+  | "evidence_incomplete"
+  | "audit_flag"
+  | "sealed_failed"
+  | "flaky_scenario"
+  | "within_variance"
+  | "success";
+
+export interface ClassifierInput {
+  stop: LineStop;
+  stations: Record<StationId, StationStatus>;
+  gates: GateAggregate;
+  inputs: EvidenceInputs;
+  /** Ids of quantitative decisions; their `measured` is always "not run" in M3b2 (M3-D17). */
+  decisions_unmeasured: readonly string[];
+  gate4_warnings: readonly Gate4Warning[];
+  /** From `injectedGateIds`: gates that did not come from `defaultGates()` (M3b2-D20). */
+  injected_gates: readonly GateId[];
+  declared_level: Level;
+}
+
+export interface Classification {
+  outcome: WOutcome;
+  exhausted: boolean;
+  /** null only for success; every other outcome carries a code that `dispositionOf` accepts. */
+  reason_code: ReasonCode | null;
+  recommendation: Recommendation;
+  unverified_areas: UnverifiedArea[];
+  rule: ClassifierRule;
+}
+
+const LEVEL_RANK: Record<Level, number> = { L1: 1, L2: 2, L3: 3 };
+
+/** What automated verification did not cover. Ids and closed codes only, never text. Computed for every row. */
+function unverifiedAreas(input: ClassifierInput): UnverifiedArea[] {
+  const { inputs } = input;
+  const areas: UnverifiedArea[] = [];
+  for (const id of input.decisions_unmeasured) areas.push({ code: "decision_unmeasured", decision_id: id });
+  if (input.gate4_warnings.includes("spend_unverifiable")) areas.push({ code: "model_spend_unverifiable", decision_id: null });
+  if (inputs.noise_check === NOT_RUN) areas.push({ code: "noise_check_not_run", decision_id: null });
+  else if (inputs.noise_check === "not_evaluated") areas.push({ code: "noise_check_not_evaluated", decision_id: null });
+  if (inputs.high_risk_paths_touched === NOT_RUN) areas.push({ code: "high_risk_paths_not_run", decision_id: null });
+  else if (inputs.high_risk_paths_touched.length > 0) areas.push({ code: "high_risk_paths_touched", decision_id: null });
+  if (input.injected_gates.length > 0) areas.push({ code: "injected_gate", decision_id: null });
+  return areas;
+}
+
+/** A sealed count counts only when it ran at least one scenario. */
+function ran(count: { total: number } | NotRun): boolean {
+  return count !== NOT_RUN && count.total > 0;
+}
+
+/** Row 6c: an input a success depends on that nobody produced (or measured too weakly). */
+function requiredInputMissing(input: ClassifierInput): boolean {
+  const { audit, sealed, gate_line, isolation_level } = input.inputs;
+  if (
+    audit.canary_hits === NOT_RUN ||
+    audit.tests_edited === NOT_RUN ||
+    audit.prove_test === NOT_RUN ||
+    audit.judge_config_touched === NOT_RUN
+  ) {
+    return true;
+  }
+  if (!ran(sealed.train) || !ran(sealed.test)) return true;
+  if (gate_line === NOT_RUN) return true;
+  return isolation_level === "unmeasured" || LEVEL_RANK[isolation_level] < LEVEL_RANK[input.declared_level];
+}
+
+/** A canary hit, an edited test, a failed prove_test or a touched judge config. A `"not run"` field is not a flag (6c handles it). */
+function auditFlagged(audit: AuditInputs): boolean {
+  return (
+    (typeof audit.canary_hits === "number" && audit.canary_hits > 0) ||
+    audit.tests_edited === true ||
+    audit.prove_test === "fail" ||
+    audit.judge_config_touched === true
+  );
+}
+
+/**
+ * Maps what the line produced to the closed outcome (M3b2 skeleton section 4.5). Pure and total: the first matching row wins,
+ * in this order: 1 station stop, 2 gate not run, 3 GATE-1, 4 GATE-3, 5 GATE-4, 6 completeness, 7 quality, 8 success.
+ * Every row before the last can only lower the result; a `flawed` result needs an implementation behind it (round >= 1, D18).
+ */
+export function classifyOutcome(input: ClassifierInput): Classification {
+  const areas = unverifiedAreas(input);
+  const make = (outcome: WOutcome, exhausted: boolean, reason_code: ReasonCode | null, rule: ClassifierRule): Classification => ({
+    outcome,
+    exhausted,
+    reason_code,
+    recommendation:
+      outcome === "success" ? (areas.length === 0 ? "merge_recommended" : "human_needed") : outcome === "flawed" ? "not_recommended" : "human_needed",
+    unverified_areas: areas,
+    rule,
+  });
+  const { stop, stations, gates, inputs } = input;
+
+  if (stop.kind === "station") {
+    if (stop.result === "error") return make("blocked", false, "station_error", "station_error");
+    if (stop.result === "manual") return make("manual", false, stop.reason_code, "station_manual");
+    return make("blocked", false, stop.reason_code, "station_blocked");
+  }
+  if (stop.kind === "gate") {
+    if (stop.verdict === "not_run") return make("blocked", false, "gate_not_run", "gate_not_run");
+    if (stop.gate === "GATE-1") return make("blocked", false, "j2_open", "gate1_open");
+    if (stop.gate === "GATE-3" && stations.S3 === "ok" && auditFlagged(inputs.audit)) {
+      return make("flawed", false, "audit_flag", "gate3_flawed");
+    }
+    return make("blocked", false, "gate_blocked", "gate3_blocked");
+  }
+  if (stop.kind === "gate4") {
+    if (stop.severity === "integrity") return make("blocked", false, "gate_blocked", "gate4_integrity");
+    if (stop.reasons.includes("reentry_loop")) return make("blocked", false, "reentry_loop", "gate4_reentry");
+    if (stop.severity === "hard") {
+      if (stop.round === 0) return make("blocked", false, "gate2_exhausted", "gate4_hard_round0");
+      return make("flawed", true, stop.reasons.includes("stalled") ? "stalled" : "visit_cap", "gate4_hard");
+    }
+    return make("blocked", false, "budget_exhausted", "gate4_soft");
+  }
+
+  if (STATION_IDS.some((id) => stations[id] !== "ok")) return make("blocked", false, "station_skipped", "station_skipped");
+  if (gates.verdict !== "pass") return make("blocked", false, "gate_not_run", "gate_not_run");
+  if (requiredInputMissing(input)) return make("blocked", false, "evidence_incomplete", "evidence_incomplete");
+  return make("success", false, null, "success");
+}
+
+/**
+ * The `OutcomeInput` M3b1's `dispositionOf` takes. A success is `human_needed` unless it is `merge_recommended`
+ * (M3-D17: an unmeasured quantitative decision, unknown spend or an injected gate never gets a plain merge recommendation).
+ */
+export function toOutcomeInput(c: Classification): OutcomeInput {
+  if (c.outcome === "success") {
+    return { outcome: "success", exhausted: false, reason_code: null, human_needed: c.recommendation !== "merge_recommended" };
+  }
+  return { outcome: c.outcome, exhausted: c.exhausted, reason_code: c.reason_code };
 }
