@@ -78,12 +78,14 @@ describe("E2 canary-no-leak, goal-loop side", () => {
       "objective",
       "open_items",
       "outcomes",
+      "recent_outcomes",
       "repo_layout",
       "trigger",
     ]);
     expect(input.trigger).toBe("gap");
     expect(input.gap).toEqual({ direction: "decrease", size: "medium" });
     expect(input.breach).toBeNull();
+    expect(input.recent_outcomes).toEqual({ success: 0, flawed: 0, blocked: 0, manual: 0 });
     expect((input.repo_layout as string[]).length).toBeGreaterThan(0);
     const prompt = readFileSync(join(fx.record, "stdin.txt"), "utf8");
     expect(prompt).toMatch(/"direction":\s*"decrease"/);

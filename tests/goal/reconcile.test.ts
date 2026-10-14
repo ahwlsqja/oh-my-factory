@@ -21,6 +21,7 @@ import {
 } from "../../src/goal/reconcile.js";
 import { fingerprintOf, workIdOf } from "../../src/work/fingerprint.js";
 import { verifiedItems } from "../../src/work/ledger-verify.js";
+import type { RecentOutcomes } from "../../src/work/recent-outcomes.js";
 import { forbiddenTermsFor } from "../../src/work/seed-lint.js";
 import type { WorkItem, WorkState } from "../../src/work/types.js";
 import {
@@ -34,6 +35,7 @@ import {
   setupTickGoal,
   stubResponse,
 } from "../helpers/goal.js";
+import { createRecorded, makeNewItem, recordW, rewriteItem } from "../helpers/work.js";
 
 /** Canaries: values, ids, a unit and paths that must never reach the model. */
 function canaryGoal(): GoalDoc {
@@ -115,7 +117,16 @@ const TRACKED = [
   "src/deep/b.ts",
 ];
 
-function inputFor(overrides: { front?: GoalDoc["front"]; body?: string; items?: WorkItem[]; cap?: number; repairableOpen?: number } = {}): ReturnType<typeof buildReconcilerInput> {
+const NO_RECENT: RecentOutcomes = { success: 0, flawed: 0, blocked: 0, manual: 0 };
+
+function inputFor(overrides: {
+  front?: GoalDoc["front"];
+  body?: string;
+  items?: WorkItem[];
+  cap?: number;
+  repairableOpen?: number;
+  recent?: RecentOutcomes;
+} = {}): ReturnType<typeof buildReconcilerInput> {
   const doc = canaryGoal();
   const front = overrides.front ?? doc.front;
   return buildReconcilerInput({
@@ -128,6 +139,7 @@ function inputFor(overrides: { front?: GoalDoc["front"]; body?: string; items?: 
     terms: forbiddenTermsFor(doc.front),
     cap: overrides.cap ?? 3,
     repairableOpen: overrides.repairableOpen,
+    recent: overrides.recent ?? NO_RECENT,
   });
 }
 
@@ -198,6 +210,15 @@ describe("buildReconcilerInput", () => {
     if ("problem" in input) throw new Error("unexpected problem");
     expect(input.outcomes).toEqual({ open: 2, done: 1, failed: 1, vetoed: 1, cancelled: 1 });
     expect(input.open_items).toHaveLength(2);
+  });
+
+  it("passes the recent outcome counts through as four integers and nothing else", () => {
+    const recent: RecentOutcomes = { success: 2, flawed: 1, blocked: 3, manual: 0 };
+    const input = inputFor({ recent, items: [workItem("Old failed work", "failed", ["src/a.ts"])] });
+    if ("problem" in input) throw new Error("unexpected problem");
+    expect(input.recent_outcomes).toEqual(recent);
+    expect(input.recent_outcomes).not.toBe(recent);
+    expect(JSON.stringify(input.recent_outcomes)).not.toContain("Old failed work");
   });
 
   it("asks for min(5, cap - open) candidates and never a negative number", () => {
@@ -712,5 +733,35 @@ describe("reconcileGoal: risk and dispatch", () => {
     expect(result.outcome).toBe("dispatched");
     expect(String(ofType(fx, "reconcile.requested")[0]?.payload.reconciler)).toMatch(/^command:/);
     expect(ofType(fx, "reconcile.requested")[0]?.payload.isolation).toBe("host-tool-less");
+  });
+});
+
+describe("reconcileGoal: recent outcomes", () => {
+  it("counts finished items by their ledger outcome, repairable ones included, and stores only the counts", async () => {
+    const fx = setupTickGoal();
+    const store = createMarkdownStore(fx.location.dir);
+    const make = (title: string, path: string): WorkItem =>
+      createRecorded(fx.ledger, store, makeNewItem({ goalId: GOAL, title, paths: [path] }));
+
+    const failed = make("Drop the stale cache", "src/cache");
+    recordW(fx.ledger, "work.started", failed);
+    recordW(fx.ledger, "work.failed", failed, { outcome: "flawed", reason_code: "station_error" });
+    rewriteItem(failed, { state: "failed" });
+
+    // The ledger says failed (blocked), but the crash came before item.md was rewritten: one W edge behind, so repairable.
+    const behind = make("Split the render module", "src/split");
+    recordW(fx.ledger, "work.started", behind);
+    recordW(fx.ledger, "work.failed", behind, { outcome: "blocked", reason_code: "infra_failure" });
+    rewriteItem(behind, { state: "in_progress" });
+    expect(verifiedItems(store, eventsOf(fx), GOAL).repairable.map((entry) => entry.work_id)).toEqual([behind.front.work_id]);
+
+    await reconcileGoal(reconcileContext(fx, fakeReconciler(okResponse([])), { store }));
+
+    const stored = JSON.parse(readFileSync(join(reconcileDir(fx), `${TICK}.input.json`), "utf8")) as Record<string, unknown>;
+    expect(stored.recent_outcomes).toEqual({ success: 0, flawed: 1, blocked: 1, manual: 0 });
+    const text = JSON.stringify(stored);
+    for (const secret of ["Drop the stale cache", "Split the render module", "src/cache", "src/split", failed.front.work_id, behind.front.work_id]) {
+      expect(text).not.toContain(secret);
+    }
   });
 });

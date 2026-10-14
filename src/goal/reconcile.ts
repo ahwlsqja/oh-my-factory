@@ -11,6 +11,7 @@ import { writePrivateFile } from "../core/private-fs.js";
 import { schemaUrl, validateDef } from "../core/schema.js";
 import { fingerprintOf, normalizePath, workIdOf } from "../work/fingerprint.js";
 import { verifiedItems } from "../work/ledger-verify.js";
+import { type RecentOutcomes, recentOutcomes } from "../work/recent-outcomes.js";
 import { classifyRisk } from "../work/risk.js";
 import { type ForbiddenTerms, forbiddenTermsFor, lintCandidate, lintText } from "../work/seed-lint.js";
 import { type IntentCandidate, OPEN_STATES, type Trigger, type WorkItem, type WorkState } from "../work/types.js";
@@ -43,6 +44,11 @@ export interface ReconcilerInput {
   /** Verified, non-malformed items only. Paths pass the same filter as repo_layout, so a past guess at a watched path is not shown again. */
   open_items: { work_id: string; title: string; state: WorkState; affected_paths: string[] }[];
   outcomes: { open: number; done: number; failed: number; vetoed: number; cancelled: number };
+  /**
+   * How the last 10 finished or parked items ended, as four counts (M3d-D14). Counts only: no title, id, path or risk
+   * of any item leaves, so this is as safe as `outcomes`. Computed from verified W events, never from item files.
+   */
+  recent_outcomes: RecentOutcomes;
   /** Tracked top-level entries and second-level directories (at most 100), minus watched paths and anything that names a metric. */
   repo_layout: string[];
   /** min(5, cap - open); the cap is the locked max_open_work_items, never the text of goal.md. */
@@ -116,6 +122,8 @@ export function buildReconcilerInput(args: {
    * is really taken (M3b1-D5). Only the count is needed; the model never sees them.
    */
   repairableOpen?: number;
+  /** `recentOutcomes(...)` of the same ledger read. Required, so no caller can forget the field. */
+  recent: RecentOutcomes;
 }): ReconcilerInput | { problem: "approach_unusable" } {
   const { terms, watchedGlobs, items } = args;
   const approach = approachOf(args.body);
@@ -145,6 +153,7 @@ export function buildReconcilerInput(args: {
       vetoed: count("vetoed"),
       cancelled: count("cancelled"),
     },
+    recent_outcomes: { ...args.recent },
     repo_layout: layoutOf(args.tracked, watchedGlobs, terms),
     max_candidates: Math.max(0, Math.min(MAX_CANDIDATES, args.cap - openTotal)),
   };
@@ -286,6 +295,12 @@ export async function reconcileGoal(ctx: ReconcileContext): Promise<ReconcileSta
     items: known.items,
     // A repairable verdict exists only for ready -> in_progress and in_progress -> awaiting_review|failed, so the file is open.
     repairableOpen: known.repairable.length,
+    // Repairable items are one W edge behind the ledger; the ledger already knows how their last run ended, so they count too.
+    recent: recentOutcomes(
+      events,
+      goalId,
+      new Set([...known.items.map((item) => item.front.work_id), ...known.repairable.map((entry) => entry.work_id)]),
+    ),
     tracked,
     watchedGlobs,
     terms,
