@@ -4,6 +4,7 @@ import { Command } from "commander";
 import { runDoctor } from "../core/doctor.js";
 import { TORN_TAIL_WARNING } from "../core/ledger.js";
 import { resolveProject } from "../core/paths.js";
+import { registerDecideCommands } from "./decide.js";
 import { registerGoalCommands } from "./goal.js";
 import { registerBudgetCommands, registerWorkCommands } from "./work.js";
 import { NOT_INITIALIZED_MESSAGE, initProject, readProjectStatus } from "../core/project.js";
@@ -17,7 +18,7 @@ const program = new Command()
 
 program.addHelpText(
   "after",
-  "\nExit codes: 0 ok, 1 problems found (including a failed ledger verify) or usage error, 2 the command could not run (for example outside a git repository, or a command refusing a corrupt ledger).",
+  "\nExit codes: 0 ok, 1 problems found (including a failed ledger verify) or usage error, 2 the command could not run (for example outside a git repository, or a command refusing a corrupt ledger), 3 blocked on a person (J2: open design decisions).",
 );
 
 program
@@ -74,6 +75,7 @@ ledgerCommand
 registerGoalCommands(program);
 registerWorkCommands(program);
 registerBudgetCommands(program);
+registerDecideCommands(program);
 
 program.parseAsync().catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : String(err));

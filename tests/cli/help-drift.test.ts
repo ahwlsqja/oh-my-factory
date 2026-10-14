@@ -43,6 +43,7 @@ describe("documentation drift", () => {
       "goal tick", "goal status", "goal resume", "goal cancel",
       "work list", "work show", "work approve", "veto",
       "budget show", "budget declare", "budget raise",
+      "decide add", "decide lint", "decide show",
     ]) {
       expect(paths).toContain(path);
     }
