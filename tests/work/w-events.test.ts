@@ -157,3 +157,50 @@ describe("W events", () => {
     }
   });
 });
+
+const M3B1_CODES = ["j2_open", "gate_blocked", "budget_exhausted", "infra_failure", "manual_required", "station_error"] as const;
+/** The twelve codes M3b2 adds (D19): each one is the reason of exactly one classifier row or handoff route. */
+const M3B2_CODES = [
+  "visit_cap",
+  "stalled",
+  "gate_not_run",
+  "station_skipped",
+  "evidence_incomplete",
+  "run_killed",
+  "audit_flag",
+  "sealed_failed",
+  "flaky_scenario",
+  "within_variance",
+  "gate2_exhausted",
+  "reentry_loop",
+] as const;
+
+describe("M3b2 reason codes", () => {
+  it("keeps the six M3b1 codes first, then the twelve M3b2 ones (later milestones append after them), and repeats none", () => {
+    expect([...W_REASON_CODES].slice(0, M3B1_CODES.length + M3B2_CODES.length)).toEqual([...M3B1_CODES, ...M3B2_CODES]);
+    expect(new Set(W_REASON_CODES).size).toBe(W_REASON_CODES.length);
+  });
+
+  it("is accepted by the schema itself, not only by the list, on a failed and a parked event", () => {
+    const enumValues = schemaDoc().$defs.reason_code?.enum ?? [];
+    for (const code of M3B2_CODES) {
+      expect(enumValues, code).toContain(code);
+      expect(accepts("work.failed", { ...scope, outcome: "flawed", reason_code: code }), code).toBe(true);
+      expect(accepts("work.parked", { ...scope, outcome: "blocked", reason_code: code }), code).toBe(true);
+    }
+  });
+
+  it("builds an omf event for each new code", () => {
+    for (const code of M3B2_CODES) {
+      const built = wEvent({ type: "work.parked", payload: { ...scope, outcome: "blocked", reason_code: code } });
+      expect(built.actor).toBe("omf");
+      expect(built.payload.reason_code).toBe(code);
+    }
+  });
+
+  it("still refuses a near miss of a new code", () => {
+    for (const reason_code of ["visit-cap", "Visit_Cap", "visit_cap ", "gate2exhausted", "reentry loop"]) {
+      expect(accepts("work.failed", { ...scope, outcome: "blocked", reason_code }), reason_code).toBe(false);
+    }
+  });
+});
