@@ -208,11 +208,11 @@ J1이 승인하면 의미 필드(semantic field)를 정규화(canonicalize)하�
 
 종료 상태는 `finish`, `blocked_on_user`, `failed`, `cancelled` 로 고정한다. 진행은 작업 id, 갱신 시각, 지표 값으로 만든 서명(signature)으로 추적한다. 서명이 바뀌지 않았으면 재시도하지 않고 J6으로 올린다. 같은 막힘(blocker) 서명이 세 번 나타나도 J6으로 올린다. 예산은 호스트 원장에 누적된다. 재시작해도 초기화되지 않으며 자동으로 연장되지 않는다(J8).
 
-루프 가드는 기본으로 켜져 있다. Kilroy(MIT)의 아이디어를 가져와 그 빈틈을 막는다. Kilroy 코드는 복사하지 않았다.
+루프 가드는 기본으로 켜져 있다. Kilroy(MIT)의 아이디어를 가져와 그 빈틈을 막는다. Kilroy 코드는 복사하지 않았다. 선점 잠금의 낡음 판정과 서명 정규화는 Kilroy 의 설계를 따른 것이다([third-party.md](../../third-party.md), `THIRD_PARTY_NOTICES.md` 참조).
 
 - **실패 서명 차단기(failure-signature breaker).** 서명은 `공정 | 결과 분류 | 정규화한 사유` 다. 실패일 때만이 아니라 모든 결과에 대해 센다. 실패하지 않는 루프가 차단기를 우회하면 안 된다. Kilroy 는 이 빈틈을 자기 스킬 문서에 스스로 적어 두었다. 성공해도 횟수를 초기화하지 않는다. 세 번 걸리면 J6 으로 올린다.
 - **방문 상한(visit cap).** W 의 각 공정에는 작업 항목별 방문 상한이 있고, 작업 항목 전체에는 공정 실행 총 상한이 있다. 기본값은 회전당 공정별 3회 방문, 총 `max(10, 20 × rounds)` 회 실행이다. Arc 의 `maxNodeExecutions` 와 같은 모양이다. 게이트 재진입도 방문으로 센다. Kilroy 의 기본값 0(꺼짐)은 따르지 않는다.
-- **선점 잠금(claim lock).** 작업 항목 단위로 `O_EXCL` 로 만든다. PID 와 프로세스 시작 시각을 기록해서, PID 가 재사용된 오래된 잠금을 가려낸다. 아이디어는 Kilroy 의 `run_ownership_lock` 에서 가져왔고 코드는 독립 구현이다. 단일 호스트를 전제하며, 팀 모드는 범위 밖이다(§14).
+- **선점 잠금(claim lock).** 작업 항목 단위로 `O_EXCL` 로 만든다. PID 와 프로세스 시작 시각을 기록해서, PID 가 재사용된 오래된 잠금을 가려낸다. 낡음 판정과 소유 확인은 Kilroy 의 `run_ownership_lock` 설계(같은 판정 구조)를 따랐고, TypeScript 코드는 독립 구현이다. 단일 호스트를 전제하며, 팀 모드는 범위 밖이다(§14).
 
 M2b 에서 이 절의 모호한 점을 정리했다. 라운드의 정의, 성공 후보를 기계적으로 판정하는 방법, 틱이 쓰는 이벤트, 목표를 멈추고 재개할 수 있는 사람이 그것이다. 기록은 [M2b 부록](../../design/2026-10-12-omf-m2b-addendum.md)(영어)에 있고, 만들어진 루프가 어떻게 동작하는지는 그쪽이 기준이다.
 
@@ -558,7 +558,7 @@ oh-my-factory/
 | devcontainer 런타임; 이후 원격 샌드박스 | devcontainer spec 과 devcontainers/cli; E2B (Apache-2.0) |
 | 결정 필드; 봉인 테스트 점수 | SEI QAS; spec-kitty (MIT); shadow-score-spec (MIT) |
 | train/holdout 기준 유지/되돌리기 | Anthropic "Automating eval design and hillclimbing" |
-| 루프 가드(실패 서명 차단기, 방문 상한), 선점 잠금, 공정별 체크포인트와 재개, 사전 점검 보고서, parity matrix 와 CLI 사용법 드리프트 테스트 | danshapiro/kilroy (MIT, 저작권 StrongDM, Inc.; 아이디어만 차용, 코드 복사 없음, [third-party.md](../../third-party.md) 참조) |
+| 루프 가드(실패 서명 차단기, 방문 상한), 선점 잠금, 공정별 체크포인트와 재개, 사전 점검 보고서, parity matrix 와 CLI 사용법 드리프트 테스트 | danshapiro/kilroy (MIT, 저작권 StrongDM, Inc.; 아이디어 차용, 선점 잠금 낡음 판정과 서명 정규화는 설계를 따름, 코드 복사 없음, [third-party.md](../../third-party.md)·`THIRD_PARTY_NOTICES.md` 참조) |
 | 그래프로 표현한 파이프라인(v0.2 에서 검토): 단계 노드, 사람 게이트, 체크포인트, 목표 게이트 | strongdm/attractor 명세(Apache-2.0)와 커뮤니티 구현. 특히 Kilroy(Dan Shapiro, Go, git worktree), Arc(TypeScript, holdout 시나리오, 수렴 루프), amolstrongdm 의 Attractor(holdout 과 트윈 대상 만족도 채점) |
 | 역할별 모델 배정을 공개하고 버전 관리 | StrongDM Weather Report |
 | 부하 탐침 | k6, 바이너리로만 호출 (AGPL, 코드 복사 없음) |
