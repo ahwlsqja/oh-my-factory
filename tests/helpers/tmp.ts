@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,6 +16,15 @@ export function makeTempDir(prefix = "omf-test-"): string {
 /** Deletes every directory made by makeTempDir so far and forgets them. Run after each test file. */
 export function removeTempDirs(): void {
   for (const dir of createdTempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+}
+
+/**
+ * Same as removeTempDirs, but removes the directories concurrently without blocking the worker thread.
+ * The afterAll hook in tests/setup/cleanup.ts uses this: a synchronous recursive delete of a few thousand
+ * fixture files took ~1.5 s per file on an idle machine and grew past the hook timeout under heavy load.
+ */
+export async function removeTempDirsAsync(): Promise<void> {
+  await Promise.all(createdTempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 }
 
 /** A fresh git repository with one commit and no remote. */
