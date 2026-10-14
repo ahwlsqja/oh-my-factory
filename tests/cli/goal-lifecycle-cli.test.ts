@@ -5,6 +5,7 @@ import { ESCALATIONS, escalate, nextSteps } from "../../src/goal/lifecycle.js";
 import { tickLockFile } from "../../src/goal/tick-lock.js";
 import { omf } from "../helpers/cli.js";
 import { setupGoal } from "../helpers/goal.js";
+import { seedRepairable, setupTick } from "../helpers/tick.js";
 
 const G = "g-fast";
 const TICK = "t-20261012T000000Z-0a1b";
@@ -36,6 +37,7 @@ describe("omf goal status", () => {
         vetoed: 0,
         cancelled: 0,
         malformed: 0,
+        repairable: 0,
       },
     });
   });
@@ -55,6 +57,19 @@ describe("omf goal status", () => {
     expect(text.stdout).toContain(`goal ${G}: blocked_on_user`);
     expect(text.stdout).toContain("J6 no_progress");
     expect(text.stdout).toContain(`omf goal resume ${G}`);
+  });
+
+  it("lists a repairable item in its own count and keeps it out of the file-state counts", () => {
+    const fx = setupTick();
+    seedRepairable(fx, "Crashed after start", "in_progress");
+
+    const json = JSON.parse(omf(["goal", "status", "g-fast", "--json"], fx.repo, fx.home).stdout);
+    // The file still says ready, but the ledger has moved on: it is neither a ready item nor dropped.
+    expect(json.work).toMatchObject({ ready: 0, in_progress: 0, malformed: 1, repairable: 1 });
+
+    const text = omf(["goal", "status", "g-fast"], fx.repo, fx.home);
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain("malformed 1, repairable 1");
   });
 
   it("exits 2 for an unknown goal", () => {
