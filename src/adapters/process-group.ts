@@ -19,7 +19,8 @@ export type ProcessResult =
 
 /** Process-group leader pids of the commands that are running now. */
 const live = new Set<number>();
-let handlersInstalled = false;
+let exitHookInstalled = false;
+let unregister: (() => void) | undefined;
 
 /**
  * SIGKILLs the whole group of `pid` (a negative pid addresses the group). ESRCH means the group is already
@@ -49,9 +50,13 @@ function onExit(): void {
  * registration stays for the life of the process, like the handlers did; the exit hook is the net for a normal exit.
  */
 function installHandlers(): void {
-  if (handlersInstalled) return;
-  handlersInstalled = true;
-  registerCleanup(killAll);
+  // Every run re-registers: the registry takes its signal handlers off after a signal, and a process that survives the
+  // re-raise (another listener caught it) gets them back only on a registration. The previous entry is dropped first so
+  // the registry never holds more than one. The exit hook stays for the life of the process; killAll is idempotent.
+  unregister?.();
+  unregister = registerCleanup(killAll);
+  if (exitHookInstalled) return;
+  exitHookInstalled = true;
   process.on("exit", onExit);
 }
 
