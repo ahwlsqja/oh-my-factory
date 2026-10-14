@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BudgetError, budgetState, consumeBudget, declareBudget, raiseBudget } from "../../src/core/budget.js";
+import { BudgetError, budgetConsumedEvent, budgetState, consumeBudget, declareBudget, raiseBudget } from "../../src/core/budget.js";
 import { Ledger } from "../../src/core/ledger.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
@@ -111,5 +111,27 @@ describe("budget kinds and codes", () => {
     expect(codeOf(() => consumeBudget(ledger, "g-a", "rounds"))).toBe("exhausted");
     ledger.append({ actor: "omf", type: "budget.consumed", payload: { goal_id: "g-a", kind: "tokens", amount: 1 } });
     expect(codeOf(() => budgetState(ledger, "g-a", "rounds"))).toBe("invalid_event");
+  });
+});
+
+describe("budgetConsumedEvent", () => {
+  it("is the event consumeBudget writes, as a pure value", () => {
+    expect(budgetConsumedEvent("g-a", "disclosure", 1)).toEqual({
+      actor: "omf",
+      type: "budget.consumed",
+      payload: { goal_id: "g-a", kind: "disclosure", amount: 1 },
+    });
+    const ledger = newLedger();
+    declareBudget(ledger, "g-a", "disclosure", 2, "human:dev");
+    consumeBudget(ledger, "g-a", "disclosure");
+    const written = ledger.readVerified().at(-1);
+    expect({ actor: written?.actor, type: written?.type, payload: written?.payload }).toEqual(
+      budgetConsumedEvent("g-a", "disclosure", 1),
+    );
+  });
+
+  it("refuses an amount that is not a positive integer", () => {
+    expect(() => budgetConsumedEvent("g-a", "rounds", 0)).toThrow(BudgetError);
+    expect(() => budgetConsumedEvent("g-a", "rounds", 1.5)).toThrow(BudgetError);
   });
 });

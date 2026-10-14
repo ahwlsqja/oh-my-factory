@@ -1,4 +1,4 @@
-import type { Ledger, LedgerEvent } from "./ledger.js";
+import type { Ledger, LedgerEvent, NewEvent } from "./ledger.js";
 
 /** What a budget counts: goal-loop rounds (spec §4.4) or S6 disclosures (spec §5.7). */
 export type BudgetKind = "rounds" | "disclosure";
@@ -140,6 +140,17 @@ export function raiseBudget(
   });
 }
 
+/**
+ * The `budget.consumed` event as a value, with no ledger access. A caller that must write a unit together with
+ * the record it pays for (releaseFeedback writes this and `feedback.released` in one `appendWithMany`, spec §5.7)
+ * builds it here, so the shape stays the one `budgetStateFromEvents` folds. It does not check the budget: the
+ * caller decides under the ledger lock, and the fold re-validates the event on the next read.
+ */
+export function budgetConsumedEvent(goalId: string, kind: BudgetKind, amount = 1): NewEvent {
+  requirePositiveInteger(amount);
+  return { actor: "omf", type: "budget.consumed", payload: { goal_id: goalId, kind, amount } };
+}
+
 /** Consumption is recorded by omf itself or by a person, never by an agent. Check and write share one lock. */
 export function consumeBudget(
   ledger: Ledger,
@@ -158,7 +169,7 @@ export function consumeBudget(
     if (state === null) throw new BudgetError("not_declared", `no budget declared for ${goalId} (${kind})`);
     if (state.remaining < amount) throw new BudgetError("exhausted", `budget exhausted for ${goalId} (${kind})`);
     outcome.after = { ...state, consumed: state.consumed + amount, remaining: state.remaining - amount };
-    return { actor, type: "budget.consumed", payload: { goal_id: goalId, kind, amount } };
+    return { ...budgetConsumedEvent(goalId, kind, amount), actor };
   });
   if (outcome.after === undefined) throw new Error("unreachable: consumption was not computed");
   return outcome.after;
