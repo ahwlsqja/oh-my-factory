@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createMarkdownStore, workItemDir } from "../../src/adapters/state-markdown.js";
 import { Ledger } from "../../src/core/ledger.js";
 import { verifiedItems, verifyItemAgainstLedger } from "../../src/work/ledger-verify.js";
+import { wEvent } from "../../src/work/w-events.js";
 import type { WorkItem, WorkItemFront } from "../../src/work/types.js";
 import { makeTempDir } from "../helpers/tmp.js";
 import { HIGH_RISK, T1, appendWorkEvent, createRecorded, makeNewItem, recordW, rewriteItem } from "../helpers/work.js";
@@ -314,5 +315,33 @@ describe("verifiedItems", () => {
     const result = verifiedItems(store, ledger.readVerified(), "g-fast");
     expect(result.items.map((item) => item.front.state)).toEqual(["ready"]);
     expect(result.malformed).toEqual([]);
+  });
+});
+
+describe("verifiedItems: repairable items", () => {
+  const RUN_ID = "r-20261014T091500Z-ab12";
+
+  it("lists an item that is one W edge behind the ledger as repairable, keeps it in malformed, and lists nothing else", () => {
+    const { ledger, store } = fixture();
+    const ok = createRecorded(ledger, store, makeNewItem({ title: "Cache the render path" }));
+    const behind = createRecorded(ledger, store, makeNewItem({ title: "Trim the render output" }));
+    const ahead = createRecorded(ledger, store, makeNewItem({ title: "Batch the file reads" }));
+    // The crash: work.started reached the ledger, item.md still says ready.
+    ledger.append(
+      wEvent({ type: "work.started", payload: { goal_id: "g-fast", work_id: behind.front.work_id, run_id: RUN_ID, from: "ready" } }),
+    );
+    // A hand edit: item.md claims awaiting_review and the ledger has no W event for it.
+    rewriteItem(ahead, { state: "awaiting_review" });
+
+    const found = verifiedItems(store, ledger.readVerified(), "g-fast");
+
+    expect(found.items.map((item) => item.front.work_id)).toEqual([ok.front.work_id]);
+    expect(found.repairable).toEqual([
+      { work_id: behind.front.work_id, dir: behind.dir, file_state: "ready", repair_to: "in_progress" },
+    ]);
+    expect(Object.fromEntries(found.malformed.map((entry) => [entry.work_id, entry.reason]))).toEqual({
+      [behind.front.work_id]: "w_repairable",
+      [ahead.front.work_id]: "w_event_missing",
+    });
   });
 });

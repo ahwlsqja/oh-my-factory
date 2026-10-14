@@ -134,9 +134,18 @@ export function verifyItemAgainstLedger(front: WorkItemFront, events: readonly L
   }
 }
 
+/** The part of an `ItemVerdict` that names the W edge a repair would apply. */
+type RepairVerdict = Extract<ItemVerdict, { reason: "w_repairable" }>;
+
 export interface VerifiedItems {
   items: WorkItem[];
   malformed: { work_id: string | null; dir: string; reason: string }[];
+  /**
+   * The subset of `malformed` whose file is exactly one W edge behind the ledger (reason `w_repairable`). They
+   * stay in `malformed` so every existing consumer still excludes them; the tick, reconcile and `goal status`
+   * read this list to count them (M3b1-D5): by `repair_to` for STOP_IF, by `file_state` for the WIP cap.
+   */
+  repairable: { work_id: string; dir: string; file_state: WorkItemFront["state"]; repair_to: RepairVerdict["repair_to"] }[];
 }
 
 /**
@@ -148,11 +157,19 @@ export interface VerifiedItems {
 export function verifiedItems(store: StateStore, events: readonly LedgerEvent[], goalId: string): VerifiedItems {
   const items: WorkItem[] = [];
   const malformed: VerifiedItems["malformed"] = store.malformedItems(goalId).map((entry) => ({ ...entry }));
+  const repairable: VerifiedItems["repairable"] = [];
   for (const item of store.fetchAllWorkItems(goalId)) {
     const verdict = verifyItemAgainstLedger(item.front, events);
     if (verdict.ok) items.push(item);
-    else malformed.push({ work_id: item.front.work_id, dir: item.dir, reason: verdict.reason });
+    else {
+      malformed.push({ work_id: item.front.work_id, dir: item.dir, reason: verdict.reason });
+      if (verdict.reason === "w_repairable") {
+        repairable.push({ work_id: item.front.work_id, dir: item.dir, file_state: item.front.state, repair_to: verdict.repair_to });
+      }
+    }
   }
-  malformed.sort((a, b) => (a.dir < b.dir ? -1 : a.dir > b.dir ? 1 : 0));
-  return { items, malformed };
+  const byDir = (a: { dir: string }, b: { dir: string }): number => (a.dir < b.dir ? -1 : a.dir > b.dir ? 1 : 0);
+  malformed.sort(byDir);
+  repairable.sort(byDir);
+  return { items, malformed, repairable };
 }
