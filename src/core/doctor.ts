@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
+import { sealedProblem } from "../vault/pokayoke.js";
 import { TORN_TAIL_WARNING, type VerifyResult } from "./ledger.js";
 import { NotAGitRepoError, type ProjectLocation, UnsupportedRepoError, locateProject, repoToplevel } from "./paths.js";
 import { projectProblem, readProjectStatus } from "./project.js";
@@ -127,6 +128,11 @@ export function runDoctor(
         const problem = projectProblem(status);
         if (problem !== null) problems.push(problem);
         if (status.ledger?.ok && status.ledger.tornTail) warnings.push(TORN_TAIL_WARNING);
+        // Poka-yoke (M3c rule 4): sealed material in the repository or a worktree is a problem to fix before any run.
+        if (status.initialized) {
+          const sealed = sealedProblem(location, env);
+          if (sealed !== null) problems.push(sealed);
+        }
       }
     }
   }

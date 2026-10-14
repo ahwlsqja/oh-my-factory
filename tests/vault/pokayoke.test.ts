@@ -2,8 +2,17 @@ import { randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { scanForSealed } from "../../src/vault/pokayoke.js";
-import { makeTempDir } from "../helpers/tmp.js";
+import { resolveProject } from "../../src/core/paths.js";
+import { initProject } from "../../src/core/project.js";
+import {
+  PokaYokeError,
+  assertNoSealedInRepo,
+  pokaYokeScopeFor,
+  scanForSealed,
+  scanWorktreeCanaries,
+  sealedProblem,
+} from "../../src/vault/pokayoke.js";
+import { makeGitRepo, makeTempDir } from "../helpers/tmp.js";
 
 /** Built at run time: a full canary literal in this file would trip OMF run on OMF. */
 const canary = (): string => `omf-canary-${randomBytes(16).toString("hex")}`;
@@ -189,5 +198,88 @@ describe("scanForSealed: fail closed", () => {
     chmodSync(join(repo, "secret.txt"), 0o000);
     const result = scanForSealed({ repo, worktrees: [] }, { stateRoot: state });
     expect(summary(result.findings)).toEqual(["repo:scan_incomplete:secret.txt"]);
+  });
+});
+
+describe("the guards on a real project", () => {
+  function project() {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const env: NodeJS.ProcessEnv = { HOME: home, OMF_HOME: join(home, ".omf"), PATH: process.env.PATH ?? "" };
+    initProject(repo, env);
+    const location = resolveProject(repo, env);
+    const worktrees = join(location.dir, "worktrees");
+    mkdirSync(join(worktrees, "w-1"), { recursive: true });
+    return { repo, env, location, worktrees, worktree: join(worktrees, "w-1") };
+  }
+
+  it("passes a clean repository and clean worktrees", () => {
+    const p = project();
+    put(p.worktree, "src/a.ts");
+    expect(() => assertNoSealedInRepo(p.location, p.env)).not.toThrow();
+    expect(sealedProblem(p.location, p.env)).toBeNull();
+  });
+
+  it("throws PokaYokeError with paths only when a canary is in the repository", () => {
+    const p = project();
+    const value = canary();
+    put(p.repo, "leak.txt", `${value}\n`);
+    let caught: unknown;
+    try {
+      assertNoSealedInRepo(p.location, p.env);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(PokaYokeError);
+    const error = caught as PokaYokeError;
+    expect(error.message).toBe("refusing to run: sealed material inside the repository or an OMF worktree (1 finding(s))");
+    expect(error.findings).toEqual([{ kind: "canary", where: "repo", path: "leak.txt" }]);
+    expect(error.message).not.toContain(value);
+  });
+
+  it("lists only real directories under worktrees/ in the scope", () => {
+    const p = project();
+    symlinkSync(p.repo, join(p.worktrees, "linked"));
+    const scope = pokaYokeScopeFor(p.location, p.env);
+    expect(scope.repo).toBe(p.location.repo);
+    expect(scope.worktrees.map((dir) => dir.split("/").pop())).toEqual(["w-1"]);
+  });
+
+  it("treats a symlink entry under worktrees/ as a finding", () => {
+    const p = project();
+    symlinkSync(p.repo, join(p.worktrees, "linked"));
+    expect(() => assertNoSealedInRepo(p.location, p.env)).toThrow(PokaYokeError);
+    expect(sealedProblem(p.location, p.env)).toBe(
+      "sealed material inside the repository or an OMF worktree: 1 finding(s) (symlink_into_state: linked)",
+    );
+  });
+
+  it("scanWorktreeCanaries returns hits with known set and does not throw for a made-up canary", () => {
+    const p = project();
+    const known = canary();
+    const madeUp = canary();
+    put(p.worktree, "out.log", `${madeUp} ${known}\n`);
+    expect(scanWorktreeCanaries(p.location, new Set([known]), p.env)).toEqual([
+      { worktree: "w-1", path: "out.log", known: false },
+      { worktree: "w-1", path: "out.log", known: true },
+    ]);
+    expect(() => assertNoSealedInRepo(p.location, p.env)).not.toThrow();
+  });
+
+  it("scanWorktreeCanaries throws when it could not look at everything", () => {
+    const p = project();
+    symlinkSync("loop-b", join(p.worktree, "loop-a"));
+    symlinkSync("loop-a", join(p.worktree, "loop-b"));
+    expect(() => scanWorktreeCanaries(p.location, new Set(), p.env)).toThrow(PokaYokeError);
+  });
+
+  it("sealedProblem names the count and the first findings", () => {
+    const p = project();
+    put(p.repo, "vault/scenarios/s.yaml");
+    put(p.repo, "claim.lock");
+    const problem = sealedProblem(p.location, p.env);
+    expect(problem).toMatch(/^sealed material inside the repository or an OMF worktree: 2 finding\(s\) \(/);
+    expect(problem).toContain(`vault_path: ${join("vault", "scenarios")}`);
+    expect(problem).toContain("ledger_or_lock_file: claim.lock");
   });
 });

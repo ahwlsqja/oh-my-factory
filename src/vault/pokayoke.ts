@@ -1,5 +1,7 @@
-import { type Dirent, lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { type Dirent, type Stats, lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { basename, isAbsolute, join, relative, sep } from "node:path";
+import type { ProjectLocation } from "../core/paths.js";
+import { realProjectDir, stateRoot } from "../core/safe-fs.js";
 import { CANARY_SEARCH } from "../scenario/types.js";
 
 /**
@@ -213,4 +215,92 @@ function scanScope(scope: { repo: string | null; worktrees: readonly string[] },
  */
 export function scanForSealed(scope: PokaYokeScope, options: ScanOptions): ScanResult {
   return scanScope(scope, options);
+}
+
+function lstatOrNull(path: string): Stats | null {
+  try {
+    return lstatSync(path);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
+  }
+}
+
+interface WorktreeLayout {
+  /** Real directories under <projectDir>/worktrees, sorted. */
+  dirs: string[];
+  /** Entries that are symlinks (or "." when worktrees/ itself is one): each is a finding, and none is scanned. */
+  links: string[];
+}
+
+/**
+ * The project's worktrees, read with lstat. T1's state-tree guard skips worktrees/ (links inside a working
+ * tree are normal), so a link standing in for a worktree, or for worktrees/ itself, is caught here.
+ */
+function worktreeLayout(location: ProjectLocation, env: NodeJS.ProcessEnv): WorktreeLayout {
+  const base = join(realProjectDir(location, env).dir, "worktrees");
+  const stat = lstatOrNull(base);
+  if (stat === null) return { dirs: [], links: [] };
+  if (stat.isSymbolicLink()) return { dirs: [], links: ["."] };
+  const dirs: string[] = [];
+  const links: string[] = [];
+  for (const entry of readdirSync(base, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) links.push(entry.name);
+    else if (entry.isDirectory()) dirs.push(join(base, entry.name));
+  }
+  return { dirs: dirs.sort(), links: links.sort() };
+}
+
+/** repo = location.repo; worktrees = the real directories under <projectDir>/worktrees. */
+export function pokaYokeScopeFor(location: ProjectLocation, env: NodeJS.ProcessEnv = process.env): PokaYokeScope {
+  return { repo: location.repo, worktrees: worktreeLayout(location, env).dirs };
+}
+
+function fullScan(location: ProjectLocation, env: NodeJS.ProcessEnv): ScanResult {
+  const layout = worktreeLayout(location, env);
+  const result = scanForSealed({ repo: location.repo, worktrees: layout.dirs }, { stateRoot: stateRoot(env) });
+  for (const name of layout.links) result.findings.push({ kind: "symlink_into_state", where: "worktree", path: name });
+  return result;
+}
+
+/**
+ * Throws PokaYokeError when the repository or an OMF worktree holds sealed material or could not be scanned
+ * completely. Canary hits in worktrees are data and never throw. Called by runSealStage, runGate2, the decide
+ * actions and (T11) the sequencer before every station.
+ */
+export function assertNoSealedInRepo(location: ProjectLocation, env: NodeJS.ProcessEnv = process.env): void {
+  const { findings } = fullScan(location, env);
+  if (findings.length > 0) throw new PokaYokeError(findings);
+}
+
+/**
+ * Canary-shaped strings in the project's worktrees, with `known` set from `knownCanaries` (the verified vault
+ * canaries, `listVaultCanaries`). For M3e's S5 audit and GATE-3. A scan that could not see everything throws:
+ * a canary audit that silently skips a path would fail open.
+ */
+export function scanWorktreeCanaries(
+  location: ProjectLocation,
+  knownCanaries: ReadonlySet<string>,
+  env: NodeJS.ProcessEnv = process.env,
+): CanaryHit[] {
+  const layout = worktreeLayout(location, env);
+  const out = scanScope({ repo: null, worktrees: layout.dirs }, { stateRoot: stateRoot(env), knownCanaries });
+  const incomplete = out.findings.filter((finding) => finding.kind === "scan_incomplete");
+  if (incomplete.length > 0) throw new PokaYokeError(incomplete);
+  return out.canary_hits;
+}
+
+const PROBLEM_PREFIX = "sealed material inside the repository or an OMF worktree";
+const PROBLEM_LISTED = 5;
+
+/** The `omf doctor` problem line for this project, or null when the scan is clean. Paths only. */
+export function sealedProblem(location: ProjectLocation, env: NodeJS.ProcessEnv = process.env): string | null {
+  const { findings } = fullScan(location, env);
+  if (findings.length === 0) return null;
+  const listed = findings
+    .slice(0, PROBLEM_LISTED)
+    .map((finding) => `${finding.kind}: ${finding.path}`)
+    .join(", ");
+  const more = findings.length > PROBLEM_LISTED ? ", ..." : "";
+  return `${PROBLEM_PREFIX}: ${findings.length} finding(s) (${listed}${more})`;
 }
