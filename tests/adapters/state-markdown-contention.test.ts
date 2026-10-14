@@ -17,6 +17,21 @@ const result = createMarkdownStore(projectDir).createWorkItem(JSON.parse(inputJs
 process.stdout.write(result.created ? "created" : "exists");
 `;
 
+/** Child: applies one W verb or a veto to an existing item and prints whether the store accepted it. */
+const WRITER = `
+const { createMarkdownStore } = await import(process.argv[1]);
+const [projectDir, workId, verb] = process.argv.slice(2);
+const store = createMarkdownStore(projectDir);
+const now = new Date("2026-10-12T12:00:00.000Z");
+try {
+  if (verb === "submit") store.submitWorkItemForReview(workId, now);
+  else store.vetoWorkItem(workId, "human:dev", "stop", now);
+  process.stdout.write("ok");
+} catch {
+  process.stdout.write("refused");
+}
+`;
+
 describe("state-markdown across processes", () => {
   it("two processes racing to create the same work item create exactly one", async () => {
     const projectDir = makeTempDir();
@@ -34,5 +49,26 @@ describe("state-markdown across processes", () => {
     const dir = join(projectDir, "goals", "g-fast", "work", workId);
     expect(readdirSync(dir).sort()).toEqual(["intent.md", "item.md"]);
     expect(existsSync(join(dir, "item.md"))).toBe(true);
+  });
+
+  it("serialises a veto against concurrent submits: the veto always lands and item.md is never torn", async () => {
+    const projectDir = makeTempDir();
+    const input = makeNewItem({ title: "Cache the render path" });
+    const workId = workIdOf(input.fingerprint);
+    const store = createMarkdownStore(projectDir);
+    store.createWorkItem(input, T0);
+    store.startWorkItem(workId, T0);
+    const runs = await Promise.all(
+      ["submit", "veto", "submit", "veto"].map((verb) => runChild(WRITER, [STORE_MODULE, projectDir, workId, verb])),
+    );
+    expect(runs.map((run) => run.code)).toEqual([0, 0, 0, 0]);
+    // A veto is legal from in_progress and from awaiting_review, so exactly one veto wins whatever the order;
+    // a submit that comes after the veto is refused, and a second submit is refused after the first.
+    expect([runs[1]?.out, runs[3]?.out].sort()).toEqual(["ok", "refused"]);
+    expect([runs[0], runs[2]].filter((run) => run?.out === "ok").length).toBeLessThanOrEqual(1);
+    expect(store.malformedItems("g-fast")).toEqual([]);
+    expect(store.fetchWorkItemsByIds([workId])[0]?.front.state).toBe("vetoed");
+    const dir = join(projectDir, "goals", "g-fast", "work", workId);
+    expect(readdirSync(dir).sort()).toEqual(["intent.md", "item.md"]);
   });
 });

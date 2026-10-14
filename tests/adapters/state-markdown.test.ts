@@ -174,3 +174,35 @@ describe("state-markdown from every open state, and under a claim", () => {
     for (const item of [gated.item, other.item, third.item]) releaseItem(item.dir);
   });
 });
+
+describe("state-markdown W verbs", () => {
+  it("writes the marker into the progress region at 0600, leaves no lock file and keeps it across later verbs", () => {
+    const projectDir = makeTempDir("omf-store-");
+    const store = createMarkdownStore(projectDir);
+    const input = makeNewItem();
+    const workId = workIdOf(input.fingerprint);
+    store.createWorkItem(input, T0);
+    store.startWorkItem(workId, T1);
+    store.setProgressMarker(workId, "S3 working", T1);
+    const dir = workItemDir(projectDir, "g-fast", workId);
+    expect(parseWorkItem(readFileSync(join(dir, "item.md"), "utf8")).progress).toBe("S3 working\n");
+    expect(mode(join(dir, "item.md"))).toBe("600");
+    expect(readdirSync(dir).sort()).toEqual(["intent.md", "item.md"]);
+    store.submitWorkItemForReview(workId, T1);
+    expect(parseWorkItem(readFileSync(join(dir, "item.md"), "utf8")).progress).toBe("S3 working\n");
+  });
+
+  it("changes nothing on disk when a verb is refused", () => {
+    const projectDir = makeTempDir("omf-store-");
+    const store = createMarkdownStore(projectDir);
+    const input = makeNewItem();
+    const workId = workIdOf(input.fingerprint);
+    store.createWorkItem(input, T0);
+    const file = join(workItemDir(projectDir, "g-fast", workId), "item.md");
+    const before = readFileSync(file, "utf8");
+    expect(() => store.submitWorkItemForReview(workId, T1)).toThrow(/only in_progress/);
+    expect(() => store.setProgressMarker(workId, "S3 working", T1)).toThrow(/only in_progress/);
+    expect(() => store.repairWorkItem(workId, "failed", T1)).toThrow(/only in_progress/);
+    expect(readFileSync(file, "utf8")).toBe(before);
+  });
+});

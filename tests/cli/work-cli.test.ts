@@ -6,10 +6,11 @@ import { Ledger } from "../../src/core/ledger.js";
 import { runVeto, runWorkApprove } from "../../src/cli/work.js";
 import { claimItem, releaseItem } from "../../src/work/claim.js";
 import { verifiedItems } from "../../src/work/ledger-verify.js";
+import { wEvent } from "../../src/work/w-events.js";
 import { omf } from "../helpers/cli.js";
 import { type GoalFixture, setupGoal } from "../helpers/goal.js";
 import { gitIn } from "../helpers/tmp.js";
-import { HIGH_RISK, createRecorded, makeNewItem, rewriteItem } from "../helpers/work.js";
+import { HIGH_RISK, createRecorded, makeNewItem, recordW, rewriteItem } from "../helpers/work.js";
 
 function fixture(options: { email?: boolean } = {}): GoalFixture & { store: ReturnType<typeof createMarkdownStore> } {
   const fx = setupGoal();
@@ -188,6 +189,7 @@ describe("omf veto", () => {
   it("succeeds while another process holds the claim, and says so", () => {
     const fx = fixture();
     const item = createRecorded(fx.ledger, fx.store, makeNewItem());
+    recordW(fx.ledger, "work.started", item);
     rewriteItem(item, { state: "in_progress" });
     claimItem(item.dir);
     const result = omf(["veto", item.front.work_id], fx.repo, fx.home);
@@ -240,5 +242,64 @@ describe("runVeto", () => {
     expect(result.claim.held).toBe(true);
     expect(result.item.front.veto?.reason).toBe("stop");
     expect(() => runVeto(fx.location, item.front.work_id, "omf", "no")).toThrow(/human actor/);
+  });
+});
+
+const RUN = "r-20261014T091500Z-ab12";
+const REPAIRABLE_TEXT = "repairable (file is behind the ledger; the next W entry on this goal repairs it)";
+
+/** The crash window of M3b1-D2: the `work.started` event reached the ledger, item.md still says `ready`. */
+function recordStartedOnly(fx: GoalFixture, workId: string): void {
+  fx.ledger.append(
+    wEvent({ type: "work.started", payload: { goal_id: "g-fast", work_id: workId, run_id: RUN, from: "ready" } }),
+  );
+}
+
+describe("a repairable item (ledger one W edge ahead of item.md)", () => {
+  it("is labelled by work list, still exits 1, and is not shown as a ready or in_progress item", () => {
+    const fx = fixture();
+    const item = createRecorded(fx.ledger, fx.store, makeNewItem({ title: "Cache the render path" }));
+    recordStartedOnly(fx, item.front.work_id);
+    const result = omf(["work", "list", "g-fast"], fx.repo, fx.home);
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain(`malformed ${item.front.work_id}: ${REPAIRABLE_TEXT}`);
+    expect(result.stdout).not.toContain("w_repairable");
+    expect(result.stdout).not.toContain(`${item.front.work_id}  ready`);
+    expect(result.stderr).toContain("1 malformed work item(s)");
+  });
+
+  it("keeps the machine reason in --json, unchanged", () => {
+    const fx = fixture();
+    const item = createRecorded(fx.ledger, fx.store, makeNewItem());
+    recordStartedOnly(fx, item.front.work_id);
+    const json = JSON.parse(omf(["work", "list", "g-fast", "--json"], fx.repo, fx.home).stdout) as {
+      items: unknown[];
+      malformed: { work_id: string; reason: string }[];
+    };
+    expect(json.items).toEqual([]);
+    expect(json.malformed.map((entry) => [entry.work_id, entry.reason])).toEqual([[item.front.work_id, "w_repairable"]]);
+  });
+
+  it("is labelled by work show, which still exits 0", () => {
+    const fx = fixture();
+    const item = createRecorded(fx.ledger, fx.store, makeNewItem());
+    recordStartedOnly(fx, item.front.work_id);
+    const result = omf(["work", "show", item.front.work_id], fx.repo, fx.home);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain(`ledger: ${REPAIRABLE_TEXT}`);
+    expect(result.stdout).not.toContain("MALFORMED");
+  });
+
+  it("leaves a hand edit with no event under its bare reason, in both commands", () => {
+    const fx = fixture();
+    const item = createRecorded(fx.ledger, fx.store, makeNewItem());
+    rewriteItem(item, { state: "in_progress" });
+    const list = omf(["work", "list", "g-fast"], fx.repo, fx.home);
+    expect(list.code).toBe(1);
+    expect(list.stdout).toContain(`malformed ${item.front.work_id}: w_event_missing`);
+    expect(list.stdout).not.toContain("repairable");
+    const show = omf(["work", "show", item.front.work_id], fx.repo, fx.home);
+    expect(show.stdout).toContain("ledger: MALFORMED (w_event_missing)");
+    expect(show.stdout).not.toContain("repairable");
   });
 });

@@ -164,7 +164,8 @@ interface GoalStatusReport {
   disclosure: BudgetState | null;
   open_escalation: Escalation | null;
   next_steps: string[];
-  work: Record<WorkState, number> & { malformed: number };
+  /** `malformed` counts every item the ledger cannot account for; `repairable` is the subset one W edge behind it. */
+  work: Record<WorkState, number> & { malformed: number; repairable: number };
 }
 
 function budgetLine(kind: string, state: BudgetState | null): string {
@@ -331,7 +332,7 @@ export function registerGoalCommands(program: Command): void {
         disclosure: budgetStateFromEvents(events, goalId, "disclosure"),
         open_escalation: run.open_escalation,
         next_steps: stoppedNextSteps(run, goalId),
-        work: { ...work, malformed: verified.malformed.length },
+        work: { ...work, malformed: verified.malformed.length, repairable: verified.repairable.length },
       };
       if (options.json) console.log(JSON.stringify(report, null, 2));
       else printStatus(report);

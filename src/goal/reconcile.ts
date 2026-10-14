@@ -110,6 +110,12 @@ export function buildReconcilerInput(args: {
   watchedGlobs: string[];
   terms: ForbiddenTerms;
   cap: number;
+  /**
+   * Items one W edge behind the ledger (`verifiedItems(...).repairable`). They are not in `items`, but the
+   * ledger says they are open, so they hold a WIP slot: leaving them out would let a crash free a slot that
+   * is really taken (M3b1-D5). Only the count is needed; the model never sees them.
+   */
+  repairableOpen?: number;
 }): ReconcilerInput | { problem: "approach_unusable" } {
   const { terms, watchedGlobs, items } = args;
   const approach = approachOf(args.body);
@@ -117,6 +123,7 @@ export function buildReconcilerInput(args: {
   if (findings.length > 0) return { problem: "approach_unusable" };
 
   const open = items.filter((item) => OPEN_STATES.includes(item.front.state));
+  const openTotal = open.length + (args.repairableOpen ?? 0);
   const count = (state: WorkState): number => items.filter((item) => item.front.state === state).length;
   return {
     objective: args.front.objective,
@@ -132,14 +139,14 @@ export function buildReconcilerInput(args: {
       affected_paths: item.front.affected_paths.filter((path) => exposable(path, watchedGlobs, terms)),
     })),
     outcomes: {
-      open: open.length,
+      open: openTotal,
       done: count("done"),
       failed: count("failed"),
       vetoed: count("vetoed"),
       cancelled: count("cancelled"),
     },
     repo_layout: layoutOf(args.tracked, watchedGlobs, terms),
-    max_candidates: Math.max(0, Math.min(MAX_CANDIDATES, args.cap - open.length)),
+    max_candidates: Math.max(0, Math.min(MAX_CANDIDATES, args.cap - openTotal)),
   };
 }
 
@@ -277,6 +284,8 @@ export async function reconcileGoal(ctx: ReconcileContext): Promise<ReconcileSta
     body: ctx.body,
     summary,
     items: known.items,
+    // A repairable verdict exists only for ready -> in_progress and in_progress -> awaiting_review|failed, so the file is open.
+    repairableOpen: known.repairable.length,
     tracked,
     watchedGlobs,
     terms,

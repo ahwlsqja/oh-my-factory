@@ -495,12 +495,18 @@ async function runTick(location: ProjectLocation, goalId: string, options: TickO
       st.reason = "no_breach";
     }
   } else {
-    const open = verified.items.filter((item) => OPEN_STATES.includes(item.front.state));
-    const awaitingReview = verified.items.filter((item) => item.front.state === "awaiting_review").length;
+    // A repairable item is one W edge behind the ledger (a crash between the event and the file, M3b1-D5).
+    // STOP_IF reads it by its ledger target and the WIP cap by its file state (always open, see reconcile.ts),
+    // so a crash can neither hide unreviewed evidence nor free a slot that is taken.
+    const openCount =
+      verified.items.filter((item) => OPEN_STATES.includes(item.front.state)).length + verified.repairable.length;
+    const awaitingReview =
+      verified.items.filter((item) => item.front.state === "awaiting_review").length +
+      verified.repairable.filter((entry) => entry.repair_to === "awaiting_review").length;
     if (awaitingReview >= STOP_IF_UNREVIEWED_EVIDENCE) {
       st.outcome = "back_pressure";
       st.reason = "stop_if_unreviewed_evidence";
-    } else if (open.length >= locked.goal.semantic.budget.max_open_work_items) {
+    } else if (openCount >= locked.goal.semantic.budget.max_open_work_items) {
       st.outcome = "wip_full";
       st.reason = "max_open_work_items";
     } else if (

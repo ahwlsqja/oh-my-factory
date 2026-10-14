@@ -6,7 +6,15 @@ import { withItemLock } from "../work/claim.js";
 import { workIdOf } from "../work/fingerprint.js";
 import { type IntentDoc, parseIntent, renderIntent } from "../work/intent-md.js";
 import { canTransition } from "../work/transitions.js";
-import type { IntentCandidate, RiskAssessment, Trigger, WorkItem, WorkItemFront, WorkState } from "../work/types.js";
+import type {
+  IntentCandidate,
+  RepairTarget,
+  RiskAssessment,
+  Trigger,
+  WorkItem,
+  WorkItemFront,
+  WorkState,
+} from "../work/types.js";
 import { WorkItemError, parseWorkItem, renderWorkItem, validateWorkItem } from "../work/work-item.js";
 
 const WORK_ID_PATTERN = /^w-[0-9a-f]{12}$/;
@@ -23,6 +31,28 @@ export interface NewWorkItem {
 }
 
 export type CreateResult = { created: true; item: WorkItem } | { created: false; reason: "exists"; work_id: string };
+
+/**
+ * What a progress marker may say (M3b1-D10): a station S1 to S7, one space, one lowercase step word. The
+ * grammar is closed on purpose: it has no digit and no free text, so neither a metric name, a target nor a
+ * measured value can be written into the item, and it cannot contain the progress region's own comment markers
+ * (spec §8 keeps metric values out of trackers). The caller renders the text from closed lists; the store checks.
+ */
+export const PROGRESS_MARKER_PATTERN = /^S[1-7] [a-z_]{1,40}$/;
+
+/**
+ * `RepairTarget` (the only states `repairWorkItem` can produce: the three W edges a ledger-ahead crash can leave a
+ * file behind; `done`, `vetoed` and `cancelled` are not there) was declared in `src/work/types.ts` by Task 2. The
+ * store re-exports it so callers can import it from here.
+ */
+export type { RepairTarget };
+
+/** The state a repair target is entered from. `awaiting_review -> failed` is deliberately absent. */
+const REPAIR_FROM: Readonly<Record<RepairTarget, WorkState>> = {
+  in_progress: "ready",
+  awaiting_review: "in_progress",
+  failed: "in_progress",
+};
 
 /**
  * The work item store (spec §11.1), shaped like Symphony's tracker contract: two required reads, one
@@ -47,6 +77,21 @@ export interface StateStore {
   vetoWorkItem(workId: string, actor: string, reason: string, now: Date): WorkItem;
   /** human:* or "omf"; any open state -> cancelled. Takes item.lock only. */
   cancelWorkItem(workId: string, actor: string, now: Date): WorkItem;
+  /**
+   * The W verbs (M3b1-D1). OMF's own, so they take no actor: the ledger event the caller appended first is the
+   * authority, and the file only catches up to it. All take item.lock only and stamp updated_at = now.
+   * No verb can produce `done` (M4 owns completion).
+   */
+  /** ready -> in_progress. */
+  startWorkItem(workId: string, now: Date): WorkItem;
+  /** in_progress -> awaiting_review. */
+  submitWorkItemForReview(workId: string, now: Date): WorkItem;
+  /** in_progress -> failed. Stricter than TRANSITIONS, which also lists awaiting_review -> failed for a person at M4. */
+  failWorkItem(workId: string, now: Date): WorkItem;
+  /** Only ready -> in_progress, in_progress -> awaiting_review and in_progress -> failed: the file catching up to a ledger that is one W edge ahead. */
+  repairWorkItem(workId: string, to: RepairTarget, now: Date): WorkItem;
+  /** in_progress only; replaces the progress region with `marker`, which must match PROGRESS_MARKER_PATTERN. */
+  setProgressMarker(workId: string, marker: string, now: Date): WorkItem;
 }
 
 export function workItemDir(projectDir: string, goalId: string, workId: string): string {
@@ -159,16 +204,35 @@ function requireHuman(actor: string, verb: string): void {
 }
 
 export function createMarkdownStore(projectDir: string): StateStore {
-  /** Re-reads the item under item.lock, applies `change`, validates and rewrites item.md atomically. */
-  function mutate(workId: string, change: (front: WorkItemFront) => WorkItemFront): WorkItem {
+  /**
+   * Re-reads the item under item.lock, applies `change` to the front matter and the progress text, validates and
+   * rewrites item.md atomically. `progress` must already end in a newline unless it is empty (renderWorkItem's form).
+   */
+  function mutateItem(workId: string, change: (item: WorkItem) => { front: WorkItemFront; progress: string }): WorkItem {
     const located = locate(projectDir, workId);
     if (located === null) throw new WorkItemError(`unknown work item ${workId}`);
     return withItemLock(located.dir, () => {
       const loaded = load(located.dir, located.goalId, workId);
       if (!loaded.ok) throw new WorkItemError(`work item ${workId} is malformed: ${loaded.reason}`);
-      const front = validateWorkItem(change(loaded.item.front));
-      writePrivateFileAtomic(join(located.dir, ITEM_FILE), renderWorkItem(front, loaded.item.progress));
-      return { ...loaded.item, front };
+      const next = change(loaded.item);
+      const front = validateWorkItem(next.front);
+      writePrivateFileAtomic(join(located.dir, ITEM_FILE), renderWorkItem(front, next.progress));
+      return { ...loaded.item, front, progress: next.progress };
+    });
+  }
+
+  /** The common case: change the front matter, keep the progress region as it is. */
+  function mutate(workId: string, change: (front: WorkItemFront) => WorkItemFront): WorkItem {
+    return mutateItem(workId, (item) => ({ front: change(item.front), progress: item.progress }));
+  }
+
+  /** One W edge: the item must be in exactly `from`, and TRANSITIONS must list the edge. */
+  function advance(workId: string, from: WorkState, to: WorkState, now: Date): WorkItem {
+    return mutate(workId, (front) => {
+      if (front.state !== from || !canTransition(from, to)) {
+        throw new WorkItemError(`work item ${workId} is ${front.state}; only ${from} items can become ${to}`);
+      }
+      return { ...front, state: to, updated_at: now.toISOString() };
     });
   }
 
@@ -264,6 +328,36 @@ export function createMarkdownStore(projectDir: string): StateStore {
       return mutate(workId, (front) => {
         leave(front, "cancelled");
         return { ...front, state: "cancelled", updated_at: now.toISOString() };
+      });
+    },
+
+    startWorkItem(workId, now) {
+      return advance(workId, "ready", "in_progress", now);
+    },
+
+    submitWorkItemForReview(workId, now) {
+      return advance(workId, "in_progress", "awaiting_review", now);
+    },
+
+    failWorkItem(workId, now) {
+      return advance(workId, "in_progress", "failed", now);
+    },
+
+    repairWorkItem(workId, to, now) {
+      // hasOwn first: a `done` or `vetoed` target must be refused by name, never looked up as undefined.
+      if (!Object.hasOwn(REPAIR_FROM, to)) throw new WorkItemError(`repair target ${String(to)} is not a W edge`);
+      return advance(workId, REPAIR_FROM[to], to, now);
+    },
+
+    setProgressMarker(workId, marker, now) {
+      if (!PROGRESS_MARKER_PATTERN.test(marker)) {
+        throw new WorkItemError("progress marker must be a station S1 to S7 and one lowercase step word");
+      }
+      return mutateItem(workId, ({ front }) => {
+        if (front.state !== "in_progress") {
+          throw new WorkItemError(`work item ${workId} is ${front.state}; only in_progress items take a progress marker`);
+        }
+        return { front: { ...front, updated_at: now.toISOString() }, progress: `${marker}\n` };
       });
     },
   };

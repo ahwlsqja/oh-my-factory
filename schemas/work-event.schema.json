@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OMF work events (M3b1, spec §5.0, §4.4)",
+  "description": "Validates { type, payload } of a W ledger event. Every string is an id, a timestamp or a member of a closed list, so nothing a model wrote and no metric text can enter.",
+  "$defs": {
+    "goal_id": { "type": "string", "pattern": "^g-[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },
+    "work_id": { "type": "string", "pattern": "^w-[0-9a-f]{12}$" },
+    "run_id": { "type": "string", "pattern": "^r-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}$" },
+    "timestamp": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$" },
+    "work_state": { "enum": ["ready", "awaiting_approval", "in_progress", "awaiting_review", "done", "failed", "vetoed", "cancelled"] },
+    "reason_code": { "enum": ["j2_open", "gate_blocked", "budget_exhausted", "infra_failure", "manual_required", "station_error"] },
+    "recommendation": { "enum": ["merge_recommended", "not_recommended", "human_needed"] },
+    "started_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "run_id", "from"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "from": { "const": "ready" }
+      }
+    },
+    "submitted_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "run_id", "outcome", "recommendation"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "outcome": { "enum": ["success", "flawed"] },
+        "recommendation": { "$ref": "#/$defs/recommendation" }
+      }
+    },
+    "failed_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "run_id", "outcome", "reason_code"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "outcome": { "enum": ["flawed", "blocked"] },
+        "reason_code": { "$ref": "#/$defs/reason_code" }
+      }
+    },
+    "parked_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "run_id", "outcome", "reason_code"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "outcome": { "enum": ["blocked", "manual"] },
+        "reason_code": { "$ref": "#/$defs/reason_code" }
+      }
+    },
+    "repaired_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "run_id", "from", "to", "source_seq"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "from": { "$ref": "#/$defs/work_state" },
+        "to": { "$ref": "#/$defs/work_state" },
+        "source_seq": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "claim_reclaimed_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "run_id", "previous_pid", "previous_acquired_at"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "previous_pid": { "anyOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }] },
+        "previous_acquired_at": { "anyOf": [{ "$ref": "#/$defs/timestamp" }, { "const": "" }] }
+      }
+    },
+    "resumed_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "run_id"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" }
+      }
+    }
+  },
+  "oneOf": [
+    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "work.started" }, "payload": { "$ref": "#/$defs/started_payload" } } },
+    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "work.submitted" }, "payload": { "$ref": "#/$defs/submitted_payload" } } },
+    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "work.failed" }, "payload": { "$ref": "#/$defs/failed_payload" } } },
+    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "work.parked" }, "payload": { "$ref": "#/$defs/parked_payload" } } },
+    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "work.repaired" }, "payload": { "$ref": "#/$defs/repaired_payload" } } },
+    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "work.claim_reclaimed" }, "payload": { "$ref": "#/$defs/claim_reclaimed_payload" } } },
+    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "work.resumed" }, "payload": { "$ref": "#/$defs/resumed_payload" } } }
+  ]
+}

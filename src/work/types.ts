@@ -19,6 +19,9 @@ export const OPEN_STATES: readonly WorkState[] = ["ready", "awaiting_approval", 
 /** States nothing leaves. */
 export const TERMINAL_WORK_STATES: readonly WorkState[] = ["done", "failed", "vetoed", "cancelled"];
 
+/** The three W edges a file can lag behind the ledger by (M3b1-D4). Never `done`, never `awaiting_review -> failed`. */
+export type RepairTarget = "in_progress" | "awaiting_review" | "failed";
+
 export type RiskClass = "normal" | "high";
 
 /** Rule labels only: an assessment never names a metric id, so it can be shown to the model and logged. */
