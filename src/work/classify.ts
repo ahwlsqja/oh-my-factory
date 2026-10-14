@@ -176,6 +176,17 @@ function auditFlagged(audit: AuditInputs): boolean {
   );
 }
 
+/** A scenario counted as failed. Only called once 6c has made sure both counts ran. */
+function sealedFailed(sealed: SealedInputs): boolean {
+  const failed = (count: { pass: number; total: number } | NotRun): boolean => count !== NOT_RUN && count.pass < count.total;
+  return failed(sealed.train) || failed(sealed.test);
+}
+
+/** M3-D10 (a): any flaky scenario. Checked before sealedFailed: M3d counts a flaky scenario as not passed (M3d-D4), so pass < total whenever flaky > 0, and the person must see the flakiness. */
+function anyFlaky(sealed: SealedInputs): boolean {
+  return sealed.train !== NOT_RUN && sealed.train.flaky > 0;
+}
+
 /**
  * Maps what the line produced to the closed outcome (M3b2 skeleton section 4.5). Pure and total: the first matching row wins,
  * in this order: 1 station stop, 2 gate not run, 3 GATE-1, 4 GATE-3, 5 GATE-4, 6 completeness, 7 quality, 8 success.
@@ -220,6 +231,10 @@ export function classifyOutcome(input: ClassifierInput): Classification {
   if (STATION_IDS.some((id) => stations[id] !== "ok")) return make("blocked", false, "station_skipped", "station_skipped");
   if (gates.verdict !== "pass") return make("blocked", false, "gate_not_run", "gate_not_run");
   if (requiredInputMissing(input)) return make("blocked", false, "evidence_incomplete", "evidence_incomplete");
+  if (auditFlagged(inputs.audit)) return make("flawed", false, "audit_flag", "audit_flag");
+  if (anyFlaky(inputs.sealed)) return make("flawed", false, "flaky_scenario", "flaky_scenario");
+  if (sealedFailed(inputs.sealed)) return make("flawed", false, "sealed_failed", "sealed_failed");
+  if (inputs.noise_check === "within_variance") return make("flawed", false, "within_variance", "within_variance");
   return make("success", false, null, "success");
 }
 

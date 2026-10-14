@@ -328,3 +328,139 @@ describe("success carries merge_recommended only with nothing unverified (M3b2-D
     expect(canaryHits(JSON.stringify(c))).toEqual([]);
   });
 });
+
+describe("quality rows of a completed line (7a to 7d) are flawed and not recommended", () => {
+  const QUALITY: [string, (i: EvidenceInputs) => void, ReasonCode][] = [
+    ["7a a canary hit", (i) => { i.audit.canary_hits = 1; }, "audit_flag"],
+    ["7a an edited test", (i) => { i.audit.tests_edited = true; }, "audit_flag"],
+    ["7a a failed prove_test", (i) => { i.audit.prove_test = "fail"; }, "audit_flag"],
+    ["7a a touched judge config", (i) => { i.audit.judge_config_touched = true; }, "audit_flag"],
+    ["7b a failed train scenario", (i) => { i.sealed.train = { pass: 3, total: 4, flaky: 0 }; }, "sealed_failed"],
+    ["7b a failed test scenario", (i) => { i.sealed.test = { pass: 1, total: 2 }; }, "sealed_failed"],
+    ["7c a flaky scenario even though all passed", (i) => { i.sealed.train = { pass: 4, total: 4, flaky: 1 }; }, "flaky_scenario"],
+    ["7d a gain within run-to-run variance", (i) => { i.noise_check = "within_variance"; }, "within_variance"],
+  ];
+
+  it.each(QUALITY)("%s", (_name, change, reason) => {
+    const inputs = cleanInputs();
+    change(inputs);
+    const c = classifyOutcome(base({ inputs }));
+    expect(c).toMatchObject({ outcome: "flawed", exhausted: false, reason_code: reason, recommendation: "not_recommended", rule: reason });
+    expect(dispositionOf(toOutcomeInput(c))).toMatchObject({ action: "submit", recommendation: "not_recommended" });
+  });
+
+  it("checks the rows in order: audit, then flaky, then sealed, then variance", () => {
+    const inputs = cleanInputs();
+    inputs.noise_check = "within_variance";
+    inputs.sealed.train = { pass: 2, total: 4, flaky: 2 };
+    expect(classifyOutcome(base({ inputs })).rule).toBe("flaky_scenario");
+    inputs.sealed.train = { pass: 3, total: 4, flaky: 0 };
+    expect(classifyOutcome(base({ inputs })).rule).toBe("sealed_failed");
+    inputs.audit.tests_edited = true;
+    expect(classifyOutcome(base({ inputs })).rule).toBe("audit_flag");
+  });
+
+  it("incomplete evidence is checked before quality: a flag beside a missing input is blocked", () => {
+    const inputs = cleanInputs();
+    inputs.audit.tests_edited = true;
+    inputs.gate_line = NOT_RUN;
+    expect(classifyOutcome(base({ inputs })).rule).toBe("evidence_incomplete");
+  });
+});
+
+/** A small seeded generator, so the whole-table check is the same on every machine. */
+function lcg(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 2 ** 32;
+  };
+}
+function pick<T>(next: () => number, items: readonly T[]): T {
+  return items[Math.floor(next() * items.length)] as T;
+}
+
+function randomInput(next: () => number): ClassifierInput {
+  const stops: ClassifierInput["stop"][] = [
+    { kind: "none" }, { kind: "none" }, { kind: "none" }, { kind: "none" },
+    { kind: "station", station: "S3", result: "error", reason_code: "station_error" },
+    { kind: "station", station: "S1", result: "manual", reason_code: "manual_required" },
+    { kind: "station", station: "S4", result: "blocked", reason_code: "infra_failure" },
+    { kind: "gate", gate: "GATE-1", verdict: "fail", reasons: ["j2_open"] },
+    { kind: "gate", gate: "GATE-2", verdict: "not_run", reasons: ["not_implemented"] },
+    { kind: "gate", gate: "GATE-3", verdict: "fail", reasons: ["canary_hit"] },
+    { kind: "gate4", severity: "integrity", reasons: ["ledger_anomaly"], round: 1 },
+    { kind: "gate4", severity: "hard", reasons: ["reentry_loop"], round: 0 },
+    { kind: "gate4", severity: "hard", reasons: ["visit_cap"], round: 0 },
+    { kind: "gate4", severity: "hard", reasons: ["stalled"], round: 2 },
+    { kind: "gate4", severity: "soft", reasons: ["spend_exhausted"], round: 1 },
+  ];
+  const inputs = cleanInputs();
+  const fault = (p: number): boolean => next() < p;
+  if (fault(0.1)) inputs.audit.canary_hits = pick(next, [NOT_RUN, 0, 2]);
+  if (fault(0.1)) inputs.audit.tests_edited = pick(next, [NOT_RUN, true]);
+  if (fault(0.1)) inputs.audit.prove_test = pick(next, [NOT_RUN, "fail"] as const);
+  if (fault(0.1)) inputs.audit.judge_config_touched = pick(next, [NOT_RUN, true]);
+  if (fault(0.1)) inputs.sealed.train = pick(next, [NOT_RUN, { pass: 0, total: 0, flaky: 0 }, { pass: 1, total: 4, flaky: 0 }, { pass: 4, total: 4, flaky: 1 }]);
+  if (fault(0.1)) inputs.sealed.test = pick(next, [NOT_RUN, { pass: 0, total: 0 }, { pass: 1, total: 2 }]);
+  if (fault(0.1)) inputs.isolation_level = pick(next, ["unmeasured", "L1", "L3"] as const);
+  if (fault(0.1)) inputs.gate_line = NOT_RUN;
+  if (fault(0.1)) inputs.noise_check = pick(next, [NOT_RUN, "within_variance", "not_evaluated"] as const);
+  if (fault(0.1)) inputs.high_risk_paths_touched = pick(next, [NOT_RUN, ["src/a.ts"]]);
+  const stations = stationsAll();
+  for (const id of STATION_IDS) if (fault(0.03)) stations[id] = pick(next, ["rework", "skipped", "blocked", "manual", "error", "not_run"] as const);
+  const gates = aggregateGates({
+    "GATE-1": fault(0.05) ? "fail" : "pass",
+    "GATE-2": fault(0.05) ? "not_run" : "pass",
+    "GATE-3": fault(0.05) ? "fail" : "pass",
+    "GATE-4": fault(0.05) ? "not_visited" : "pass",
+  });
+  return {
+    stop: pick(next, stops),
+    stations,
+    gates,
+    inputs,
+    decisions_unmeasured: fault(0.2) ? ["d-1"] : [],
+    gate4_warnings: fault(0.2) ? ["spend_unverifiable"] : [],
+    injected_gates: fault(0.1) ? ["GATE-3"] : [],
+    declared_level: "L2",
+  };
+}
+
+describe("the classifier is total and can only lower a result (whole-table safety net)", () => {
+  it("never yields a success, a merge recommendation or an input outcome that dispositionOf refuses", () => {
+    const next = lcg(20261014);
+    const seen = { success: 0, flawed: 0, blocked: 0, manual: 0, merge: 0 };
+    for (let n = 0; n < 4000; n += 1) {
+      const input = randomInput(next);
+      const c = classifyOutcome(input);
+      const disposition = dispositionOf(toOutcomeInput(c)); // an OutcomeError here fails the test
+      seen[c.outcome] += 1;
+      if (c.outcome !== "success") expect(c.reason_code).not.toBeNull();
+      if (c.recommendation === "merge_recommended") {
+        seen.merge += 1;
+        expect(c.outcome).toBe("success");
+        expect(c.unverified_areas).toEqual([]);
+      }
+      if (disposition.action === "submit" && disposition.recommendation === "merge_recommended") expect(c.unverified_areas).toEqual([]);
+      if (c.outcome !== "success") continue;
+      // An independent statement of what a success needs.
+      const i = input.inputs;
+      expect(input.stop.kind).toBe("none");
+      expect(STATION_IDS.every((id) => input.stations[id] === "ok")).toBe(true);
+      expect(input.gates.verdict).toBe("pass");
+      expect([i.audit.canary_hits, i.audit.tests_edited, i.audit.prove_test, i.audit.judge_config_touched]).toEqual([0, false, "pass", false]);
+      expect(i.sealed.train !== NOT_RUN && i.sealed.train.total > 0 && i.sealed.train.pass === i.sealed.train.total && i.sealed.train.flaky === 0).toBe(true);
+      expect(i.sealed.test !== NOT_RUN && i.sealed.test.total > 0 && i.sealed.test.pass === i.sealed.test.total).toBe(true);
+      expect(["L2", "L3"]).toContain(i.isolation_level);
+      expect(i.gate_line).not.toBe(NOT_RUN);
+      expect(i.noise_check).not.toBe("within_variance");
+    }
+    // The generator reaches every outcome, so the loop above is not vacuous.
+    expect(seen.success).toBeGreaterThan(0);
+    expect(seen.flawed).toBeGreaterThan(0);
+    expect(seen.blocked).toBeGreaterThan(0);
+    expect(seen.manual).toBeGreaterThan(0);
+    expect(seen.merge).toBeGreaterThan(0);
+  });
+});
