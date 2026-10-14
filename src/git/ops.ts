@@ -1,3 +1,7 @@
+import { closeSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, rmSync, type Stats } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { assertOutsideAgentHomes, assertOutsideRepo } from "../core/paths.js";
 import { HostGitError, runHostGit, type GitTarget, type HostGitOptions } from "./hardened.js";
 
 /**
@@ -174,4 +178,135 @@ export async function treePaths(target: GitTarget, sha: string): Promise<string[
   requireSha("sha", sha);
   const out = await git(target, ["ls-tree", "-r", "-z", "--name-only", "--full-tree", sha]);
   return decodeUtf8Strict(out).split("\0").filter((path) => path.length > 0);
+}
+
+function requireAbsolute(label: string, path: string): void {
+  if (!isAbsolute(path)) throw new Error(`${label} must be an absolute path`);
+}
+
+function lstatOrNull(path: string): Stats | null {
+  try {
+    return lstatSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+/**
+ * Guards a path OMF is about to write: absolute, not inside the quarantine it was read from, not inside an agent's
+ * config home (spec §11 rule 1). The user's own repository is checked where the project location is derived
+ * (`locateProject`); this module never learns it.
+ */
+function assertHostOutput(path: string, target: GitTarget): void {
+  requireAbsolute("output path", path);
+  assertOutsideRepo(path, target.gitDir);
+  assertOutsideAgentHomes(path);
+}
+
+/** `checkout-index` skips files that already exist, which would export a stale tree, so the destination must be empty and real. */
+function requireEmptyDirectory(dir: string): void {
+  const stat = lstatOrNull(dir);
+  if (stat === null) throw new Error("destination directory does not exist");
+  if (!stat.isDirectory()) throw new Error("destination must be a real directory, not a symlink");
+  if (readdirSync(dir).length > 0) throw new Error("destination directory is not empty");
+}
+
+/** A 0700 temp directory that holds one index file for the duration of `fn`, so the quarantine's own index is never written. */
+async function withPrivateIndex<T>(fn: (indexFile: string) => Promise<T>): Promise<T> {
+  assertOutsideAgentHomes(tmpdir()); // the private index is a host write too (M3e-D29)
+  const dir = mkdtempSync(join(tmpdir(), "omf-index-"));
+  try {
+    return await fn(join(dir, "index"));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Writes the tracked files of `sha` into the empty directory `destDir`: `read-tree` into a private index, then
+ * `checkout-index -a` with `destDir` as the work tree. Git itself refuses to write through a symlink or into `.git`
+ * (the empty-directory rule means a planted symlink never gets that far). Symlinks in the tree stay symlinks. The
+ * quarantine may be bare, which is why this uses `--work-tree` and not `--prefix`.
+ */
+export async function exportTree(target: GitTarget, sha: string, destDir: string): Promise<{ files: number }> {
+  requireSha("sha", sha);
+  assertHostOutput(destDir, target);
+  requireEmptyDirectory(destDir);
+  return withPrivateIndex(async (indexFile) => {
+    const scoped: GitTarget = { gitDir: target.gitDir, workTree: destDir, indexFile };
+    await git(scoped, ["read-tree", sha]);
+    const listing = await git(scoped, ["ls-files", "-z"]);
+    await git(scoped, ["checkout-index", "-a"]);
+    return { files: listing.toString("utf8").split("\0").filter((path) => path.length > 0).length };
+  });
+}
+
+/**
+ * `git archive --format=tar` of `sha` into a new file (0600, created exclusively so a planted symlink or an existing
+ * file is refused). For a Docker build context (M3f); an archive from a hostile source is never extracted on the host.
+ */
+export async function archiveTar(target: GitTarget, sha: string, outFile: string): Promise<void> {
+  requireSha("sha", sha);
+  assertHostOutput(outFile, target);
+  mkdirSync(dirname(outFile), { recursive: true, mode: 0o700 });
+  try {
+    closeSync(openSync(outFile, "wx", 0o600));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error("archive file already exists");
+    throw error;
+  }
+  try {
+    await git(target, ["archive", "--format=tar", "-o", outFile, sha]);
+  } catch (error) {
+    rmSync(outFile, { force: true });
+    throw error;
+  }
+}
+
+/**
+ * `git apply [-R] --whitespace=nowarn` in `dir`, against a scratch git directory that has no config of its own.
+ * Git refuses a path inside `.git` (any case) and a path beyond a symlink, so a hostile patch or tree cannot make
+ * it write outside `dir`. False when git refuses or the patch does not apply (nothing is changed: apply is atomic);
+ * an empty patch is refused too. A timeout or a bad git directory throws.
+ */
+export async function applyPatchToDir(scratchGitDir: string, dir: string, patch: string, options: { reverse: boolean }): Promise<boolean> {
+  requireAbsolute("directory", dir);
+  const args = ["apply", ...(options.reverse ? ["-R"] : []), "--whitespace=nowarn"];
+  try {
+    await runHostGit({ gitDir: scratchGitDir, workTree: dir }, args, { input: Buffer.from(patch, "latin1"), cwd: dir });
+    return true;
+  } catch (error) {
+    if (exitedWith(error) !== null) return false;
+    throw error;
+  }
+}
+
+/**
+ * True only when `dir` equals the tree of `sha`. `target.indexFile` is required and must be private: a temp file
+ * this call overwrites, never the repository's own index. All with `workTree: dir`:
+ * 1. `read-tree sha`;
+ * 2. `update-index -q --refresh`: a fresh read-tree index has no stat data and plumbing `diff-files` never refreshes,
+ *    so without this step an identical tree reads as dirty;
+ * 3. `diff-files --quiet` (exit 1 is dirty);
+ * 4. `ls-files -o --directory` must print nothing. No ignore rule applies (`core.excludesFile=/dev/null`, and
+ *    `--exclude-standard` is not passed), so a file the tree's own `.gitignore` names still counts.
+ * A root `.git` is checked last: `ls-files -o` never lists it, and it is never part of a tree.
+ */
+export async function isDirClean(target: GitTarget, sha: string, dir: string): Promise<boolean> {
+  requireSha("sha", sha);
+  requireAbsolute("directory", dir);
+  if (target.indexFile === undefined) throw new Error("isDirClean needs a private target.indexFile");
+  if (resolve(target.indexFile) === resolve(target.gitDir, "index")) throw new Error("indexFile must not be the repository's own index");
+  const scoped: GitTarget = { gitDir: target.gitDir, workTree: dir, indexFile: target.indexFile };
+  await git(scoped, ["read-tree", sha]);
+  try {
+    await git(scoped, ["update-index", "-q", "--refresh"]);
+    await git(scoped, ["diff-files", "--quiet"]);
+  } catch (error) {
+    if (exitedWith(error) === 1) return false;
+    throw error;
+  }
+  const untracked = await git(scoped, ["ls-files", "-o", "--directory"]);
+  return untracked.length === 0 && lstatOrNull(join(dir, ".git")) === null;
 }

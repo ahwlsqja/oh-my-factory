@@ -105,3 +105,108 @@ describe("read-only operations", () => {
     expect(await ops.treePaths(fx.quarantine, fx.head)).not.toContain("docs/old.md");
   });
 });
+describe("materialising and checking a tree", () => {
+  it("exportTree writes tracked files only and keeps symlinks as symlinks", async () => {
+    const dest = realTempDir("omf-export-");
+    const result = await ops.exportTree(fx.quarantine, fx.head, dest);
+    const tracked = await ops.treePaths(fx.quarantine, fx.head);
+    expect(result.files).toBe(tracked.length);
+    expect(listFiles(dest)).toEqual([...tracked].sort());
+    expect(lstatSync(join(dest, "l.txt")).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(join(dest, "l.txt"))).toBe("src/a.ts");
+    expect(existsSync(join(dest, ".git"))).toBe(false);
+    expect(existsSync(join(fx.gitDir, "index"))).toBe(false); // the quarantine's own index is never created
+  });
+
+  it("exportTree refuses a destination it cannot trust and writes nothing through a symlink", async () => {
+    const outside = realTempDir("omf-outside-");
+    const planted = realTempDir("omf-planted-");
+    symlinkSync(outside, join(planted, "src"));
+    await expect(ops.exportTree(fx.quarantine, fx.head, planted)).rejects.toThrow("destination directory is not empty");
+    const link = join(realTempDir("omf-link-"), "dest");
+    symlinkSync(outside, link);
+    await expect(ops.exportTree(fx.quarantine, fx.head, link)).rejects.toThrow("destination must be a real directory");
+    await expect(ops.exportTree(fx.quarantine, fx.head, join(fx.gitDir, "export"))).rejects.toThrow("must live outside the repository");
+    const home = realTempDir("omf-home-");
+    mkdirSync(join(home, ".claude", "x"), { recursive: true });
+    vi.stubEnv("HOME", home);
+    await expect(ops.exportTree(fx.quarantine, fx.head, join(home, ".claude", "x"))).rejects.toThrow("must not live inside");
+    expect(readdirSync(outside)).toEqual([]);
+  });
+
+  it("git itself refuses to check out through a planted symlink (the second layer under the empty-directory rule)", async () => {
+    const outside = realTempDir("omf-outside-");
+    const planted = realTempDir("omf-planted-");
+    symlinkSync(outside, join(planted, "src"));
+    const target: GitTarget = { gitDir: fx.gitDir, workTree: planted, indexFile: join(realTempDir("omf-index-"), "index") };
+    await runHostGit(target, ["read-tree", fx.head]);
+    expect(await codeOf(runHostGit(target, ["checkout-index", "-a"]))).toBe("git_failed");
+    expect(readdirSync(outside)).toEqual([]);
+  });
+
+  it("isDirClean is true for a fresh export and false after any difference", async () => {
+    const dir = realTempDir("omf-clean-");
+    await ops.exportTree(fx.quarantine, fx.head, dir);
+    // Regression: a fresh read-tree index has no stat data, so without `update-index --refresh` an identical tree reads as dirty.
+    expect(await ops.isDirClean(withIndex(fx.quarantine), fx.head, dir)).toBe(true);
+    expect(await ops.isDirClean(withIndex(fx.quarantine), fx.base, dir)).toBe(false);
+
+    writeFileSync(join(dir, "src", "a.ts"), "export const a = 3;\n"); // same size as the committed line
+    expect(await ops.isDirClean(withIndex(fx.quarantine), fx.head, dir)).toBe(false);
+    writeFileSync(join(dir, "src", "a.ts"), "export const a = 2;\n");
+    expect(await ops.isDirClean(withIndex(fx.quarantine), fx.head, dir)).toBe(true);
+
+    put(dir, "z.log", "x"); // matches the tree's own .gitignore, and still counts
+    expect(await ops.isDirClean(withIndex(fx.quarantine), fx.head, dir)).toBe(false);
+    rmSync(join(dir, "z.log"));
+    writeFileSync(join(dir, ".git"), "gitdir: /nonexistent\n"); // a root .git is never part of a tree
+    expect(await ops.isDirClean(withIndex(fx.quarantine), fx.head, dir)).toBe(false);
+    expect(existsSync(join(fx.gitDir, "index"))).toBe(false);
+  });
+
+  it("isDirClean needs a private index of its own", async () => {
+    const dir = realTempDir("omf-clean-");
+    await expect(ops.isDirClean(fx.quarantine, fx.head, dir)).rejects.toThrow("private target.indexFile");
+    await expect(ops.isDirClean({ ...fx.quarantine, indexFile: join(fx.gitDir, "index") }, fx.head, dir)).rejects.toThrow("own index");
+  });
+
+  it("a revert patch takes head back to base and forward again, byte for byte", async () => {
+    const scratch = await createScratchGitDir(realTempDir("omf-scratch-"));
+    const patch = await ops.revertPatch(fx.quarantine, fx.base, fx.head, CHANGED_PATHS);
+    const dir = realTempDir("omf-head-");
+    await ops.exportTree(fx.quarantine, fx.head, dir);
+    expect(await ops.applyPatchToDir(scratch, dir, patch, { reverse: true })).toBe(true);
+    expect(await ops.isDirClean(withIndex(fx.quarantine), fx.base, dir)).toBe(true);
+    expect(await ops.applyPatchToDir(scratch, dir, patch, { reverse: false })).toBe(true);
+    expect(await ops.isDirClean(withIndex(fx.quarantine), fx.head, dir)).toBe(true);
+  });
+
+  it("applyPatchToDir refuses .git paths and paths beyond a symlink", async () => {
+    const scratch = await createScratchGitDir(realTempDir("omf-scratch-"));
+    const dir = realTempDir("omf-apply-");
+    const outside = realTempDir("omf-outside-");
+    symlinkSync(outside, join(dir, "link"));
+    const adding = (path: string): string =>
+      ["diff --git a/PATH b/PATH", "new file mode 100644", "index 0000000..e69de29", "--- /dev/null", "+++ b/PATH", "@@ -0,0 +1 @@", "+pwn", ""]
+        .join("\n")
+        .replaceAll("PATH", path);
+    for (const path of [".git/hooks/pre-commit", ".GIT/x", "link/pwn.txt"]) {
+      expect(await ops.applyPatchToDir(scratch, dir, adding(path), { reverse: false }), path).toBe(false);
+    }
+    expect(readdirSync(outside)).toEqual([]);
+    expect(existsSync(join(dir, ".git"))).toBe(false);
+  });
+
+  it("archiveTar lists tracked files only and never overwrites", async () => {
+    const out = join(realTempDir("omf-archive-"), "ctx.tar");
+    await ops.archiveTar(fx.quarantine, fx.head, out);
+    // `tar -t` only lists; nothing here ever extracts an archive.
+    const names = execFileSync("tar", ["-tf", out], { encoding: "utf8" })
+      .split("\n")
+      .filter((name) => name !== "" && !name.endsWith("/"))
+      .sort();
+    expect(names).toEqual([...(await ops.treePaths(fx.quarantine, fx.head))].sort());
+    expect(statSync(out).mode & 0o777).toBe(0o600);
+    await expect(ops.archiveTar(fx.quarantine, fx.head, out)).rejects.toThrow("archive file already exists");
+  });
+});
