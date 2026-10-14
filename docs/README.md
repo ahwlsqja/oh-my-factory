@@ -39,3 +39,16 @@ Start with the top-level [README](../README.md) for what OMF is and the command 
   checked; do not link to it from a tracked file.
 - **First-run journey.** `tests/e2e/journey.test.ts` runs the README quick start against the built CLI in a
   temporary home and repository.
+
+## Scope of this PR
+
+The first-run journey (`tests/e2e/journey.test.ts`) and the no-ANSI test cover part of the planned work. Deferred
+and tracked here:
+
+- A journey that runs the packed tarball (`npm pack` then install) instead of the repository build.
+- A `tick` step in the journey.
+- Recovery from a corrupted ledger.
+- Uploading journey timings and logs as a CI artifact.
+- A real pty case for approval (J1 typed id) and for the no-ANSI test.
+- `docs/ko/README.md`.
+- A `check-docs` script.
