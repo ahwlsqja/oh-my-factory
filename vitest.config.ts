@@ -19,6 +19,14 @@ export default defineConfig({
     setupFiles: ["tests/setup/cleanup.ts"],
     testTimeout: 30000,
     hookTimeout: 30000,
+    coverage: {
+      // Used only by `npm run test:coverage`. v8 sees this process, not the CLI children that
+      // tests spawn from dist/, so src/cli numbers undercount (see docs/maintainers/testing.md).
+      provider: "v8",
+      include: ["src/**/*.ts"],
+      reporter: ["text-summary", "json-summary", "lcov", "html"],
+      reportsDirectory: "coverage",
+    },
     ...(Number.isInteger(maxWorkers) && maxWorkers > 0 ? { maxWorkers } : {}),
   },
 });

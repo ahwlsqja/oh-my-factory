@@ -39,11 +39,16 @@
     "build": "npm run clean && tsc -p tsconfig.json",
     "prepack": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "lint": "biome lint .",
+    "format:check": "biome format ."
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
     "@types/node": "24.19.2",
     "@types/picomatch": "4.0.3",
+    "@vitest/coverage-v8": "5.0.2",
     "typescript": "7.0.2",
     "vitest": "5.0.2"
   },
