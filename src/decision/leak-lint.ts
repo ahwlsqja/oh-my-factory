@@ -1,6 +1,6 @@
 import type { LedgerEvent } from "../core/ledger.js";
 import type { GoalSemantic } from "../goal/goal-file.js";
-import { GoalLockError, readGoalLock } from "../goal/goal-lock.js";
+import { readGoalLock } from "../goal/goal-lock.js";
 import { type ForbiddenTerms, forbiddenTermsFor, lintText } from "../work/seed-lint.js";
 import { DecisionError } from "./errors.js";
 
@@ -64,17 +64,12 @@ export function leakContextFor(semantic: GoalSemantic, measured: readonly number
 
 /**
  * Reads the goal lock and the `metric.measured` readings of the verified ledger (payload field `value`, see
- * `measureGoal`). A missing or invalid lock throws `goal_not_locked`: with no lock there is nothing to compare
- * against, and a lint that cannot run must not wave text through (fail closed).
+ * `measureGoal`). A missing lock throws `goal_not_locked`: with no lock there is nothing to compare against, and a
+ * lint that cannot run must not wave text through (fail closed). A lock file that is present but unreadable or
+ * schema-invalid throws its `GoalLockError` unchanged: that is damaged host state, so the CLI exits 2 (A20).
  */
 export function loadLeakContext(projectDir: string, goalId: string, events: readonly LedgerEvent[]): LeakContext {
-  let lock;
-  try {
-    lock = readGoalLock(projectDir, goalId);
-  } catch (err) {
-    if (err instanceof GoalLockError) throw new DecisionError("goal_not_locked", `${err.message}; lock the goal before recording decisions`);
-    throw err;
-  }
+  const lock = readGoalLock(projectDir, goalId);
   if (lock === null) throw new DecisionError("goal_not_locked", `goal ${goalId} has no lock; approve it (J1) before recording decisions`);
   const readings: { seq: number; value: number }[] = [];
   for (const event of events) {

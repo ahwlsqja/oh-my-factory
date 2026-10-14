@@ -5,7 +5,7 @@ import { leakContextAt, leakContextFor, lintDecisionStrings, loadLeakContext } f
 import type { LeakContext } from "../../src/decision/leak-lint.js";
 import { goalTemplate, parseGoal } from "../../src/goal/goal-file.js";
 import type { GoalSemantic } from "../../src/goal/goal-file.js";
-import { goalLockFile, lockGoal } from "../../src/goal/goal-lock.js";
+import { GoalLockError, goalLockFile, lockGoal } from "../../src/goal/goal-lock.js";
 import { CANARY } from "../helpers/canary.js";
 import { setupGoal } from "../helpers/goal.js";
 
@@ -197,12 +197,13 @@ describe("leak context", () => {
     expect(leakContextAt(plain, 0)).toBe(plain);
   });
 
-  it("fails closed without a usable goal lock", () => {
+  it("refuses a missing goal lock and lets a corrupt one's GoalLockError through", () => {
     const fx = setupGoal();
     expect(codeOf(() => loadLeakContext(fx.location.dir, "g-fast", []))).toBe("goal_not_locked");
     const file = goalLockFile(fx.location.dir, "g-fast");
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, "{");
-    expect(codeOf(() => loadLeakContext(fx.location.dir, "g-fast", []))).toBe("goal_not_locked");
+    // A damaged lock is host state that cannot be read, not a refusal: it reaches main.ts as exit 2 (A20).
+    expect(() => loadLeakContext(fx.location.dir, "g-fast", [])).toThrow(GoalLockError);
   });
 });
