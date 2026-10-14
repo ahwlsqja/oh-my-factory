@@ -1,11 +1,17 @@
+import type { LedgerEvent } from "../core/ledger.js";
+import type { ProjectLocation } from "../core/paths.js";
 import { safeText } from "../core/safe-text.js";
 import { validate } from "../core/schema.js";
-import type { DecisionStatus } from "../decision/types.js";
+import { type LeakContext, lintDecisionStrings, loadLeakContext } from "../decision/leak-lint.js";
+import { recordProblems } from "../decision/lint.js";
+import { foldDecisions } from "../decision/state.js";
+import { type DecisionStatus, isQuantitative } from "../decision/types.js";
 import type { AuditInputs, Classification, EvidenceInputs, Level, SealedInputs } from "./classify.js";
 import type { GateBoard, GateStatus, GateVerdict } from "./gates.js";
 import { GATE_IDS, NOT_RUN, STATION_IDS } from "./line-types.js";
 import type { GateId, NodeId, NotRun, StationId, StationStatus, UnverifiedArea, UnverifiedCode } from "./line-types.js";
 import type { WOutcome } from "./outcome.js";
+import type { WorkItem } from "./types.js";
 import type { WorkBudgetState } from "./w-budget.js";
 import type { Recommendation } from "./w-events.js";
 
@@ -94,6 +100,40 @@ export class EvidenceError extends Error {
     this.name = "EvidenceError";
   }
 }
+
+/**
+ * The quantitative decisions of the item, for the document. Evidence goes to the repository, so an id or a threshold
+ * gets the M3a leak treatment first: a record that fails `recordProblems` for a leak, or whose id or threshold
+ * matches the current lock or any reading (a re-lock after the decision was written), is dropped and `masked` is
+ * set. If the leak context cannot be loaded (no goal lock, damaged lock), nothing is listed and `masked` is set:
+ * a check that cannot run never waves text through. Non-quantitative decisions are not listed on purpose; GATE-1
+ * settled them and no measurement could confirm them (M3-D17).
+ */
+export function evidenceDecisions(location: ProjectLocation, item: WorkItem, events: readonly LedgerEvent[]): EvidenceDecisions {
+  const scope = { goal_id: item.front.goal_id, work_id: item.front.work_id };
+  let leak: LeakContext;
+  try {
+    leak = loadLeakContext(location.dir, scope.goal_id, events);
+  } catch {
+    return { list: [], masked: true };
+  }
+  const list: EvidenceDoc["decisions"] = [];
+  let masked = false;
+  for (const record of foldDecisions(events, scope).decisions) {
+    if (!isQuantitative(record.class)) continue;
+    const threshold = record.response_measure === null ? NOT_RUN : record.response_measure.threshold;
+    const leaks =
+      recordProblems(record, leak).some((problem) => problem.code === "leak") ||
+      lintDecisionStrings({ id: record.id, threshold }, leak).length > 0;
+    if (leaks) {
+      masked = true;
+      continue;
+    }
+    list.push({ id: record.id, threshold, measured: NOT_RUN, status: record.status });
+  }
+  return { list, masked };
+}
+
 
 /** One fixed sentence per code: evidence.md prints these, never a station's words. Typed over the union, so a new code cannot be forgotten. */
 export const UNVERIFIED_SENTENCES: Readonly<Record<UnverifiedCode, string>> = {
