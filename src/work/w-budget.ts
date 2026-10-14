@@ -1,5 +1,8 @@
-import type { LedgerEvent } from "../core/ledger.js";
+import type { Ledger, LedgerEvent, NewEvent } from "../core/ledger.js";
+import type { LockOwner } from "../core/lock.js";
 import { validate } from "../core/schema.js";
+import { claimStatus } from "./claim.js";
+import type { PROGRESS_STATIONS } from "./w-verbs.js";
 
 
 /**
@@ -133,4 +136,92 @@ export function foldWorkBudget(events: readonly LedgerEvent[], workId: string): 
           max_model_micro_usd: saturate(limits.max_model_micro_usd + raised.model_micro_usd),
         };
   return { limits, raised, effective, rounds_started: roundsStarted, previous_signature: previous, spend, anomalies };
+}
+
+export type WorkBudgetErrorCode = "forbidden" | "invalid_amount" | "wrong_state" | "no_limits" | "malformed" | "claim_lost";
+
+/** Messages are built from codes and validated ids only: nothing a model, a file or the audit wrote (M3b1-D3). */
+export class WorkBudgetError extends Error {
+  constructor(
+    readonly code: WorkBudgetErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "WorkBudgetError";
+  }
+}
+
+/** The claim a run proved at entry. Every append below re-checks it under the ledger lock. */
+export interface OwnedAppend {
+  ledger: Ledger;
+  itemDir: string;
+  claim: LockOwner;
+  scope: { goal_id: string; work_id: string; run_id: string };
+}
+
+/** Same stations as the W progress marker; `StationId` in line-types.ts (Task 3) is the same type. */
+export type BudgetStation = (typeof PROGRESS_STATIONS)[number];
+
+/** Validates at the writer, like `wEvent`: a malformed id or amount fails here and never reaches the ledger. */
+function budgetEvent(actor: string, type: WorkBudgetEventType, payload: Record<string, unknown>): NewEvent {
+  const check = validate(SCHEMA, { type, payload });
+  if (!check.ok) throw new Error(`invalid ${type} event: ${check.errors}`);
+  return { actor, type, payload };
+}
+
+/** The claim file must still name this run: same pid, start time and acquired_at. Anything else is `claim_lost`. */
+function assertOwned(own: OwnedAppend): void {
+  const owner = claimStatus(own.itemDir).owner;
+  if (
+    owner === null ||
+    owner.pid !== own.claim.pid ||
+    owner.start_time !== own.claim.start_time ||
+    owner.acquired_at !== own.claim.acquired_at
+  ) {
+    throw new WorkBudgetError("claim_lost", `the claim on ${own.scope.work_id} is not the one this run holds`);
+  }
+}
+
+/** Thrown inside the ledger lock when there is nothing to append; nothing is written. */
+class AlreadyRecorded extends Error {}
+
+/**
+ * Copies the `[w]` limits into the ledger at the item's first run (M3b2-D1). Idempotent: returns null when
+ * limits are already recorded. The claim is proved first, so a run that lost its claim writes nothing.
+ */
+export function recordLimits(own: OwnedAppend, limits: WorkLimits): LedgerEvent | null {
+  try {
+    return own.ledger.appendWith((events) => {
+      assertOwned(own);
+      if (foldWorkBudget(events, own.scope.work_id).limits !== null) throw new AlreadyRecorded();
+      return budgetEvent("omf", "work.limits_set", {
+        ...own.scope,
+        max_rounds: limits.max_rounds,
+        max_model_micro_usd: limits.max_model_micro_usd,
+      });
+    });
+  } catch (err) {
+    if (err instanceof AlreadyRecorded) return null;
+    throw err;
+  }
+}
+
+/**
+ * Consumes one round when S3 opens (M3b2-D3): the number is `rounds_started + 1` from the ledger the lock
+ * holds, so two writers cannot take the same number. `prevSignature` is the signature of the round before.
+ */
+export function recordRound(own: OwnedAppend, prevSignature: string | null): LedgerEvent {
+  return own.ledger.appendWith((events) => {
+    assertOwned(own);
+    const round = foldWorkBudget(events, own.scope.work_id).rounds_started + 1;
+    return budgetEvent("omf", "work.round", { ...own.scope, round, prev_signature: prevSignature });
+  });
+}
+
+/** One station call's model spend in micro-USD; null = the vendor did not say (M3b2-D2). */
+export function recordSpend(own: OwnedAppend, station: BudgetStation, micro: number | null): LedgerEvent {
+  return own.ledger.appendWith(() => {
+    assertOwned(own);
+    return budgetEvent("omf", "work.spend", { ...own.scope, station, micro_usd: micro });
+  });
 }

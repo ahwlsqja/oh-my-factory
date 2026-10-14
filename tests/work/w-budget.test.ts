@@ -1,6 +1,18 @@
+import { rmSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { validate } from "../../src/core/schema.js";
-import { type BudgetAnomalyCode, WORK_BUDGET_EVENT_TYPES, foldWorkBudget, microUsd } from "../../src/work/w-budget.js";
+import { claimFile } from "../../src/work/claim.js";
+import {
+  type BudgetAnomalyCode,
+  type OwnedAppend,
+  WORK_BUDGET_EVENT_TYPES,
+  WorkBudgetError,
+  foldWorkBudget,
+  microUsd,
+  recordLimits,
+  recordRound,
+  recordSpend,
+} from "../../src/work/w-budget.js";
 import { CANARY } from "../helpers/canary.js";
 import { W_RUN, type WFixture, setupW } from "../helpers/w-verbs-fixture.js";
 
@@ -202,5 +214,81 @@ describe("foldWorkBudget", () => {
     expect(fx.verdict()).toEqual({ ok: true });
     expect(fx.verified().items.map((item) => item.front.work_id)).toEqual([fx.workId]);
     expect(fx.verified().malformed).toEqual([]);
+  });
+});
+
+const own = (fx: WFixture): OwnedAppend => ({ ledger: fx.ledger, itemDir: fx.item.dir, claim: fx.claim, scope: fx.scope });
+
+function budgetCode(fn: () => unknown): string {
+  try {
+    fn();
+  } catch (err) {
+    return err instanceof WorkBudgetError ? err.code : "other error";
+  }
+  return "no error";
+}
+
+// M3b2-D3: a round is consumed before the work, under the claim, so a kill cannot dodge the count.
+describe("owned appends", () => {
+  it("recordLimits writes one omf event, and a second call writes nothing and returns null", () => {
+    const fx = setupW();
+    const event = recordLimits(own(fx), LIMITS);
+    expect(event).toMatchObject({ actor: "omf", type: "work.limits_set", payload: { ...fx.scope, ...LIMITS } });
+    const before = fx.ledgerText();
+    expect(recordLimits(own(fx), { max_rounds: 9, max_model_micro_usd: 9 })).toBeNull();
+    expect(fx.ledgerText()).toBe(before);
+    expect(fold(fx).effective).toEqual(LIMITS);
+  });
+
+  it("recordRound numbers rounds from the ledger and carries the previous signature", () => {
+    const fx = setupW();
+    expect(recordRound(own(fx), null).payload).toMatchObject({ ...fx.scope, round: 1, prev_signature: null });
+    expect(recordRound(own(fx), SIG).payload).toMatchObject({ round: 2, prev_signature: SIG });
+    expect(fold(fx)).toMatchObject({ rounds_started: 2, previous_signature: SIG, anomalies: [] });
+  });
+
+  it("recordSpend records a known and an unknown spend per station", () => {
+    const fx = setupW();
+    recordSpend(own(fx), "S3", 1200);
+    recordSpend(own(fx), "S4", null);
+    expect(fold(fx).spend).toEqual({ micro_usd: 1200, unknown_count: 1 });
+  });
+
+  it("refuses an invalid spend and writes nothing", () => {
+    const fx = setupW();
+    const before = fx.ledgerText();
+    expect(() => recordSpend(own(fx), "S3", -1)).toThrow("invalid work.spend event");
+    expect(() => recordSpend(own(fx), "S3", 1.5)).toThrow("invalid work.spend event");
+    expect(fx.ledgerText()).toBe(before);
+  });
+
+  const BREAKS: [string, (fx: WFixture) => void][] = [
+    ["the claim file is gone", (fx) => rmSync(claimFile(fx.item.dir))],
+    [
+      "another process owns the claim",
+      (fx) =>
+        writeFileSync(
+          claimFile(fx.item.dir),
+          JSON.stringify({ pid: process.pid + 1, start_time: fx.claim.start_time, acquired_at: fx.claim.acquired_at }),
+        ),
+    ],
+    [
+      "the claim was re-acquired later by the same pid",
+      (fx) =>
+        writeFileSync(
+          claimFile(fx.item.dir),
+          JSON.stringify({ pid: fx.claim.pid, start_time: fx.claim.start_time, acquired_at: "2030-01-01T00:00:00.000Z" }),
+        ),
+    ],
+  ];
+
+  it.each(BREAKS)("every append refuses with claim_lost and writes nothing when %s", (_label, breakClaim) => {
+    const fx = setupW();
+    breakClaim(fx);
+    const before = fx.ledgerText();
+    expect(budgetCode(() => recordLimits(own(fx), LIMITS))).toBe("claim_lost");
+    expect(budgetCode(() => recordRound(own(fx), null))).toBe("claim_lost");
+    expect(budgetCode(() => recordSpend(own(fx), "S3", 1))).toBe("claim_lost");
+    expect(fx.ledgerText()).toBe(before);
   });
 });
