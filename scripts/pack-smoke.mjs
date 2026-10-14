@@ -6,7 +6,7 @@
 // them), so this works while the package is still private. `prepack` runs the
 // build; do not pass --ignore-scripts or the tarball ships without dist/.
 import { execFileSync } from "node:child_process";
-import { accessSync, constants, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { accessSync, constants, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -74,6 +74,25 @@ try {
   if (version !== pkg.version) fail(`omf --version printed "${version}", expected "${pkg.version}"`);
   const help = run(bin, ["--help"], { cwd: tmp });
   if (!/omf/i.test(help) || !/Usage:/i.test(help)) fail("omf --help output looks wrong");
+
+  // 5. Schema lookup from the installed location: init + ledger verify in a
+  // throwaway git repo with an isolated HOME.
+  const repo = join(tmp, "repo");
+  mkdirSync(repo, { recursive: true });
+  mkdirSync(join(tmp, "home"), { recursive: true });
+  const git = (...args) =>
+    run(
+      "git",
+      ["-c", "user.name=Smoke Test", "-c", "user.email=smoke@example.invalid", "-c", "commit.gpgsign=false", ...args],
+      { cwd: repo },
+    );
+  git("init", "-q");
+  git("commit", "-q", "--allow-empty", "-m", "init");
+  // run() throws on a non-zero exit, so reaching the regex means exit 0.
+  for (const [args, expected] of [[["init"], /initialized/i], [["ledger", "verify"], /ok:/i]]) {
+    const out = run(bin, args, { cwd: repo });
+    if (!expected.test(out)) fail(`omf ${args.join(" ")} output unexpected: ${out.trim()}`);
+  }
 } catch (err) {
   fail(`smoke run threw: ${err instanceof Error ? err.message : String(err)}`);
 } finally {
