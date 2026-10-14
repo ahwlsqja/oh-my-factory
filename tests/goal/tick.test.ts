@@ -17,6 +17,7 @@ import {
   lastTickEvents,
   lastTickTypes,
   ledgerEvents,
+  seedRepairable,
   seedWorkItem,
   setP95,
   setupTick,
@@ -395,6 +396,46 @@ describe("tickGoal: WIP cap and STOP_IF back-pressure", () => {
     expect(fx.reconciler.calls).toBe(0);
     expect(count(fx, "budget.consumed")).toBe(0);
     expect(lastTickEvents(fx).at(-1)?.payload).toMatchObject({ model_calls: 0, rounds_remaining: 10 });
+  });
+
+  it("counts a repairable item toward back_pressure by its ledger target state", async () => {
+    // Cap 5 keeps the WIP check out of the way: only STOP_IF can stop this tick.
+    const fx = setupTick({ maxOpen: 5 });
+    seedWorkItem(fx, { title: "Pending review alpha", state: "awaiting_review" });
+    seedWorkItem(fx, { title: "Pending review beta", state: "awaiting_review" });
+    seedRepairable(fx, "Pending review gamma", "awaiting_review");
+
+    const result = await fx.tick();
+
+    expect(result).toMatchObject({ status: "continue", outcome: "back_pressure", reason_code: "stop_if_unreviewed_evidence" });
+    expect(fx.reconciler.calls).toBe(0);
+    expect(count(fx, "budget.consumed")).toBe(0);
+  });
+
+  it("counts a repairable item toward the open cap by its file state", async () => {
+    const fx = setupTick({ maxOpen: 2 });
+    seedWorkItem(fx, { title: "Seeded work" });
+    seedRepairable(fx, "Crashed after start", "in_progress");
+
+    const result = await fx.tick();
+
+    expect(result).toMatchObject({ status: "continue", outcome: "wip_full", reconciled: false });
+    expect(fx.reconciler.calls).toBe(0);
+    expect(count(fx, "budget.consumed")).toBe(0);
+  });
+
+  it("agrees with reconcile on the open count: with a cap of 3, one verified and one repairable item leave one slot", async () => {
+    const fx = setupTick({ maxOpen: 3 });
+    seedWorkItem(fx, { title: "Seeded work" });
+    seedRepairable(fx, "Crashed after start", "in_progress");
+    fx.reconciler.reply([candidateOf("Cache the render path"), candidateOf("Trim the render output", ["src/output"])]);
+
+    const result = await fx.tick();
+
+    expect(result.outcome).toBe("dispatched");
+    expect(ledgerEvents(fx).find((event) => event.type === "reconcile.requested")?.payload.max_candidates).toBe(1);
+    expect(result.created).toHaveLength(1);
+    expect(result.rejected.map((r) => [r.filter, r.reason_code])).toEqual([["wip_cap", "cap_reached"]]);
   });
 
   it("waits with back_pressure when three items await review, before the WIP check", async () => {

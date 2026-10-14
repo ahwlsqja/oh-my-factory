@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { NewWorkItem, StateStore } from "../../src/adapters/state-markdown.js";
 import type { Ledger } from "../../src/core/ledger.js";
 import { fingerprintOf, workIdOf } from "../../src/work/fingerprint.js";
+import type { WEventType } from "../../src/work/w-events.js";
 import type { IntentCandidate, RiskAssessment, Trigger, WorkItem, WorkItemFront } from "../../src/work/types.js";
 import { renderWorkItem } from "../../src/work/work-item.js";
 
@@ -76,6 +77,44 @@ export function appendWorkEvent(
   extra: Record<string, unknown> = {},
 ): void {
   ledger.append({ actor, type, payload: { goal_id: item.front.goal_id, work_id: item.front.work_id, ...extra } });
+}
+
+/** A run id that matches `RUN_ID_PATTERN`, for events that do not care which run wrote them. */
+export const FIXTURE_RUN_ID = "r-20261012T100000Z-0001";
+
+/** The smallest payload each W event type accepts, run id and ids aside. `extra` overrides any field. */
+const W_DEFAULTS: Record<WEventType, Record<string, unknown>> = {
+  "work.started": { from: "ready" },
+  "work.submitted": { outcome: "success", recommendation: "merge_recommended" },
+  "work.failed": { outcome: "blocked", reason_code: "infra_failure" },
+  "work.parked": { outcome: "blocked", reason_code: "j2_open" },
+  "work.repaired": { from: "ready", to: "in_progress", source_seq: 1 },
+  "work.claim_reclaimed": { previous_pid: null, previous_acquired_at: "" },
+  "work.resumed": {},
+};
+
+/**
+ * Appends a valid W event for `item` as `omf`, the way a run would have (M3b1-D2: the ledger is the authority,
+ * so a fixture that puts an item into a W state must also leave the event). The item file is not touched:
+ * pair it with `rewriteItem` for a hand-built state, or leave it for a crash fixture. `extra` overrides fields.
+ */
+export function recordW(
+  ledger: Ledger,
+  type: WEventType,
+  item: { front: Pick<WorkItemFront, "goal_id" | "work_id"> },
+  extra: Record<string, unknown> = {},
+): void {
+  ledger.append({
+    actor: "omf",
+    type,
+    payload: {
+      goal_id: item.front.goal_id,
+      work_id: item.front.work_id,
+      run_id: FIXTURE_RUN_ID,
+      ...W_DEFAULTS[type],
+      ...extra,
+    },
+  });
 }
 
 /** Edits item.md on disk the way a person with a text editor would, bypassing the store and the ledger. */

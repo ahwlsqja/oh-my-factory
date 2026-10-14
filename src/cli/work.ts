@@ -316,6 +316,14 @@ export function runVeto(
 }
 
 /** Work item and veto commands (spec §4.4 step 5, §9). Errors propagate to main.ts, which exits 2. */
+/**
+ * What `work list` and `work show` print for an item whose file is exactly one W edge behind the ledger
+ * (M3b1-D4, D5). The reason is a person's question ("did someone edit this by hand?"): the ledger is the
+ * authority, so a crash leftover is healed by the next W entry on the goal, never by editing item.md.
+ * Display only: `--json` keeps the machine reason `w_repairable`.
+ */
+export const REPAIRABLE_LABEL = "repairable (file is behind the ledger; the next W entry on this goal repairs it)";
+
 export function registerWorkCommands(program: Command): void {
   const work = program.command("work").description("list, inspect and approve work items");
 
@@ -331,7 +339,8 @@ export function registerWorkCommands(program: Command): void {
         if (!ALL_STATES.includes(state as WorkState)) throw new Error(`unknown state ${state}; use ${ALL_STATES.join(", ")}`);
       }
       const events = new Ledger(status.dir).readVerified();
-      const { items, malformed } = verifiedItems(createMarkdownStore(status.dir), events, goalId);
+      const { items, malformed, repairable } = verifiedItems(createMarkdownStore(status.dir), events, goalId);
+      const repairableIds = new Set(repairable.map((entry) => entry.work_id));
       const shown = options.state.length === 0 ? items : items.filter((item) => options.state.includes(item.front.state));
       if (options.json) {
         console.log(JSON.stringify({ goal_id: goalId, items: shown.map((item) => item.front), malformed }, null, 2));
@@ -340,7 +349,10 @@ export function registerWorkCommands(program: Command): void {
         for (const { front } of shown) {
           console.log(`${front.work_id}  ${front.state.padEnd(17)} ${front.risk.class.padEnd(6)} ${front.title}`);
         }
-        for (const entry of malformed) console.log(`malformed ${entry.work_id ?? "(no id)"}: ${entry.reason}`);
+        for (const entry of malformed) {
+          const label = entry.work_id !== null && repairableIds.has(entry.work_id) ? REPAIRABLE_LABEL : entry.reason;
+          console.log(`malformed ${entry.work_id ?? "(no id)"}: ${label}`);
+        }
       }
       if (malformed.length > 0) {
         console.error(`warning: ${malformed.length} malformed work item(s) are never dispatched or counted as open work`);
@@ -357,7 +369,9 @@ export function registerWorkCommands(program: Command): void {
       const item = requireItem(status.dir, workId);
       const verdict = verifyItemAgainstLedger(item.front, new Ledger(status.dir).readVerified());
       console.log(`work ${workId} (${item.front.state}) of goal ${item.front.goal_id}`);
-      console.log(verdict.ok ? "ledger: consistent" : `ledger: MALFORMED (${verdict.reason}); this item is never dispatched`);
+      if (verdict.ok) console.log("ledger: consistent");
+      else if (verdict.reason === "w_repairable") console.log(`ledger: ${REPAIRABLE_LABEL}`);
+      else console.log(`ledger: MALFORMED (${verdict.reason}); this item is never dispatched`);
       const claim = claimStatus(item.dir);
       if (claim.held) console.log(`claim: held by pid ${claim.owner === null ? "unknown" : claim.owner.pid}`);
       console.log("--- item.md ---");

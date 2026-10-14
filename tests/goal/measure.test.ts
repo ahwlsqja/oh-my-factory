@@ -197,4 +197,29 @@ describe("measureGoal guardrails and baseline", () => {
     // Six earlier points exist, three of them flagged: only the three clean ones are baseline.
     expect(report.metrics[1]?.band).toEqual({ status: "insufficient_baseline", points: 3 });
   });
+
+  it("judges a reading taken under a pending regime change against a clean baseline and keeps it out of the next one", async () => {
+    const fx = setupGoal();
+    writeBands(fx, "m-errors");
+    lockGoal(fx.location, "g-fast", "human:dev");
+    const original = readFileSync(fx.goalFile, "utf8");
+    for (let i = 0; i < 6; i++) await measureGoal(fx.location, "g-fast", { runner: "host" });
+
+    writeFileSync(fx.goalFile, original.replace("value: 250", "value: 400"));
+    writeFileSync(join(fx.repo, "bench", "errors.sh"), "echo 5\n");
+    const first = (await measureGoal(fx.location, "g-fast", { runner: "host" })).report;
+    const second = (await measureGoal(fx.location, "g-fast", { runner: "host" })).report;
+
+    // Had the first pending point entered the baseline, the second would see mean 1.06 and sigma about 1.6 and breach only at 2 sigma.
+    for (const report of [first, second]) {
+      expect(report.needs_reapproval).toBe(true);
+      expect(report.metrics[1]).toMatchObject({
+        band: { status: "breach", tier: "3sigma", mean: expect.closeTo(0.4, 6) },
+        band_action: "propose",
+      });
+    }
+    const breached = new Ledger(fx.location.dir).readVerified().filter((e) => e.type === "band.breached");
+    expect(breached).toHaveLength(2);
+    for (const event of breached) expect(event.payload).toMatchObject({ tier: "3sigma", needs_reapproval: true });
+  });
 });

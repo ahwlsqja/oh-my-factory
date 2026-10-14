@@ -60,9 +60,10 @@ function loadConsistentItem(location: ProjectLocation, workId: string): WorkItem
 
 /**
  * The guard of every write: the item is ledger-consistent, in `ready` and nothing more, and no run holds
- * its claim. Nothing in M3a can produce `in_progress` (work.started is M3b1), so an `in_progress` item
- * here was hand-edited; and decisions must not change while a run holds the claim, or the run would
- * drift from the `spec.md` it was sealed with (M3a design A12). Plain errors: exit 2.
+ * its claim. A run starts an item only at S3, after GATE-1 passed (M3b1-D11), so an `in_progress` item has
+ * a sealed `spec.md`: changing a decision now would drift from the spec its run holds. A J2 question
+ * raised after the start has no write path until a later milestone relaxes this guard (M3b1 deferred).
+ * Decisions must not change while a run holds the claim either (M3a design A12). Plain errors: exit 2.
  */
 export function requireDecidableItem(location: ProjectLocation, workId: string): WorkItem {
   const item = loadConsistentItem(location, workId);
