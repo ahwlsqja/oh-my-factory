@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OMF gate, audit and isolation events (M3e)",
+  "description": "Validates { type, payload } of the events M3e writes. Every string is an id, a gate line or a member of a closed list, so no gate output, path, canary or scenario text can enter.",
+  "$defs": {
+    "goal_id": { "type": "string", "pattern": "^g-[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },
+    "work_id": { "type": "string", "pattern": "^w-[0-9a-f]{12}$" },
+    "run_id": { "type": "string", "pattern": "^r-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}$" },
+    "gate_name": { "enum": ["fast", "full", "deep"] },
+    "gates_evaluated_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "run_id", "line", "status", "failing", "misconfigured", "reasons"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "line": {
+          "type": "string",
+          "pattern": "^OMF_GATES: fast=(pass|fail|skip|empty) full=(pass|fail|skip|empty) deep=(pass|fail|skip|empty)$"
+        },
+        "status": { "enum": ["GREEN", "RED", "MISCONFIGURED"] },
+        "failing": { "type": "array", "uniqueItems": true, "maxItems": 3, "items": { "$ref": "#/$defs/gate_name" } },
+        "misconfigured": { "type": "array", "uniqueItems": true, "maxItems": 3, "items": { "$ref": "#/$defs/gate_name" } },
+        "reasons": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 6,
+          "items": { "enum": ["line_absent", "line_duplicated", "line_malformed", "required_skipped", "required_empty", "no_required_gates"] }
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": {
+        "type": { "const": "gates.evaluated" },
+        "payload": { "$ref": "#/$defs/gates_evaluated_payload" }
+      }
+    }
+  ]
+}
