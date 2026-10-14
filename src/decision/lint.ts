@@ -1,7 +1,7 @@
 import { leakContextAt, lintDecisionStrings } from "./leak-lint.js";
 import type { LeakContext } from "./leak-lint.js";
 import { INTERFACE_DECISION_ID, isQuantitative } from "./types.js";
-import type { DecisionRecord } from "./types.js";
+import type { DecisionRecord, DecisionState } from "./types.js";
 
 export type LintProblemCode =
   | "anomaly"
@@ -79,6 +79,68 @@ export function recordProblems(record: DecisionRecord, ctx: LeakContext): LintPr
   const asOfRecord = leakContextAt(ctx, record.closed_seq ?? record.added_seq);
   for (const finding of lintDecisionStrings(leakBody(record), asOfRecord)) {
     problems.push({ code: "leak", decision_id: id, field: finding.field, rule: finding.rule });
+  }
+  return problems;
+}
+
+/**
+ * Where scenario links come from. The real vault supplies it in M3c; M3a only needs the seam, so the link rule can be
+ * tested now and switched on later without touching the callers (M3-D17).
+ */
+export interface DecisionLinks {
+  linkedDecisionIds(): ReadonlySet<string>;
+}
+
+/**
+ * Which resolved decisions a scenario still has to cover (spec §5.2, GATE-2).
+ * - `unlinked`: resolved, not quantitative, and no scenario names it. GATE-2 sends the item back to S2 for these.
+ * - `not_run`: resolved and quantitative. A CLI scenario cannot prove a latency or a throughput figure in v0.1, so these
+ *   are reported as `measured: not_run` and never counted as success (M3-D17).
+ * Open, deferred and not-applicable decisions are in neither list: they have no committed answer to cover. Both lists
+ * follow `added_seq` order, so the output is stable. Pure; GATE-1 never calls it (A8).
+ */
+export function scenarioLinkCoverage(
+  state: DecisionState,
+  linked: ReadonlySet<string>,
+): { unlinked: string[]; not_run: string[] } {
+  const unlinked: string[] = [];
+  const notRun: string[] = [];
+  for (const decision of state.decisions) {
+    if (decision.status !== "resolved") continue;
+    if (isQuantitative(decision.class)) notRun.push(decision.id);
+    else if (!linked.has(decision.id)) unlinked.push(decision.id);
+  }
+  return { unlinked, not_run: notRun };
+}
+
+/**
+ * Deterministic lint of one work item's decision state (what `omf decide lint` prints). In order:
+ *  1. every ledger anomaly, as code `anomaly` with the anomaly code as `detail`;
+ *  2. `recordProblems` for every record, in `added_seq` order;
+ *  3. `intent_question_missing` for each id in `intentQuestionIds` that has no record (F8, A15: an unseeded question
+ *     must not be invisible to lint any more than it is to GATE-1);
+ *  4. only when `links` is given: `unlinked` for each resolved non-quantitative decision no scenario names.
+ * Without `links` the link rule is skipped, because before M3c there are no scenarios to link to.
+ */
+export function lintDecisions(
+  state: DecisionState,
+  ctx: LeakContext,
+  intentQuestionIds: readonly string[],
+  links?: DecisionLinks,
+): LintProblem[] {
+  const problems: LintProblem[] = [];
+  for (const anomaly of state.anomalies) {
+    problems.push({ code: "anomaly", decision_id: anomaly.decision_id, detail: anomaly.code });
+  }
+  for (const decision of state.decisions) problems.push(...recordProblems(decision, ctx));
+  const known = new Set(state.decisions.map((decision) => decision.id));
+  for (const id of intentQuestionIds) {
+    if (!known.has(id)) problems.push({ code: "intent_question_missing", decision_id: id });
+  }
+  if (links !== undefined) {
+    for (const id of scenarioLinkCoverage(state, links.linkedDecisionIds()).unlinked) {
+      problems.push({ code: "unlinked", decision_id: id });
+    }
   }
   return problems;
 }
