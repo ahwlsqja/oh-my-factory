@@ -1,8 +1,8 @@
-import type { LedgerEvent, NewEvent } from "../core/ledger.js";
+import type { Ledger, LedgerEvent, NewEvent } from "../core/ledger.js";
 import { validateDef } from "../core/schema.js";
 import type { DecisionScope } from "../decision/types.js";
 import { scenarioRef } from "./types.js";
-import type { AuthorFailureCode, AuthorStamp, ScenarioStatus, SealFeedback } from "./types.js";
+import type { AuthorFailureCode, AuthorStamp, ScenarioStatus, SealFeedback, StoredScenario } from "./types.js";
 
 /**
  * Ledger events of the Scenario Vault (M3c): `seal.*`, `scenario.status_changed` and `gate2.evaluated`. Every payload is
@@ -249,4 +249,100 @@ export function foldSeals(events: readonly LedgerEvent[], scope: DecisionScope):
 /** Rounds follow completed seals only: a failed seal consumes none. T10 recounts this inside `appendWith`. */
 export function nextSealRound(events: readonly LedgerEvent[], scope: DecisionScope): number {
   return foldSeals(events, scope).completed + 1;
+}
+
+interface StatusPayload {
+  seal_id: string;
+  scenario_ref: string;
+  status: Exclude<ScenarioStatus, "active">;
+  reason: StatusReason;
+}
+
+/**
+ * `scenarioRef -> status` for one set, from `scenario.status_changed` only; absent means `active`. The first valid move of a
+ * scenario stands. A later omf move of the same scenario, an invalid omf `scenario.*` event or an unknown `scenario.*` type is
+ * an anomaly (M3c-D20). Events of other seals, scopes and actors are skipped.
+ */
+export function foldStatuses(
+  events: readonly LedgerEvent[],
+  scope: DecisionScope,
+  sealId: string,
+): { statuses: ReadonlyMap<string, ScenarioStatus>; anomalies: number } {
+  const statuses = new Map<string, ScenarioStatus>();
+  let anomalies = 0;
+  for (const event of events) {
+    if (!event.type.startsWith("scenario.")) continue;
+    if (event.actor !== "omf" || !inScope(event, scope)) continue;
+    if (event.type !== "scenario.status_changed" || !validateDef(SCHEMA, "ev_scenario_status_changed", event.payload).ok) {
+      anomalies += 1;
+      continue;
+    }
+    const payload = event.payload as unknown as StatusPayload;
+    if (payload.seal_id !== sealId) continue;
+    if (statuses.has(payload.scenario_ref)) {
+      anomalies += 1;
+      continue;
+    }
+    statuses.set(payload.scenario_ref, payload.status);
+  }
+  return { statuses, anomalies };
+}
+
+export interface EffectiveScenario {
+  scenario: StoredScenario;
+  status: ScenarioStatus;
+}
+
+/** The ledger's status, else `active` (OMF stamps active at intake). No field of the stored file is read for this. */
+export function effectiveScenarios(set: readonly StoredScenario[], statuses: ReadonlyMap<string, ScenarioStatus>): EffectiveScenario[] {
+  return set.map((scenario) => ({ scenario, status: statuses.get(scenarioRef(scenario.scenario_id)) ?? "active" }));
+}
+
+export type AuthorOrder = { ok: true } | { ok: false; reason: "no_seal" | "seal_after_start" };
+
+/**
+ * "The author precedes the implementer", from ledger order only. The first `work.started` of the item (any actor: a forged one
+ * makes the check fail closed) must come after the latest valid `seal.completed`. An item that has not started is ok here;
+ * a missing seal is GATE-2's `seal_missing`, not an order problem.
+ */
+export function authorPrecedesStart(events: readonly LedgerEvent[], scope: DecisionScope): AuthorOrder {
+  const start = events.find((event) => event.type === WORK_STARTED_EVENT && inScope(event, scope));
+  if (start === undefined) return { ok: true };
+  const { latest } = foldSeals(events, scope);
+  if (latest === null) return { ok: false, reason: "no_seal" };
+  return latest.seq < start.seq ? { ok: true } : { ok: false, reason: "seal_after_start" };
+}
+
+export class ScenarioStatusError extends Error {
+  constructor(
+    readonly code: "unknown_seal" | "already_moved",
+    message: string,
+  ) {
+    super(message);
+    this.name = "ScenarioStatusError";
+  }
+}
+
+/**
+ * Moves a scenario from `active` to `retired` or `contaminated` by appending `scenario.status_changed`. The seal must have a
+ * valid `seal.completed` and the scenario must not have moved yet; both are checked under the ledger lock, so two callers
+ * cannot both move it. Writes nothing to the vault. M3e's audit calls this on a known canary hit. Messages never name the scenario.
+ */
+export function markScenarioStatus(
+  ledger: Ledger,
+  scope: DecisionScope,
+  sealId: string,
+  scenarioId: string,
+  status: Exclude<ScenarioStatus, "active">,
+  reason: StatusReason,
+): void {
+  ledger.appendWith((events) => {
+    if (!foldSeals(events, scope).records.some((record) => record.seal_id === sealId)) {
+      throw new ScenarioStatusError("unknown_seal", "no seal.completed names that seal for this item");
+    }
+    if (foldStatuses(events, scope, sealId).statuses.has(scenarioRef(scenarioId))) {
+      throw new ScenarioStatusError("already_moved", "the scenario is no longer active");
+    }
+    return scenarioStatusChangedEvent(scope, { seal_id: sealId, scenario_id: scenarioId, status, reason });
+  });
 }

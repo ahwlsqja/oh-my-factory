@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 import { Ledger } from "../../src/core/ledger.js";
 import type { NewEvent } from "../../src/core/ledger.js";
 import {
+  ScenarioStatusError,
+  authorPrecedesStart,
+  effectiveScenarios,
   foldSeals,
+  foldStatuses,
   gate2EvaluatedEvent,
+  markScenarioStatus,
   nextSealRound,
   scenarioStatusChangedEvent,
   sealCompletedEvent,
@@ -11,6 +16,7 @@ import {
   sealRequestedEvent,
 } from "../../src/scenario/events.js";
 import { scenarioRef } from "../../src/scenario/types.js";
+import type { StoredScenario } from "../../src/scenario/types.js";
 import { OTHER_SCOPE, SCOPE } from "../helpers/decision.js";
 import { AUTHOR, COUNTS, digest, sealId, storedScenario } from "../helpers/stored-scenario.js";
 import { makeTempDir } from "../helpers/tmp.js";
@@ -132,5 +138,88 @@ describe("foldSeals", () => {
   it("is empty for a ledger with no seal events", () => {
     expect(foldSeals([], SCOPE)).toEqual({ latest: null, completed: 0, failed: 0, anomalies: 0, records: [] });
     expect(nextSealRound([], SCOPE)).toBe(1);
+  });
+});
+
+function statusCode(fn: () => void): string | undefined {
+  try {
+    fn();
+  } catch (err) {
+    return err instanceof ScenarioStatusError ? err.code : "not a ScenarioStatusError";
+  }
+  return undefined;
+}
+
+describe("scenario status", () => {
+  it("comes from omf ledger events only, and moves away from active once", () => {
+    const ledger = newLedger();
+    ledger.append(completed(1, 1));
+    const [first, second, third] = [storedScenario(1), storedScenario(2), storedScenario(3)] as [StoredScenario, StoredScenario, StoredScenario];
+
+    markScenarioStatus(ledger, SCOPE, sealId(1), first.scenario_id, "retired", "person_retired");
+    markScenarioStatus(ledger, SCOPE, sealId(1), second.scenario_id, "contaminated", "canary_hit");
+    const written = ledger.readVerified().length;
+    expect(statusCode(() => markScenarioStatus(ledger, SCOPE, sealId(1), first.scenario_id, "contaminated", "canary_hit"))).toBe("already_moved");
+    expect(statusCode(() => markScenarioStatus(ledger, SCOPE, sealId(9), third.scenario_id, "retired", "person_retired"))).toBe("unknown_seal");
+    expect(ledger.readVerified().length, "a refused move appends nothing").toBe(written);
+
+    // Someone else appending the event does not move a status.
+    ledger.append({
+      actor: "agent:worker",
+      type: "scenario.status_changed",
+      payload: { ...SCOPE, seal_id: sealId(1), scenario_ref: scenarioRef(third.scenario_id), status: "retired", reason: "person_retired" },
+    });
+    // A second omf move of an already moved scenario is an anomaly, and the first move stands.
+    ledger.append(
+      scenarioStatusChangedEvent(SCOPE, { seal_id: sealId(1), scenario_id: first.scenario_id, status: "contaminated", reason: "canary_hit" }),
+    );
+
+    const events = ledger.readVerified();
+    const { statuses, anomalies } = foldStatuses(events, SCOPE, sealId(1));
+    expect(anomalies).toBe(1);
+    expect(statuses.get(scenarioRef(first.scenario_id))).toBe("retired");
+    expect(effectiveScenarios([first, second, third], statuses).map((e) => e.status)).toEqual(["retired", "contaminated", "active"]);
+    expect(foldStatuses(events, SCOPE, sealId(2)).statuses.size, "status is per seal").toBe(0);
+    expect(foldStatuses(events, OTHER_SCOPE, sealId(1)).statuses.size, "status is per item").toBe(0);
+  });
+
+  it("counts an invalid omf scenario event as an anomaly", () => {
+    const ledger = newLedger();
+    const scoped = { goal_id: SCOPE.goal_id, work_id: SCOPE.work_id };
+    ledger.append({ actor: "omf", type: "scenario.status_changed", payload: { ...scoped, seal_id: sealId(1), status: "retired" } });
+    ledger.append({ actor: "omf", type: "scenario.exposed", payload: { ...scoped } });
+    expect(foldStatuses(ledger.readVerified(), SCOPE, sealId(1)).anomalies).toBe(2);
+  });
+
+  it("is ledger-else-active whatever a file says", () => {
+    const edited = { ...storedScenario(4), status: "retired", exposure: 99 } as unknown as StoredScenario;
+    expect(effectiveScenarios([edited], new Map()).map((e) => e.status)).toEqual(["active"]);
+    const retired = new Map([[scenarioRef(edited.scenario_id), "retired" as const]]);
+    expect(effectiveScenarios([edited], retired).map((e) => e.status)).toEqual(["retired"]);
+  });
+});
+
+describe("authorPrecedesStart", () => {
+  const started = (actor = "omf", scope = SCOPE): NewEvent => ({
+    actor,
+    type: "work.started",
+    payload: { goal_id: scope.goal_id, work_id: scope.work_id, run_id: "r-20261014T000000Z-ab12", from: "ready" },
+  });
+  const orderOf = (events: NewEvent[]) => {
+    const ledger = newLedger();
+    for (const event of events) ledger.append(event);
+    return authorPrecedesStart(ledger.readVerified(), SCOPE);
+  };
+
+  it.each([
+    ["no seal and no start", () => [], { ok: true }],
+    ["a seal, then the start", () => [completed(1, 1), started()], { ok: true }],
+    ["a start of another item is not this item's start", () => [started("omf", OTHER_SCOPE), completed(1, 1)], { ok: true }],
+    ["a start and no seal at all", () => [started()], { ok: false, reason: "no_seal" }],
+    ["the start, then a seal", () => [started(), completed(1, 1)], { ok: false, reason: "seal_after_start" }],
+    ["a reseal after the start", () => [completed(1, 1), started(), completed(2, 2)], { ok: false, reason: "seal_after_start" }],
+    ["a forged start by a person before the seal fails closed", () => [started("human:dev@example.invalid"), completed(1, 1)], { ok: false, reason: "seal_after_start" }],
+  ])("%s", (_name, events, expected) => {
+    expect(orderOf(events())).toEqual(expected);
   });
 });
