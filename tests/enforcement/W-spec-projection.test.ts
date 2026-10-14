@@ -48,7 +48,26 @@ describe("W-spec-projection", () => {
       step();
       expect(readFileSync(specFile(f.item.dir), "utf8"), name).toBe(expectedSpec(f));
     }
-    expect(expectedSpec(f)).toBe(expectedSpec(f));
+    // An expectation written out by hand, not derived from renderSpec: the file on disk must carry these exact lines.
+    const onDisk = readFileSync(specFile(f.item.dir), "utf8");
+    expect(onDisk.split("\n")).toEqual(
+      expect.arrayContaining([
+        "# Cache the render path",
+        "## Interface",
+        "### d-interface (interface)",
+        "- Choice: A command line program",
+        '- Build: ["npm","run","build"]',
+        "## Resolved",
+        "## Deferred",
+        "### d-cache (other)",
+        "- Reason: Waiting on a benchmark.",
+        "- Expires: 2099-01-01T00:00:00.000Z",
+        "## Open (these block sealing)",
+        "## Not applicable",
+        "### d-flag (other)",
+        "- Rationale: Nothing to decide here.",
+      ]),
+    );
   });
 
   it("reports a hand edit as spec_drift (lint exits 1) and overwrites it on lint --render and on the next write", () => {
