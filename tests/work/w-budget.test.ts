@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { validate } from "../../src/core/schema.js";
-import { WORK_BUDGET_EVENT_TYPES, microUsd } from "../../src/work/w-budget.js";
+import { type BudgetAnomalyCode, WORK_BUDGET_EVENT_TYPES, foldWorkBudget, microUsd } from "../../src/work/w-budget.js";
+import { CANARY } from "../helpers/canary.js";
+import { W_RUN, type WFixture, setupW } from "../helpers/w-verbs-fixture.js";
 
 const SCOPE = { goal_id: "g-fast", work_id: "w-0123456789ab", run_id: "r-20261012T100000Z-ab12" };
 const SIG = "a".repeat(64);
@@ -71,5 +73,134 @@ describe("microUsd", () => {
 
   it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY, 1e-9, 1e12])("refuses %s", (usd) => {
     expect(() => microUsd(usd)).toThrow(RangeError);
+  });
+});
+
+const LIMITS = { max_rounds: 3, max_model_micro_usd: 5_000_000 };
+
+/** Appends a ledger event as any actor, valid or not, and returns its seq. The fold must judge it, not the writer. */
+function put(fx: WFixture, actor: string, type: string, payload: Record<string, unknown>): number {
+  return fx.ledger.append({ actor, type, payload }).seq;
+}
+const limits = (fx: WFixture, extra: Record<string, unknown> = {}) => ({ ...fx.scope, ...LIMITS, ...extra });
+const roundOf = (fx: WFixture, round: number, sig: string | null = null) => ({ ...fx.scope, round, prev_signature: sig });
+const spendOf = (fx: WFixture, micro: number | null, station = "S3") => ({ ...fx.scope, station, micro_usd: micro });
+const raiseOf = (fx: WFixture, kind: string, amount: number) => ({ goal_id: fx.goalId, work_id: fx.workId, kind, amount });
+const fold = (fx: WFixture) => foldWorkBudget(fx.events(), fx.workId);
+
+const EMPTY = {
+  limits: null,
+  raised: { rounds: 0, model_micro_usd: 0 },
+  effective: null,
+  rounds_started: 0,
+  previous_signature: null,
+  spend: { micro_usd: 0, unknown_count: 0 },
+  anomalies: [],
+};
+
+// M3b2-D1 to D3: the counts come from the ledger alone, and anything the fold cannot trust is an anomaly
+// that GATE-4 (Task 3) turns into a closed failure.
+describe("foldWorkBudget", () => {
+  it("is empty for a ledger with no budget events", () => {
+    expect(fold(setupW())).toEqual(EMPTY);
+  });
+
+  it("folds limits, a person's raises, rounds and spend, and effective is limits plus raises", () => {
+    const fx = setupW();
+    const sig2 = "b".repeat(64);
+    put(fx, "omf", "work.limits_set", limits(fx));
+    put(fx, "human:dev", "work.limit_raised", raiseOf(fx, "rounds", 2));
+    put(fx, "human:dev", "work.limit_raised", raiseOf(fx, "model_micro_usd", 1_000_000));
+    put(fx, "omf", "work.round", roundOf(fx, 1));
+    put(fx, "omf", "work.spend", spendOf(fx, 1000));
+    put(fx, "omf", "work.spend", spendOf(fx, null, "S4"));
+    put(fx, "omf", "work.round", roundOf(fx, 2, sig2));
+    put(fx, "omf", "work.spend", spendOf(fx, 500, "S5"));
+    expect(fold(fx)).toEqual({
+      limits: LIMITS,
+      raised: { rounds: 2, model_micro_usd: 1_000_000 },
+      effective: { max_rounds: 5, max_model_micro_usd: 6_000_000 },
+      rounds_started: 2,
+      previous_signature: sig2,
+      spend: { micro_usd: 1500, unknown_count: 1 },
+      anomalies: [],
+    });
+  });
+
+  it("skips another item's events, valid or not", () => {
+    const fx = setupW();
+    const other = { goal_id: fx.goalId, work_id: "w-aaaaaaaaaaaa", run_id: W_RUN };
+    put(fx, "omf", "work.limits_set", { ...other, ...LIMITS });
+    put(fx, "omf", "work.spend", { ...other, station: "S3", micro_usd: -5 });
+    put(fx, "human:dev", "work.limit_raised", { goal_id: fx.goalId, work_id: "w-aaaaaaaaaaaa", kind: "rounds", amount: 1 });
+    expect(fold(fx)).toEqual(EMPTY);
+  });
+
+  const ANOMALIES: [string, BudgetAnomalyCode, (fx: WFixture) => number][] = [
+    ["a spend written by a person", "not_omf", (fx) => put(fx, "human:dev", "work.spend", spendOf(fx, 5))],
+    ["a round written by an agent", "not_omf", (fx) => put(fx, "agent:x", "work.round", roundOf(fx, 1))],
+    ["a limits event written by a person", "not_omf", (fx) => put(fx, "human:dev", "work.limits_set", limits(fx))],
+    [
+      "a raise written by omf",
+      "not_human",
+      (fx) => {
+        put(fx, "omf", "work.limits_set", limits(fx));
+        return put(fx, "omf", "work.limit_raised", raiseOf(fx, "rounds", 1));
+      },
+    ],
+    [
+      "a second limits event",
+      "limits_twice",
+      (fx) => {
+        put(fx, "omf", "work.limits_set", limits(fx));
+        return put(fx, "omf", "work.limits_set", limits(fx, { max_rounds: 50 }));
+      },
+    ],
+    ["a raise before any limits", "raise_before_limits", (fx) => put(fx, "human:dev", "work.limit_raised", raiseOf(fx, "rounds", 1))],
+    ["a round that skips a number", "round_gap", (fx) => put(fx, "omf", "work.round", roundOf(fx, 2))],
+    ["a spend with a negative amount", "invalid_event", (fx) => put(fx, "omf", "work.spend", spendOf(fx, -1))],
+    [
+      "a limits event with a planted stray field",
+      "invalid_event",
+      (fx) => put(fx, "omf", "work.limits_set", limits(fx, { note: CANARY.metricId })),
+    ],
+  ];
+
+  it.each(ANOMALIES)("%s is one anomaly and counts for nothing", (_label, code, build) => {
+    const fx = setupW();
+    const seq = build(fx);
+    const state = fold(fx);
+    expect(state.anomalies).toEqual([{ code, seq }]);
+    expect(state.rounds_started).toBe(0);
+    expect(state.spend).toEqual({ micro_usd: 0, unknown_count: 0 });
+    expect(state.raised).toEqual({ rounds: 0, model_micro_usd: 0 });
+    // The anomaly carries a code and a seq, never the rejected payload.
+    expect(JSON.stringify(state)).not.toContain(CANARY.metricId);
+  });
+
+  it("keeps the first limits when a second one is forged", () => {
+    const fx = setupW();
+    put(fx, "omf", "work.limits_set", limits(fx));
+    put(fx, "omf", "work.limits_set", limits(fx, { max_rounds: 50 }));
+    expect(fold(fx).effective).toEqual(LIMITS);
+  });
+
+  it("saturates instead of overflowing, so a huge spend still exhausts the limit", () => {
+    const fx = setupW();
+    put(fx, "omf", "work.spend", spendOf(fx, Number.MAX_SAFE_INTEGER));
+    put(fx, "omf", "work.spend", spendOf(fx, 10));
+    expect(fold(fx).spend.micro_usd).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  // Depends row 7: the M3b1 verifier and `verifiedItems` must not be confused by the four new types.
+  it("leaves the M3b1 verifier and verifiedItems unaffected by all four event types", () => {
+    const fx = setupW();
+    put(fx, "omf", "work.limits_set", limits(fx));
+    put(fx, "human:dev", "work.limit_raised", raiseOf(fx, "rounds", 1));
+    put(fx, "omf", "work.round", roundOf(fx, 1));
+    put(fx, "omf", "work.spend", spendOf(fx, 1));
+    expect(fx.verdict()).toEqual({ ok: true });
+    expect(fx.verified().items.map((item) => item.front.work_id)).toEqual([fx.workId]);
+    expect(fx.verified().malformed).toEqual([]);
   });
 });
