@@ -8,6 +8,16 @@ Security problems do not go in issues or pull requests. Follow [`SECURITY.md`](S
 By taking part you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md). OMF has no telemetry,
 and contributions must not add any.
 
+## Pre-1.0 policy
+
+OMF is 0.x. Any minor release may change commands, file formats or ledger events. Breaking changes will
+be listed in the changelog once release automation lands.
+
+## Platforms
+
+macOS and Linux with Node.js 22.12 or newer are supported and tested in CI. Windows is not supported
+yet.
+
 ## Setup
 
 You need Node.js 22.12 or newer and npm.
@@ -27,6 +37,11 @@ npm run typecheck   # source and tests
 npm test            # builds dist/ from scratch and runs the whole suite
 npm run build       # production build
 ```
+
+## Output and colour
+
+OMF prints no ANSI colour or other control sequences. Tests enforce this (`tests/cli/no-ansi.test.ts`,
+which lands in a sibling pull request), so do not add colour output.
 
 ## Commits and pull requests
 

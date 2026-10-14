@@ -16,16 +16,15 @@ There are no published releases yet. Fixes land on `main` only and are not backp
 
 Please do not open a public issue, pull request or discussion for a security problem.
 
-Use GitHub private vulnerability reporting instead:
+Use GitHub private vulnerability reporting, which is enabled on this repository:
 
-1. Open the repository's **Security** tab.
+1. Open the repository's **Security** tab, or go straight to
+   <https://github.com/ahwlsqja/oh-my-factory/security/advisories/new>.
 2. Choose **Report a vulnerability**.
 3. Describe the problem, the affected commit, and how to reproduce it.
 
-Note for the maintainer: private vulnerability reporting is a repository setting and must be enabled
-(Settings, Code security, Private vulnerability reporting). If the "Report a vulnerability" button is
-missing, the setting is not on yet. In that case open a public issue that says only "I need a private
-channel for a security report", with no technical details, and the maintainer will arrange one.
+If the "Report a vulnerability" button is ever missing, open a public issue that says only "I need a
+private channel for a security report", with no technical details, and the maintainer will arrange one.
 
 Please mask paths that contain your user name, e-mail addresses, tokens and any other credential in
 what you send. Never include a real secret.
