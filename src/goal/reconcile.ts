@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { type ReconcileFailureCode, ReconcileParseError, type Reconciler, extractModelJson } from "../adapters/reconciler.js";
 import type { StateStore } from "../adapters/state-markdown.js";
-import { budgetStateFromEvents, consumeBudget } from "../core/budget.js";
+import { budgetConsumedEvent, budgetStateFromEvents } from "../core/budget.js";
 import { sha256Hex } from "../core/canonical-json.js";
 import { EXTRA_HIGH_RISK_GLOBS, type OmfConfig } from "../core/config.js";
 import type { Ledger } from "../core/ledger.js";
@@ -266,6 +266,13 @@ function schemaReason(errors: string): string {
   return "invalid_field";
 }
 
+/** Thrown inside the locked budget write to abandon it when a pool ran out after the snapshot was read. */
+class SpendLost extends Error {
+  constructor(readonly outcome: "rounds_exhausted" | "disclosure_exhausted") {
+    super(outcome);
+  }
+}
+
 function emptyResult(outcome: ReconcileStageResult["outcome"]): ReconcileStageResult {
   return { outcome, created: [], rejected: [], failure: null, stage_ms: { reconcile: 0, dispatch: 0 } };
 }
@@ -319,9 +326,25 @@ export async function reconcileGoal(ctx: ReconcileContext): Promise<ReconcileSta
   const inputText = `${JSON.stringify(input, null, 2)}\n`;
   writePrivateFile(join(reconcileDir, `${tickId}.input.json`), inputText);
 
-  // Both are checked above, so neither is consumed on exhaustion. This is the only place a round is spent (D18).
-  consumeBudget(ledger, goalId, "rounds");
-  if (disclosure !== null) consumeBudget(ledger, goalId, "disclosure");
+  // The checks above read a snapshot; a feedback release (M3d-D8) may take the last disclosure unit before this write.
+  // So both pools are folded again under the ledger lock and written together or not at all: no round is spent
+  // without the model call it pays for. This is the only place a round is spent (D18).
+  let lost: "rounds_exhausted" | "disclosure_exhausted" | null = null;
+  try {
+    ledger.appendWithMany((current) => {
+      const nowRounds = budgetStateFromEvents(current, goalId, "rounds");
+      if (nowRounds === null || nowRounds.remaining < 1) throw new SpendLost("rounds_exhausted");
+      if (disclosure !== null) {
+        const nowDisclosure = budgetStateFromEvents(current, goalId, "disclosure");
+        if (nowDisclosure === null || nowDisclosure.remaining < 1) throw new SpendLost("disclosure_exhausted");
+      }
+      return [budgetConsumedEvent(goalId, "rounds"), ...(disclosure !== null ? [budgetConsumedEvent(goalId, "disclosure")] : [])];
+    });
+  } catch (error) {
+    if (!(error instanceof SpendLost)) throw error;
+    lost = error.outcome;
+  }
+  if (lost !== null) return emptyResult(lost);
   ledger.append({
     actor: "omf",
     type: "reconcile.requested",

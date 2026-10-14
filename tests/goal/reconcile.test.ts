@@ -8,6 +8,7 @@ import { sha256Hex } from "../../src/core/canonical-json.js";
 import { readConfig } from "../../src/core/config.js";
 import type { LedgerEvent } from "../../src/core/ledger.js";
 import { validate } from "../../src/core/schema.js";
+import { releaseFeedback } from "../../src/feedback/release.js";
 import type { GapSummary } from "../../src/goal/gap-summary.js";
 import { type GoalDoc, goalDir, parseGoal } from "../../src/goal/goal-file.js";
 import {
@@ -411,6 +412,38 @@ describe("reconcileGoal: spending and recording", () => {
     expect(reconciler.calls).toHaveLength(1);
     // The exhausted disclosure budget was checked first, so the second attempt did not spend a round.
     expect(roundsOf(fx)?.consumed).toBe(1);
+  });
+
+  it("ends in a clean disclosure_exhausted when a feedback release takes the last unit between the read and the consume", async () => {
+    const fx = setupTickGoal();
+    declareBudget(fx.ledger, GOAL, "disclosure", 1, "human:dev");
+    let raced = false;
+    const racing = Object.create(fx.ledger) as typeof fx.ledger;
+    racing.readVerified = () => {
+      const events = fx.ledger.readVerified();
+      if (!raced) {
+        raced = true;
+        const results = Array.from({ length: 10 }, (_, i) => ({ category: "interface" as const, passed: i < 3, flaky: false }));
+        const out = releaseFeedback(fx.ledger, {
+          goalId: GOAL,
+          workId: "w-0123456789ab",
+          runId: "r-20261014T091500Z-0001",
+          trainDigest: "a".repeat(64),
+          results,
+        });
+        expect(out.status).toBe("released");
+      }
+      return events;
+    };
+    const before = eventsOf(fx).length;
+    const reconciler = fakeReconciler(okResponse([]));
+    const result = await reconcileGoal({ ...reconcileContext(fx, reconciler), ledger: racing });
+    expect(result.outcome).toBe("disclosure_exhausted");
+    expect(reconciler.calls).toHaveLength(0);
+    expect(roundsOf(fx)?.consumed).toBe(0);
+    const added = eventsOf(fx).slice(before);
+    expect(added.some((e) => e.type === "goal.terminated")).toBe(false);
+    expect(added.filter((e) => e.type === "budget.consumed").map((e) => e.payload.kind)).toEqual(["disclosure"]);
   });
 
   it("does nothing, and spends nothing, when the WIP cap is already full", async () => {
