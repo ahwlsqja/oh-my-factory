@@ -1,7 +1,7 @@
 import type { LedgerEvent, NewEvent } from "../core/ledger.js";
 import { validate } from "../core/schema.js";
-import { DECISION_CLASSES } from "../decision/types.js";
-import { scorePct } from "./ladder.js";
+import { DECISION_CLASSES, type DecisionClass } from "../decision/types.js";
+import { type BestEntry, meetsMargin, scorePct } from "./ladder.js";
 import { FeedbackError, type ReleasedCategory } from "./types.js";
 
 /**
@@ -142,4 +142,105 @@ export function feedbackEventsOf(events: readonly LedgerEvent[], goalId: string)
     });
   }
   return found;
+}
+
+export interface LadderState {
+  best: Map<DecisionClass, BestEntry>;
+  releases: number;
+  layout: { work_id: string; categories: { category: DecisionClass; n: number }[] } | null;
+}
+
+/**
+ * The Ladder of one (goal, train set digest), folded from the verified ledger (M3d-D4, D6; spec §5.7). Nothing
+ * is cached, so a restart or a new work item cannot reset it. The fold re-derives every claim a release event
+ * makes instead of trusting it, because a forged event could raise or lower the baseline:
+ * - round == previous round + 1;
+ * - every release of one digest has the same work_id, category set and n per category (the layout; the digest
+ *   alone does not pin it, so a changed layout is a bug or a forgery);
+ * - kind "first" iff the category has no best yet, "new" iff meetsMargin(pass - best.pass, n), "repeat" iff
+ *   pass == best.pass (the Ladder never shows a decrease);
+ * - a release with disclosure_units 1 is immediately preceded (seq - 1) by its own omf budget.consumed of one
+ *   disclosure unit for this goal, so a unit cannot be spent without a release or shared by two.
+ * Per-event rules (pass <= n, score_pct, class order, units match kinds) are already checked by
+ * feedbackEventsOf. Any breach throws FeedbackError("invalid_event") and stops the line.
+ */
+export function ladderStateFromEvents(events: readonly LedgerEvent[], goalId: string, trainDigest: string): LadderState {
+  const bySeq = new Map<number, LedgerEvent>(events.map((event) => [event.seq, event]));
+  const state: LadderState = { best: new Map(), releases: 0, layout: null };
+  for (const record of feedbackEventsOf(events, goalId)) {
+    const event = record.event;
+    if (event.type !== "feedback.released" || event.payload.train_digest !== trainDigest) continue;
+    const { payload } = event;
+    const fail = (why: string): FeedbackError => invalidEvent(event.type, record.seq, why);
+    if (payload.round !== state.releases + 1) throw fail("round is not the previous round plus one");
+    const layout = {
+      work_id: payload.work_id,
+      categories: payload.categories.map(({ category, n }) => ({ category, n })),
+    };
+    if (state.layout !== null && JSON.stringify(state.layout) !== JSON.stringify(layout)) {
+      throw fail("work item, category set or n differs from the first release of this digest");
+    }
+    state.layout ??= layout;
+    for (const c of payload.categories) {
+      const best = state.best.get(c.category);
+      if (best === undefined) {
+        if (c.kind !== "first") throw fail(`${c.category} has no best yet but its kind is ${c.kind}`);
+        state.best.set(c.category, { pass: c.pass, n: c.n });
+      } else if (c.kind === "new") {
+        if (!meetsMargin(c.pass - best.pass, c.n)) throw fail(`${c.category} is new but gains less than the margin`);
+        state.best.set(c.category, { pass: c.pass, n: c.n });
+      } else if (c.kind !== "repeat" || c.pass !== best.pass) {
+        throw fail(`${c.category} kind ${c.kind} does not follow from the best released score`);
+      }
+    }
+    if (payload.disclosure_units === 1) {
+      const before = bySeq.get(record.seq - 1);
+      const paid =
+        before !== undefined &&
+        before.type === "budget.consumed" &&
+        before.actor === "omf" &&
+        before.payload.goal_id === goalId &&
+        before.payload.kind === "disclosure" &&
+        before.payload.amount === 1;
+      if (!paid) throw fail("a new score is not immediately preceded by its disclosure unit");
+    }
+    state.releases += 1;
+  }
+  return state;
+}
+
+/**
+ * Per-scenario exposure (spec 437, limit 20) as the ledger sees it (M3d-D10): the number of releases that
+ * showed a new score (disclosure_units 1) for (goal, work item), over EVERY train digest of the item, counted
+ * since the latest J3 reseal authorization for it. Every train scenario contributes to every release, so one
+ * count covers them all. It is not keyed by digest: a digest changes whenever any scenario is added, retired or
+ * contaminated, and a per-digest count would then restart for every surviving scenario, so the limit could be
+ * evaded without a person. Only a J3 act (fresh scenarios) restarts it; J6 (a raised budget) does not.
+ */
+export function exposureUnitsOf(events: readonly LedgerEvent[], goalId: string, workId: string): number {
+  let units = 0;
+  for (const record of feedbackEventsOf(events, goalId)) {
+    const event = record.event;
+    if (event.payload.work_id !== workId) continue;
+    if (event.type === "feedback.test_reseal_authorized" && event.payload.basis === "J3") units = 0;
+    else if (event.type === "feedback.released" && event.payload.disclosure_units === 1) units += 1;
+  }
+  return units;
+}
+
+/**
+ * The shape of M3c's `ExposureCount` (`src/scenario/gate2.ts`: `({split, digest}) => number`), written structurally so this
+ * file needs no M3c import; a wider `split` parameter is assignable to M3c's narrower one. M3c-D9 dropped `reserveExposure`
+ * and `scenario.exposed`: GATE-2's `exposure_exhausted` calls the function supplied here (M3d-D10).
+ */
+export type ExposureCountFn = (key: { split: string; digest: string }) => number;
+
+/**
+ * The `ExposureCount` M3d supplies to M3c GATE-2: the (goal, work item) count of `exposureUnitsOf`, returned for ANY split
+ * and digest key (the count is not keyed by digest, M3d-D10). A snapshot of the events passed in; the caller builds a new
+ * function after the ledger changes.
+ */
+export function exposureCountFor(events: readonly LedgerEvent[], goalId: string, workId: string): ExposureCountFn {
+  const units = exposureUnitsOf(events, goalId, workId);
+  return () => units;
 }

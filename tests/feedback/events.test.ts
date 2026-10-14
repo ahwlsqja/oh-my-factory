@@ -1,13 +1,17 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { Ledger } from "../../src/core/ledger.js";
+import { declareBudget } from "../../src/core/budget.js";
+import { Ledger, type NewEvent } from "../../src/core/ledger.js";
 import { schemaUrl, validate } from "../../src/core/schema.js";
 import { DECISION_CLASSES } from "../../src/decision/types.js";
 import {
   FEEDBACK_EVENT_TYPES,
   type FeedbackEvent,
+  exposureCountFor,
+  exposureUnitsOf,
   feedbackEvent,
   feedbackEventsOf,
+  ladderStateFromEvents,
 } from "../../src/feedback/events.js";
 import { scorePct } from "../../src/feedback/ladder.js";
 import { FeedbackError, type ReleasedCategory } from "../../src/feedback/types.js";
@@ -249,5 +253,273 @@ describe("feedbackEventsOf", () => {
     const badCounts = newLedger();
     badCounts.append({ actor: "omf", type: "feedback.test_run_completed", payload: { ...payloadOf(COMPLETED), flaky: 3 } });
     expect(failure(() => feedbackEventsOf(badCounts.readVerified(), GOAL)).code).toBe("invalid_event");
+  });
+});
+
+const OTHER_WORK = "w-ba9876543210";
+const TRAIN_2 = "d".repeat(64);
+const TRAIN_3 = "e".repeat(64);
+
+const FIRST = [category("interface", 10, 4, "first"), category("security", 5, 2, "first")];
+const REPEAT = [category("interface", 10, 4, "repeat"), category("security", 5, 2, "repeat")];
+const BIG_FIRST = [category("interface", 110, 1, "first")];
+
+/** A disclosure ledger: the budget is declared by a person, as releaseFeedback (Task 5) requires. */
+function openLedger(): Ledger {
+  const ledger = newLedger();
+  declareBudget(ledger, GOAL, "disclosure", 50, "human:dev");
+  return ledger;
+}
+
+interface Release {
+  round: number;
+  categories: ReleasedCategory[];
+  digest?: string;
+  work?: string;
+  goal?: string;
+  units?: 0 | 1;
+  /** Write the budget.consumed unit right before the release (default: iff units is 1). */
+  paid?: boolean;
+}
+
+/**
+ * Writes one feedback.released event the way releaseFeedback will (the disclosure unit first, adjacent, in one
+ * append), but through raw NewEvents, so a test can also plant a forged one the writer would refuse.
+ */
+function release(ledger: Ledger, r: Release): void {
+  const goal = r.goal ?? GOAL;
+  const units = r.units ?? (r.categories.some((c) => c.kind !== "repeat") ? 1 : 0);
+  const event: NewEvent = {
+    actor: "omf",
+    type: "feedback.released",
+    payload: {
+      goal_id: goal,
+      work_id: r.work ?? WORK,
+      run_id: RUN,
+      train_digest: r.digest ?? TRAIN,
+      round: r.round,
+      categories: r.categories,
+      disclosure_units: units,
+    },
+  };
+  const unit: NewEvent = { actor: "omf", type: "budget.consumed", payload: { goal_id: goal, kind: "disclosure", amount: 1 } };
+  ledger.appendWithMany(() => ((r.paid ?? units === 1) ? [unit, event] : [event]));
+}
+
+const stateOf = (ledger: Ledger, digest = TRAIN) => ladderStateFromEvents(ledger.readVerified(), GOAL, digest);
+
+describe("ladderStateFromEvents", () => {
+  it("is empty on an empty ledger", () => {
+    expect(ladderStateFromEvents([], GOAL, TRAIN)).toEqual({ best: new Map(), releases: 0, layout: null });
+  });
+
+  it("folds first, repeat and new releases into best, count and layout", () => {
+    const ledger = openLedger();
+    release(ledger, { round: 1, categories: FIRST });
+    release(ledger, { round: 2, categories: REPEAT });
+    // interface 4 -> 8 of 10: d = 4, 10*4 >= 10 and 4*4 >= 10, so new; security stays a repeat.
+    release(ledger, { round: 3, categories: [category("interface", 10, 8, "new"), category("security", 5, 2, "repeat")] });
+    const state = stateOf(ledger);
+    expect(state.releases).toBe(3);
+    expect([...state.best]).toEqual([
+      ["interface", { pass: 8, n: 10 }],
+      ["security", { pass: 2, n: 5 }],
+    ]);
+    expect(state.layout).toEqual({
+      work_id: WORK,
+      categories: [
+        { category: "interface", n: 10 },
+        { category: "security", n: 5 },
+      ],
+    });
+  });
+
+  it("accepts the smallest passing gain at n=110 (d=11; d=10 is refused below)", () => {
+    const ok = openLedger();
+    release(ok, { round: 1, categories: BIG_FIRST });
+    release(ok, { round: 2, categories: [category("interface", 110, 12, "new")] }); // d = 11
+    expect(stateOf(ok).best.get("interface")).toEqual({ pass: 12, n: 110 });
+  });
+
+  it("does not mix another goal or another digest into the state", () => {
+    const ledger = openLedger();
+    release(ledger, { round: 1, categories: FIRST });
+    release(ledger, { round: 1, categories: FIRST, digest: TRAIN_2 });
+    release(ledger, { round: 1, categories: FIRST, goal: "g-other" });
+    expect(stateOf(ledger).releases).toBe(1);
+    expect(stateOf(ledger, TRAIN_2).releases).toBe(1);
+    expect(stateOf(ledger, TRAIN_3)).toEqual({ best: new Map(), releases: 0, layout: null });
+  });
+
+  it("gives the same state after a restart (a new Ledger over the same directory)", () => {
+    const ledger = openLedger();
+    release(ledger, { round: 1, categories: FIRST });
+    release(ledger, { round: 2, categories: REPEAT });
+    expect(ladderStateFromEvents(new Ledger(ledger.dir).readVerified(), GOAL, TRAIN)).toEqual(stateOf(ledger));
+  });
+
+  const forged: [string, (ledger: Ledger) => void][] = [
+    [
+      "a round gap",
+      (l) => {
+        release(l, { round: 1, categories: FIRST });
+        release(l, { round: 3, categories: REPEAT });
+      },
+    ],
+    [
+      "a new score below the margin (n=110, d=10)",
+      (l) => {
+        release(l, { round: 1, categories: BIG_FIRST });
+        release(l, { round: 2, categories: [category("interface", 110, 11, "new")] });
+      },
+    ],
+    [
+      "a new score that is a decrease",
+      (l) => {
+        release(l, { round: 1, categories: FIRST });
+        release(l, { round: 2, categories: [category("interface", 10, 2, "new"), category("security", 5, 2, "repeat")] });
+      },
+    ],
+    [
+      "a repeat with a different pass",
+      (l) => {
+        release(l, { round: 1, categories: FIRST });
+        release(l, { round: 2, categories: [category("interface", 10, 5, "repeat"), category("security", 5, 2, "repeat")] });
+      },
+    ],
+    [
+      "a first when a best exists",
+      (l) => {
+        release(l, { round: 1, categories: FIRST });
+        release(l, { round: 2, categories: FIRST });
+      },
+    ],
+    [
+      "disclosure_units 1 on a release of only repeats",
+      (l) => {
+        release(l, { round: 1, categories: FIRST });
+        release(l, { round: 2, categories: REPEAT, units: 1 });
+      },
+    ],
+    [
+      "disclosure_units 0 on a release with a new score",
+      (l) => {
+        release(l, { round: 1, categories: FIRST });
+        release(l, { round: 2, categories: [category("interface", 10, 8, "new"), category("security", 5, 2, "repeat")], units: 0 });
+      },
+    ],
+    ["a new score without its consumption", (l) => release(l, { round: 1, categories: FIRST, paid: false })],
+    [
+      "a consumption that is not adjacent",
+      (l) => {
+        l.append({ actor: "omf", type: "budget.consumed", payload: { goal_id: GOAL, kind: "disclosure", amount: 1 } });
+        l.append({ actor: "omf", type: "note.added", payload: {} });
+        release(l, { round: 1, categories: FIRST, paid: false });
+      },
+    ],
+    [
+      "a different work item under one digest",
+      (l) => {
+        release(l, { round: 1, categories: FIRST });
+        release(l, { round: 2, categories: REPEAT, work: OTHER_WORK });
+      },
+    ],
+    [
+      "a different category set under one digest",
+      (l) => {
+        release(l, { round: 1, categories: FIRST });
+        release(l, { round: 2, categories: [category("interface", 10, 4, "repeat")] });
+      },
+    ],
+    [
+      "a different n under one digest",
+      (l) => {
+        release(l, { round: 1, categories: FIRST });
+        release(l, { round: 2, categories: [category("interface", 11, 4, "repeat"), category("security", 5, 2, "repeat")] });
+      },
+    ],
+  ];
+  for (const [name, setup] of forged) {
+    it(`throws invalid_event for ${name}`, () => {
+      const ledger = openLedger();
+      setup(ledger);
+      expect(failure(() => stateOf(ledger)).code).toBe("invalid_event");
+    });
+  }
+});
+
+describe("exposureUnitsOf", () => {
+  const reseal = (basis: "J3" | "J6", consumed: string | null): NewEvent =>
+    feedbackEvent(
+      { type: "feedback.test_reseal_authorized", payload: { goal_id: GOAL, work_id: WORK, consumed_test_digest: consumed, basis } },
+      "human:dev",
+    );
+  const count = (ledger: Ledger, work = WORK): number => exposureUnitsOf(ledger.readVerified(), GOAL, work);
+
+  it("counts new-score releases of one work item across digests, and restarts only after a J3 act", () => {
+    const ledger = openLedger();
+    expect(count(ledger)).toBe(0);
+    release(ledger, { round: 1, categories: FIRST }); // units 1
+    release(ledger, { round: 2, categories: REPEAT }); // units 0: a repeat costs no exposure
+    expect(count(ledger)).toBe(1);
+
+    // A digest change alone (a scenario was added or retired) must not reset the count.
+    release(ledger, { round: 1, categories: FIRST, digest: TRAIN_2 });
+    expect(count(ledger)).toBe(2);
+
+    // Another work item of the same goal has its own count.
+    release(ledger, { round: 1, categories: FIRST, work: OTHER_WORK, digest: TRAIN_3 });
+    expect(count(ledger)).toBe(2);
+    expect(count(ledger, OTHER_WORK)).toBe(1);
+
+    // J6 (the budget was raised) does not restart it; J3 (fresh scenarios) does.
+    ledger.append(reseal("J6", TEST));
+    expect(count(ledger)).toBe(2);
+    ledger.append(reseal("J3", null));
+    expect(count(ledger)).toBe(0);
+    expect(count(ledger, OTHER_WORK)).toBe(1);
+
+    release(ledger, { round: 2, categories: [category("interface", 10, 8, "new"), category("security", 5, 2, "repeat")], digest: TRAIN_2 });
+    expect(count(ledger)).toBe(1);
+  });
+
+  it("gives the same count after a restart", () => {
+    const ledger = openLedger();
+    release(ledger, { round: 1, categories: FIRST });
+    expect(exposureUnitsOf(new Ledger(ledger.dir).readVerified(), GOAL, WORK)).toBe(1);
+  });
+});
+
+describe("exposureCountFor", () => {
+  const reseal = (basis: "J3" | "J6", consumed: string | null): NewEvent =>
+    feedbackEvent(
+      { type: "feedback.test_reseal_authorized", payload: { goal_id: GOAL, work_id: WORK, consumed_test_digest: consumed, basis } },
+      "human:dev",
+    );
+
+  it("supplies M3c's ExposureCount: the (goal, work item) count for any split and digest", () => {
+    const ledger = openLedger();
+    const countFor = (work = WORK) => exposureCountFor(ledger.readVerified(), GOAL, work);
+    expect(countFor()({ split: "train", digest: TRAIN })).toBe(0);
+    release(ledger, { round: 1, categories: FIRST });
+    release(ledger, { round: 1, categories: FIRST, digest: TRAIN_2 });
+    release(ledger, { round: 2, categories: REPEAT, digest: TRAIN_2 }); // a repeat costs no exposure
+    const count = countFor();
+    expect(count({ split: "train", digest: TRAIN })).toBe(2);
+    expect(count({ split: "train", digest: TRAIN_2 })).toBe(2);
+    expect(count({ split: "test", digest: TEST })).toBe(2);
+    expect(count({ split: "train", digest: "f".repeat(64) })).toBe(2);
+    expect(countFor(OTHER_WORK)({ split: "train", digest: TRAIN })).toBe(0);
+    expect(count({ split: "train", digest: TRAIN })).toBe(exposureUnitsOf(ledger.readVerified(), GOAL, WORK));
+    ledger.append(reseal("J3", null));
+    expect(countFor()({ split: "train", digest: TRAIN })).toBe(0);
+  });
+
+  it("is a snapshot: a later release does not change a function already built", () => {
+    const ledger = openLedger();
+    const before = exposureCountFor(ledger.readVerified(), GOAL, WORK);
+    release(ledger, { round: 1, categories: FIRST });
+    expect(before({ split: "train", digest: TRAIN })).toBe(0);
+    expect(exposureCountFor(ledger.readVerified(), GOAL, WORK)({ split: "train", digest: TRAIN })).toBe(1);
   });
 });
