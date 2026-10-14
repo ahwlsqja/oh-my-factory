@@ -256,3 +256,66 @@ describe("Ledger", () => {
     expect(ledger.verify()).toEqual({ ok: true, count: 0, head: GENESIS_HASH });
   });
 });
+
+describe("appendWithMany", () => {
+  it("appends several events from one locked read, chained in order", () => {
+    const ledger = newLedger();
+    ledger.append({ actor: "omf", type: "project.initialized", payload: {} });
+    let seen = -1;
+    const written = ledger.appendWithMany((events) => {
+      seen = events.length;
+      return [
+        { actor: "omf", type: "test.first", payload: { n: 1 } },
+        { actor: "omf", type: "test.second", payload: { n: 2 } },
+        { actor: "omf", type: "test.third", payload: { n: 3 } },
+      ];
+    });
+    expect(seen).toBe(1);
+    expect(written.map((e) => [e.seq, e.type])).toEqual([
+      [2, "test.first"],
+      [3, "test.second"],
+      [4, "test.third"],
+    ]);
+    expect(ledger.verify()).toMatchObject({ ok: true, count: 4, head: written[2]?.hash });
+  });
+
+  it("writes nothing when build throws or returns no event", () => {
+    const ledger = newLedger();
+    ledger.append({ actor: "omf", type: "project.initialized", payload: {} });
+    expect(() =>
+      ledger.appendWithMany(() => {
+        throw new Error("precondition failed");
+      }),
+    ).toThrow("precondition failed");
+    expect(() => ledger.appendWithMany(() => [])).toThrow(/at least one event/);
+    expect(ledger.verify()).toMatchObject({ ok: true, count: 1 });
+  });
+
+  it("writes nothing when a later event is invalid", () => {
+    const ledger = newLedger();
+    expect(() =>
+      ledger.appendWithMany(() => [
+        { actor: "omf", type: "test.ok", payload: {} },
+        { actor: "robot", type: "test.bad", payload: {} },
+      ]),
+    ).toThrow(/invalid event/);
+    expect(ledger.verify()).toMatchObject({ ok: true, count: 0 });
+  });
+
+  it("discards a torn tail once and returns only the requested events", () => {
+    const ledger = newLedger();
+    ledger.append({ actor: "omf", type: "project.initialized", payload: {} });
+    appendFileSync(ledger.file, '{"schema_version":1,"seq":2,"pre');
+    const written = ledger.appendWithMany(() => [
+      { actor: "omf", type: "test.a", payload: {} },
+      { actor: "omf", type: "test.b", payload: {} },
+    ]);
+    expect(written.map((e) => e.type)).toEqual(["test.a", "test.b"]);
+    expect(ledger.readVerified().map((e) => e.type)).toEqual([
+      "project.initialized",
+      "ledger.tail_discarded",
+      "test.a",
+      "test.b",
+    ]);
+  });
+});
