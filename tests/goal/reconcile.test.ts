@@ -271,16 +271,7 @@ const modeOf = (file: string): string => (statSync(file).mode & 0o777).toString(
 
 /** A store whose createWorkItem is replaced; every other verb goes to the real store. */
 function wrapStore(inner: StateStore, createWorkItem: StateStore["createWorkItem"]): StateStore {
-  return {
-    fetchWorkItemsByStates: (goalId, states) => inner.fetchWorkItemsByStates(goalId, states),
-    fetchWorkItemsByIds: (ids) => inner.fetchWorkItemsByIds(ids),
-    fetchAllWorkItems: (goalId) => inner.fetchAllWorkItems(goalId),
-    malformedItems: (goalId) => inner.malformedItems(goalId),
-    createWorkItem,
-    approveWorkItem: (workId, actor, now) => inner.approveWorkItem(workId, actor, now),
-    vetoWorkItem: (workId, actor, reason, now) => inner.vetoWorkItem(workId, actor, reason, now),
-    cancelWorkItem: (workId, actor, now) => inner.cancelWorkItem(workId, actor, now),
-  };
+  return { ...inner, createWorkItem };
 }
 
 describe("scopeViolation", () => {
