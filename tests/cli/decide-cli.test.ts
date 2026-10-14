@@ -68,6 +68,10 @@ describe("requireDecidableItem", () => {
     rewriteItem(busy, { state: "in_progress" });
     expect(() => requireDecidableItem(fx.location, busy.front.work_id)).toThrow("is in_progress");
 
+    const forged = createRecorded(fx.ledger, fx.store, makeNewItem({ title: "Prune the cache" }));
+    rewriteItem(forged, { state: "in_progress" }); // hand-edited: no work.started in the ledger
+    expect(() => requireDecidableItem(fx.location, forged.front.work_id)).toThrow("w_event_missing");
+
     const gone = createRecorded(fx.ledger, fx.store, makeNewItem({ title: "Trim the logs" }));
     runVeto(fx.location, gone.front.work_id, PERSON, "not needed");
     expect(() => requireDecidableItem(fx.location, gone.front.work_id)).toThrow("is vetoed");
