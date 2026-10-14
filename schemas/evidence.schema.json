@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OMF evidence document (M3b2, spec §5.8)",
+  "description": "evidence.json of one run. Every field is required. A field nobody produced is the string \"not run\" (isolation_level: \"unmeasured\"), never absent and never a passing value. Strings are ids, members of closed lists or length-capped text; plan_summary and implementer_notes are the untrusted fields.",
+  "$defs": {
+    "goal_id": { "type": "string", "pattern": "^g-[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },
+    "work_id": { "type": "string", "pattern": "^w-[0-9a-f]{12}$" },
+    "run_id": { "type": "string", "pattern": "^r-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}$" },
+    "timestamp": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$" },
+    "decision_id": { "type": "string", "pattern": "^d-[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },
+    "code": { "type": "string", "pattern": "^[a-z0-9_]+$", "maxLength": 60 },
+    "text": { "type": "string", "maxLength": 4000 },
+    "count": { "type": "integer", "minimum": 0 },
+    "not_run": { "const": "not run" },
+    "station_id": { "enum": ["S1", "S2", "S3", "S4", "S5", "S6", "S7"] },
+    "gate_id": { "enum": ["GATE-1", "GATE-2", "GATE-3", "GATE-4"] },
+    "node_id": { "enum": ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "GATE-1", "GATE-2", "GATE-3", "GATE-4"] },
+    "station_status": { "enum": ["ok", "rework", "skipped", "blocked", "manual", "error", "not_run"] },
+    "gate_verdict": { "enum": ["pass", "fail", "not_run"] },
+    "gate_status": { "enum": ["pass", "fail", "not_run", "not_visited"] },
+    "unverified_code": {
+      "enum": [
+        "decision_unmeasured", "model_spend_unverifiable", "noise_check_not_run", "noise_check_not_evaluated",
+        "high_risk_paths_not_run", "high_risk_paths_touched", "decisions_masked", "injected_gate"
+      ]
+    },
+    "unverified_area": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "decision_id"],
+      "properties": {
+        "code": { "$ref": "#/$defs/unverified_code" },
+        "decision_id": { "anyOf": [{ "$ref": "#/$defs/decision_id" }, { "type": "null" }] }
+      }
+    },
+    "tally_train": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pass", "total", "flaky"],
+      "properties": { "pass": { "$ref": "#/$defs/count" }, "total": { "$ref": "#/$defs/count" }, "flaky": { "$ref": "#/$defs/count" } }
+    },
+    "tally_test": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pass", "total"],
+      "properties": { "pass": { "$ref": "#/$defs/count" }, "total": { "$ref": "#/$defs/count" } }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "work_id", "goal_id", "run_id", "outcome", "recommendation", "recommendation_reasons",
+    "unverified_areas", "decisions", "gates", "gate_line", "stations", "sealed", "audit", "isolation_level",
+    "high_risk_paths_touched", "noise_check", "label", "self_metrics", "untrusted_fields", "plan_summary",
+    "implementer_notes", "created_at"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "work_id": { "$ref": "#/$defs/work_id" },
+    "goal_id": { "$ref": "#/$defs/goal_id" },
+    "run_id": { "$ref": "#/$defs/run_id" },
+    "outcome": { "enum": ["success", "flawed", "blocked", "manual"] },
+    "recommendation": { "enum": ["merge_recommended", "not_recommended", "human_needed"] },
+    "recommendation_reasons": { "type": "array", "maxItems": 40, "items": { "$ref": "#/$defs/code" } },
+    "unverified_areas": { "type": "array", "items": { "$ref": "#/$defs/unverified_area" } },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "threshold", "measured", "status"],
+        "properties": {
+          "id": { "$ref": "#/$defs/decision_id" },
+          "threshold": { "anyOf": [{ "type": "number" }, { "$ref": "#/$defs/not_run" }] },
+          "measured": { "$ref": "#/$defs/not_run" },
+          "status": { "enum": ["open", "resolved", "deferred", "na"] }
+        }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verdict", "per_gate", "history", "injected"],
+      "properties": {
+        "verdict": { "enum": ["pass", "fail"] },
+        "per_gate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["GATE-1", "GATE-2", "GATE-3", "GATE-4"],
+          "properties": {
+            "GATE-1": { "$ref": "#/$defs/gate_status" },
+            "GATE-2": { "$ref": "#/$defs/gate_status" },
+            "GATE-3": { "$ref": "#/$defs/gate_status" },
+            "GATE-4": { "$ref": "#/$defs/gate_status" }
+          }
+        },
+        "history": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["gate", "verdict", "reasons"],
+            "properties": {
+              "gate": { "$ref": "#/$defs/gate_id" },
+              "verdict": { "$ref": "#/$defs/gate_verdict" },
+              "reasons": { "type": "array", "items": { "$ref": "#/$defs/code" } }
+            }
+          }
+        },
+        "injected": { "type": "array", "items": { "$ref": "#/$defs/gate_id" } }
+      }
+    },
+    "gate_line": { "anyOf": [{ "$ref": "#/$defs/text" }, { "$ref": "#/$defs/not_run" }] },
+    "stations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["S1", "S2", "S3", "S4", "S5", "S6", "S7"],
+      "properties": {
+        "S1": { "$ref": "#/$defs/station_status" },
+        "S2": { "$ref": "#/$defs/station_status" },
+        "S3": { "$ref": "#/$defs/station_status" },
+        "S4": { "$ref": "#/$defs/station_status" },
+        "S5": { "$ref": "#/$defs/station_status" },
+        "S6": { "$ref": "#/$defs/station_status" },
+        "S7": { "$ref": "#/$defs/station_status" }
+      }
+    },
+    "sealed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["train", "test"],
+      "properties": {
+        "train": { "anyOf": [{ "$ref": "#/$defs/tally_train" }, { "$ref": "#/$defs/not_run" }] },
+        "test": { "anyOf": [{ "$ref": "#/$defs/tally_test" }, { "$ref": "#/$defs/not_run" }] }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canary_hits", "tests_edited", "prove_test", "judge_config_touched"],
+      "properties": {
+        "canary_hits": { "anyOf": [{ "$ref": "#/$defs/count" }, { "$ref": "#/$defs/not_run" }] },
+        "tests_edited": { "anyOf": [{ "type": "boolean" }, { "$ref": "#/$defs/not_run" }] },
+        "prove_test": { "enum": ["pass", "fail", "not run"] },
+        "judge_config_touched": { "anyOf": [{ "type": "boolean" }, { "$ref": "#/$defs/not_run" }] }
+      }
+    },
+    "isolation_level": { "enum": ["L1", "L2", "L3", "unmeasured"] },
+    "high_risk_paths_touched": {
+      "anyOf": [
+        { "type": "array", "maxItems": 200, "items": { "type": "string", "maxLength": 500 } },
+        { "$ref": "#/$defs/not_run" }
+      ]
+    },
+    "noise_check": { "enum": ["ok", "within_variance", "not_evaluated", "not run"] },
+    "label": { "const": "pre-verified / goal impact not measured" },
+    "self_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage_times", "rounds", "human_interventions_by_J", "budget_used"],
+      "properties": {
+        "stage_times": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/node_id" },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["visits", "total_ms"],
+            "properties": { "visits": { "$ref": "#/$defs/count" }, "total_ms": { "$ref": "#/$defs/count" } }
+          }
+        },
+        "rounds": { "$ref": "#/$defs/count" },
+        "human_interventions_by_J": { "$ref": "#/$defs/not_run" },
+        "budget_used": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rounds", "model_micro_usd", "spend_unknown"],
+          "properties": {
+            "rounds": { "$ref": "#/$defs/count" },
+            "model_micro_usd": { "$ref": "#/$defs/count" },
+            "spend_unknown": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "untrusted_fields": { "const": ["plan_summary", "implementer_notes"] },
+    "plan_summary": { "anyOf": [{ "$ref": "#/$defs/text" }, { "$ref": "#/$defs/not_run" }] },
+    "implementer_notes": { "anyOf": [{ "$ref": "#/$defs/text" }, { "$ref": "#/$defs/not_run" }] },
+    "created_at": { "$ref": "#/$defs/timestamp" }
+  }
+}
