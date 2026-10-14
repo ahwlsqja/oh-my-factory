@@ -149,3 +149,55 @@ describe("configSha256", () => {
     expect(configSha256(dir)).not.toBe(first);
   });
 });
+
+describe("[w] table (per-item W limits, M3-D18)", () => {
+  it("takes the defaults when the file has no [w] section (a missing section, not a missing file)", () => {
+    expect(CONFIG_DEFAULTS.w).toEqual({ max_rounds: 3, max_model_usd: 5 });
+    expect(parseConfig("").w).toEqual({ max_rounds: 3, max_model_usd: 5 });
+    expect(parseConfig('[isolation]\ndeclared = "L2"\n').w).toEqual({ max_rounds: 3, max_model_usd: 5 });
+  });
+
+  it("overrides one key and keeps the default of the other", () => {
+    expect(parseConfig("[w]\nmax_rounds = 7\n").w).toEqual({ max_rounds: 7, max_model_usd: 5 });
+    expect(parseConfig("[w]\nmax_model_usd = 0.25\n").w).toEqual({ max_rounds: 3, max_model_usd: 0.25 });
+    expect(parseConfig("[w]\nmax_rounds = 2\nmax_model_usd = 12\n").w).toEqual({ max_rounds: 2, max_model_usd: 12 });
+  });
+
+  it("accepts both ends of each range", () => {
+    expect(parseConfig("[w]\nmax_rounds = 1\n").w.max_rounds).toBe(1);
+    expect(parseConfig("[w]\nmax_rounds = 50\n").w.max_rounds).toBe(50);
+    expect(parseConfig("[w]\nmax_model_usd = 10000\n").w.max_model_usd).toBe(10000);
+  });
+
+  it("does not hand out the defaults' own object", () => {
+    parseConfig("").w.max_rounds = 99;
+    expect(CONFIG_DEFAULTS.w.max_rounds).toBe(3);
+  });
+
+  it.each([
+    ["max_rounds = 0"],
+    ["max_rounds = 51"],
+    ["max_rounds = 2.5"],
+    ['max_rounds = "3"'],
+    ["max_model_usd = 0"],
+    ["max_model_usd = -1"],
+    ["max_model_usd = nan"],
+    ['max_model_usd = "5"'],
+    ["max_model_usd = 10000.5"],
+  ])("refuses [w] %s and names the key", (line) => {
+    const key = line.split(" ")[0];
+    expect(() => parseConfig(`[w]\n${line}\n`)).toThrow(new RegExp(`config\\.toml is invalid: .*/w/${key}`));
+  });
+
+  it("refuses an unknown key under [w]", () => {
+    expect(() => parseConfig("[w]\nmax_rounds = 3\nbogus = 1\n")).toThrow(/data\/w must NOT have additional properties/);
+  });
+
+  it("still refuses a missing config.toml instead of using the [w] defaults (spec §11.5)", () => {
+    expect(() => readConfig(makeTempDir("omf-config-"))).toThrow(/config\.toml missing; run omf init/);
+  });
+
+  it("reads [w] through readConfig", () => {
+    expect(readConfig(projectWith("[w]\nmax_rounds = 4\n")).w).toEqual({ max_rounds: 4, max_model_usd: 5 });
+  });
+});
