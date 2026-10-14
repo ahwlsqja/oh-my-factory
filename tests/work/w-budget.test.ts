@@ -5,8 +5,11 @@ import { claimFile } from "../../src/work/claim.js";
 import {
   type BudgetAnomalyCode,
   type OwnedAppend,
+  REENTRY_KILLS_MAX,
+  REENTRY_SAME_REASON_MAX,
   WORK_BUDGET_EVENT_TYPES,
   WorkBudgetError,
+  foldReentry,
   foldWorkBudget,
   microUsd,
   recordLimits,
@@ -15,6 +18,7 @@ import {
 } from "../../src/work/w-budget.js";
 import { CANARY } from "../helpers/canary.js";
 import { W_RUN, type WFixture, setupW } from "../helpers/w-verbs-fixture.js";
+import { appendWorkEvent, recordW } from "../helpers/work.js";
 
 const SCOPE = { goal_id: "g-fast", work_id: "w-0123456789ab", run_id: "r-20261012T100000Z-ab12" };
 const SIG = "a".repeat(64);
@@ -290,5 +294,62 @@ describe("owned appends", () => {
     expect(budgetCode(() => recordRound(own(fx), null))).toBe("claim_lost");
     expect(budgetCode(() => recordSpend(own(fx), "S3", 1))).toBe("claim_lost");
     expect(fx.ledgerText()).toBe(before);
+  });
+});
+
+const OTHER_ITEM = { front: { goal_id: "g-fast", work_id: "w-aaaaaaaaaaaa" } };
+const reentry = (fx: WFixture) => foldReentry(fx.events(), fx.goalId, fx.workId);
+
+// Spec §4.4: the same blocker three times escalates to J6. The count is read from the ledger, so a restart
+// cannot reset it, and only a person's act on the goal does (M3b2-D17).
+describe("foldReentry", () => {
+  it("has limits of three, for both counts", () => {
+    expect([REENTRY_SAME_REASON_MAX, REENTRY_KILLS_MAX]).toEqual([3, 3]);
+  });
+
+  it("is zero for a ledger with no parks and no reclaims", () => {
+    expect(reentry(setupW())).toEqual({ same_reason: 0, kills: 0 });
+  });
+
+  it("counts the largest number of parks with one reason, and every reclaim", () => {
+    const fx = setupW();
+    for (const reason_code of ["j2_open", "j2_open", "gate_blocked", "j2_open"]) {
+      recordW(fx.ledger, "work.parked", fx.item, { reason_code });
+    }
+    recordW(fx.ledger, "work.claim_reclaimed", fx.item);
+    recordW(fx.ledger, "work.claim_reclaimed", fx.item);
+    expect(reentry(fx)).toEqual({ same_reason: 3, kills: 2 });
+  });
+
+  it("does not count reentry_loop or budget_exhausted parks, which are the guard's own stops", () => {
+    const fx = setupW();
+    for (const reason_code of ["reentry_loop", "budget_exhausted", "reentry_loop", "budget_exhausted"]) {
+      recordW(fx.ledger, "work.parked", fx.item, { reason_code });
+    }
+    expect(reentry(fx)).toEqual({ same_reason: 0, kills: 0 });
+  });
+
+  it("ignores another item's events and a park nobody trusted (an agent wrote it)", () => {
+    const fx = setupW();
+    recordW(fx.ledger, "work.parked", OTHER_ITEM);
+    recordW(fx.ledger, "work.claim_reclaimed", OTHER_ITEM);
+    fx.ledger.append({
+      actor: "agent:x",
+      type: "work.parked",
+      payload: { ...fx.scope, outcome: "blocked", reason_code: "j2_open" },
+    });
+    expect(reentry(fx)).toEqual({ same_reason: 0, kills: 0 });
+  });
+
+  it("starts again after a person's act on this goal, and not after one on another goal", () => {
+    const fx = setupW();
+    for (let n = 0; n < 3; n++) recordW(fx.ledger, "work.parked", fx.item);
+    recordW(fx.ledger, "work.claim_reclaimed", fx.item);
+    fx.ledger.append({ actor: "human:dev", type: "work.approved", payload: { goal_id: "g-other", work_id: "w-bbbbbbbbbbbb" } });
+    expect(reentry(fx)).toEqual({ same_reason: 3, kills: 1 });
+    appendWorkEvent(fx.ledger, "work.approved", "human:dev", fx.item);
+    expect(reentry(fx)).toEqual({ same_reason: 0, kills: 0 });
+    recordW(fx.ledger, "work.parked", fx.item);
+    expect(reentry(fx)).toEqual({ same_reason: 1, kills: 0 });
   });
 });

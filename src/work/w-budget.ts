@@ -2,8 +2,8 @@ import type { Ledger, LedgerEvent, NewEvent } from "../core/ledger.js";
 import type { LockOwner } from "../core/lock.js";
 import { validate } from "../core/schema.js";
 import { claimStatus } from "./claim.js";
+import { classifyWEvent } from "./w-events.js";
 import type { PROGRESS_STATIONS } from "./w-verbs.js";
-
 
 /**
  * The per-item budget of a W run, kept in the ledger (M3b2-D1, spec §5.0 GATE-4). A limit is copied from
@@ -224,4 +224,41 @@ export function recordSpend(own: OwnedAppend, station: BudgetStation, micro: num
     assertOwned(own);
     return budgetEvent("omf", "work.spend", { ...own.scope, station, micro_usd: micro });
   });
+}
+
+export const REENTRY_SAME_REASON_MAX = 3;
+export const REENTRY_KILLS_MAX = 3;
+
+/** The guard's own stops: counting them would make a stopped item stop itself again for the same reason. */
+const NOT_COUNTED: ReadonlySet<string> = new Set(["reentry_loop", "budget_exhausted"]);
+
+/**
+ * Re-entry facts since the last human act on the goal (M3b2-D17): an event whose actor is `human:*` and whose
+ * payload names this goal. `same_reason` is the largest number of `work.parked` events of this item with one
+ * reason code; `kills` is the number of `work.claim_reclaimed` events of this item. Only schema-valid events
+ * written by `omf` count (`classifyWEvent`), so a forged park or reclaim cannot push an item into a loop stop.
+ */
+export function foldReentry(
+  events: readonly LedgerEvent[],
+  goalId: string,
+  workId: string,
+): { same_reason: number; kills: number } {
+  let since = 0;
+  events.forEach((event, index) => {
+    if (HUMAN.test(event.actor) && event.payload.goal_id === goalId) since = index + 1;
+  });
+  const parks = new Map<string, number>();
+  let kills = 0;
+  for (const event of events.slice(since)) {
+    const classified = classifyWEvent(event);
+    if (classified.kind !== "w") continue;
+    const w = classified.event;
+    if (w.payload.work_id !== workId) continue;
+    if (w.type === "work.claim_reclaimed") kills += 1;
+    else if (w.type === "work.parked") {
+      const code: string = w.payload.reason_code;
+      if (!NOT_COUNTED.has(code)) parks.set(code, (parks.get(code) ?? 0) + 1);
+    }
+  }
+  return { same_reason: Math.max(0, ...parks.values()), kills };
 }
