@@ -12,6 +12,7 @@ import {
   foldReentry,
   foldWorkBudget,
   microUsd,
+  raiseWorkLimit,
   recordLimits,
   recordRound,
   recordSpend,
@@ -351,5 +352,89 @@ describe("foldReentry", () => {
     expect(reentry(fx)).toEqual({ same_reason: 0, kills: 0 });
     recordW(fx.ledger, "work.parked", fx.item);
     expect(reentry(fx)).toEqual({ same_reason: 1, kills: 0 });
+  });
+});
+
+function raiseCode(fx: WFixture, actor: string, kind: "rounds" | "model_micro_usd", amount: number, workId = fx.workId): string {
+  return budgetCode(() => raiseWorkLimit(fx.ctx.location, workId, kind, amount, actor));
+}
+
+/** An item the ledger and the file agree is `in_progress`. */
+function startItem(fx: WFixture): void {
+  fx.appendOnly({ type: "work.started", payload: { ...fx.scope, from: "ready" } });
+  fx.handEdit("in_progress");
+}
+
+// J8 (spec §4.4): a person raises one limit of an open item. The raise is a ledger event; nothing else can lift a limit.
+describe("raiseWorkLimit", () => {
+  it("refuses an actor that is not a person, and writes nothing", () => {
+    const fx = setupW();
+    recordLimits(own(fx), LIMITS);
+    const before = fx.ledgerText();
+    for (const actor of ["omf", "agent:x", "human:", "dev"]) expect(raiseCode(fx, actor, "rounds", 1), actor).toBe("forbidden");
+    expect(fx.ledgerText()).toBe(before);
+  });
+
+  it("refuses an amount that is not a positive whole number", () => {
+    const fx = setupW();
+    recordLimits(own(fx), LIMITS);
+    for (const amount of [0, -1, 1.5, Number.NaN, 2 ** 53]) {
+      expect(raiseCode(fx, "human:dev", "model_micro_usd", amount), String(amount)).toBe("invalid_amount");
+    }
+  });
+
+  it("appends one human work.limit_raised for a ready item, even while a run holds the claim", () => {
+    const fx = setupW();
+    recordLimits(own(fx), LIMITS);
+    const event = raiseWorkLimit(fx.ctx.location, fx.workId, "rounds", 2, "human:dev");
+    expect(event).toMatchObject({
+      actor: "human:dev",
+      type: "work.limit_raised",
+      payload: { goal_id: fx.goalId, work_id: fx.workId, kind: "rounds", amount: 2 },
+    });
+    raiseWorkLimit(fx.ctx.location, fx.workId, "model_micro_usd", 250_000, "human:dev");
+    expect(fold(fx)).toMatchObject({
+      raised: { rounds: 2, model_micro_usd: 250_000 },
+      effective: { max_rounds: 5, max_model_micro_usd: 5_250_000 },
+      anomalies: [],
+    });
+    expect(fx.verdict()).toEqual({ ok: true });
+  });
+
+  it("works for an in_progress item", () => {
+    const fx = setupW();
+    recordLimits(own(fx), LIMITS);
+    startItem(fx);
+    expect(raiseCode(fx, "human:dev", "rounds", 1)).toBe("no error");
+  });
+
+  it("refuses an item that is not open, has no limits, is malformed or unknown, and writes nothing", () => {
+    const fx = setupW();
+    expect(raiseCode(fx, "human:dev", "rounds", 1), "no limits yet").toBe("no_limits");
+
+    recordLimits(own(fx), LIMITS);
+    expect(raiseCode(fx, "human:dev", "rounds", 1, "w-ffffffffffff"), "unknown item").toBe("malformed");
+    expect(raiseCode(fx, "human:dev", "rounds", 1, "not-a-work-id"), "ill-formed id").toBe("malformed");
+
+    fx.handEdit("in_progress"); // a hand edit: no work.started event behind it
+    expect(raiseCode(fx, "human:dev", "rounds", 1), "hand-edited state").toBe("malformed");
+    fx.handEdit("ready");
+
+    startItem(fx);
+    fx.appendOnly({ type: "work.submitted", payload: { ...fx.scope, outcome: "flawed", recommendation: "not_recommended" } });
+    fx.handEdit("awaiting_review");
+    const before = fx.ledgerText();
+    expect(raiseCode(fx, "human:dev", "rounds", 1), "awaiting_review").toBe("wrong_state");
+    expect(fx.ledgerText()).toBe(before);
+  });
+
+  it("puts only ids and codes in an error, never the id it was given", () => {
+    const fx = setupW();
+    expect(() => raiseWorkLimit(fx.ctx.location, CANARY.metricId, "rounds", 1, "human:dev")).toThrow(WorkBudgetError);
+    try {
+      raiseWorkLimit(fx.ctx.location, CANARY.metricId, "rounds", 1, "human:dev");
+    } catch (err) {
+      expect((err as Error).message).not.toContain(CANARY.metricId);
+    }
   });
 });

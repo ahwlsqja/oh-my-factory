@@ -1,7 +1,11 @@
-import type { Ledger, LedgerEvent, NewEvent } from "../core/ledger.js";
+import { findWorkItem } from "../adapters/state-markdown.js";
+import { Ledger, type LedgerEvent, type NewEvent } from "../core/ledger.js";
 import type { LockOwner } from "../core/lock.js";
+import type { ProjectLocation } from "../core/paths.js";
 import { validate } from "../core/schema.js";
 import { claimStatus } from "./claim.js";
+import { verifyItemAgainstLedger } from "./ledger-verify.js";
+import type { WorkItem } from "./types.js";
 import { classifyWEvent } from "./w-events.js";
 import type { PROGRESS_STATIONS } from "./w-verbs.js";
 
@@ -261,4 +265,60 @@ export function foldReentry(
     }
   }
   return { same_reason: Math.max(0, ...parks.values()), kills };
+}
+
+const WORK_ID = /^w-[0-9a-f]{12}$/;
+
+/**
+ * The read-only precondition of a raise, shared by the prompt (`workLimitLines`) and the write so that what
+ * a person is shown is what the write enforces. The item must read, verify against the ledger and be `ready`
+ * or `in_progress`, and its limits must already be recorded (they are copied from `[w]` at the first run).
+ */
+export function openItemBudget(
+  location: ProjectLocation,
+  workId: string,
+  events: readonly LedgerEvent[],
+): { item: WorkItem; state: WorkBudgetState } {
+  if (!WORK_ID.test(workId)) throw new WorkBudgetError("malformed", "work id is not well formed");
+  let item: WorkItem | null = null;
+  try {
+    item = findWorkItem(location.dir, workId);
+  } catch {
+    item = null; // the store's own text can quote file content, so it is dropped
+  }
+  if (item === null) throw new WorkBudgetError("malformed", `work item ${workId} cannot be read`);
+  if (!verifyItemAgainstLedger(item.front, events).ok) {
+    throw new WorkBudgetError("malformed", `work item ${workId} does not match the ledger`);
+  }
+  if (item.front.state !== "ready" && item.front.state !== "in_progress") {
+    throw new WorkBudgetError("wrong_state", `work item ${workId} is ${item.front.state}`);
+  }
+  const state = foldWorkBudget(events, workId);
+  if (state.limits === null) {
+    throw new WorkBudgetError("no_limits", `work item ${workId} has no recorded limits yet; they are recorded when its first run starts`);
+  }
+  return { item, state };
+}
+
+/**
+ * J8: a person raises one limit of an open item (M3b2-D1). The actor must be `human:*`; the item is
+ * re-checked under the ledger lock, so a run that finishes or a veto that lands in between cannot be missed.
+ * It needs no claim: a person's raise must work while a run holds the item, and the run folds the ledger at its
+ * next S3 entry. It moves no state; a person then runs the line again.
+ */
+export function raiseWorkLimit(
+  location: ProjectLocation,
+  workId: string,
+  kind: LimitKind,
+  amount: number,
+  actor: string,
+): LedgerEvent {
+  if (!HUMAN.test(actor)) throw new WorkBudgetError("forbidden", "only a person may raise a work limit (J8)");
+  if (!Number.isSafeInteger(amount) || amount < 1) {
+    throw new WorkBudgetError("invalid_amount", "amount must be a positive whole number");
+  }
+  return new Ledger(location.dir).appendWith((events) => {
+    const { item } = openItemBudget(location, workId, events);
+    return budgetEvent(actor, "work.limit_raised", { goal_id: item.front.goal_id, work_id: workId, kind, amount });
+  });
 }
