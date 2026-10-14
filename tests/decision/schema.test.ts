@@ -111,6 +111,18 @@ describe("decision.schema.json", () => {
     expect(failures).toEqual([]);
   });
 
+  it("rejects control, line-separator and bidi characters in free text and argv", () => {
+    const bad = ["a\u001b[8mb", "a\nb", "a\u202Eb", "a\u2066b", "a\u2028b"];
+    for (const text of bad) {
+      expect(check("add_input", { ...fixtures.add_input, question: text }).ok).toBe(false);
+      expect(check("resolve_input", { ...fixtures.resolve_input, rationale: text }).ok).toBe(false);
+      expect(check("resolve_input", { ...fixtures.resolve_input, rejected: [text] }).ok).toBe(false);
+      expect(check("defer_input", { ...fixtures.defer_input, reason: text }).ok).toBe(false);
+      expect(check("argv", ["npm", text]).ok).toBe(false);
+      expect(check("argv", ["npm", "test"]).ok).toBe(true);
+    }
+  });
+
   it("rejects a document that lacks any required field", () => {
     const failures: string[] = [];
     for (const [def, doc] of Object.entries(fixtures)) {

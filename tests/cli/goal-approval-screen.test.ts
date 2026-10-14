@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 import { approvalScreen } from "../../src/cli/goal.js";
 import { approveGoal } from "../../src/goal/approve.js";
 import { bandsLockInfo } from "../../src/goal/bands.js";
-import { lockFile } from "../../src/goal/metrics.js";
+import { Ledger } from "../../src/core/ledger.js";
+import { lockFile, proposeMetric } from "../../src/goal/metrics.js";
 import { approveLegacy, setupGoal, writeBands } from "../helpers/goal.js";
 import { commitAll } from "../helpers/tmp.js";
 import { readFileSync } from "node:fs";
@@ -79,5 +80,24 @@ describe("approvalScreen", () => {
     approveLegacy(fx);
     const text = approvalScreen(fx.location, "g-fast").lines.join("\n");
     expect(text).toContain("bands not locked (approved before M2b)");
+  });
+
+  it("escapes control and bidi characters from goal fields and metric argv so a person signs what they read", () => {
+    const fx = setupGoal();
+    writeFileSync(
+      fx.goalFile,
+      readFileSync(fx.goalFile, "utf8").replace('title: "Say what this goal is in a few words"', 'title: "fast\\x1b[2Jdone"'),
+    );
+    proposeMetric(
+      new Ledger(fx.location.dir),
+      fx.location.dir,
+      { metric_id: "m-p95", command: ["sh", "bench/p95.sh", "\u202eevil"], unit: "ms", watched_paths: ["bench/p95.sh"], image: null },
+      "human:dev",
+    );
+    const text = approvalScreen(fx.location, "g-fast").lines.join("\n");
+    expect(text).toContain("\\u202e");
+    expect(text).toContain("fast\\u001b[2Jdone");
+    expect(text).not.toContain("\u202e");
+    expect(text).not.toContain("\x1b");
   });
 });

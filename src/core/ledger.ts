@@ -169,11 +169,26 @@ export class Ledger {
    * `build` must not call `append` or `appendWith` on this ledger: the lock is not reentrant, so the inner call would wait for the outer one and time out.
    */
   appendWith(build: (events: LedgerEvent[]) => NewEvent): LedgerEvent {
+    const written = this.appendWithMany((events) => [build(events)]);
+    const last = written.at(-1);
+    if (last === undefined) throw new Error("appendWith wrote no event");
+    return last;
+  }
+
+  /**
+   * Like `appendWith`, for a decision that must write several events as one unit (a decision plus the
+   * records it depends on). `build` sees the verified events under the ledger lock and returns at least one
+   * event; they are appended in order, in one write. If `build` throws, or any returned event is invalid,
+   * nothing is written. Returns the appended events only, not a `ledger.tail_discarded` record.
+   * The same reentrancy rule applies: `build` must not call this ledger's append methods.
+   */
+  appendWithMany(build: (events: LedgerEvent[]) => NewEvent[]): LedgerEvent[] {
     return withLockSync(this.lockFile, () => {
       const snap = this.snapshot();
       const verified = verifyEvents(snap.events);
       if (!verified.ok) throw new LedgerCorruptError(verified.seq, verified.reason);
-      const input = build(snap.events);
+      const inputs = build(snap.events);
+      if (inputs.length === 0) throw new Error("appendWithMany needs at least one event");
       // Prepare every line before touching the file, so a rejected event leaves the ledger unchanged.
       let at = { count: verified.count, head: verified.head };
       const lines: string[] = [];
@@ -186,13 +201,18 @@ export class Ledger {
         lines.push(discarded.line);
         at = { count: discarded.event.seq, head: discarded.event.hash };
       }
-      const main = this.prepare(at, input);
-      lines.push(main.line);
+      const written: LedgerEvent[] = [];
+      for (const input of inputs) {
+        const next = this.prepare(at, input);
+        lines.push(next.line);
+        written.push(next.event);
+        at = { count: next.event.seq, head: next.event.hash };
+      }
       // Truncate and append are two writes. A crash between them loses the torn tail without a
       // tail_discarded record; the chain stays valid because the torn bytes were never an event.
       if (snap.tornTail !== null) truncateSync(this.file, snap.headBytes);
       appendFileSync(this.file, `${snap.missingNewline ? "\n" : ""}${lines.join("")}`, { mode: 0o600 });
-      return main.event;
+      return written;
     });
   }
 

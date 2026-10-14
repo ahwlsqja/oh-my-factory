@@ -513,7 +513,7 @@ handoff:
 | `omf work list` / `show` / `approve` | 작업 항목 조회, 고위험 항목 승인 (J 번호 없음, M2b 부록 참고) |
 | `omf budget show` / `declare` / `raise` | 예산 조회, 선언, 증액(J8). `raise ... wall_time` 은 벽시계 시간을 늘린다 |
 | `omf goal sign` | J5 |
-| `omf decide <work-id>` | S1 인터뷰, `spec.md`, J2 |
+| `omf decide <work-id>` (하위 명령 `add`, `resolve` (`--na`), `defer`, `lint`, `show`) | S1 인터뷰, `spec.md`, J2 |
 | `omf seal <work-id>` | S2와 GATE-2 |
 | `omf run <work-id>` | S3에서 S6까지의 루프. 예산으로 한정한다. |
 | `omf report <work-id>` | S7 |

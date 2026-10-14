@@ -136,10 +136,15 @@ OMF 는 루프 두 개를 돌립니다.
 | `omf work show <work-id>` | 작업 항목의 `item.md`, 클레임, `intent.md` 를 출력합니다. |
 | `omf work approve <work-id>` | 위험도가 높은 작업 항목을 승인해 디스패치할 수 있게 합니다. 대화형 터미널이 필요합니다. |
 | `omf veto <work-id> [--reason <text>]` | 열려 있는 어느 상태에서든 작업 항목을 거부합니다. 거부는 제한만 하므로 터미널이 필요 없습니다. |
+| `omf decide add <work-id> --file <entry.json>` | 작업 항목의 설계 질문(결정)을 원장에 기록하고 `spec.md` 를 다시 만듭니다. 항목이 `ready` 이고 실행이 클레임을 쥐고 있지 않을 때만 됩니다. |
+| `omf decide resolve <work-id> <decision-id> --file <resolution.json> [--na]` | 사람으로서 결정을 닫습니다(선택, 근거, 기각한 안. 인터페이스 결정은 빌드·실행·게이트 명령도 담습니다). 대화형 터미널이 필요합니다. `--na` 는 해당 없음으로 닫습니다. |
+| `omf decide defer <work-id> <decision-id> --file <deferral.json>` | 서명된 기본값과 만료일을 두고 결정을 미룹니다. 대화형 터미널이 필요합니다. |
+| `omf decide lint <work-id> [--json] [--render]` | 결정을 검사하고 GATE-1 을 계산합니다. 종료 코드 0 정상, 1 문제, 3 사람을 기다림(J2, `needs-human.json` 도 기록). `--render` 는 `spec.md` 를 다시 씁니다. |
+| `omf decide show <work-id> [--json]` | 상태별 결정, GATE-1 판정, `spec.md` 가 원장과 같은지 출력합니다. 아무것도 쓰지 않습니다. |
 
-종료 코드: `0` 정상, `1` 확인이 필요함(문제 발견, 거절된 확인, 멈췄거나 승인을 기다리는 틱), `2` 명령을 실행할 수 없음.
+종료 코드: `0` 정상, `1` 확인이 필요함(문제 발견, 거절된 확인, 멈췄거나 승인을 기다리는 틱), `2` 명령을 실행할 수 없음, `3` 사람을 기다림(`omf decide lint`: 열린 설계 결정).
 
-아직 만들지 않은 것: 결정 원장과 봉인 시나리오, 컨테이너 실행기와 판정기, 증거 보고서, `omf ship`, 목표 달성 확인(`omf goal sign`), 실행 도중 사람에게 입력을 요청하는 흐름. 모두 [설계 문서](docs/ko/design/2026-10-12-omf-v0-design.md)에
+아직 만들지 않은 것: 봉인 시나리오, 컨테이너 실행기와 판정기, 증거 보고서, `omf ship`, 목표 달성 확인(`omf goal sign`), 실행 도중 사람에게 입력을 요청하는 흐름. 모두 [설계 문서](docs/ko/design/2026-10-12-omf-v0-design.md)에
 적혀 있습니다.
 
 ## 빠른 시작

@@ -702,7 +702,7 @@ written to trackers, only summaries and references.
 | `omf work list` / `show` / `approve` | Inspect work items; approve a high-risk item (no J number, see the M2b addendum) |
 | `omf budget show` / `declare` / `raise` | Inspect, declare and raise budgets (J8); `raise ... wall_time` raises the wall time |
 | `omf goal sign` | J5 |
-| `omf decide <work-id>` | S1 interview, `spec.md`, J2 |
+| `omf decide <work-id>` (subcommands `add`, `resolve` (`--na`), `defer`, `lint`, `show`) | S1 interview, `spec.md`, J2 |
 | `omf seal <work-id>` | S2 and GATE-2 |
 | `omf run <work-id>` | S3 to S6 loop, bounded by budget |
 | `omf report <work-id>` | S7 |
