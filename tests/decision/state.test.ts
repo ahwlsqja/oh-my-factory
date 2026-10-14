@@ -49,10 +49,28 @@ describe("foldDecisions", () => {
         added_by: "omf",
         added_seq: 1,
         closed_seq: 2,
+        measure_seq: 2,
       },
     ]);
     expect(findDecision(state, "d-cache")).toBe(state.decisions[0]);
     expect(findDecision(state, "d-none")).toBeNull();
+  });
+
+  it("records the seq that wrote the response measure (add, then a resolve that supplies one)", () => {
+    const state = fold(
+      addedEvent("d-a", { class: "latency", response_measure: MEASURE }),
+      addedEvent("d-b", { class: "latency" }),
+      addedEvent("d-c"),
+      resolvedEvent("d-a"),
+      resolvedEvent("d-b", { response_measure: MEASURE }),
+      resolvedEvent("d-c"),
+    );
+    expect(state.anomalies).toEqual([]);
+    expect(state.decisions.map((record) => [record.id, record.measure_seq])).toEqual([
+      ["d-a", 1],
+      ["d-b", 5],
+      ["d-c", null],
+    ]);
   });
 
   it("keeps the interface body of a resolved interface decision", () => {

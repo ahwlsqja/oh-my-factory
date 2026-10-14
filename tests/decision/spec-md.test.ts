@@ -35,6 +35,7 @@ function record(seq: number, patch: Partial<DecisionRecord> & { id: string }): D
     added_by: PERSON,
     added_seq: seq,
     closed_seq: null,
+    measure_seq: null,
     ...patch,
   };
 }
@@ -59,6 +60,7 @@ const interfaceRecord = (seq: number): DecisionRecord =>
     resolution: resolution("a command line tool"),
     interface: CONTRACT,
     closed_seq: 20,
+    measure_seq: null,
   });
 
 /** One record in each status, deliberately out of added_seq order. */
@@ -72,6 +74,7 @@ const MIXED = stateOf(
     resolution: resolution("cache in memory"),
     response_measure: { metric: "render time", op: "<", threshold: 250, unit: "ms", percentile: 95, window: null },
     closed_seq: 21,
+    measure_seq: null,
   }),
   record(3, {
     id: "d-later",
@@ -85,12 +88,14 @@ const MIXED = stateOf(
       expires_at: "2026-12-01T00:00:00.000Z",
     },
     closed_seq: 22,
+    measure_seq: null,
   }),
   record(4, {
     id: "d-skip",
     status: "na",
     na: { rationale: "no network involved", by: PERSON, at: "2026-10-13T00:00:00.000Z" },
     closed_seq: 23,
+    measure_seq: null,
   }),
 );
 

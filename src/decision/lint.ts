@@ -25,19 +25,25 @@ export interface LintProblem {
 }
 
 /**
- * The parts of a record a person (or an agent) wrote, as one object for the leak lint. Nulls are left out and so
- * are the bookkeeping fields (status, seqs, added_by): `lintDecisionStrings` skips the OMF-set keys itself.
- * The id is included on purpose: an id is text that reaches `spec.md` and the ledger (A16b).
+ * The parts of a record a person (or an agent) wrote, in three groups by the event that wrote them, each with its
+ * own object for the leak lint. Nulls are left out and so are the bookkeeping fields (status, seqs, added_by):
+ * `lintDecisionStrings` skips the OMF-set keys itself. The id is included on purpose: an id is text that reaches
+ * `spec.md` and the ledger (A16b).
  */
-function leakBody(record: DecisionRecord): Record<string, unknown> {
-  const body: Record<string, unknown> = { id: record.id, question: record.question };
-  if (record.qas !== null) body["qas"] = record.qas;
-  if (record.response_measure !== null) body["response_measure"] = record.response_measure;
-  if (record.resolution !== null) body["resolution"] = record.resolution;
-  if (record.deferral !== null) body["deferral"] = record.deferral;
-  if (record.interface !== null) body["interface"] = record.interface;
-  if (record.na !== null) body["na"] = record.na;
-  return body;
+function leakBodies(record: DecisionRecord): { body: Record<string, unknown>; seq: number }[] {
+  const added: Record<string, unknown> = { id: record.id, question: record.question };
+  if (record.qas !== null) added["qas"] = record.qas;
+  const closed: Record<string, unknown> = {};
+  if (record.resolution !== null) closed["resolution"] = record.resolution;
+  if (record.deferral !== null) closed["deferral"] = record.deferral;
+  if (record.interface !== null) closed["interface"] = record.interface;
+  if (record.na !== null) closed["na"] = record.na;
+  const bodies = [{ body: added, seq: record.added_seq }];
+  if (record.response_measure !== null) {
+    bodies.push({ body: { response_measure: record.response_measure }, seq: record.measure_seq ?? record.added_seq });
+  }
+  bodies.push({ body: closed, seq: record.closed_seq ?? record.added_seq });
+  return bodies;
 }
 
 /**
@@ -49,7 +55,8 @@ function leakBody(record: DecisionRecord): Record<string, unknown> {
  * - `interface_body_missing`: a resolved interface decision needs its contract.
  * - `gates_inconsistent`: every gate named in `gates.required` needs a command.
  * - `leak`: any leak finding over every string and number the record carries, under the current lock's terms and
- *   target, and the readings recorded up to the record's own last write (`closed_seq`, else `added_seq`; A22).
+ *   target. Each field is judged against the readings recorded up to the event that wrote it (A22): id, question and
+ *   qas at `added_seq`; the response measure at `measure_seq`; resolution, deferral, n/a and interface at `closed_seq`.
  */
 export function recordProblems(record: DecisionRecord, ctx: LeakContext): LintProblem[] {
   const problems: LintProblem[] = [];
@@ -75,10 +82,11 @@ export function recordProblems(record: DecisionRecord, ctx: LeakContext): LintPr
     }
   }
 
-  // Readings keep arriving: judge the record against the ones that existed when it was last written (A22).
-  const asOfRecord = leakContextAt(ctx, record.closed_seq ?? record.added_seq);
-  for (const finding of lintDecisionStrings(leakBody(record), asOfRecord)) {
-    problems.push({ code: "leak", decision_id: id, field: finding.field, rule: finding.rule });
+  // Readings keep arriving: judge each field against the ones that existed when it was written (A22).
+  for (const { body, seq } of leakBodies(record)) {
+    for (const finding of lintDecisionStrings(body, leakContextAt(ctx, seq))) {
+      problems.push({ code: "leak", decision_id: id, field: finding.field, rule: finding.rule });
+    }
   }
   return problems;
 }

@@ -166,6 +166,8 @@ export interface DecisionRecord {
   added_by: string;
   added_seq: number;
   closed_seq: number | null;
+  /** Seq of the event that wrote `response_measure` (the add, or the resolve that supplied it); null when there is none. */
+  measure_seq: number | null;
 }
 
 export type AnomalyCode =

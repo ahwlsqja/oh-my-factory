@@ -46,6 +46,7 @@ function open(id: string, over: Partial<DecisionRecord> = {}): DecisionRecord {
     added_by: "omf",
     added_seq: 1,
     closed_seq: null,
+    measure_seq: null,
     ...over,
   };
 }
@@ -55,6 +56,7 @@ function resolved(id: string, over: Partial<DecisionRecord> = {}): DecisionRecor
     status: "resolved",
     resolution: { choice: "sqlite", rationale: "one file, no daemon", rejected: ["postgres"], by: HUMAN, at: NOW.toISOString() },
     closed_seq: 2,
+    measure_seq: null,
     ...over,
   });
 }
@@ -75,6 +77,7 @@ function deferred(id: string, expiresAt: string, signedBy = HUMAN): DecisionReco
       expires_at: expiresAt,
     },
     closed_seq: 2,
+    measure_seq: null,
   });
 }
 
@@ -132,6 +135,7 @@ describe("GATE-1 spec conditions", () => {
       status: "na",
       na: { rationale: "none", by: HUMAN, at: NOW.toISOString() },
       closed_seq: 2,
+      measure_seq: null,
     });
     expect(blocked(gate(stateOf([naInterface])))).toContainEqual({ code: "interface_unresolved" });
   });
@@ -250,12 +254,39 @@ describe("GATE-1 validity is part of closure (record_invalid)", () => {
 
   it("judges a record against the readings that existed when it was written (A22)", () => {
     const latency = (closedSeq: number) =>
-      resolved("d-latency", { class: "latency", closed_seq: closedSeq, response_measure: { ...measure(), threshold: 300 } });
+      resolved("d-latency", { class: "latency", closed_seq: closedSeq, measure_seq: closedSeq, response_measure: { ...measure(), threshold: 300 } });
     const later: LeakContext = { ...CLEAN, measuredNumbers: [300], readings: [{ seq: 10, value: 300 }] };
     // Closed at seq 4, before the reading at seq 10 that has the same number: still valid.
     expect(gate(stateOf([interfaceRecord(), latency(4)]), [], later)).toEqual({ status: "pass" });
     // Closed at seq 12, after that reading: the threshold equals a reading the person could have seen.
     expect(invalid(latency(12), later)).toEqual([{ code: "record_invalid", decision_id: "d-latency", problem: "leak" }]);
+  });
+
+  it("judges the add-time fields as of the add, not the close (A22)", () => {
+    const later: LeakContext = { ...CLEAN, measuredNumbers: [3], readings: [{ seq: 10, value: 3 }] };
+    const base = { question: "Should we keep 3 retries?", added_seq: 1, closed_seq: 20 };
+    const done = resolved("d-retries", base);
+    const na = open("d-retries", { ...base, status: "na", na: { rationale: "not relevant", by: HUMAN, at: NOW.toISOString() } });
+    expect(recordProblems(done, later)).toEqual([]);
+    expect(recordProblems(na, later)).toEqual([]);
+    expect(gate(stateOf([interfaceRecord(), done]), [], later)).toEqual({ status: "pass" });
+    expect(gate(stateOf([interfaceRecord(), na]), [], later)).toEqual({ status: "pass" });
+  });
+
+  it("judges a measure supplied at resolve as of the resolve, and an add-time measure as of the add", () => {
+    const later: LeakContext = { ...CLEAN, measuredNumbers: [300], readings: [{ seq: 10, value: 300 }] };
+    const addTime = resolved("d-latency", {
+      class: "latency",
+      added_seq: 1,
+      closed_seq: 20,
+      measure_seq: 1,
+      response_measure: { ...measure(), threshold: 300 },
+    });
+    expect(recordProblems(addTime, later)).toEqual([]);
+    const atResolve = { ...addTime, measure_seq: 20 };
+    expect(recordProblems(atResolve, later)).toEqual([
+      { code: "leak", decision_id: "d-latency", field: "response_measure.threshold", rule: "number-value" },
+    ]);
   });
 
   it("rejects a planted id that carries a metric phrase", () => {

@@ -53,6 +53,7 @@ function record(id: string, over: Partial<DecisionRecord> = {}): DecisionRecord 
     added_by: "omf",
     added_seq: seq,
     closed_seq: seq + 1000,
+    measure_seq: null,
     ...over,
   };
 }

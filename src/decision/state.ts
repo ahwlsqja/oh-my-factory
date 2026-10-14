@@ -140,6 +140,7 @@ export function foldDecisions(events: readonly LedgerEvent[], scope: DecisionSco
         added_by: event.actor,
         added_seq: event.seq,
         closed_seq: null,
+        measure_seq: payload.response_measure === undefined ? null : event.seq,
       };
       decisions.push(record);
       byId.set(id, record);
@@ -170,7 +171,10 @@ export function foldDecisions(events: readonly LedgerEvent[], scope: DecisionSco
       record.status = "resolved";
       record.deferral = null;
       record.resolution = detach(payload.resolution);
-      if (payload.response_measure !== undefined) record.response_measure = detach(payload.response_measure);
+      if (payload.response_measure !== undefined) {
+        record.response_measure = detach(payload.response_measure);
+        record.measure_seq = event.seq;
+      }
       record.interface = payload.interface === undefined ? null : detach(payload.interface);
     } else if (event.type === "decision.deferred") {
       const payload = event.payload as unknown as DeferredPayload;
