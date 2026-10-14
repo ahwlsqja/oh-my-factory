@@ -303,7 +303,7 @@ is not retried; it escalates to J6. The same blocker signature appearing three t
 escalates to J6. Budgets accumulate in the host ledger. They do not reset on restart and are never
 extended automatically (J8).
 
-Loop guards are on by default. They follow Kilroy's implementation (MIT), with its gaps closed:
+Loop guards are on by default. They adapt ideas from Kilroy (MIT) and close its gaps. No Kilroy code is copied:
 
 - **Failure-signature breaker.** The signature is `station | outcome class | normalized reason`.
   It is counted for every outcome, not only for failures. A non-failing loop must not bypass the
@@ -314,8 +314,8 @@ Loop guards are on by default. They follow Kilroy's implementation (MIT), with i
   executions in total; Arc's `maxNodeExecutions` uses the same shape. Re-entering a gate counts as a
   visit. Kilroy's default of 0, which means off, is not followed.
 - **Claim lock.** The lock is per work item and is created with `O_EXCL`. It records the PID and
-  the process start time, so a stale lock is detected when the PID was reused. This follows Kilroy's
-  `run_ownership_lock`. It assumes a single host, and team mode is out of scope (§14).
+  the process start time, so a stale lock is detected when the PID was reused. This takes the idea from
+  Kilroy's `run_ownership_lock`; the code is independent. It assumes a single host, and team mode is out of scope (§14).
 
 M2b resolved the ambiguities in this section: what a round is, how a success candidate is decided mechanically, which events a tick writes and who may stop and resume a goal. They are recorded in [the M2b addendum](2026-10-12-omf-m2b-addendum.md), which describes the loop as built.
 
@@ -750,7 +750,7 @@ oh-my-factory/
 | Devcontainer runtime; remote sandbox later | devcontainer spec and devcontainers/cli; E2B (Apache-2.0) |
 | Decision fields; sealed-test score | SEI QAS; spec-kitty (MIT); shadow-score-spec (MIT) |
 | Keep/revert on train/holdout | Anthropic "Automating eval design and hillclimbing" |
-| Loop guards (failure-signature breaker, visit caps), claim lock, per-station checkpoint and resume, preflight report, parity matrix and CLI usage drift test | danshapiro/kilroy (MIT, copyright StrongDM, Inc.; code may be borrowed with notice) |
+| Loop guards (failure-signature breaker, visit caps), claim lock, per-station checkpoint and resume, preflight report, parity matrix and CLI usage drift test | danshapiro/kilroy (MIT, copyright StrongDM, Inc.; ideas only, no code copied, see [third-party.md](../third-party.md)) |
 | Pipeline-as-graph (evaluate for v0.2): phases as nodes, human gates, checkpoints, goal gates | strongdm/attractor spec (Apache-2.0) and community implementations, especially Kilroy (Dan Shapiro, Go, git worktrees), Arc (TypeScript, holdout scenarios, convergence loops) and amolstrongdm's Attractor (satisfaction scoring against holdouts and twins) |
 | Role-to-model routing, published and versioned | StrongDM Weather Report |
 | Load probes | k6, invoked as a binary only (AGPL, no code copied) |
@@ -871,5 +871,5 @@ These are deferred and do not block v0.1.
    - Most of OMF's guarantees live outside any graph: isolation, the vault, budgets and masking.
 
    Depending on or forking Kilroy is rejected. It is about 55k lines of non-test Go, OMF is a
-   TypeScript package, and its permission and isolation defaults conflict with OMF's. Small MIT
-   pieces are borrowed instead (§10).
+   TypeScript package, and its permission and isolation defaults conflict with OMF's. Small ideas
+   are borrowed instead (§10); no code is copied.
