@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { registerCleanup } from "../core/cleanup-registry.js";
 
 export interface ProcessOptions {
   cwd: string;
@@ -37,42 +38,21 @@ function killAll(): void {
   for (const pid of live) killGroup(pid);
 }
 
-function onSigint(): void {
-  onSignal("SIGINT");
-}
-
-function onSigterm(): void {
-  onSignal("SIGTERM");
-}
-
 function onExit(): void {
   killAll();
 }
 
 /**
- * A detached group is not in the terminal's foreground group, so Ctrl-C never reaches it. Kill every live
- * group, take our handlers off so the signal has its default effect again, and re-raise it: the process
- * still ends with the signal status instead of exit 0.
+ * A detached group is not in the terminal's foreground group, so Ctrl-C never reaches it. The group killer is registered
+ * once with the shared cleanup registry (M3e-D25): on SIGINT or SIGTERM it kills every live group, then the registry takes
+ * its handlers off and re-raises the signal, so the process still ends with the signal status instead of exit 0. The
+ * registration stays for the life of the process, like the handlers did; the exit hook is the net for a normal exit.
  */
-function onSignal(signal: NodeJS.Signals): void {
-  killAll();
-  removeHandlers();
-  process.kill(process.pid, signal);
-}
-
 function installHandlers(): void {
   if (handlersInstalled) return;
   handlersInstalled = true;
-  process.on("SIGINT", onSigint);
-  process.on("SIGTERM", onSigterm);
+  registerCleanup(killAll);
   process.on("exit", onExit);
-}
-
-function removeHandlers(): void {
-  handlersInstalled = false;
-  process.off("SIGINT", onSigint);
-  process.off("SIGTERM", onSigterm);
-  process.off("exit", onExit);
 }
 
 /** Number of process groups this module is running right now. A test seam: it is 0 after every command has settled. */
