@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type RiskInput, DEFAULT_HIGH_RISK, classifyRisk } from "../../src/work/risk.js";
+import { type RiskInput, DEFAULT_HIGH_RISK, TEST_GLOBS, classifyRisk, isTestPath } from "../../src/work/risk.js";
 
 function input(declaredPaths: string[], extra: Partial<RiskInput> = {}): RiskInput {
   return { declaredPaths, watchedGlobs: [], extraGlobs: [], tracked: [], ...extra };
@@ -118,5 +118,53 @@ describe("classifyRisk purity", () => {
     expect(classifyRisk(input(declared, { tracked }))).toEqual(first);
     expect(classifyRisk(input([...declared].reverse(), { tracked: [...tracked].reverse() }))).toEqual(first);
     expect(first.rules).toEqual(["auth", "goal-factory", "test"]);
+  });
+});
+
+describe("TEST_GLOBS and isTestPath", () => {
+  it("TEST_GLOBS is the test rule of DEFAULT_HIGH_RISK, one source", () => {
+    expect(TEST_GLOBS).toEqual(DEFAULT_HIGH_RISK.find((entry) => entry.rule === "test")?.globs);
+  });
+
+  it.each([
+    ["**/test/**", "test/a.ts"],
+    ["**/test/**", "src/test/a.ts"],
+    ["**/tests/**", "tests/a.ts"],
+    ["**/__tests__/**", "pkg/__tests__/a.ts"],
+    ["**/*.test.*", "a.test.ts"],
+    ["**/*.spec.*", "x/a.spec.js"],
+    ["**/*_test.*", "pkg/a_test.go"],
+    ["**/*_spec.*", "a_spec.rb"],
+  ])("agrees with the test rule of classifyRisk for the default glob %s (%s)", (glob, path) => {
+    expect(TEST_GLOBS).toContain(glob);
+    expect(isTestPath(path)).toBe(true);
+    expect(classifyRisk(input([path])).rules).toContain("test");
+  });
+
+  it("covers every default glob with at least one sample above", () => {
+    expect(TEST_GLOBS).toHaveLength(7);
+  });
+
+  it("is case-insensitive, includes dot paths and ignores ./", () => {
+    expect(isTestPath("Tests/A.TS")).toBe(true);
+    expect(isTestPath(".hidden/tests/a.ts")).toBe(true);
+    expect(isTestPath("./a.test.ts")).toBe(true);
+  });
+
+  it("is false for paths that only look like tests", () => {
+    for (const path of ["latest.js", "src/contest/a.ts", "docs/testing.md", "src/attest.ts", "src/test.js", "README.md", ""]) {
+      expect(isTestPath(path), path).toBe(false);
+    }
+  });
+
+  it("honours explicit entries as a file or as a directory, anchored at the root, and never guesses a glob", () => {
+    expect(isTestPath("e2e/a.ts", ["e2e"])).toBe(true);
+    expect(isTestPath("e2e", ["./e2e/"])).toBe(true);
+    expect(isTestPath("E2E/deep/a.ts", ["e2e"])).toBe(true);
+    expect(isTestPath("spec/helper.rb", ["spec/helper.rb"])).toBe(true);
+    expect(isTestPath("e2e2/a.ts", ["e2e"])).toBe(false);
+    expect(isTestPath("src/e2e/a.ts", ["e2e"])).toBe(false);
+    expect(isTestPath("e2e/a.ts", ["e2e/*.ts"])).toBe(false); // a glob in the list is a literal name, not a pattern
+    expect(isTestPath("src/a.ts", [""])).toBe(false);
   });
 });

@@ -37,6 +37,11 @@ export const DEFAULT_HIGH_RISK: ReadonlyArray<{ rule: RiskRule; globs: readonly 
   },
 ];
 
+const testRule = DEFAULT_HIGH_RISK.find((entry) => entry.rule === "test");
+if (testRule === undefined) throw new Error("DEFAULT_HIGH_RISK has no test rule");
+/** The globs of the `test` rule: the one definition of a test file shared by `classifyRisk`, `proveTest` and the audit (M3e-D9). */
+export const TEST_GLOBS: readonly string[] = testRule.globs;
+
 export interface RiskInput {
   /** Literal repo-relative files or directories the candidate says it will touch. */
   declaredPaths: readonly string[];
@@ -100,4 +105,22 @@ export function classifyRisk(input: RiskInput): RiskAssessment {
   }
   const sorted = [...found].sort();
   return { class: sorted.length > 0 ? "high" : "normal", rules: sorted, paths: [...paths].sort() };
+}
+
+const testMatcher = picomatch([...TEST_GLOBS], MATCH_OPTIONS);
+
+/**
+ * True when `path` matches a `test` glob (case-insensitive, dot paths included, like `classifyRisk`) or equals an `explicit`
+ * entry or lies below it as a directory. `explicit` is a list of literal repo-relative paths, anchored at the root; a glob in
+ * it is a literal name. Never a guessed glob: a test directory outside `TEST_GLOBS` counts only when the caller lists it.
+ */
+export function isTestPath(path: string, explicit: readonly string[] = []): boolean {
+  const normalized = normalizePath(path);
+  if (normalized === "") return false;
+  if (testMatcher(normalized)) return true;
+  const lower = normalized.toLowerCase();
+  return explicit.some((entry) => {
+    const wanted = normalizePath(entry).toLowerCase();
+    return wanted !== "" && (lower === wanted || lower.startsWith(`${wanted}/`));
+  });
 }
