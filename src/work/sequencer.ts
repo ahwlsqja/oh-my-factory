@@ -26,8 +26,8 @@ import {
   finalizeClassification,
   writeEvidence,
 } from "./evidence.js";
-import { type Gate4Result, type Gate4Warning, VisitCounter, evaluateGate4, gate4Result } from "./gate4.js";
-import { type GateResult, type Gate, GateBoard, defaultGates, injectedGateIds } from "./gates.js";
+import { type Gate4Result, type Gate4Warning, VisitCounter, evaluateGate4, gate4Result, roundSignature } from "./gate4.js";
+import { type GateResult, type GateVerdict, type Gate, GateBoard, defaultGates, injectedGateIds } from "./gates.js";
 import type { GovernanceCode } from "./governance.js";
 import { type HandoffRecord, buildHandoff, handoffFile, writeHandoff } from "./handoff.js";
 import {
@@ -41,7 +41,7 @@ import {
 } from "./line-types.js";
 import { type Disposition, OutcomeError, type WOutcome, dispositionOf } from "./outcome.js";
 import type { WorkItem } from "./types.js";
-import { type OwnedAppend, foldWorkBudget, microUsd, recordLimits, recordRound, recordSpend } from "./w-budget.js";
+import { type OwnedAppend, foldReentry, foldWorkBudget, microUsd, recordLimits, recordRound, recordSpend } from "./w-budget.js";
 import { type ReasonCode, W_REASON_CODES } from "./w-events.js";
 import { type RecheckFailure, type WRun, beginRun } from "./w-run.js";
 import { WError, type WErrorCode } from "./w-verbs.js";
@@ -122,6 +122,7 @@ type LineGates = Record<Exclude<GateId, "GATE-4">, Gate>;
 const NO_REENTRY = { same_reason: 0, kills: 0 } as const;
 const NO_STALL = { current: null, rework: false } as const;
 const REASON_SHAPE = /^[a-z0-9_]{1,40}$/;
+const DIGEST = /^[0-9a-f]{64}$/;
 
 /** Thrown inside the line and caught in runLine: the run ends as `aborted`, with closed codes only. */
 class RunAbort extends Error {
@@ -168,16 +169,25 @@ function checkedResult(id: Exclude<GateId, "GATE-4">, raw: unknown): GateResult 
 }
 
 type Reading =
-  | { status: "ok" }
+  | { status: "ok" | "rework"; digest: string | null }
   | { status: "skipped" }
   | { status: "error" }
   | { status: "blocked" | "manual"; reason_code: ReasonCode };
 
-/** A station result as a closed status. Rework (routed in Task 8), an unknown code and a non-result are all `error`. */
-function interpret(raw: unknown): Reading {
-  const r = raw as { kind?: unknown; reason_code?: unknown } | null;
+/**
+ * A station result as a closed status. `rework` is the one status that is not a stop, and only S6 may ask for it
+ * (spec 5.0); from any other station, an unknown reason code, a digest that is not 64 hex, and a non-result are all
+ * `error`. Nothing the station wrote is copied except a valid digest (M3b2-D19).
+ */
+function interpret(id: StationId, raw: unknown): Reading {
+  const r = raw as { kind?: unknown; reason_code?: unknown; progress_digest?: unknown } | null;
   if (r === null || typeof r !== "object") return { status: "error" };
-  if (r.kind === "ok" || r.kind === "skipped") return { status: r.kind };
+  const digest = r.progress_digest;
+  if (digest !== undefined && !(typeof digest === "string" && DIGEST.test(digest))) return { status: "error" };
+  const progress = typeof digest === "string" ? digest : null;
+  if (r.kind === "ok") return { status: "ok", digest: progress };
+  if (r.kind === "rework") return id === "S6" ? { status: "rework", digest: progress } : { status: "error" };
+  if (r.kind === "skipped") return { status: "skipped" };
   if (
     (r.kind === "blocked" || r.kind === "manual") &&
     typeof r.reason_code === "string" &&
@@ -243,6 +253,11 @@ class Line {
   private readonly times: Partial<Record<NodeId, StageTime>> = {};
   private readonly warnings = new Set<Gate4Warning>();
   private stop: LineStop = { kind: "none" };
+  /** The round's `[node, status, digest]` list; its hash is the stall signature (M3b2-D7). Emptied when a round opens. */
+  private readonly trail: { node: NodeId; status: StationStatus | GateVerdict; digest: string | null }[] = [];
+  /** The signature of the round that just ended in a rework request; the next `work.round` carries it. */
+  private lastSignature: string | null = null;
+  private reworkAsked = false;
 
   constructor(
     private readonly env: LineEnv,
@@ -251,6 +266,7 @@ class Line {
 
   /** Visits LINE_ORDER once. A recheck before every node: a veto, a lost claim or a drifted config ends the run. */
   async walk(): Promise<void> {
+    if (!this.guardEntry()) return;
     let index = 0;
     while (index < LINE_ORDER.length && this.stop.kind === "none") {
       const node = LINE_ORDER[index];
@@ -263,6 +279,27 @@ class Line {
     }
   }
 
+  /**
+   * Line entry, before S1 (M3b2-D17): may one more round start? Rounds, spend, ledger anomalies and the re-entry
+   * facts (the same park reason three times, or three killed runs, since the last person's act). A fail is put on
+   * the board and ends the line here, before any station runs, so a repeating blocker costs nothing to repeat.
+   * Every count is read from the ledger as it is now, so a restart cannot reset it (M3b2-D3). Returns whether the line goes on.
+   */
+  private guardEntry(): boolean {
+    const events = this.env.ledger.readVerified();
+    const { run } = this.env;
+    return this.settle(
+      evaluateGate4({
+        budget: foldWorkBudget(events, run.workId),
+        visits: { in_round: 0, total: 0, entering: null },
+        next_round_wanted: true,
+        stall: NO_STALL,
+        reentry: foldReentry(events, run.goalId, run.workId),
+      }),
+      "fail",
+    );
+  }
+
   private budget() {
     return foldWorkBudget(this.env.ledger.readVerified(), this.env.run.workId);
   }
@@ -271,10 +308,7 @@ class Line {
   private async visit(node: NodeId, index: number): Promise<number> {
     if (node === "S3" && !this.opensRound()) return index;
     const counts = this.visits.enter(node);
-    if (node === "GATE-4") {
-      this.afterS6(counts);
-      return index + 1;
-    }
+    if (node === "GATE-4") return this.afterS6(counts) ? LINE_ORDER.indexOf("S3") : index + 1;
     // Gates count as visits: the same GATE-4 rule that caps stations caps the S2/GATE-2 loop (M3b2-D6).
     const guarded = evaluateGate4({
       budget: this.budget(),
@@ -322,28 +356,37 @@ class Line {
       reentry: NO_REENTRY,
     });
     if (!this.settle(answer, "fail")) return false;
-    guard(() => recordRound(this.env.own, null));
+    guard(() => recordRound(this.env.own, this.lastSignature));
     if (!this.env.run.resumed) guard(() => this.env.run.start());
     this.visits.startRound();
     this.board.startRound();
     for (const id of ROUND_SCOPED_STATIONS) this.stations[id] = "not_run";
     resetRoundScopedInputs(this.inputs);
+    this.trail.length = 0;
+    this.reworkAsked = false;
     return true;
   }
 
-  /** The GATE-4 node: the one check that goes on the board whatever it says. */
-  private afterS6(counts: { in_round: number; total: number }): void {
+  /**
+   * The GATE-4 node: the one check that goes on the board whatever it says. A rework request asks for another
+   * round, so rounds and spend are checked as for a round that would start, and a round whose signature equals the
+   * one recorded when it opened (the previous round's) is a stall (M3b2-D7). Returns whether the walk goes back to S3.
+   */
+  private afterS6(counts: { in_round: number; total: number }): boolean {
     const started = this.now();
+    const current = roundSignature(this.trail);
     const answer = evaluateGate4({
       budget: this.budget(),
       visits: { ...counts, entering: "GATE-4" },
-      next_round_wanted: false,
-      stall: NO_STALL,
+      next_round_wanted: this.reworkAsked,
+      stall: { current, rework: this.reworkAsked },
       reentry: NO_REENTRY,
     });
     this.clock("GATE-4", started);
     this.ran.push({ node: "GATE-4", result: answer.verdict });
-    this.settle(answer, "always");
+    if (!this.settle(answer, "always") || !this.reworkAsked) return false;
+    this.lastSignature = current;
+    return true;
   }
 
   private async runStation(id: StationId): Promise<void> {
@@ -357,7 +400,7 @@ class Line {
       reading = { status: "skipped" };
     } else {
       try {
-        reading = interpret(await station.run(this.stationContext(id)));
+        reading = interpret(id, await station.run(this.stationContext(id)));
       } catch (err) {
         if (err instanceof RunAbort) throw err;
         reading = { status: "error" }; // the message is dropped: it may hold anything
@@ -366,7 +409,9 @@ class Line {
     this.clock(id, started);
     this.stations[id] = reading.status;
     this.ran.push({ node: id, result: reading.status });
-    if (reading.status === "ok") {
+    this.trail.push({ node: id, status: reading.status, digest: "digest" in reading ? reading.digest : null });
+    if (id === "S6") this.reworkAsked = reading.status === "rework";
+    if (reading.status === "ok" || reading.status === "rework") {
       if (round >= 1) guard(() => this.env.run.progress({ station: id, step: "handed_off" }));
       return;
     }
@@ -403,6 +448,7 @@ class Line {
         : await this.evaluate(id);
     this.clock(id, started);
     this.board.record(result);
+    this.trail.push({ node: id, status: result.verdict, digest: null });
     this.ran.push({ node: id, result: result.verdict });
     if (result.verdict === "pass") return index + 1;
     // GATE-2 fail goes back to S2; the visit guard in `visit` bounds the loop. Anything else stops the line.
