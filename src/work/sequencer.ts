@@ -41,7 +41,7 @@ import {
 } from "./line-types.js";
 import { type Disposition, OutcomeError, type WOutcome, dispositionOf } from "./outcome.js";
 import type { WorkItem } from "./types.js";
-import { type OwnedAppend, foldReentry, foldWorkBudget, microUsd, recordLimits, recordRound, recordSpend } from "./w-budget.js";
+import { type OwnedAppend, WorkBudgetError, foldReentry, foldWorkBudget, microUsd, recordLimits, recordRound, recordSpend } from "./w-budget.js";
 import { type ReasonCode, W_REASON_CODES } from "./w-events.js";
 import { type RecheckFailure, type WRun, beginRun } from "./w-run.js";
 import { WError, type WErrorCode } from "./w-verbs.js";
@@ -143,6 +143,8 @@ function guard<T>(act: () => T): T {
   } catch (err) {
     if (err instanceof WError) throw new RunAbort("run_error", null, err.code);
     if (err instanceof OutcomeError) throw new RunAbort("run_error", null, "outcome_invalid");
+    // The own-claim appends of Task 2 refuse with their own error; the code is all that leaves, never the message.
+    if (err instanceof WorkBudgetError) throw new RunAbort("run_error", null, err.code === "claim_lost" ? "claim_lost" : "malformed");
     throw err;
   }
 }
@@ -258,6 +260,8 @@ class Line {
   /** The signature of the round that just ended in a rework request; the next `work.round` carries it. */
   private lastSignature: string | null = null;
   private reworkAsked = false;
+  /** Set when `ctx.recordSpend` aborted the run; raised after the station returns, so a station cannot swallow it. */
+  private spendAbort: RunAbort | null = null;
 
   constructor(
     private readonly env: LineEnv,
@@ -406,6 +410,7 @@ class Line {
         reading = { status: "error" }; // the message is dropped: it may hold anything
       }
     }
+    if (this.spendAbort !== null) throw this.spendAbort;
     this.clock(id, started);
     this.stations[id] = reading.status;
     this.ran.push({ node: id, result: reading.status });
@@ -433,7 +438,12 @@ class Line {
       now: this.env.now,
       inputs: this.inputs,
       recordSpend: (micro) => {
-        guard(() => recordSpend(this.env.own, id, micro));
+        try {
+          guard(() => recordSpend(this.env.own, id, micro));
+        } catch (err) {
+          if (err instanceof RunAbort) this.spendAbort ??= err;
+          throw err;
+        }
       },
     };
   }
