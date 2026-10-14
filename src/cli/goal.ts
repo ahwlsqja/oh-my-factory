@@ -6,6 +6,7 @@ import { humanActor } from "../core/actor.js";
 import { Ledger } from "../core/ledger.js";
 import type { ProjectLocation } from "../core/paths.js";
 import { requireProject } from "../core/project.js";
+import { safeText } from "../core/safe-text.js";
 import { approveGoal } from "../goal/approve.js";
 import { type AuditReport, auditGoal } from "../goal/audit.js";
 import { type BandsConfig, bandsLockInfoOf, readBands } from "../goal/bands.js";
@@ -64,7 +65,7 @@ function describeBands(config: BandsConfig | null): string {
     const entry = config.tiers[tier];
     return entry === undefined ? [] : [`${tier} -> ${entry.action}`];
   });
-  return `baseline ${config.baseline}; ${tiers.join(", ")}`;
+  return `baseline ${safeText(config.baseline)}; ${safeText(tiers.join(", "))}`;
 }
 
 /**
@@ -80,38 +81,42 @@ export function approvalScreen(
   const out = (line: string): void => void lines.push(line);
   const audit = auditGoal(status, goalId);
   if (audit.problems.length > 0 || audit.regime_changes.length > 0) {
-    out(`why approval is needed again (goal ${goalId} is ${audit.state.replace("needs_reapproval", "needs re-approval")}):`);
-    for (const problem of audit.problems) out(`  problem: ${problem}`);
-    for (const change of audit.regime_changes) out(`  - ${change}`);
+    out(`why approval is needed again (goal ${safeText(goalId)} is ${audit.state.replace("needs_reapproval", "needs re-approval")}):`);
+    for (const problem of audit.problems) out(`  problem: ${safeText(problem)}`);
+    for (const change of audit.regime_changes) out(`  - ${safeText(change)}`);
     if (audit.approval !== null && audit.watched_paths_changed.length > 0) {
       out(`changes since the approval at ${audit.approval.head_commit.slice(0, 12)}:`);
       const stat = diffStat(status.repo, audit.approval.head_commit, audit.watched_paths_changed);
-      out(stat === "" ? "  (only untracked files; no diff to show)" : stat);
+      out(stat === "" ? "  (only untracked files; no diff to show)" : stat.split("\n").map(safeText).join("\n"));
     }
   }
   const { front } = readGoal(status.dir, goalId);
-  out(`goal ${front.goal_id}: ${front.title}`);
-  out(`objective: ${front.objective}`);
-  out(`target: ${front.target.metric_id} ${front.target.operator} ${front.target.value} ${front.target.unit}`);
-  out(`leading: ${listOrNone(front.leading)}; lagging: ${listOrNone(front.lagging)}; guardrails: ${listOrNone(front.guardrails)}`);
-  out(`budget: ${front.budget.rounds} rounds, ${front.budget.wall_time} wall time, at most ${front.budget.max_open_work_items} open work items`);
-  out(`decision rule: ${front.prereg.decision_rule} (minimum observation ${front.prereg.min_observation})`);
+  out(`goal ${safeText(front.goal_id)}: ${safeText(front.title)}`);
+  out(`objective: ${safeText(front.objective)}`);
+  out(`target: ${safeText(front.target.metric_id)} ${front.target.operator} ${front.target.value} ${safeText(front.target.unit)}`);
+  out(
+    `leading: ${safeText(listOrNone(front.leading))}; lagging: ${safeText(listOrNone(front.lagging))}; guardrails: ${safeText(listOrNone(front.guardrails))}`,
+  );
+  out(`budget: ${front.budget.rounds} rounds, ${safeText(front.budget.wall_time)} wall time, at most ${front.budget.max_open_work_items} open work items`);
+  out(`decision rule: ${safeText(front.prereg.decision_rule)} (minimum observation ${safeText(front.prereg.min_observation)})`);
   const metrics: Record<string, string> = {};
   for (const id of referencedMetrics(front)) {
     const proposal = readProposal(status.dir, id);
     if (proposal === null) {
-      out(`metric ${id}: no proposal`);
+      out(`metric ${safeText(id)}: no proposal`);
       continue;
     }
     metrics[id] = metricSha256(proposal);
-    const image = proposal.image === null ? "" : `; image ${proposal.image}`;
-    out(`metric ${id}: ${JSON.stringify(proposal.command)} -> ${proposal.unit}; watches ${listOrNone(proposal.watched_paths)}${image}`);
+    const image = proposal.image === null ? "" : `; image ${safeText(proposal.image)}`;
+    out(
+      `metric ${safeText(id)}: ${safeText(JSON.stringify(proposal.command))} -> ${safeText(proposal.unit)}; watches ${safeText(listOrNone(proposal.watched_paths))}${image}`,
+    );
   }
   // Bands are locked with the goal (spec §4.6). The configs are read once, so the hash is of what is shown.
   const configs: Record<string, BandsConfig | null> = {};
   for (const id of referencedMetrics(front)) {
     configs[id] = readBands(status.dir, goalId, id);
-    out(`bands ${id}: ${describeBands(configs[id] ?? null)}`);
+    out(`bands ${safeText(id)}: ${describeBands(configs[id] ?? null)}`);
   }
   if (audit.approval !== null && audit.approval.bands_sha256 === null) {
     out("bands not locked (approved before M2b): a change to a bands file is not a regime change until you approve again");

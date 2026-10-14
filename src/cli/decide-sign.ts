@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { ProjectLocation } from "../core/paths.js";
 import { Ledger } from "../core/ledger.js";
+import { safeText } from "../core/safe-text.js";
 import { validateDef } from "../core/schema.js";
 import { findDecision, foldDecisions } from "../decision/state.js";
 import {
@@ -42,18 +43,6 @@ const INPUT_NOUN: Record<SignVerb, string> = { resolve: "resolution", defer: "de
  */
 export function signRetype(workId: string, decisionId: string): string {
   return `${workId}/${decisionId}`;
-}
-
-/**
- * Text from a ledger record or an agent-drafted file is data, not terminal input: control characters, line
- * breaks, format characters (bidi overrides) and line separators print as escapes, so no text can move the
- * cursor, hide itself or fake a line of the screen (spec §6.2: a person signs exactly what is shown).
- */
-export function safeText(text: string): string {
-  return text.replace(/[\p{Cc}\p{Cf}\u2028\u2029]/gu, (ch) => {
-    const code = ch.codePointAt(0) ?? 0;
-    return code > 0xffff ? `\\u{${code.toString(16)}}` : `\\u${code.toString(16).padStart(4, "0")}`;
-  });
 }
 
 const argv = (command: string[] | null): string => (command === null ? "none" : safeText(JSON.stringify(command)));
