@@ -3,11 +3,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { type StateStore, createMarkdownStore } from "../../src/adapters/state-markdown.js";
 import { claimFile, claimStatus } from "../../src/work/claim.js";
-import type { Gate } from "../../src/work/gates.js";
+import type { Gate, GateVerdict } from "../../src/work/gates.js";
 import { STATION_IDS, type StationId } from "../../src/work/line-types.js";
 import type { LineOptions } from "../../src/work/sequencer.js";
 import { newRunId } from "../../src/work/w-events.js";
-import { OK, type LineFixture, type StationBody, passGates, setupLine, stationsOf } from "../helpers/line.js";
+import { OK, type LineFixture, type StationBody, fakeGate, finished, passGates, setupLine, stationsOf } from "../helpers/line.js";
 
 /** Another run's claim: same process, a different acquired_at, so the sequencer finds a claim that is not its own. */
 function stealClaim(f: LineFixture): void {
@@ -179,5 +179,88 @@ describe("runLine: progress markers", () => {
       S7: "in_progress S7 entered",
     });
     expect(f.fresh().progress.trim()).toBe("S7 handed_off");
+  });
+});
+
+/** A clock that moves only when a station says so, so every duration in the evidence is exact. */
+function manualClock(startMs: number): { now: () => Date; advance: (ms: number) => void } {
+  let at = startMs;
+  return {
+    now: () => new Date(at),
+    advance: (ms) => {
+      at += ms;
+    },
+  };
+}
+
+/** Answers with `verdicts` in order, then repeats the last one. */
+function sequenceGate(id: "GATE-2" | "GATE-3", verdicts: GateVerdict[]): Gate {
+  let call = 0;
+  return {
+    id,
+    evaluate: () => {
+      const verdict = verdicts[Math.min(call++, verdicts.length - 1)] ?? "pass";
+      return { gate: id, verdict, reasons: verdict === "pass" ? [] : ["scenarios_failed"] };
+    },
+  };
+}
+
+describe("runLine: stage timing", () => {
+  it("measures every station and gate visit of a finished line", async () => {
+    const f = setupLine();
+    const clock = manualClock(Date.now());
+    const spend =
+      (ms: number): StationBody =>
+      () => {
+        clock.advance(ms);
+        return OK;
+      };
+    const stations = stationsOf([], { S1: spend(100), S2: spend(200), S3: spend(300), S4: spend(400), S5: spend(500), S6: spend(600), S7: spend(700) });
+    const result = finished(await f.go({ stations, gates: passGates([]), now: clock.now }));
+
+    const once = (total_ms: number): { visits: number; total_ms: number } => ({ visits: 1, total_ms });
+    expect(result.evidence.self_metrics.stage_times).toEqual({
+      S1: once(100),
+      "GATE-1": once(0),
+      S2: once(200),
+      "GATE-2": once(0),
+      S3: once(300),
+      S4: once(400),
+      S5: once(500),
+      "GATE-3": once(0),
+      S6: once(600),
+      "GATE-4": once(0), // a pure check, so it takes no time of its own, but it is a visit
+      S7: once(700),
+    });
+  });
+
+  it("measures a line that stopped, up to and including the node that stopped it", async () => {
+    const f = setupLine();
+    const clock = manualClock(Date.now());
+    const infra: StationBody = () => {
+      clock.advance(50);
+      return { kind: "blocked", reason_code: "infra_failure" };
+    };
+    const result = finished(await f.go({ stations: stationsOf([], { S3: infra }), gates: passGates([]), now: clock.now }));
+
+    const times = result.evidence.self_metrics.stage_times;
+    expect(times.S3).toEqual({ visits: 1, total_ms: 50 });
+    expect(times.S4).toBeUndefined();
+  });
+
+  it("counts every visit when GATE-2 sends the walk back to S2", async () => {
+    const f = setupLine();
+    const clock = manualClock(Date.now());
+    const s2: StationBody = () => {
+      clock.advance(10);
+      return OK;
+    };
+    const gates = { "GATE-2": sequenceGate("GATE-2", ["fail", "pass"]), "GATE-3": fakeGate("GATE-3") };
+    const result = finished(await f.go({ stations: stationsOf([], { S2: s2 }), gates, now: clock.now }));
+
+    const times = result.evidence.self_metrics.stage_times;
+    expect(times.S2).toEqual({ visits: 2, total_ms: 20 });
+    expect(times["GATE-2"]).toEqual({ visits: 2, total_ms: 0 });
+    expect(times.S1).toEqual({ visits: 1, total_ms: 0 });
   });
 });
