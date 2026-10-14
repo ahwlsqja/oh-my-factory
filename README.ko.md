@@ -342,7 +342,8 @@ OMF 는 모든 것을 저장소 밖에, 프로젝트마다 폴더 하나로 둡�
 설계는 Will Larson 의 소프트웨어 팩토리 실험, StrongDM 의 Software Factory, Anthropic 의 AI-native
 SDLC 플레이북, 그리고 사람의 판단이 어디에 있어야 하는지에 대한 Addy Osmani 와 Piotr Sarnacki 의
 글 위에 서 있습니다. 도구 계층은 oh-my-claudecode, oh-my-codex, addyosmani/factory, Kilroy, OpenAI
-의 Symphony 명세를 따릅니다. 모든 출처는
+의 Symphony 명세를 참고했습니다. 설계를 가져다 쓴 곳(선점 잠금의 낡음 판정은 Kilroy 의 설계를 따름)도 코드는 독립 구현이며,
+무엇을 어디서 가져왔는지는 [`docs/third-party.md`](docs/third-party.md) 에 적혀 있습니다. 모든 출처는
 [`docs/design/references.md`](docs/design/references.md) 에 있습니다.
 
 ## 기여하기

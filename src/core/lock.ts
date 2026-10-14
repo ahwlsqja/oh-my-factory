@@ -56,6 +56,7 @@ function isAlive(pid: number): boolean {
   }
 }
 
+// Staleness and ownership checks adapt the design of Kilroy (MIT); see THIRD_PARTY_NOTICES.md.
 /** Stale when the owner is gone, or when its pid now belongs to a different process. */
 export function isStale(owner: LockOwner): boolean {
   if (!isAlive(owner.pid)) return true;

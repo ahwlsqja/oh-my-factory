@@ -352,9 +352,10 @@ To uninstall, run `npm unlink -g oh-my-factory` and delete `~/.omf`.
 
 The design builds on Will Larson's software factory experiment, StrongDM's Software Factory,
 Anthropic's AI-native SDLC playbook, and the writing of Addy Osmani and Piotr Sarnacki on where
-human judgment belongs. The tool layer follows oh-my-claudecode, oh-my-codex, addyosmani/factory,
-Kilroy and OpenAI's Symphony spec. [`docs/design/references.md`](docs/design/references.md) lists
-every source.
+human judgment belongs. The tool layer draws on oh-my-claudecode, oh-my-codex, addyosmani/factory,
+Kilroy and OpenAI's Symphony spec; where it adapts a design (the claim lock's staleness checks follow
+Kilroy's) the code is independent, and [`docs/third-party.md`](docs/third-party.md) records what is
+taken from each. [`docs/design/references.md`](docs/design/references.md) lists every source.
 
 ## Contributing
 

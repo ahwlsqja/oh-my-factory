@@ -28,6 +28,7 @@
     "dist",
     "schemas",
     "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
     "README.md"
   ],
   "engines": {
