@@ -16,6 +16,7 @@ import { fingerprintOf, workIdOf } from "../../src/work/fingerprint.js";
 import type { IntentCandidate, RiskAssessment, WorkState } from "../../src/work/types.js";
 import { type GoalFixture, setupGoal } from "./goal.js";
 import { commitAll } from "./tmp.js";
+import { recordW } from "./work.js";
 
 export const TICK_GOAL = "g-fast";
 
@@ -185,8 +186,10 @@ export function lastTickTypes(fx: TickFixture): string[] {
 
 /**
  * A work item that verifies against the ledger: `work.created` first (as `reconcileGoal` does, D30), then the
- * store write. `state` other than the created one rewrites item.md afterwards, which is legitimate for the
- * states M3 will own (`awaiting_review`, `in_progress`) because the verifier accepts them from a `ready` creation.
+ * store write. A W state also gets the W trail a run would have left (`recordW`): `in_progress` has
+ * `work.started`, `awaiting_review` and `failed` add `work.submitted` / `work.failed`, because the verifier
+ * rejects a W state without its event (M3b1-D4). item.md is then rewritten to that state, the way the store
+ * would have left it. `done` has no writer before M4, so it cannot be seeded.
  */
 export function seedWorkItem(
   fx: TickFixture,
@@ -218,7 +221,14 @@ export function seedWorkItem(
     fx.clock.now(),
   );
   const state = spec.state ?? created;
+  if (state === "done") throw new Error("seedWorkItem cannot seed done: nothing writes it before M4");
   if (state !== created) {
+    const item = { front: { goal_id: TICK_GOAL, work_id: workId } };
+    if (state === "in_progress" || state === "awaiting_review" || state === "failed") {
+      recordW(fx.ledger, "work.started", item);
+      if (state === "awaiting_review") recordW(fx.ledger, "work.submitted", item, { outcome: "flawed", recommendation: "not_recommended" });
+      if (state === "failed") recordW(fx.ledger, "work.failed", item);
+    }
     const file = join(workItemDir(fx.location.dir, TICK_GOAL, workId), "item.md");
     writeFileSync(file, readFileSync(file, "utf8").replace(/^state: .*$/m, `state: ${state}`));
   }

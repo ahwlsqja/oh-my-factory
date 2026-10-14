@@ -12,7 +12,7 @@ import type { AddInput, InterfaceContract, ResolveInput } from "../../src/decisi
 import { DecisionError } from "../../src/decision/write.js";
 import { claimItem, releaseItem } from "../../src/work/claim.js";
 import { setupTickGoal } from "../helpers/goal.js";
-import { HIGH_RISK, createRecorded, makeNewItem, rewriteItem } from "../helpers/work.js";
+import { HIGH_RISK, createRecorded, makeNewItem, recordW, rewriteItem } from "../helpers/work.js";
 import { projectDir } from "../../src/core/paths.js";
 import { goalLockFile } from "../../src/goal/goal-lock.js";
 import { needsHumanFile, readNeedsHuman } from "../../src/decision/needs-human.js";
@@ -64,7 +64,8 @@ describe("requireDecidableItem", () => {
     expect(() => requireDecidableItem(fx.location, gated.front.work_id)).toThrow("approval_unrecorded");
 
     const busy = createRecorded(fx.ledger, fx.store, makeNewItem({ title: "Warm the cache" }));
-    rewriteItem(busy, { state: "in_progress" }); // nothing in M3a can start an item, so this was hand-edited
+    recordW(fx.ledger, "work.started", busy); // a run started it: the ledger has the event
+    rewriteItem(busy, { state: "in_progress" });
     expect(() => requireDecidableItem(fx.location, busy.front.work_id)).toThrow("is in_progress");
 
     const gone = createRecorded(fx.ledger, fx.store, makeNewItem({ title: "Trim the logs" }));
@@ -81,6 +82,7 @@ describe("requireDecidableItem", () => {
 
   it("decideReport, unlike the guard, reads an in-progress item and writes nothing", () => {
     const fx = fixture();
+    recordW(fx.ledger, "work.started", fx.item);
     rewriteItem(fx.item, { state: "in_progress" });
     const before = new Ledger(fx.location.dir).readVerified().length;
     expect(decideReport(fx.location, fx.id, NOW).gate.status).toBe("blocked_on_user");

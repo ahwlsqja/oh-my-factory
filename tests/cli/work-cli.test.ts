@@ -9,7 +9,7 @@ import { verifiedItems } from "../../src/work/ledger-verify.js";
 import { omf } from "../helpers/cli.js";
 import { type GoalFixture, setupGoal } from "../helpers/goal.js";
 import { gitIn } from "../helpers/tmp.js";
-import { HIGH_RISK, createRecorded, makeNewItem, rewriteItem } from "../helpers/work.js";
+import { HIGH_RISK, createRecorded, makeNewItem, recordW, rewriteItem } from "../helpers/work.js";
 
 function fixture(options: { email?: boolean } = {}): GoalFixture & { store: ReturnType<typeof createMarkdownStore> } {
   const fx = setupGoal();
@@ -188,6 +188,7 @@ describe("omf veto", () => {
   it("succeeds while another process holds the claim, and says so", () => {
     const fx = fixture();
     const item = createRecorded(fx.ledger, fx.store, makeNewItem());
+    recordW(fx.ledger, "work.started", item);
     rewriteItem(item, { state: "in_progress" });
     claimItem(item.dir);
     const result = omf(["veto", item.front.work_id], fx.repo, fx.home);
