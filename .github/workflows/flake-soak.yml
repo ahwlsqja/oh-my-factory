@@ -1,0 +1,58 @@
+name: flake-soak
+
+on:
+  schedule:
+    - cron: "43 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flake-soak-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  soak:
+    name: soak (3 shuffled runs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Tests must never reach a real model; no secret is mapped into this job.
+      ANTHROPIC_API_KEY: ""
+      OPENAI_API_KEY: ""
+      CLAUDE_CODE_OAUTH_TOKEN: ""
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Run the suite 3 times in shuffled order
+        run: |
+          set -uo pipefail
+          failed=0
+          {
+            echo "### Flake soak"
+            echo
+            echo "| run | seed | result |"
+            echo "|---|---|---|"
+          } >> "${GITHUB_STEP_SUMMARY}"
+          for run in 1 2 3; do
+            seed=$(( (RANDOM << 15 | RANDOM) + 1 ))
+            echo "::group::run ${run}, seed ${seed}"
+            if npm test -- --sequence.shuffle --sequence.seed="${seed}"; then
+              result=pass
+            else
+              result=FAIL
+              failed=1
+            fi
+            echo "::endgroup::"
+            echo "| ${run} | ${seed} | ${result} |" >> "${GITHUB_STEP_SUMMARY}"
+          done
+          echo >> "${GITHUB_STEP_SUMMARY}"
+          echo "Reproduce a failure locally with: npm test -- --sequence.shuffle --sequence.seed=<seed>" >> "${GITHUB_STEP_SUMMARY}"
+          exit "${failed}"
