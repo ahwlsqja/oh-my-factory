@@ -310,3 +310,44 @@ export async function isDirClean(target: GitTarget, sha: string, dir: string): P
   const untracked = await git(scoped, ["ls-files", "-o", "--directory"]);
   return untracked.length === 0 && lstatOrNull(join(dir, ".git")) === null;
 }
+
+const SMALL_OUTPUT_BYTES = 1024 * 1024;
+
+/**
+ * Transport-free bundle import (M3e-D22), in three calls the caller must make in order: `bundleVerify`, `unbundle`,
+ * `fsckStrict`. `HARDENED_GIT_CONFIG` keeps `protocol.file.allow=never`, so `git fetch x.bundle` fails by design;
+ * `unbundle` writes objects and no refs and uses no transport. The bundle file is OMF-created, its contents are hostile.
+ * False when git rejects the header or the output is unreasonably large. A header-only check: a bundle with an intact
+ * header and a truncated pack still verifies, and `unbundle` is what fails on it. Ref names are never returned.
+ */
+export async function bundleVerify(target: GitTarget, bundleFile: string): Promise<boolean> {
+  requireAbsolute("bundle file", bundleFile);
+  try {
+    await git(target, ["bundle", "verify", bundleFile], { maxOutputBytes: SMALL_OUTPUT_BYTES });
+    return true;
+  } catch (error) {
+    if (error instanceof HostGitError && (error.code === "git_failed" || error.code === "output_limit")) return false;
+    throw error;
+  }
+}
+
+/**
+ * Writes the objects of the bundle into the quarantine repository and no ref. Git does not run `fsck` here, so the
+ * objects of a rejected import may be in the repository: run `fsckStrict`, and discard the quarantine on false.
+ */
+export async function unbundle(target: GitTarget, bundleFile: string): Promise<void> {
+  requireAbsolute("bundle file", bundleFile);
+  assertOutsideAgentHomes(target.gitDir);
+  await git(target, ["bundle", "unbundle", bundleFile], { maxOutputBytes: SMALL_OUTPUT_BYTES });
+}
+
+/** `git fsck --strict --no-dangling --no-progress`; true only on exit 0. Run after every `unbundle`, before any object is trusted. */
+export async function fsckStrict(target: GitTarget): Promise<boolean> {
+  try {
+    await git(target, ["fsck", "--strict", "--no-dangling", "--no-progress"], { maxOutputBytes: SMALL_OUTPUT_BYTES });
+    return true;
+  } catch (error) {
+    if (error instanceof HostGitError && (error.code === "git_failed" || error.code === "output_limit")) return false;
+    throw error;
+  }
+}

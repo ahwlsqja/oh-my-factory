@@ -210,3 +210,49 @@ describe("materialising and checking a tree", () => {
     await expect(ops.archiveTar(fx.quarantine, fx.head, out)).rejects.toThrow("archive file already exists");
   });
 });
+describe("bundle import without a transport", () => {
+  let bundles: BundleFixture;
+  beforeAll(() => {
+    bundles = makeBundles(fx);
+  });
+
+  it("imports a good bundle with verify, unbundle and fsck, and writes no ref", async () => {
+    const quarantine = makeEmptyQuarantine();
+    expect(await ops.bundleVerify(quarantine, bundles.good)).toBe(true);
+    await ops.unbundle(quarantine, bundles.good);
+    expect(await ops.fsckStrict(quarantine)).toBe(true);
+    expect(await ops.resolveCommit(quarantine, fx.head)).toBe(fx.head);
+    expect(gitIn(quarantine.gitDir, "for-each-ref")).toBe("");
+  });
+
+  it("rejects a junk file, a truncated pack and an object that fails fsck --strict", async () => {
+    expect(await ops.bundleVerify(makeEmptyQuarantine(), bundles.junk)).toBe(false);
+    expect(await codeOf(ops.unbundle(makeEmptyQuarantine(), bundles.truncated))).toBe("git_failed");
+    // Git 2.53 imports the bad tree (`unbundle` does not run fsck by itself), and fsckStrict is what rejects it.
+    const quarantine = makeEmptyQuarantine();
+    expect(await ops.bundleVerify(quarantine, bundles.bad)).toBe(true);
+    const failure = await codeOf(ops.unbundle(quarantine, bundles.bad));
+    if (failure === undefined) expect(await ops.fsckStrict(quarantine)).toBe(false);
+    else expect(failure).toBe("git_failed");
+  });
+
+  it("refuses a relative bundle path", async () => {
+    await expect(ops.bundleVerify(makeEmptyQuarantine(), "good.bundle")).rejects.toThrow("bundle file must be an absolute path");
+  });
+
+  it("a plain fetch of a bundle fails under the hardened prefix, which is why import has no fetch path", async () => {
+    const quarantine = makeEmptyQuarantine();
+    expect(await codeOf(runHostGit(quarantine, ["fetch", bundles.good, "main"], { cwd: quarantine.gitDir }))).toBe("git_failed");
+    let stderr = "";
+    try {
+      execFileSync("git", [...HARDENED_GIT_CONFIG, `--git-dir=${quarantine.gitDir}`, "fetch", bundles.good, "main"], {
+        env: hardenedGitEnv(),
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (error) {
+      stderr = String((error as { stderr?: unknown }).stderr);
+    }
+    expect(stderr).toContain("transport 'file' not allowed");
+  });
+});
