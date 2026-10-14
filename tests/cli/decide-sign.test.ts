@@ -96,6 +96,34 @@ function codeOf(fn: () => unknown): string | undefined {
   return undefined;
 }
 
+// Spec §6.2: what is printed is what is signed, so no text may move the cursor, hide or fake a line.
+describe("decisionScreen escaping", () => {
+  const EVIL = "x\u001b[8m\r\nbuild: [\"fake\"]\u202Ey";
+  const hostile = (text: string): boolean => /[\p{Cc}\p{Cf}\u2028\u2029]/u.test(text);
+
+  it("prints control and bidi characters as escapes in every free-text field", () => {
+    const { fx, items } = setup();
+    const item = items[0]!;
+    const base = recordOf(fx, item, "d-cache-key");
+    const record = { ...base, question: EVIL } as typeof base;
+    const input: ResolveInput = { choice: EVIL, rationale: EVIL, rejected: [EVIL], interface: { ...CONTRACT, io_contract: EVIL, build: ["npm", EVIL] } };
+    const lines = decisionScreen(item, record, { verb: "resolve", input });
+    const text = lines.join("\n");
+    expect(hostile(text.replace(/\n/g, ""))).toBe(false);
+    expect(lines.filter((line) => line.startsWith("build:"))).toEqual([]);
+    expect(text).toContain("\\u001b");
+    expect(text).toContain("\\u202e");
+  });
+
+  it("escapes the defer and n/a texts", () => {
+    const { fx, items } = setup();
+    const item = items[0]!;
+    const record = recordOf(fx, item, "d-cache-key");
+    expect(hostile(decisionScreen(item, record, { verb: "defer", input: { ...DEFER, reason: EVIL, owner: EVIL } }).join(""))).toBe(false);
+    expect(hostile(decisionScreen(item, record, { verb: "na", input: { rationale: EVIL } }).join(""))).toBe(false);
+  });
+});
+
 // Spec §6.2: a person signs a decision knowing which work item it belongs to and what will be recorded.
 describe("decisionScreen", () => {
   it("names the work item and shows the choice a resolution would record", () => {

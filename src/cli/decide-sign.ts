@@ -44,13 +44,25 @@ export function signRetype(workId: string, decisionId: string): string {
   return `${workId}/${decisionId}`;
 }
 
-const argv = (command: string[] | null): string => (command === null ? "none" : JSON.stringify(command));
+/**
+ * Text from a ledger record or an agent-drafted file is data, not terminal input: control characters, line
+ * breaks, format characters (bidi overrides) and line separators print as escapes, so no text can move the
+ * cursor, hide itself or fake a line of the screen (spec §6.2: a person signs exactly what is shown).
+ */
+export function safeText(text: string): string {
+  return text.replace(/[\p{Cc}\p{Cf}\u2028\u2029]/gu, (ch) => {
+    const code = ch.codePointAt(0) ?? 0;
+    return code > 0xffff ? `\\u{${code.toString(16)}}` : `\\u${code.toString(16).padStart(4, "0")}`;
+  });
+}
+
+const argv = (command: string[] | null): string => (command === null ? "none" : safeText(JSON.stringify(command)));
 
 function measureLines(measure: ResponseMeasure | null): string[] {
   if (measure === null) return [];
   const percentile = measure.percentile === null ? "" : ` at p${measure.percentile}`;
-  const window = measure.window === null ? "" : ` over ${measure.window}`;
-  return [`measure: ${measure.metric} ${measure.op} ${measure.threshold} ${measure.unit}${percentile}${window}`];
+  const window = measure.window === null ? "" : ` over ${safeText(measure.window)}`;
+  return [`measure: ${safeText(measure.metric)} ${measure.op} ${measure.threshold} ${safeText(measure.unit)}${percentile}${window}`];
 }
 
 /** The commands the factory will run for this item, as argv arrays: a person signs exactly these. */
@@ -59,7 +71,7 @@ function interfaceLines(contract: InterfaceContract): string[] {
     `interface: ${contract.kind}`,
     `  build: ${argv(contract.build)}`,
     `  run: ${argv(contract.run)}`,
-    `  io contract: ${contract.io_contract}`,
+    `  io contract: ${safeText(contract.io_contract)}`,
     `  gate fast: ${argv(contract.gates.fast)}`,
     `  gate full: ${argv(contract.gates.full)}`,
     `  gate deep: ${argv(contract.gates.deep)}`,
@@ -74,25 +86,25 @@ function interfaceLines(contract: InterfaceContract): string[] {
  */
 export function decisionScreen(item: WorkItem, record: DecisionRecord, action: SignAction): string[] {
   const lines = [
-    `work ${item.front.work_id} of goal ${item.front.goal_id}: ${item.front.title}`,
-    `decision ${record.id} (class ${record.class}): ${record.question}`,
+    `work ${item.front.work_id} of goal ${item.front.goal_id}: ${safeText(item.front.title)}`,
+    `decision ${record.id} (class ${record.class}): ${safeText(record.question)}`,
   ];
   if (record.qas !== null) {
     const { source, stimulus, environment, artifact, response } = record.qas;
     lines.push(
-      `  source: ${source}`,
-      `  stimulus: ${stimulus}`,
-      `  environment: ${environment}`,
-      `  artifact: ${artifact}`,
-      `  response: ${response}`,
+      `  source: ${safeText(source)}`,
+      `  stimulus: ${safeText(stimulus)}`,
+      `  environment: ${safeText(environment)}`,
+      `  artifact: ${safeText(artifact)}`,
+      `  response: ${safeText(response)}`,
     );
   }
   lines.push(`you are about to ${VERB_PHRASE[action.verb]} it with:`);
   switch (action.verb) {
     case "resolve": {
       const { input } = action;
-      lines.push(`choice: ${input.choice}`, `rationale: ${input.rationale}`);
-      for (const rejected of input.rejected ?? []) lines.push(`rejected: ${rejected}`);
+      lines.push(`choice: ${safeText(input.choice)}`, `rationale: ${safeText(input.rationale)}`);
+      for (const rejected of input.rejected ?? []) lines.push(`rejected: ${safeText(rejected)}`);
       lines.push(...measureLines(input.response_measure ?? record.response_measure));
       if (input.interface !== undefined) lines.push(...interfaceLines(input.interface));
       break;
@@ -100,16 +112,16 @@ export function decisionScreen(item: WorkItem, record: DecisionRecord, action: S
     case "defer": {
       const { input } = action;
       lines.push(
-        `owner: ${input.owner}`,
-        `reason: ${input.reason}`,
-        `revisit trigger: ${input.revisit_trigger}`,
-        `default: ${input.default}`,
-        `expires: ${input.expires_at}`,
+        `owner: ${safeText(input.owner)}`,
+        `reason: ${safeText(input.reason)}`,
+        `revisit trigger: ${safeText(input.revisit_trigger)}`,
+        `default: ${safeText(input.default)}`,
+        `expires: ${safeText(input.expires_at)}`,
       );
       break;
     }
     case "na":
-      lines.push(`rationale: ${action.input.rationale}`);
+      lines.push(`rationale: ${safeText(action.input.rationale)}`);
       break;
   }
   return lines;

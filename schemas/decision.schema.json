@@ -27,18 +27,18 @@
       "type": "array",
       "minItems": 1,
       "maxItems": 64,
-      "items": { "type": "string", "minLength": 1, "maxLength": 1000, "pattern": "^[^\\u0000]+$" }
+      "items": { "type": "string", "minLength": 1, "maxLength": 1000, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" }
     },
     "qas": {
       "type": "object",
       "additionalProperties": false,
       "required": ["source", "stimulus", "environment", "artifact", "response"],
       "properties": {
-        "source": { "type": "string", "minLength": 1, "maxLength": 500 },
-        "stimulus": { "type": "string", "minLength": 1, "maxLength": 500 },
-        "environment": { "type": "string", "minLength": 1, "maxLength": 500 },
-        "artifact": { "type": "string", "minLength": 1, "maxLength": 500 },
-        "response": { "type": "string", "minLength": 1, "maxLength": 500 }
+        "source": { "type": "string", "minLength": 1, "maxLength": 500, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
+        "stimulus": { "type": "string", "minLength": 1, "maxLength": 500, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
+        "environment": { "type": "string", "minLength": 1, "maxLength": 500, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
+        "artifact": { "type": "string", "minLength": 1, "maxLength": 500, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
+        "response": { "type": "string", "minLength": 1, "maxLength": 500, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" }
       }
     },
     "response_measure": {
@@ -46,12 +46,12 @@
       "additionalProperties": false,
       "required": ["metric", "op", "threshold", "unit", "percentile", "window"],
       "properties": {
-        "metric": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "metric": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
         "op": { "enum": ["<", "<=", ">", ">=", "=="] },
         "threshold": { "type": "number" },
-        "unit": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "unit": { "type": "string", "minLength": 1, "maxLength": 40, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
         "percentile": { "anyOf": [{ "type": "number", "minimum": 0, "maximum": 100 }, { "type": "null" }] },
-        "window": { "anyOf": [{ "type": "string", "minLength": 1, "maxLength": 80 }, { "type": "null" }] }
+        "window": { "anyOf": [{ "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" }, { "type": "null" }] }
       }
     },
     "interface_contract": {
@@ -62,7 +62,7 @@
         "kind": { "enum": ["cli", "http"] },
         "build": { "$ref": "#/$defs/argv" },
         "run": { "$ref": "#/$defs/argv" },
-        "io_contract": { "type": "string", "maxLength": 4000 },
+        "io_contract": { "type": "string", "maxLength": 4000, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]*$" },
         "gates": {
           "type": "object",
           "additionalProperties": false,
@@ -84,7 +84,7 @@
       "properties": {
         "id": { "$ref": "#/$defs/decision_id" },
         "class": { "$ref": "#/$defs/decision_class" },
-        "question": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "question": { "type": "string", "minLength": 1, "maxLength": 1000, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
         "qas": { "$ref": "#/$defs/qas" },
         "response_measure": { "$ref": "#/$defs/response_measure" }
       }
@@ -94,9 +94,9 @@
       "additionalProperties": false,
       "required": ["choice", "rationale"],
       "properties": {
-        "choice": { "type": "string", "minLength": 1, "maxLength": 2000 },
-        "rationale": { "type": "string", "minLength": 1, "maxLength": 2000 },
-        "rejected": { "type": "array", "maxItems": 10, "items": { "type": "string", "minLength": 1, "maxLength": 500 } },
+        "choice": { "type": "string", "minLength": 1, "maxLength": 2000, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 2000, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
+        "rejected": { "type": "array", "maxItems": 10, "items": { "type": "string", "minLength": 1, "maxLength": 500, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" } },
         "response_measure": { "$ref": "#/$defs/response_measure" },
         "interface": { "$ref": "#/$defs/interface_contract" }
       }
@@ -106,10 +106,10 @@
       "additionalProperties": false,
       "required": ["owner", "reason", "revisit_trigger", "default", "expires_at"],
       "properties": {
-        "owner": { "type": "string", "minLength": 1, "maxLength": 200 },
-        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 },
-        "revisit_trigger": { "type": "string", "minLength": 1, "maxLength": 1000 },
-        "default": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "owner": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1000, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
+        "revisit_trigger": { "type": "string", "minLength": 1, "maxLength": 1000, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
+        "default": { "type": "string", "minLength": 1, "maxLength": 2000, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
         "expires_at": { "$ref": "#/$defs/timestamp" }
       }
     },
@@ -118,7 +118,7 @@
       "additionalProperties": false,
       "required": ["rationale"],
       "properties": {
-        "rationale": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 2000, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" }
       }
     },
     "resolution": {
@@ -126,9 +126,9 @@
       "additionalProperties": false,
       "required": ["choice", "rationale", "rejected", "by", "at"],
       "properties": {
-        "choice": { "type": "string", "minLength": 1, "maxLength": 2000 },
-        "rationale": { "type": "string", "minLength": 1, "maxLength": 2000 },
-        "rejected": { "type": "array", "maxItems": 10, "items": { "type": "string", "minLength": 1, "maxLength": 500 } },
+        "choice": { "type": "string", "minLength": 1, "maxLength": 2000, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 2000, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
+        "rejected": { "type": "array", "maxItems": 10, "items": { "type": "string", "minLength": 1, "maxLength": 500, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" } },
         "by": { "$ref": "#/$defs/human" },
         "at": { "$ref": "#/$defs/timestamp" }
       }
@@ -138,10 +138,10 @@
       "additionalProperties": false,
       "required": ["owner", "reason", "revisit_trigger", "default", "signed_by", "expires_at"],
       "properties": {
-        "owner": { "type": "string", "minLength": 1, "maxLength": 200 },
-        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 },
-        "revisit_trigger": { "type": "string", "minLength": 1, "maxLength": 1000 },
-        "default": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "owner": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1000, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
+        "revisit_trigger": { "type": "string", "minLength": 1, "maxLength": 1000, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
+        "default": { "type": "string", "minLength": 1, "maxLength": 2000, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
         "signed_by": { "$ref": "#/$defs/human" },
         "expires_at": { "$ref": "#/$defs/timestamp" }
       }
@@ -164,7 +164,7 @@
         "work_id": { "$ref": "#/$defs/work_id" },
         "decision_id": { "$ref": "#/$defs/decision_id" },
         "class": { "$ref": "#/$defs/decision_class" },
-        "question": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "question": { "type": "string", "minLength": 1, "maxLength": 1000, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
         "qas": { "$ref": "#/$defs/qas" },
         "response_measure": { "$ref": "#/$defs/response_measure" }
       }
@@ -201,7 +201,7 @@
         "goal_id": { "$ref": "#/$defs/goal_id" },
         "work_id": { "$ref": "#/$defs/work_id" },
         "decision_id": { "$ref": "#/$defs/decision_id" },
-        "rationale": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 2000, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
         "by": { "$ref": "#/$defs/human" },
         "at": { "$ref": "#/$defs/timestamp" }
       }
@@ -269,8 +269,8 @@
         "j": { "const": "J2" },
         "work_id": { "$ref": "#/$defs/work_id" },
         "goal_id": { "$ref": "#/$defs/goal_id" },
-        "question": { "type": "string", "minLength": 1, "maxLength": 1000 },
-        "options": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 500 } },
+        "question": { "type": "string", "minLength": 1, "maxLength": 1000, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" },
+        "options": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 500, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" } },
         "default": { "const": null },
         "resume_token": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
         "reasons": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/reason" } },
