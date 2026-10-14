@@ -5,6 +5,7 @@ import { runDoctor } from "../core/doctor.js";
 import { TORN_TAIL_WARNING } from "../core/ledger.js";
 import { resolveProject } from "../core/paths.js";
 import { registerDecideCommands } from "./decide.js";
+import { registerDecideSigningCommands } from "./decide-sign.js";
 import { registerGoalCommands } from "./goal.js";
 import { registerBudgetCommands, registerWorkCommands } from "./work.js";
 import { NOT_INITIALIZED_MESSAGE, initProject, readProjectStatus } from "../core/project.js";
@@ -76,6 +77,7 @@ registerGoalCommands(program);
 registerWorkCommands(program);
 registerBudgetCommands(program);
 registerDecideCommands(program);
+registerDecideSigningCommands(program);
 
 program.parseAsync().catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : String(err));
