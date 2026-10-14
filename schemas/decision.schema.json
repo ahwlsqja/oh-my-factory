@@ -1,0 +1,281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OMF design decisions (M3a, spec §4.6, §5.2, §6.2)",
+  "$defs": {
+    "decision_id": { "type": "string", "pattern": "^d-[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },
+    "timestamp": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$" },
+    "human": { "type": "string", "pattern": "^human:\\S+$" },
+    "work_id": { "type": "string", "pattern": "^w-[0-9a-f]{12}$" },
+    "goal_id": { "type": "string", "pattern": "^g-[a-z0-9]+(-[a-z0-9]+)*$" },
+    "decision_class": {
+      "enum": [
+        "interface",
+        "compatibility",
+        "latency",
+        "throughput",
+        "memory",
+        "durability",
+        "queue_bound",
+        "data_model",
+        "error_semantics",
+        "security",
+        "other"
+      ]
+    },
+    "gate_name": { "enum": ["fast", "full", "deep"] },
+    "argv": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "type": "string", "minLength": 1, "maxLength": 1000, "pattern": "^[^\\u0000]+$" }
+    },
+    "qas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "stimulus", "environment", "artifact", "response"],
+      "properties": {
+        "source": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "stimulus": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "environment": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "artifact": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "response": { "type": "string", "minLength": 1, "maxLength": 500 }
+      }
+    },
+    "response_measure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "op", "threshold", "unit", "percentile", "window"],
+      "properties": {
+        "metric": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "op": { "enum": ["<", "<=", ">", ">=", "=="] },
+        "threshold": { "type": "number" },
+        "unit": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "percentile": { "anyOf": [{ "type": "number", "minimum": 0, "maximum": 100 }, { "type": "null" }] },
+        "window": { "anyOf": [{ "type": "string", "minLength": 1, "maxLength": 80 }, { "type": "null" }] }
+      }
+    },
+    "interface_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "build", "run", "io_contract", "gates", "test_command"],
+      "properties": {
+        "kind": { "enum": ["cli", "http"] },
+        "build": { "$ref": "#/$defs/argv" },
+        "run": { "$ref": "#/$defs/argv" },
+        "io_contract": { "type": "string", "maxLength": 4000 },
+        "gates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fast", "full", "deep", "required"],
+          "properties": {
+            "fast": { "anyOf": [{ "$ref": "#/$defs/argv" }, { "type": "null" }] },
+            "full": { "anyOf": [{ "$ref": "#/$defs/argv" }, { "type": "null" }] },
+            "deep": { "anyOf": [{ "$ref": "#/$defs/argv" }, { "type": "null" }] },
+            "required": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/gate_name" } }
+          }
+        },
+        "test_command": { "$ref": "#/$defs/argv" }
+      }
+    },
+    "add_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "class", "question"],
+      "properties": {
+        "id": { "$ref": "#/$defs/decision_id" },
+        "class": { "$ref": "#/$defs/decision_class" },
+        "question": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "qas": { "$ref": "#/$defs/qas" },
+        "response_measure": { "$ref": "#/$defs/response_measure" }
+      }
+    },
+    "resolve_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["choice", "rationale"],
+      "properties": {
+        "choice": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "rejected": { "type": "array", "maxItems": 10, "items": { "type": "string", "minLength": 1, "maxLength": 500 } },
+        "response_measure": { "$ref": "#/$defs/response_measure" },
+        "interface": { "$ref": "#/$defs/interface_contract" }
+      }
+    },
+    "defer_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "reason", "revisit_trigger", "default", "expires_at"],
+      "properties": {
+        "owner": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "revisit_trigger": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "default": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "expires_at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "na_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rationale"],
+      "properties": {
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 2000 }
+      }
+    },
+    "resolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["choice", "rationale", "rejected", "by", "at"],
+      "properties": {
+        "choice": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "rejected": { "type": "array", "maxItems": 10, "items": { "type": "string", "minLength": 1, "maxLength": 500 } },
+        "by": { "$ref": "#/$defs/human" },
+        "at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "deferral": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "reason", "revisit_trigger", "default", "signed_by", "expires_at"],
+      "properties": {
+        "owner": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "revisit_trigger": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "default": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "signed_by": { "$ref": "#/$defs/human" },
+        "expires_at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "field"],
+      "properties": {
+        "rule": { "enum": ["metric-name", "target-value", "number-value"] },
+        "field": { "type": "string", "minLength": 1, "maxLength": 200 }
+      }
+    },
+    "ev_added": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "decision_id", "class", "question"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "decision_id": { "$ref": "#/$defs/decision_id" },
+        "class": { "$ref": "#/$defs/decision_class" },
+        "question": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "qas": { "$ref": "#/$defs/qas" },
+        "response_measure": { "$ref": "#/$defs/response_measure" }
+      }
+    },
+    "ev_resolved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "decision_id", "resolution"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "decision_id": { "$ref": "#/$defs/decision_id" },
+        "resolution": { "$ref": "#/$defs/resolution" },
+        "response_measure": { "$ref": "#/$defs/response_measure" },
+        "interface": { "$ref": "#/$defs/interface_contract" }
+      }
+    },
+    "ev_deferred": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "decision_id", "deferral"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "decision_id": { "$ref": "#/$defs/decision_id" },
+        "deferral": { "$ref": "#/$defs/deferral" }
+      }
+    },
+    "ev_marked_na": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "decision_id", "rationale", "by", "at"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "decision_id": { "$ref": "#/$defs/decision_id" },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "by": { "$ref": "#/$defs/human" },
+        "at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "ev_rejected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "op", "findings"],
+      "oneOf": [
+        { "properties": { "decision_id": true }, "required": ["decision_id"] },
+        { "properties": { "decision_id_sha12": true }, "required": ["decision_id_sha12"] }
+      ],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "decision_id": { "$ref": "#/$defs/decision_id" },
+        "decision_id_sha12": { "type": "string", "pattern": "^[0-9a-f]{12}$" },
+        "op": { "enum": ["add", "resolve", "defer", "na"] },
+        "findings": { "type": "array", "minItems": 1, "maxItems": 50, "items": { "$ref": "#/$defs/finding" } }
+      }
+    },
+    "reason": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code"],
+      "properties": {
+        "code": {
+          "enum": [
+            "interface_missing",
+            "interface_unresolved",
+            "intent_question_missing",
+            "required_open",
+            "resolution_not_human",
+            "deferral_unsigned",
+            "deferral_expired",
+            "record_invalid",
+            "ledger_anomaly"
+          ]
+        },
+        "decision_id": { "anyOf": [{ "$ref": "#/$defs/decision_id" }, { "type": "null" }] },
+        "expires_at": { "$ref": "#/$defs/timestamp" },
+        "problem": { "type": "string", "pattern": "^[a-z_]+$", "maxLength": 40 },
+        "anomaly": { "type": "string", "pattern": "^[a-z_]+$", "maxLength": 40 }
+      }
+    },
+    "needs_human": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "id",
+        "j",
+        "work_id",
+        "goal_id",
+        "question",
+        "options",
+        "default",
+        "resume_token",
+        "reasons",
+        "created_at"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "id": { "type": "string", "pattern": "^nh-[0-9a-f]{12}$" },
+        "j": { "const": "J2" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "question": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "options": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 500 } },
+        "default": { "const": null },
+        "resume_token": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+        "reasons": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/reason" } },
+        "created_at": { "$ref": "#/$defs/timestamp" }
+      }
+    }
+  }
+}
