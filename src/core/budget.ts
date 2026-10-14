@@ -142,7 +142,7 @@ export function raiseBudget(
 
 /**
  * The `budget.consumed` event as a value, with no ledger access. A caller that must write a unit together with
- * the record it pays for (releaseFeedback writes this and `feedback.released` in one `appendWithMany`, spec §5.7)
+ * the record it pays for (releaseFeedback writes this and the feedback release record in one `appendWithMany`, spec §5.7)
  * builds it here, so the shape stays the one `budgetStateFromEvents` folds. It does not check the budget: the
  * caller decides under the ledger lock, and the fold re-validates the event on the next read.
  */
