@@ -132,6 +132,7 @@ OMF 는 루프 두 개를 돌립니다.
 | `omf budget show <id> [--json]` | 라운드, 공개, 벽시계 시간 예산의 선언값, 상향값, 사용량, 남은 양을 출력합니다. |
 | `omf budget declare <id> <kind> <amount>` | J8: `rounds` 또는 `disclosure` 예산을 선언합니다. 대화형 터미널이 필요합니다. |
 | `omf budget raise <id> <kind> <amount>` | J8: `rounds`, `disclosure`, `wall_time` 상한을 올립니다. 대화형 터미널이 필요하고, 벽시계 시간은 올리기만 되고 선언은 안 됩니다. |
+| `omf budget raise <work_id> --rounds <n>` 또는 `--usd <amount>` | J8: 작업 항목 하나의 라운드 한도 또는 모델 비용 한도를 올립니다. 대화형 터미널이 필요합니다. 한도는 항목의 첫 실행이 시작될 때 `config.toml` 의 `[w]` 에서 복사됩니다. 항목의 상태는 바꾸지 않으니, 올린 뒤 항목을 다시 실행하세요. |
 | `omf work list <goal-id> [--state <s>] [--json]` | 목표의 작업 항목을 나열합니다. 원장에 기록이 없는 항목은 손상으로 보고합니다(종료 코드 1). |
 | `omf work show <work-id>` | 작업 항목의 `item.md`, 클레임, `intent.md` 를 출력합니다. |
 | `omf work approve <work-id>` | 위험도가 높은 작업 항목을 승인해 디스패치할 수 있게 합니다. 대화형 터미널이 필요합니다. |

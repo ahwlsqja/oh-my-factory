@@ -66,6 +66,16 @@ describe("documentation drift", () => {
     expect(out.stdout).toContain("--json");
   });
 
+  it("budget raise documents both forms, in --help and in both READMEs", () => {
+    const out = omf(["budget", "raise", "--help"], makeTempDir(), makeTempDir("omf-home-"));
+    expect(out.code).toBe(0);
+    expect(out.stdout).toContain("--rounds");
+    expect(out.stdout).toContain("--usd");
+    for (const file of ["README.md", "README.ko.md"]) {
+      expect(readRepoFile(file), file).toContain("omf budget raise <work_id> --rounds <n>");
+    }
+  });
+
   it("both READMEs point at the example and the addendum, and the English one at the smoke script", () => {
     for (const file of ["README.md", "README.ko.md"]) {
       const text = readRepoFile(file);
