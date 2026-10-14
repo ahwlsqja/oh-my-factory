@@ -1,0 +1,30 @@
+name: pr-title
+
+# Advisory check: the pull request title must be a Conventional Commit. It is
+# deliberately not part of the aggregate "ci" job in ci.yml, so it cannot block
+# a merge yet. A follow-up may make it required.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  pr-title:
+    name: pr-title
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/lint-pr-title.mjs
+          sparse-checkout-cone-mode: false
+      # The title is attacker-controlled text: it reaches the script only
+      # through this env var, never through ${{ }} interpolation in `run`.
+      - name: Validate the pull request title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: node scripts/lint-pr-title.mjs
