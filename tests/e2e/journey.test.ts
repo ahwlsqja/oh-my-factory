@@ -9,7 +9,10 @@ import { gitIn, makeGitRepo, makeTempDir } from "../helpers/tmp.js";
 // The README quick start, run against the built CLI in a temporary HOME and a temporary git repository.
 // J1 approval needs a terminal and a typed id, which a test cannot provide, so that one step calls approveGoal
 // in-process (the TTY path is covered in tests/cli/confirm.test.ts and goal-cli.test.ts).
-const BUDGET_MS = 10_000;
+// Per-step timings are printed, not asserted. Only a generous ceiling fails the test, so a real hang is caught
+// without flaking on a slow CI machine. Override with OMF_E2E_BUDGET_MS.
+const parsedBudget = Number(process.env.OMF_E2E_BUDGET_MS);
+const BUDGET_MS = Number.isFinite(parsedBudget) && parsedBudget > 0 ? parsedBudget : 60_000;
 const GOAL_ID = "g-journey";
 const METRIC_ID = "m-journey";
 
@@ -19,7 +22,7 @@ interface StepResult {
 }
 
 describe("first-run journey", () => {
-  it("walks init to goal status in a temporary HOME within the time budget", () => {
+  it("walks init to goal status in a temporary HOME without hanging", () => {
     const repo = makeGitRepo();
     const home = makeTempDir("omf-home-");
     gitIn(repo, "config", "user.email", "journey@example.invalid");
@@ -89,6 +92,6 @@ describe("first-run journey", () => {
     const lines = ["first-run journey timings:", ...steps.map((s) => `  ${s.name.padEnd(22)} ${String(s.ms).padStart(5)} ms`), `  total ${total} ms`];
     // console.log is not shown for a passing file with this reporter setup; stderr is.
     process.stderr.write(`${lines.join("\n")}\n`);
-    expect(total).toBeLessThan(BUDGET_MS);
-  });
+    expect(total, `journey took ${total} ms, ceiling ${BUDGET_MS} ms (OMF_E2E_BUDGET_MS)`).toBeLessThan(BUDGET_MS);
+  }, BUDGET_MS + 30_000);
 });

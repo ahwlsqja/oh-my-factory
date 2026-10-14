@@ -3,8 +3,10 @@ import { omf } from "../helpers/cli.js";
 import { makeGitRepo, makeTempDir } from "../helpers/tmp.js";
 
 // OMF's colour policy: output is plain text. No command writes an escape byte, whatever the terminal says.
-// If colour is ever added it must come with a helper that honours NO_COLOR, FORCE_COLOR and isatty first,
-// and this test then gets cases for those settings (docs/README.md, "Output policy").
+// If colour is ever added it must come with a helper that honours NO_COLOR, FORCE_COLOR and isatty first
+// (docs/README.md, "Output policy"). NO_COLOR=1 and FORCE_COLOR=1 are covered below.
+// Deferred: a real pty case (a child on a pseudo-terminal, where isatty is true). It needs a pty helper that
+// the test dependencies do not provide yet, so these cases run with piped, non-TTY streams only.
 const ESC = "\x1b";
 
 const HELP = [
@@ -27,10 +29,11 @@ const HELP = [
 ];
 
 describe("no ANSI escape bytes", () => {
-  // Colour-forcing variables must not change anything, so run once plain and once with FORCE_COLOR set.
+  // Colour-forcing variables must not change anything, so run plain, with FORCE_COLOR=1 and with NO_COLOR=1.
   for (const [label, env] of [
     ["default environment", {}],
     ["FORCE_COLOR=1", { FORCE_COLOR: "1" }],
+    ["NO_COLOR=1", { NO_COLOR: "1" }],
   ] as const) {
     describe(label, () => {
       const home = makeTempDir("omf-home-");
