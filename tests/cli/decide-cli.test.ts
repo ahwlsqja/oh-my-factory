@@ -10,7 +10,8 @@ import { renderSpec, specFile } from "../../src/decision/spec-md.js";
 import { foldDecisions } from "../../src/decision/state.js";
 import type { AddInput, InterfaceContract, ResolveInput } from "../../src/decision/types.js";
 import { DecisionError } from "../../src/decision/write.js";
-import { claimItem, releaseItem } from "../../src/work/claim.js";
+import { claimItem, claimStatus, releaseItem } from "../../src/work/claim.js";
+import { beginRun } from "../../src/work/w-run.js";
 import { setupTickGoal } from "../helpers/goal.js";
 import { HIGH_RISK, createRecorded, makeNewItem, recordW, rewriteItem } from "../helpers/work.js";
 import { projectDir } from "../../src/core/paths.js";
@@ -294,5 +295,38 @@ describe("omf help", () => {
   it("lists exit code 3", () => {
     const out = omf(["--help"], makeTempDir(), makeTempDir("omf-home-"));
     expect(out.stdout).toContain("3 blocked on a person (J2: open design decisions)");
+  });
+});
+
+describe("re-entry after a park (M3b1-D11)", () => {
+  it("a run that parks a ready item with j2_open leaves it decidable, and the next run enters it", () => {
+    const fx = fixture();
+    const first = beginRun({ location: fx.location, workId: fx.id });
+    const parked = first.finish({ outcome: "blocked", exhausted: false, reason_code: "j2_open" });
+    expect(parked).toMatchObject({ applied: true, disposition: { action: "park" } });
+    expect(claimStatus(fx.item.dir).held).toBe(false);
+    expect(fx.store.fetchWorkItemsByIds([fx.id])[0]?.front.state).toBe("ready");
+
+    // the guard accepts it, and so does the CLI
+    expect(requireDecidableItem(fx.location, fx.id).front.state).toBe("ready");
+    const add = omf(["decide", "add", fx.id, "--file", jsonFile(fx, "add.json", ADD_INTERFACE)], fx.repo, fx.home);
+    expect(add.code, add.stderr).toBe(0);
+    runDecideResolve(fx.location, fx.id, "d-interface", RESOLVE_INTERFACE, PERSON, NOW);
+
+    // the GATE-1 stand-in: real GATE-1 is evaluated by the M3b2 sequencer before start()
+    const second = beginRun({ location: fx.location, workId: fx.id });
+    expect(second.resumed).toBe(false);
+    expect(second.recheck().ok).toBe(true);
+    second.abandon();
+  });
+
+  it("an item a run has started is no longer decidable: its spec.md is sealed", () => {
+    const fx = fixture();
+    const run = beginRun({ location: fx.location, workId: fx.id });
+    run.start();
+    run.abandon();
+    const before = new Ledger(fx.location.dir).readVerified().length;
+    expect(() => requireDecidableItem(fx.location, fx.id)).toThrow("is in_progress");
+    expect(new Ledger(fx.location.dir).readVerified()).toHaveLength(before);
   });
 });
