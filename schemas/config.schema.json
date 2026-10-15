@@ -70,6 +70,22 @@
         "work_tmpfs_mb": { "type": "integer", "minimum": 16, "maximum": 2048 },
         "state_tmpfs_mb": { "type": "integer", "minimum": 1, "maximum": 256 }
       }
+    },
+    "implementer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "image": { "type": "string", "minLength": 1 },
+        "timeout_ms": { "type": "integer", "minimum": 60000, "maximum": 14400000 },
+        "memory_mb": { "type": "integer", "minimum": 256, "maximum": 16384 },
+        "cpus": { "type": "number", "minimum": 0.1, "maximum": 16, "multipleOf": 0.01 },
+        "pids_limit": { "type": "integer", "minimum": 16, "maximum": 8192 },
+        "tmp_tmpfs_mb": { "type": "integer", "minimum": 1, "maximum": 4096 },
+        "work_tmpfs_mb": { "type": "integer", "minimum": 16, "maximum": 4096 },
+        "agent_tmpfs_mb": { "type": "integer", "minimum": 16, "maximum": 4096 },
+        "max_log_bytes": { "type": "integer", "minimum": 1048576, "maximum": 1073741824 },
+        "max_workspace_bytes": { "type": "integer", "minimum": 1048576, "maximum": 1073741824 }
+      }
     }
   }
 }

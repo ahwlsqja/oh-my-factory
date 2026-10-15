@@ -38,6 +38,15 @@ max_model_usd = 5.0
 # docker_context = "my-local-context"    # a local Docker context; the client's current context is never used
 # memory_mb = 512                        # per container; tmp_tmpfs_mb, scratch_tmpfs_mb, work_tmpfs_mb and
 #                                        # state_tmpfs_mb (tmpfs sizes) must fit inside it
+
+# Optional. The implementer container (Claude Code). Without an image no implementer runs. It uses the
+# docker_context of [judge].
+# [implementer]
+# image = "name@sha256:..."              # pinned by digest, or a local image id ("sha256:" and 64 hex digits)
+# timeout_ms = 1800000                   # one session, 60000..14400000
+# memory_mb = 2048                       # tmp_tmpfs_mb, work_tmpfs_mb and agent_tmpfs_mb together must fit inside it
+# max_log_bytes = 67108864               # cap of the session log (64 MiB)
+# The vendor key is never configured here: it is read from the environment of the one command that runs it.
 `;
 
 export const PROJECT_INITIALIZED = "project.initialized";

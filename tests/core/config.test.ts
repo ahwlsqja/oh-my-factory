@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { sha256Hex } from "../../src/core/canonical-json.js";
@@ -13,6 +13,7 @@ import {
   readConfig,
 } from "../../src/core/config.js";
 import { DEFAULT_CONFIG, initProject } from "../../src/core/project.js";
+import { schemaUrl } from "../../src/core/schema.js";
 import { makeGitRepo, makeTempDir } from "../helpers/tmp.js";
 
 function projectWith(text: string): string {
@@ -295,5 +296,130 @@ describe("[judge]", () => {
       parseConfig("[judge]\nmemory_mb = 100\ntmp_tmpfs_mb = 90\nscratch_tmpfs_mb = 11\nwork_tmpfs_mb = 16\n"),
     ).toThrow(/sut container \(101 MiB\)/);
     expect(parseConfig("[judge]\nmemory_mb = 320\n").judge.memory_mb).toBe(320);
+  });
+});
+
+describe("[implementer]", () => {
+  const D = "c".repeat(64);
+
+  it("defaults to no image, a 30 minute session and a 64 MiB log cap", () => {
+    expect(parseConfig("").implementer).toEqual({
+      image: null,
+      timeout_ms: 1_800_000,
+      memory_mb: 2048,
+      cpus: 2,
+      pids_limit: 512,
+      tmp_tmpfs_mb: 256,
+      work_tmpfs_mb: 1024,
+      agent_tmpfs_mb: 256,
+      max_log_bytes: 67_108_864,
+      max_workspace_bytes: 268_435_456,
+    });
+    expect(CONFIG_DEFAULTS.implementer.max_log_bytes).toBe(64 * 1024 * 1024);
+  });
+
+  it("merges a partial section over the defaults and accepts a digest and a local image id", () => {
+    const pinned = parseConfig(`[implementer]\nimage = "factory-impl@sha256:${D}"\ntimeout_ms = 60000\n`).implementer;
+    expect(pinned).toMatchObject({ image: `factory-impl@sha256:${D}`, timeout_ms: 60_000, memory_mb: 2048 });
+    expect(parseConfig(`[implementer]\nimage = "sha256:${D}"\n`).implementer.image).toBe(`sha256:${D}`);
+  });
+
+  it("does not hand out the defaults' own object", () => {
+    const first = parseConfig("");
+    first.implementer.memory_mb = 1;
+    expect(CONFIG_DEFAULTS.implementer.memory_mb).toBe(2048);
+    expect(parseConfig("").implementer.memory_mb).toBe(2048);
+  });
+
+  it("keeps the [implementer] example in the shipped config commented out and never configures a key", () => {
+    expect(DEFAULT_CONFIG).toMatch(/^# \[implementer\]$/m);
+    expect(DEFAULT_CONFIG).not.toMatch(/^\[implementer\]/m);
+    expect(DEFAULT_CONFIG).not.toMatch(/(api_key|token|secret|password)\s*=/i);
+  });
+
+  it.each([
+    ["a timeout below one minute", "timeout_ms = 59999"],
+    ["a timeout above four hours", "timeout_ms = 14400001"],
+    ["a memory limit below 256", "memory_mb = 255"],
+    ["cpus above 16", "cpus = 16.5"],
+    ["cpus with three decimals", "cpus = 1.005"],
+    ["a pids limit below 16", "pids_limit = 15"],
+    ["a zero tmp size", "tmp_tmpfs_mb = 0"],
+    ["a work size below 16", "work_tmpfs_mb = 15"],
+    ["a work size above 4096 (assertSpec refuses any tmpfs above 4096)", "work_tmpfs_mb = 4097"],
+    ["an agent size below 16", "agent_tmpfs_mb = 15"],
+    ["a log cap below 1 MiB", "max_log_bytes = 1048575"],
+    ["a log cap above 1 GiB", "max_log_bytes = 1073741825"],
+    ["a workspace cap below 1 MiB", "max_workspace_bytes = 1048575"],
+    ["a docker context of its own", 'docker_context = "x"'],
+    ["a key field", 'api_key = "x"'],
+  ])("refuses %s", (_name, line) => {
+    expect(() => parseConfig(`[implementer]\n${line}\n`)).toThrow(/config\.toml is invalid/);
+  });
+
+  it.each([
+    ["the shortest timeout", "timeout_ms = 60000"],
+    ["the longest timeout", "timeout_ms = 14400000"],
+    ["the cpus floor", "cpus = 0.1"],
+    ["the cpus ceiling", "cpus = 16"],
+    ["the smallest log cap", "max_log_bytes = 1048576"],
+    ["the largest log cap", "max_log_bytes = 1073741824"],
+    ["the largest workspace cap", "max_workspace_bytes = 1073741824"],
+  ])("accepts %s", (_name, line) => {
+    expect(() => parseConfig(`[implementer]\n${line}\n`)).not.toThrow();
+  });
+
+  it.each([
+    ["a tag", "node:22"],
+    ["an empty string", ""],
+    ["an upper case image id", `sha256:${D.toUpperCase()}`],
+    ["a short image id", "sha256:abc"],
+    ["a digest of 63 characters", `node@sha256:${"d".repeat(63)}`],
+  ])("refuses an image that is %s, naming the key, before the schema runs", (_name, image) => {
+    expect(() => parseConfig(`[implementer]\nimage = "${image}"\n`)).toThrow(
+      "implementer.image must be pinned by digest or be a local image id",
+    );
+  });
+
+  it("says why a codex implementer is refused, and still allows codex for the other roles", () => {
+    expect(() => parseConfig('[roles]\nimplementer = { vendor = "codex" }\n')).toThrow(
+      /roles\.implementer\.vendor "codex" is not supported: only the claude implementer runs in a container in this version/,
+    );
+    expect(
+      parseConfig('[roles]\nimplementer = { vendor = "claude", model = "some-model" }\n').roles.implementer,
+    ).toEqual({ vendor: "claude", model: "some-model" });
+    expect(parseConfig('[roles]\nauthor = { vendor = "codex" }\n').roles.author.vendor).toBe("codex");
+  });
+
+  it("refuses tmpfs sizes that do not fit in memory_mb, because tmpfs is charged to the container", () => {
+    // tmp (256) + work (1024) + agent (256) = 1536 MiB.
+    expect(() => parseConfig("[implementer]\nmemory_mb = 1024\n")).toThrow(
+      /implementer tmpfs sizes \(1536 MiB\) exceed implementer\.memory_mb \(1024\)/,
+    );
+    expect(parseConfig("[implementer]\nmemory_mb = 1536\n").implementer.memory_mb).toBe(1536);
+  });
+
+  it("has exactly the closed key set, none of which can carry a credential", () => {
+    const schema = JSON.parse(readFileSync(schemaUrl("config.schema.json"), "utf8")) as {
+      properties: { implementer: { additionalProperties: boolean; properties: Record<string, unknown> } };
+    };
+    const { additionalProperties, properties } = schema.properties.implementer;
+    expect(additionalProperties).toBe(false);
+    expect(Object.keys(properties).sort()).toEqual(
+      [
+        "agent_tmpfs_mb",
+        "cpus",
+        "image",
+        "max_log_bytes",
+        "max_workspace_bytes",
+        "memory_mb",
+        "pids_limit",
+        "timeout_ms",
+        "tmp_tmpfs_mb",
+        "work_tmpfs_mb",
+      ].sort(),
+    );
+    for (const name of Object.keys(properties)) expect(name).not.toMatch(/key|token|secret|credential|password|env/i);
+    expect(Object.keys(CONFIG_DEFAULTS.implementer).sort()).toEqual(Object.keys(properties).sort());
   });
 });
