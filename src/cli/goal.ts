@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { legacyImageWarnings } from "../adapters/measure-cmd.js";
 import { createReconciler } from "../adapters/reconciler.js";
 import { readConfig } from "../core/config.js";
 import { type TickResult, tickGoal } from "../goal/tick.js";
@@ -27,9 +28,6 @@ import { confirmByTyping, requireTerminal } from "./confirm.js";
 function collect(value: string, previous: string[]): string[] {
   return [...previous, value];
 }
-
-/** `name@sha256:<digest>`: the only image form that cannot be re-pointed after J1 approved the metric. */
-const DIGEST_PINNED = /@sha256:[0-9a-f]{64}$/;
 
 function printList(title: string, items: readonly string[]): void {
   if (items.length === 0) return;
@@ -313,6 +311,7 @@ export function registerGoalCommands(program: Command): void {
         throw new Error(`unknown runner ${options.runner}; use docker or host`);
       }
       const status = requireProject(process.cwd());
+      if (options.runner === "docker") for (const line of legacyImageWarnings(status.dir, goalId)) console.error(line);
       const { report, file } = await measureGoal(status, goalId, { runner: options.runner });
       if (options.json) console.log(JSON.stringify(report, null, 2));
       else printGap(report, file);
@@ -432,6 +431,7 @@ export function registerGoalCommands(program: Command): void {
       const config = readConfig(status.dir);
       const reconciler = createReconciler(status.dir, config.reconciler);
       if (options.runner === "host") console.error("warning: ticking on the host without isolation (--runner host)");
+      if (options.runner === "docker") for (const line of legacyImageWarnings(status.dir, goalId)) console.error(line);
       const result = await tickGoal(status, goalId, { runner: options.runner, reconciler, config });
       if (options.json) console.log(JSON.stringify(publicTick(result), null, 2));
       else printTick(goalId, result);
@@ -467,11 +467,6 @@ export function registerGoalCommands(program: Command): void {
       if (proposal.watched_paths.length === 0) {
         console.error(
           `warning: ${proposal.metric_id} watches no path, so a change to the code it runs is not a regime change; add --watch <glob>`,
-        );
-      }
-      if (proposal.image !== null && !DIGEST_PINNED.test(proposal.image)) {
-        console.error(
-          `warning: ${proposal.metric_id} image ${proposal.image} is not pinned by digest, so the tag can be re-pointed after approval without a regime change; use <name>@sha256:<digest>`,
         );
       }
     });

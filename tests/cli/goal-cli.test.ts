@@ -88,48 +88,28 @@ describe("omf metric propose", () => {
     expect(readProposal(projectDir(repo, { HOME: home }), "m-p95")).toBeNull();
   });
 
-  it("warns when the image is a tag, because a tag can be re-pointed after approval", () => {
+  it("refuses an image that is a tag, and writes no proposal", () => {
     const { repo, home } = initialized();
     gitIn(repo, "config", "user.email", "dev@example.com");
-    const tag = omf(
-      [
-        "metric",
-        "propose",
-        "m-p95",
-        "--unit",
-        "ms",
-        "--watch",
-        "bench/**",
-        "--image",
-        "alpine:3.20",
-        "--",
-        "sh",
-        "bench/p95.sh",
-      ],
-      repo,
-      home,
-    );
-    expect(tag.code).toBe(0);
-    expect(tag.stderr).toContain("warning: m-p95 image alpine:3.20 is not pinned by digest");
-    const digest = `alpine@sha256:${"a".repeat(64)}`;
-    const pinned = omf(
-      [
-        "metric",
-        "propose",
-        "m-p95",
-        "--unit",
-        "ms",
-        "--watch",
-        "bench/**",
-        "--image",
-        digest,
-        "--",
-        "sh",
-        "bench/p95.sh",
-      ],
-      repo,
-      home,
-    );
+    const args = (image: string): string[] => [
+      "metric",
+      "propose",
+      "m-p95",
+      "--unit",
+      "ms",
+      "--watch",
+      "bench/**",
+      "--image",
+      image,
+      "--",
+      "sh",
+      "bench/p95.sh",
+    ];
+    const tag = omf(args("alpine:3.20"), repo, home);
+    expect(tag.code).toBe(2);
+    expect(tag.stderr).toContain("metric m-p95 image alpine:3.20 is not pinned by digest");
+    expect(readProposal(projectDir(repo, { HOME: home }), "m-p95")).toBeNull();
+    const pinned = omf(args(`alpine@sha256:${"a".repeat(64)}`), repo, home);
     expect(pinned.code).toBe(0);
     expect(pinned.stderr).toBe("");
   });

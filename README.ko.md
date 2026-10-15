@@ -232,7 +232,10 @@ warning: measured on the host without isolation (--runner host)
 
 - 지표의 명령과 `--watch` 로 지정한 경로만 대상입니다. 지정하지 않으면 `omf metric propose` 가 경고합니다.
   지표가 읽지만 감시하지 않는 파일과 gitignore 된 입력은 새 승인 없이 바뀔 수 있습니다.
-- 컨테이너 이미지 태그는 바뀔 수 있습니다. 이미지를 고정하려면 digest 를 쓰세요.
+- 컨테이너 이미지 태그는 바뀔 수 있으므로 지표 이미지는 digest(`name@sha256:<64자리 16진수>`)로 고정해야 합니다.
+  `omf metric propose --image` 는 태그를 거부하고, 태그가 든 제안이 저장된 목표를 승인할 때도 거부합니다. 이 규칙
+  이전에 태그로 잠근 지표는 계속 측정되지만 `omf goal measure`, `omf goal tick` 을 실행할 때마다 경고가 나옵니다.
+  digest 로 고정하려면 지표를 다시 제안하세요.
 - `bands/<metric>.yaml` 은 목표와 함께 잠깁니다. 해시가 J1 승인에 들어가므로, 고치거나 새로 만들거나 지우면
   체제 변경입니다. 관리 한계가 잠기기 전에 승인한 목표는 다시 승인할 때까지 한계가 잠기지 않고, 승인 화면이
   그렇게 알려 줍니다.

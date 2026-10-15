@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { MetricDefinition } from "../goal/metrics.js";
+import { isDigestPinned } from "../container/image-ref.js";
+import { safeText } from "../core/safe-text.js";
+import { readGoalLock } from "../goal/goal-lock.js";
+import { type MetricDefinition, readLock } from "../goal/metrics.js";
 import { type ProcessResult, runProcessGroup } from "./process-group.js";
 
 export type RunnerKind = "docker" | "host";
@@ -12,6 +15,35 @@ export type MeasureOutcome = { ok: true; value: number } | { ok: false; reason: 
 export const MEASURE_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 const NUMBER = /^-?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?$/;
+
+/**
+ * The warning for a metric whose image is a tag, or null. A lock J1 approved before the digest rule keeps measuring,
+ * but its tag can be re-pointed without a regime change, so every run says so.
+ */
+export function unpinnedImageWarning(metric: Pick<MetricDefinition, "metric_id" | "image">): string | null {
+  if (metric.image === null || isDigestPinned(metric.image)) return null;
+  return `warning: metric ${metric.metric_id} image ${safeText(metric.image)} is not pinned by digest and was locked before that was required, so the tag can be re-pointed without a regime change; propose the metric again with <name>@sha256:<digest>`;
+}
+
+/**
+ * One warning per locked metric of the goal whose image is a tag. A goal that is not approved, or a lock that cannot
+ * be read, gives none: the audit inside the measurement reports that problem itself, and a warning must not stop
+ * or change a run.
+ */
+export function legacyImageWarnings(projectDir: string, goalId: string): string[] {
+  const warnings: string[] = [];
+  try {
+    const goalLock = readGoalLock(projectDir, goalId);
+    for (const metricId of goalLock?.metrics ?? []) {
+      const lock = readLock(projectDir, goalId, metricId);
+      const warning = lock === null ? null : unpinnedImageWarning(lock);
+      if (warning !== null) warnings.push(warning);
+    }
+  } catch {
+    return [];
+  }
+  return warnings;
+}
 
 export function isolationOf(runner: RunnerKind): Isolation {
   return runner === "docker" ? "container" : "none";
