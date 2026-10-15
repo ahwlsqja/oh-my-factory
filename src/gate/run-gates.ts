@@ -29,7 +29,7 @@ function rulesOf(stdout: string): number | null {
 
 /**
  * exit 0 is `pass` (`empty` when the marker says 0 rules); a non-zero exit, a signal, a timeout or the output limit is `fail`;
- * a runner error is `skip` (the gate never ran: environment, M3e-D5). Only the exit status and the marker integer are read;
+ * a runner error is `skip` (the gate never ran: environment). Only the exit status and the marker integer are read;
  * stdout and stderr are hostile and nothing else is kept.
  */
 export function gateValueOf(result: CommandResult): { value: GateLineValue; rules: number | null } {
@@ -43,8 +43,8 @@ export function gateValueOf(result: CommandResult): { value: GateLineValue; rule
 const DEFAULT_OPTIONS: RunOptions = { timeoutMs: 600_000, maxOutputBytes: 1024 * 1024 };
 
 /**
- * Runs the declared gates fast, full, deep with no short-circuit (M3e-D4: the line is complete evidence). The line is built
- * here with `formatGateLine`, never read from a gate's output (M3e-D3); the verdict is `evaluateGateLine` over that line.
+ * Runs the declared gates fast, full, deep with no short-circuit (the line is complete evidence). The line is built
+ * here with `formatGateLine`, never read from a gate's output; the verdict is `evaluateGateLine` over that line.
  */
 export async function runGates(gates: JudgeConfigDecl["gates"], target: CommandTarget, options: Partial<RunOptions> = {}): Promise<GateRunResult> {
   const runOptions: RunOptions = { ...DEFAULT_OPTIONS, ...options };

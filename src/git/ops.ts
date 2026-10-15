@@ -233,7 +233,7 @@ function requireEmptyDirectory(dir: string): void {
 
 /** A 0700 temp directory that holds one index file for the duration of `fn`, so the quarantine's own index is never written. */
 async function withPrivateIndex<T>(fn: (indexFile: string) => Promise<T>): Promise<T> {
-  assertOutsideAgentHomes(tmpdir()); // the private index is a host write too (M3e-D29)
+  assertOutsideAgentHomes(tmpdir()); // the private index is a host write too
   const dir = mkdtempSync(join(tmpdir(), "omf-index-"));
   try {
     return await fn(join(dir, "index"));
@@ -343,7 +343,7 @@ function containsDotGit(dir: string): boolean {
 const SMALL_OUTPUT_BYTES = 1024 * 1024;
 
 /**
- * Transport-free bundle import (M3e-D22), in three calls the caller must make in order: `bundleVerify`, `unbundle`,
+ * Transport-free bundle import, in three calls the caller must make in order: `bundleVerify`, `unbundle`,
  * `fsckStrict`. `HARDENED_GIT_CONFIG` keeps `protocol.file.allow=never`, so `git fetch x.bundle` fails by design;
  * `unbundle` writes objects and no refs and uses no transport. The bundle file is OMF-created, its contents are hostile.
  * False when git rejects the header or the output is unreasonably large. A header-only check: a bundle with an intact

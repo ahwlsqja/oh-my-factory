@@ -20,7 +20,7 @@ export class TreeLimitError extends Error {}
 
 /**
  * `lstat` only. A symlink is reported, never followed or descended into. `.git` is an ordinary entry here (callers decide).
- * `root` is an absolute directory OMF created. Sorted by path. Precondition (M3e-D26): the container that wrote the tree is
+ * `root` is an absolute directory OMF created. Sorted by path. Precondition: the container that wrote the tree is
  * stopped before any host read; a concurrent writer could still swap a directory between the check and a later open.
  */
 export function walkTree(root: string, limits: Partial<WalkLimits> = {}): TreeEntry[] {
@@ -59,7 +59,7 @@ export class TreeReadError extends Error {
  * `lstat` of every path component, then `open` with `O_NOFOLLOW | O_NONBLOCK` and an `fstat` regular-file check. A FIFO swapped
  * in for a regular file cannot block the open (the `fstat` then refuses it). Default cap 8 MiB. The lstat-then-open guard covers
  * the leaf and the checked components only: a concurrent writer that swaps a directory component between the check and the
- * open is a recorded TOCTOU limit (M3e-D26), not a claim of this function.
+ * open is a recorded TOCTOU limit, not a claim of this function.
  */
 export function readTreeFile(root: string, rel: string, maxBytes: number = DEFAULT_MAX_FILE_BYTES): Buffer {
   if (rel.includes("\0") || isAbsolute(rel)) throw new TreeReadError("outside_root");

@@ -6,8 +6,8 @@ import { assertOutsideAgentHomes, assertOutsideRepo } from "../core/paths.js";
 /**
  * Flat argv prefix for every git call that touches data a container wrote. The order is fixed and tested byte for
  * byte. The prefix does not switch off `filter.*`, `diff.*.textconv` or `diff.external`: `checkTarget` refuses a repository whose
- * own config defines one (M3e review), and the diff calls pass `--no-ext-diff --no-textconv`. `protocol.file.allow=never` stays: a bundle is imported without the transport layer (`bundleVerify`,
- * `unbundle`, `fsckStrict`, M3e-D22), and no per-operation override exists.
+ * own config defines one, and the diff calls pass `--no-ext-diff --no-textconv`. `protocol.file.allow=never` stays: a bundle is imported without the transport layer (`bundleVerify`,
+ * `unbundle`, `fsckStrict`), and no per-operation override exists.
  */
 export const HARDENED_GIT_CONFIG: readonly string[] = [
   "core.hooksPath=/dev/null",
@@ -205,7 +205,7 @@ export async function runHostGit(target: GitTarget, args: readonly string[], opt
 /**
  * `git init --bare --template=` (no sample hooks) inside a fresh 0700 directory under `parent`; returns the bare git
  * directory, `<fresh>/git`. For `git apply` contexts that have no repository of their own. `parent` is checked against
- * the agent config homes always, and against the user's repository when the caller passes it (M3e-D29).
+ * the agent config homes always, and against the user's repository when the caller passes it.
  */
 export async function createScratchGitDir(parent: string, repo?: string): Promise<string> {
   if (!isAbsolute(parent)) throw new HostGitError("not_absolute");

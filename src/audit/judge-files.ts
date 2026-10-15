@@ -9,7 +9,7 @@ const PYTEST_CONFIGS = ["pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg", 
  * The closed list of tool configs, looked up for EVERY argv token (basename, leading `./` and a trailing `@version` removed), so
  * `npm test` and `npx vitest` both resolve. The globs are relative to the repository root, matched case-insensitively against every
  * path of the diff including added files: a candidate that ADDS `vitest.config.ts`, `conftest.py`, `pytest.ini` or `.mocharc.*`
- * to exclude tests is flagged (M3e-D13). A config in a subdirectory is not covered (a recorded limit), except `conftest.py`.
+ * to exclude tests is flagged. A config in a subdirectory is not covered (a recorded limit), except `conftest.py`.
  */
 export const TOOL_CONFIG_FILES: Readonly<Record<string, readonly string[]>> = {
   npm: NODE_RUNNER_CONFIGS,

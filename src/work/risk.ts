@@ -39,7 +39,7 @@ export const DEFAULT_HIGH_RISK: ReadonlyArray<{ rule: RiskRule; globs: readonly 
 
 const testRule = DEFAULT_HIGH_RISK.find((entry) => entry.rule === "test");
 if (testRule === undefined) throw new Error("DEFAULT_HIGH_RISK has no test rule");
-/** The globs of the `test` rule: the one definition of a test file shared by `classifyRisk`, `proveTest` and the audit (M3e-D9). */
+/** The globs of the `test` rule: the one definition of a test file shared by `classifyRisk`, `proveTest` and the audit. */
 export const TEST_GLOBS: readonly string[] = testRule.globs;
 
 export interface RiskInput {
@@ -159,7 +159,7 @@ export function isTestPath(path: string, explicit: readonly string[] = []): bool
 }
 
 /**
- * The risk of a candidate after the audit recomputed it from the real diff (M3e-D11): high if either assessment is high,
+ * The risk of a candidate after the audit recomputed it from the real diff: high if either assessment is high,
  * and the rules and paths are the sorted union. It never returns a class lower than `declared`, and it does not rewrite the
  * item's stored risk; the effective class lives in the audit record and the ledger event.
  */

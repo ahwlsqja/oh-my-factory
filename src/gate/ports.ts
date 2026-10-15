@@ -9,7 +9,7 @@ export interface RunOptions {
 
 /**
  * Where a declared command runs. M3f: the container that holds the candidate. M3e: a test fixture target. No `src/` module
- * implements this by spawning on the host (a structural test in Task 4 enforces it).
+ * implements this by spawning on the host (a structural test enforces it).
  */
 export interface CommandTarget {
   run(argv: readonly string[], options: RunOptions): Promise<CommandResult>;

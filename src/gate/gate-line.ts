@@ -39,7 +39,7 @@ function parseCandidate(line: string): GateLineParse {
 
 /**
  * Lines that start with the prefix are candidates; exactly one is allowed; the grammar is strict (single spaces, three
- * keys in fixed order, no tab, no CR). OMF writes the line itself (M3e-D3), so a deviation is an anomaly, not a dialect.
+ * keys in fixed order, no tab, no CR). OMF writes the line itself, so a deviation is an anomaly, not a dialect.
  */
 export function parseGateLine(text: string): GateLineParse {
   const candidates = text.split("\n").filter((line) => line.startsWith(GATE_LINE_PREFIX));

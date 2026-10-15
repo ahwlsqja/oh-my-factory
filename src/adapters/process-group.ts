@@ -45,7 +45,7 @@ function onExit(): void {
 
 /**
  * A detached group is not in the terminal's foreground group, so Ctrl-C never reaches it. The group killer is registered
- * with the shared cleanup registry (M3e-D25) as a `first` entry, so on SIGINT or SIGTERM it kills every live group before
+ * with the shared cleanup registry as a `first` entry, so on SIGINT or SIGTERM it kills every live group before
  * any directory cleanup runs; then the registry takes its handlers off and re-raises the signal, so the process still
  * ends with the signal status instead of exit 0. The exit hook is the net for a normal exit.
  */

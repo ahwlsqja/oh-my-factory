@@ -17,7 +17,7 @@ export interface AuditInput {
   extraGlobs: readonly string[];
   /** From the ledger interface entry, never from the tree. */
   judge: JudgeConfigDecl;
-  /** The same array `proveTest` received (M3e-D28). */
+  /** The same array `proveTest` received. */
   explicitTestPaths: readonly string[];
   /** Default `["spec.md", "intent.md"]`; M3g passes the real locations. */
   projectionPaths: readonly string[];
@@ -39,7 +39,7 @@ export interface WorkAudit {
   judge_files_checked: number;
   projections_touched: string[];
   risk: { declared: RiskAssessment; recomputed: RiskAssessment | null; effective: RiskAssessment; raised: boolean };
-  /** `recomputed.paths`: diff-based, `[]` on an empty diff (M3e-D11). Capped at 200 listed; `high_risk_paths_count` is the true count. */
+  /** `recomputed.paths`: diff-based, `[]` on an empty diff. Capped at 200 listed; `high_risk_paths_count` is the true count. */
   high_risk_paths_touched: string[];
   high_risk_paths_count: number;
   prove_test: ProveTestResult | "not_run";
@@ -51,9 +51,8 @@ const capRisk = (risk: RiskAssessment): RiskAssessment => ({ class: risk.class, 
 
 /**
  * The audit of the real diff between two shas of the quarantine repository. A git failure (a path that is not valid UTF-8, a
- * missing repository) rejects: an audit that could not look at the diff is not an audit. An empty diff skips the risk recompute
- * (M3e-D12). The judge config comes from the ledger argvs; zero resolved files gives `judge_files_checked: 0`, which downstream
- * reads as `not_run`, never as unchanged (M3e-D13).
+ * missing repository) rejects: an audit that could not look at the diff is not an audit. An empty diff skips the risk recompute. The judge config comes from the ledger argvs; zero resolved files gives
+ * `judge_files_checked: 0`, which downstream reads as `not_run`, never as unchanged.
  */
 export async function runAudit(input: AuditInput): Promise<WorkAudit> {
   const entries = await rawDiff(input.quarantine, input.base, input.head);
@@ -99,7 +98,7 @@ export interface AuditSignals {
   review_required: boolean;
 }
 
-/** One mapping from the audit to what the classifier and the evidence need, so they cannot disagree (M3e-D27). */
+/** One mapping from the audit to what the classifier and the evidence need, so they cannot disagree. */
 export function auditSignals(report: WorkAudit): AuditSignals {
   const flawed: FlawedSignal[] = [];
   if (report.prove_test !== "not_run" && report.prove_test.status === "FAILED") flawed.push("prove_test_failed");

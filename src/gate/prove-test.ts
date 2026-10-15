@@ -24,7 +24,7 @@ export interface ProveTestInput {
   head: string;
   /** The declared `interface.test_command`. */
   testCommand: readonly string[];
-  /** Beyond `TEST_GLOBS`; the SAME array the audit receives (one field threaded by the sequencer, M3e-D28). */
+  /** Beyond `TEST_GLOBS`; the SAME array the audit receives (one field threaded by the sequencer). */
   explicitTestPaths: readonly string[];
   copies: WorkCopyFactory;
   timeoutMs?: number;
@@ -49,7 +49,7 @@ function statusOf(result: CommandResult): number | null {
   return result.kind === "exited" ? result.status : null;
 }
 
-/** Creates a copy, registers its abort with the cleanup registry, and always disposes it (the copy is discarded, which is the restore, M3e-D8). */
+/** Creates a copy, registers its abort with the cleanup registry, and always disposes it (the copy is discarded, which is the restore). */
 async function withCopy<T>(copies: WorkCopyFactory, spec: { quarantine: GitTarget; sha: string }, use: (copy: WorkCopy) => Promise<T>): Promise<T> {
   const copy = await copies.create(spec);
   const unregister = registerCleanup(() => copy.abortSync());
@@ -66,7 +66,7 @@ async function withCopy<T>(copies: WorkCopyFactory, spec: { quarantine: GitTarge
 }
 
 /**
- * Proves that the change's test fails without the change. Flow (M3e-D6): resolve both shas, check ancestry, split the raw diff
+ * Proves that the change's test fails without the change. Flow: resolve both shas, check ancestry, split the raw diff
  * into test and non-test paths, build the revert patch for the non-test paths. Copy A (head) runs the test command as a baseline;
  * copy B is a second, fresh copy of head, with the patch applied in reverse, and must make the test fail. Two copies, because a
  * build output, cache or snapshot from the baseline must not reach the reverted run.

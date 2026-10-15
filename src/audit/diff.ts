@@ -8,7 +8,7 @@ export interface DiffFacts {
   empty: boolean;
   /** Every touched path (A, M, D, T), sorted. */
   paths: string[];
-  /** Status M, D or T on a path that `isTestPath` accepts: an existing test was changed or removed (M3e-D10). */
+  /** Status M, D or T on a path that `isTestPath` accepts: an existing test was changed or removed. */
   tests_edited: string[];
   /** Status A on a test path. */
   tests_added: number;
@@ -58,7 +58,7 @@ export interface RiskOutcome {
 }
 
 /**
- * The risk of the real diff, and the effective risk (M3e-D11, M3e-D12). An empty diff skips the recompute: `classifyRisk` would return
+ * The risk of the real diff, and the effective risk. An empty diff skips the recompute: `classifyRisk` would return
  * `undeclared` for zero paths, which is not a finding about the diff, so the effective risk is the declared one. Otherwise the diff's
  * own paths are classified as literal paths (a `[` in `app/posts/[id]/page.tsx` is not a glob) and `raiseRisk` can only raise.
  */
