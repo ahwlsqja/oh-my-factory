@@ -54,7 +54,7 @@ describe("forbiddenPaths", () => {
     const repo = makeGitRepo();
     const env = { HOME: link, OMF_HOME: join(real, ".omf") };
     const location = locateProject(repo, env);
-    mkdirSync(location.dir, { recursive: true });
+    mkdirSync(location.dir, { recursive: true, mode: 0o700 });
     const paths = forbiddenPaths(location, env);
     const realHome = realpathSync.native(real);
     for (const expected of [

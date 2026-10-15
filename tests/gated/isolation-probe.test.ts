@@ -56,7 +56,7 @@ describeGated("G-real-isolation-probe", () => {
     // A temp OMF home and project with a marker planted in its vault. Never the real home.
     const { env, location } = setupVault();
     const planted = join(location.dir, "vault", "planted-secret.txt");
-    writeFileSync(planted, MARKER);
+    writeFileSync(planted, MARKER, { mode: 0o600 });
     const runId = `r-20261015T000000Z-${randomBytes(2).toString("hex")}`;
     const ledger = new Ledger(location.dir);
     const itemDir = join(location.dir, "items", WORK);

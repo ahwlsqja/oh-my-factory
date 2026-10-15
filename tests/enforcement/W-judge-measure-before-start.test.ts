@@ -3,8 +3,8 @@ import { createMeasured } from "../../src/container/measure.js";
 import { DEVIATIONS, measureFixture } from "../helpers/measure-fixture.js";
 
 // The SUT image is candidate-built, so its entrypoint and the probe's `sh` must not run in a container whose facts nobody
-// has judged. createMeasured judges `docker inspect` BEFORE `start`; a facts violation removes the container unstarted
-// (M3f-D4). The call log is the proof: no start, no exec.
+// has judged. createMeasured judges `docker inspect` BEFORE `start`; a facts violation removes the container unstarted.
+// The call log is the proof: no start, no exec.
 describe("W-judge-measure-before-start", () => {
   it.each(DEVIATIONS.map((d) => [d.name, d] as const))(
     "%s: create, inspect, remove, and no start or exec",

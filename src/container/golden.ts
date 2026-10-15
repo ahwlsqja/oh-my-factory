@@ -18,7 +18,7 @@ import {
 
 export { roleTmpfs } from "./spec.js";
 
-/** The tmpfs mounts of each role and nothing else: no role has a bind mount, so no golden holds a host path (M3f-D22). */
+/** The tmpfs mounts of each role and nothing else: no role has a bind mount, so no golden holds a host path. */
 const ROLE_DESTINATIONS = {
   sut: ["/tmp", "/scratch"],
   harness: ["/tmp", "/state"],
@@ -84,7 +84,7 @@ export function forbiddenPaths(location: ProjectLocation, env: NodeJS.ProcessEnv
 
 /**
  * The golden a role is judged against: no network, a read-only root, only the role's tmpfs mounts, the digest-pinned base
- * image's own environment names (trusted data, M3f-D9), no vendor CLI and no credential file.
+ * image's own environment names (trusted data), no vendor CLI and no credential file.
  */
 export function goldenFor(input: { role: ContainerRole; image: ImageInfo; forbidden: readonly string[] }): StageGolden {
   return {

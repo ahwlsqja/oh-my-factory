@@ -38,7 +38,7 @@ export class NotGoldenError extends Error {
 /**
  * One line per finding, always ending in `end`, so a truncated answer is malformed and never clean. A constant: nothing
  * from the host, a scenario or the candidate is ever interpolated into it. A tripwire for base images that ship a vendor
- * CLI, a credential file or a socket (M3f-D23); the daemon's `docker inspect` stays the authority.
+ * CLI, a credential file or a socket; the daemon's `docker inspect` stays the authority.
  */
 const PROBE_SCRIPT = [
   'for b in claude codex docker gh aws gcloud az kubectl; do command -v "$b" >/dev/null 2>&1 && echo "vendor:$b"; done',
@@ -169,7 +169,7 @@ export async function createMeasured(
     keep = true;
     return { handle, measurement };
   } finally {
-    // Idempotent. A failed removal leaves an orphan that carries the omf.owner label for the sweep (Task 7).
+    // Idempotent. A failed removal leaves an orphan that carries the omf.owner label for the owner-label sweep.
     if (!keep) await runtime.remove(handle).catch(() => undefined);
   }
 }
