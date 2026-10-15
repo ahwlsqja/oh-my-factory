@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { Ledger } from "../../src/core/ledger.js";
 import { projectDir } from "../../src/core/paths.js";
 import { lockGoal } from "../../src/goal/goal-lock.js";
-import { lockFile, readProposal } from "../../src/goal/metrics.js";
+import { lockFile, proposalFile, readProposal } from "../../src/goal/metrics.js";
 import { omf } from "../helpers/cli.js";
 import { setupGoal } from "../helpers/goal.js";
 import { gitIn, makeGitRepo, makeTempDir } from "../helpers/tmp.js";
@@ -129,6 +129,17 @@ describe("omf goal audit", () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("goal g-fast: draft");
     expect(result.stdout).toContain("ready for J1: run omf goal approve g-fast");
+  });
+
+  it("does not call a draft ready when a stored proposal image is a tag", () => {
+    const fx = setupGoal();
+    const file = proposalFile(fx.location.dir, "m-p95");
+    const stored = JSON.parse(readFileSync(file, "utf8"));
+    writeFileSync(file, `${JSON.stringify({ ...stored, image: "alpine:3.20" }, null, 2)}\n`);
+    const result = omf(["goal", "audit", "g-fast"], fx.repo, fx.home);
+    expect(result.stdout).not.toContain("ready for J1");
+    expect(result.stdout).toContain("metric m-p95 image alpine:3.20 is not pinned by digest");
+    expect(result.stdout).toContain("propose the metric again with a digest");
   });
 
   it("exits 1 when the goal needs re-approval", () => {
