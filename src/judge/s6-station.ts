@@ -26,7 +26,7 @@ import type { FeedbackSlot, RoundState } from "./state.js";
 /**
  * Judges the test split of the round in the container. A port, so the station is tested without a daemon; the real
  * adapter is `containerTestJudge`. It gets the behavior scenarios of the test split only: the contradiction canaries of
- * both splits were already judged by S4 and are not the split's single use (M3f-D20).
+ * both splits were already judged by S4 and are not the split's single use.
  */
 export type TestJudge = (input: {
   ctx: StationContext;
@@ -47,7 +47,7 @@ const blocked = (reason_code: ReasonCode): StationResult => ({ kind: "blocked", 
 const manual = (): StationResult => ({ kind: "manual", reason_code: "manual_required" });
 
 /**
- * A withheld release as the line's closed stop (M3f-D13). An exhausted or undeclared disclosure budget needs a person
+ * A withheld release as the line's closed stop. An exhausted or undeclared disclosure budget needs a person
  * to declare or raise it (J8); a spent exposure limit or a train batch too small to release needs new scenarios (J3).
  */
 export function withheldResult(reason: WithheldReason): StationResult {
@@ -61,7 +61,7 @@ export function withheldResult(reason: WithheldReason): StationResult {
 }
 
 /**
- * The feedback writers' errors as closed stops (M3f-D13). A malformed call or a sequence the writers never produce is
+ * The feedback writers' errors as closed stops. A malformed call or a sequence the writers never produce is
  * not retryable, so it parks for a person (`manual_required`). A budget or ledger integrity error is not a
  * FeedbackError and is never mapped here: it propagates and the sequencer records a station error.
  */
@@ -150,7 +150,7 @@ async function testSplit(
       ),
     );
     state.test = verdict;
-    // `pass` counts scenarios that passed in every repetition, so a flaky test scenario leaves pass < total (M3f-D14).
+    // `pass` counts scenarios that passed in every repetition, so a flaky test scenario leaves pass < total.
     result = { pass: verdict.counts.pass, total: verdict.counts.total, flaky: verdict.counts.flaky };
     completeTestRun(ledger, { ...run, ...result });
   }
