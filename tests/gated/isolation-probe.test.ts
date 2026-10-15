@@ -62,7 +62,7 @@ describeGated("G-real-isolation-probe", () => {
     const itemDir = join(location.dir, "items", WORK);
     const scope = { goal_id: "g-fast", work_id: WORK, run_id: runId };
     const deps = { runtime, sink: ledger, scope, itemDir, now: () => new Date() };
-    const forbidden = forbiddenPaths(location, env);
+    const forbidden = forbiddenPaths(location, { ...env, HOME: makeTempDir("omf-gated-forbidden-home-") });
     const measure = (role: ContainerRole) =>
       createMeasured(
         deps,
@@ -79,6 +79,7 @@ describeGated("G-real-isolation-probe", () => {
       runtime.exec(handle, { argv, timeoutMs: 20_000, maxOutputBytes: 64 * 1024 });
 
     const handles: ContainerHandle[] = [];
+    let failure: unknown;
     try {
       const sut = await measure("sut");
       handles.push(sut.handle);
@@ -106,8 +107,18 @@ describeGated("G-real-isolation-probe", () => {
       const outbound = await exec(sut.handle, ["wget", "-T", "3", "-q", "-O", "/dev/null", "http://1.1.1.1/"]);
       expect(outbound.kind).toBe("exited");
       expect(outbound.kind === "exited" && outbound.status).not.toBe(0);
+    } catch (error) {
+      failure = error;
+      throw error;
     } finally {
-      for (const handle of handles) await runtime.remove(handle);
+      const cleanup: unknown[] = [];
+      for (const handle of handles) {
+        try {
+          await runtime.remove(handle);
+        } catch (error) {
+          cleanup.push(error);
+        }
+      }
       const left = spawnSync(
         "docker",
         ["--context", GATED_CONTEXT, "ps", "-a", "-q", "--filter", `label=omf.run=${runId}`],
@@ -116,8 +127,12 @@ describeGated("G-real-isolation-probe", () => {
           encoding: "utf8",
         },
       );
-      expect(left.status).toBe(0);
-      expect(left.stdout.trim()).toBe("");
+      // An earlier assertion failure stays the reported error; cleanup problems surface only on an otherwise passing run.
+      if (failure === undefined) {
+        if (cleanup.length > 0) throw cleanup[0];
+        expect(left.status).toBe(0);
+        expect(left.stdout.trim()).toBe("");
+      }
     }
   }, 240_000);
 });
