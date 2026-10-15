@@ -199,6 +199,12 @@ describe("W-gate1-then-gate2-walk through runLine", () => {
     const second = finished(await runLine({ location: l.f.fx.location, workId: l.f.workId, now: clock.now, stations: lineStations(l, [yaml], trace), gates }));
     expect(second.reason_code).not.toBe("j2_open");
     expect(second.evidence.gates.history).toContainEqual({ gate: "GATE-1", verdict: "pass", reasons: ["already_started"] });
+    const evaluated = ledgerEvents(l.f.fx, "gate2.evaluated");
+    expect(evaluated, "each run ran the real GATE-2 once").toHaveLength(2);
+    const latest = evaluated.at(-1)?.payload as { reason_codes: string[]; route: string; seal_id: string | null };
+    expect(latest.seal_id, "the second run's GATE-2 ran on the standing seal").toBe((ledgerEvents(l.f.fx, "seal.completed")[0]?.payload as { seal_id: string }).seal_id);
+    expect(latest.reason_codes).not.toContain("gate1_not_passing");
+    expect(latest.route).not.toBe("J2");
     expect(prompts(l)).toHaveLength(1);
     expect(ledgerEvents(l.f.fx, "seal.requested")).toHaveLength(1);
     expect(ledgerEvents(l.f.fx, "seal.completed")).toHaveLength(1);
