@@ -228,16 +228,14 @@ function buildReport(
   options: DoctorOptions,
   probes: Probes,
 ): PreflightReport {
-  const problemDetails: Finding[] = [];
-  const warningDetails: Finding[] = [];
+  // One list in report order, so `--strict` can promote a warning without moving it: tools first, then the project.
+  const ordered: Array<{ finding: Finding; kind: "problem" | "tool" | "notice" }> = [];
   const problem = (message: string, fix: string): void => {
-    problemDetails.push({ message, fix, needed_by: [] });
+    ordered.push({ finding: { message, fix, needed_by: [] }, kind: "problem" });
   };
-  const warn = (message: string, fix: string, neededBy: readonly string[] = []): void => {
-    warningDetails.push({ message, fix, needed_by: [...neededBy] });
+  const warn = (message: string, fix: string, neededBy: readonly string[], kind: "tool" | "notice" = "tool"): void => {
+    ordered.push({ finding: { message, fix, needed_by: [...neededBy] }, kind });
   };
-  // A torn tail never failed doctor before warnings existed, so `--strict` leaves it a warning.
-  const isPromotable = (finding: Finding): boolean => finding.message !== TORN_TAIL_WARNING;
 
   const { git, docker, daemon, claude, codex } = probes;
   if (!git.found) problem("git not found on PATH", "install git and make sure it is on PATH");
@@ -245,12 +243,6 @@ function buildReport(
     warn(
       "docker not found on PATH",
       "install Docker to run metrics and judging in a container; metrics can use --runner host meanwhile",
-      NEEDED_BY.docker,
-    );
-  } else if (!daemon) {
-    warn(
-      "docker daemon is not reachable",
-      "start Docker (for example Docker Desktop) and check it with: docker info",
       NEEDED_BY.docker,
     );
   }
@@ -265,6 +257,13 @@ function buildReport(
         NEEDED_BY[name],
       );
     }
+  }
+  if (docker.found && !daemon) {
+    warn(
+      "docker daemon is not reachable",
+      "start Docker (for example Docker Desktop) and check it with: docker info",
+      NEEDED_BY.docker,
+    );
   }
 
   let toplevel: string | null = null;
@@ -310,9 +309,12 @@ function buildReport(
           problem(found, status.ledger !== null && !status.ledger.ok ? LEDGER_FIX : "run omf init");
         }
         if (status.ledger?.ok && status.ledger.tornTail) {
+          // A torn tail never failed doctor before warnings existed, so `--strict` leaves it a warning.
           warn(
             TORN_TAIL_WARNING,
             "run any command that writes to the ledger; the next write repairs the tail, or restore a backup",
+            [],
+            "notice",
           );
         }
         // Poka-yoke (spec §11 rule 4): vault material in the repository or a worktree is a problem to fix before any run.
@@ -330,8 +332,10 @@ function buildReport(
   }
 
   const strict = options.strict === true;
-  const problemList = strict ? [...problemDetails, ...warningDetails.filter(isPromotable)] : problemDetails;
-  const warningList = strict ? warningDetails.filter((finding) => !isPromotable(finding)) : warningDetails;
+  const promoted = (entry: (typeof ordered)[number]): boolean =>
+    entry.kind === "problem" || (strict && entry.kind === "tool");
+  const problemList = ordered.filter(promoted).map((entry) => entry.finding);
+  const warningList = ordered.filter((entry) => !promoted(entry)).map((entry) => entry.finding);
   const reported: PreflightReport["tools"] = { git, docker: { ...docker, daemon }, claude, codex };
   const report: PreflightReport = {
     schema_version: 1,

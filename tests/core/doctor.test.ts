@@ -135,6 +135,34 @@ describe("runDoctor", () => {
     );
   });
 
+  it("--strict lists the problems in the order doctor always listed them: tools, then the project", () => {
+    const home = makeTempDir("omf-home-");
+    const bin = makeTempDir("omf-bin-");
+    const docker = join(bin, "docker");
+    writeFileSync(docker, '#!/bin/sh\nif [ "$1" = "info" ]; then exit 1; else echo "Docker version 29.0.0"; fi\n');
+    chmodSync(docker, 0o755);
+    withGit(bin);
+    // Docker installed but stopped, no agent CLIs, outside any repository, so a project problem follows the tool ones.
+    const stopped = runDoctor(makeTempDir(), env(home, bin), undefined, undefined, { strict: true });
+    expect(stopped.problems).toEqual([
+      "claude not found on PATH",
+      "codex not found on PATH",
+      "docker daemon is not reachable",
+      "not inside a git repository",
+    ]);
+    // No docker binary at all: it comes first, before the agent CLIs.
+    const bare = makeTempDir("omf-bin-");
+    withGit(bare);
+    const missing = runDoctor(makeTempDir(), env(home, bare), undefined, undefined, { strict: true });
+    expect(missing.problems).toEqual([
+      "docker not found on PATH",
+      "claude not found on PATH",
+      "codex not found on PATH",
+      "not inside a git repository",
+    ]);
+    expect(missing.problem_details.map((p) => p.message)).toEqual(missing.problems);
+  });
+
   it("--strict leaves a torn tail a warning and keeps the exit status ok", () => {
     const repo = makeGitRepo();
     const home = makeTempDir("omf-home-");
