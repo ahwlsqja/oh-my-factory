@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { type ReconcileFailureCode, ReconcileParseError, type Reconciler, extractModelJson } from "../adapters/reconciler.js";
 import type { StateStore } from "../adapters/state-markdown.js";
-import { budgetStateFromEvents, consumeBudget } from "../core/budget.js";
+import { budgetConsumedEvent, budgetStateFromEvents } from "../core/budget.js";
 import { sha256Hex } from "../core/canonical-json.js";
 import { EXTRA_HIGH_RISK_GLOBS, type OmfConfig } from "../core/config.js";
 import type { Ledger } from "../core/ledger.js";
@@ -11,6 +11,7 @@ import { writePrivateFile } from "../core/private-fs.js";
 import { schemaUrl, validateDef } from "../core/schema.js";
 import { fingerprintOf, normalizePath, workIdOf } from "../work/fingerprint.js";
 import { verifiedItems } from "../work/ledger-verify.js";
+import { type RecentOutcomes, recentOutcomes } from "../work/recent-outcomes.js";
 import { classifyRisk } from "../work/risk.js";
 import { type ForbiddenTerms, forbiddenTermsFor, lintCandidate, lintText } from "../work/seed-lint.js";
 import { type IntentCandidate, OPEN_STATES, type Trigger, type WorkItem, type WorkState } from "../work/types.js";
@@ -43,6 +44,11 @@ export interface ReconcilerInput {
   /** Verified, non-malformed items only. Paths pass the same filter as repo_layout, so a past guess at a watched path is not shown again. */
   open_items: { work_id: string; title: string; state: WorkState; affected_paths: string[] }[];
   outcomes: { open: number; done: number; failed: number; vetoed: number; cancelled: number };
+  /**
+   * How the last 10 finished or parked items ended, as four counts. Counts only: no title, id, path or risk
+   * of any item leaves, so this is as safe as `outcomes`. Computed from verified W events, never from item files.
+   */
+  recent_outcomes: RecentOutcomes;
   /** Tracked top-level entries and second-level directories (at most 100), minus watched paths and anything that names a metric. */
   repo_layout: string[];
   /** min(5, cap - open); the cap is the locked max_open_work_items, never the text of goal.md. */
@@ -113,9 +119,11 @@ export function buildReconcilerInput(args: {
   /**
    * Items one W edge behind the ledger (`verifiedItems(...).repairable`). They are not in `items`, but the
    * ledger says they are open, so they hold a WIP slot: leaving them out would let a crash free a slot that
-   * is really taken (M3b1-D5). Only the count is needed; the model never sees them.
+   * is really taken. Only the count is needed; the model never sees them.
    */
   repairableOpen?: number;
+  /** `recentOutcomes(...)` of the same ledger read. Required, so no caller can forget the field. */
+  recent: RecentOutcomes;
 }): ReconcilerInput | { problem: "approach_unusable" } {
   const { terms, watchedGlobs, items } = args;
   const approach = approachOf(args.body);
@@ -145,6 +153,7 @@ export function buildReconcilerInput(args: {
       vetoed: count("vetoed"),
       cancelled: count("cancelled"),
     },
+    recent_outcomes: { ...args.recent },
     repo_layout: layoutOf(args.tracked, watchedGlobs, terms),
     max_candidates: Math.max(0, Math.min(MAX_CANDIDATES, args.cap - openTotal)),
   };
@@ -257,6 +266,13 @@ function schemaReason(errors: string): string {
   return "invalid_field";
 }
 
+/** Thrown inside the locked budget write to abandon it when a pool ran out after the snapshot was read. */
+class SpendLost extends Error {
+  constructor(readonly outcome: "rounds_exhausted" | "disclosure_exhausted") {
+    super(outcome);
+  }
+}
+
 function emptyResult(outcome: ReconcileStageResult["outcome"]): ReconcileStageResult {
   return { outcome, created: [], rejected: [], failure: null, stage_ms: { reconcile: 0, dispatch: 0 } };
 }
@@ -286,6 +302,12 @@ export async function reconcileGoal(ctx: ReconcileContext): Promise<ReconcileSta
     items: known.items,
     // A repairable verdict exists only for ready -> in_progress and in_progress -> awaiting_review|failed, so the file is open.
     repairableOpen: known.repairable.length,
+    // Repairable items are one W edge behind the ledger; the ledger already knows how their last run ended, so they count too.
+    recent: recentOutcomes(
+      events,
+      goalId,
+      new Set([...known.items.map((item) => item.front.work_id), ...known.repairable.map((entry) => entry.work_id)]),
+    ),
     tracked,
     watchedGlobs,
     terms,
@@ -304,9 +326,25 @@ export async function reconcileGoal(ctx: ReconcileContext): Promise<ReconcileSta
   const inputText = `${JSON.stringify(input, null, 2)}\n`;
   writePrivateFile(join(reconcileDir, `${tickId}.input.json`), inputText);
 
-  // Both are checked above, so neither is consumed on exhaustion. This is the only place a round is spent (D18).
-  consumeBudget(ledger, goalId, "rounds");
-  if (disclosure !== null) consumeBudget(ledger, goalId, "disclosure");
+  // The checks above read a snapshot; a feedback release may take the last disclosure unit before this write.
+  // So both pools are folded again under the ledger lock and written together or not at all: no round is spent
+  // without the model call it pays for. This is the only place a round is spent (D18).
+  let lost: "rounds_exhausted" | "disclosure_exhausted" | null = null;
+  try {
+    ledger.appendWithMany((current) => {
+      const nowRounds = budgetStateFromEvents(current, goalId, "rounds");
+      if (nowRounds === null || nowRounds.remaining < 1) throw new SpendLost("rounds_exhausted");
+      if (disclosure !== null) {
+        const nowDisclosure = budgetStateFromEvents(current, goalId, "disclosure");
+        if (nowDisclosure === null || nowDisclosure.remaining < 1) throw new SpendLost("disclosure_exhausted");
+      }
+      return [budgetConsumedEvent(goalId, "rounds"), ...(disclosure !== null ? [budgetConsumedEvent(goalId, "disclosure")] : [])];
+    });
+  } catch (error) {
+    if (!(error instanceof SpendLost)) throw error;
+    lost = error.outcome;
+  }
+  if (lost !== null) return emptyResult(lost);
   ledger.append({
     actor: "omf",
     type: "reconcile.requested",
