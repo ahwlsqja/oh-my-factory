@@ -66,9 +66,10 @@ export function sealLockFile(itemDir: string): string {
  * S2 (spec §5.3). In order:
  * 1. preflight: the state-tree guard and the poka-yoke, before anything is read or written;
  * 2. take `seal.lock` without waiting (held: `refused seal_in_progress`); it is released in `finally`;
- * 3. verified ledger read, fold, GATE-1 under `now`: not pass is `blocked_gate1`, nothing appended, author uncalled;
- * 4. any `work.started` for the item: the author preceded it and a seal exists is `reused` (nothing written, no author
- *    call), otherwise `refused implementation_started`;
+ * 3. verified ledger read and seal fold. Any `work.started` for the item: the author preceded it and a seal exists is
+ *    `reused` (nothing written, no author call, GATE-1 not consulted: a started item's standing seal does not depend on
+ *    a later deferral expiring), otherwise `refused implementation_started`;
+ * 4. fold, GATE-1 under `now`: not pass is `blocked_gate1`, nothing appended, author uncalled;
  * 5. `sealInputsFor` and `buildSealPrompt` (`blocked_input` on a `SealInputError`);
  * 6. append `seal.requested`, with `round` = completed seals + 1;
  * 7. run the author. A failure appends `seal.failed` and consumes no round;
@@ -110,11 +111,6 @@ async function sealLocked(deps: SealDeps): Promise<SealStageResult> {
   const now = deps.now();
 
   const events = ledger.readVerified();
-  const state = foldDecisions(events, scope);
-  const leak = loadLeakContext(location.dir, scope.goal_id, events);
-  const gate1 = evaluateGate1(state, now, { leak, intentQuestionIds: intentQuestionIds(item.intent.candidate.open_questions.length) });
-  if (gate1.status !== "pass") return { status: "blocked_gate1", reasons: gate1.reasons };
-
   const seals = foldSeals(events, scope);
   const started = events.some(
     (event) => event.type === WORK_STARTED_EVENT && event.payload.goal_id === scope.goal_id && event.payload.work_id === scope.work_id,
@@ -125,6 +121,11 @@ async function sealLocked(deps: SealDeps): Promise<SealStageResult> {
       ? { status: "reused", seal: seals.latest }
       : { status: "refused", reason: "implementation_started" };
   }
+
+  const state = foldDecisions(events, scope);
+  const leak = loadLeakContext(location.dir, scope.goal_id, events);
+  const gate1 = evaluateGate1(state, now, { leak, intentQuestionIds: intentQuestionIds(item.intent.candidate.open_questions.length) });
+  if (gate1.status !== "pass") return { status: "blocked_gate1", reasons: gate1.reasons };
 
   let prompt: string;
   try {

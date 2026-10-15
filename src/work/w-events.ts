@@ -61,6 +61,8 @@ export const W_REASON_CODES = [
   "within_variance",
   "gate2_exhausted",
   "reentry_loop",
+  // Added by the real GATE-2: the sealed scenarios, or what they were written from, need a person.
+  "scenarios_need_review",
 ] as const;
 export type ReasonCode = (typeof W_REASON_CODES)[number];
 

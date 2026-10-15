@@ -10,6 +10,7 @@ import {
   gate2EvaluatedEvent,
   markScenarioStatus,
   nextSealRound,
+  sealFeedbackFromEvents,
   scenarioStatusChangedEvent,
   sealCompletedEvent,
   sealFailedEvent,
@@ -67,6 +68,7 @@ describe("seal and gate2 event builders", () => {
         counts: { active: 2, behavior_train: 1, behavior_test: 1, canaries: 0, contaminated: 0, retired: 0 },
         set_sha256: digest("1"),
         decisions_digest: digest("a"),
+        feedback_counts: { weak: 1, contradictions: 0, invalid: 2 },
       }),
     ];
     for (const event of events) expect(event.actor).toBe("omf");
@@ -221,5 +223,60 @@ describe("authorPrecedesStart", () => {
     ["a forged start by a person before the seal fails closed", () => [started("human:dev@example.invalid"), completed(1, 1)], { ok: false, reason: "seal_after_start" }],
   ])("%s", (_name, events, expected) => {
     expect(orderOf(events())).toEqual(expected);
+  });
+});
+
+describe("sealFeedbackFromEvents", () => {
+  const evaluated = (over: Partial<Parameters<typeof gate2EvaluatedEvent>[1]> = {}, scope = SCOPE): NewEvent =>
+    gate2EvaluatedEvent(scope, {
+      round: 1,
+      seal_id: sealId(1),
+      status: "fail",
+      route: "back_to_S2",
+      reason_codes: ["unlinked_decisions"],
+      unlinked_decision_ids: ["d-cache"],
+      not_run_decision_ids: [],
+      counts: { active: 2, behavior_train: 1, behavior_test: 1, canaries: 0, contaminated: 0, retired: 0 },
+      set_sha256: digest("1"),
+      decisions_digest: digest("a"),
+      feedback_counts: { weak: 1, contradictions: 0, invalid: 2 },
+      ...over,
+    });
+  const read = (events: NewEvent[]) => {
+    const ledger = newLedger();
+    for (const event of events) ledger.append(event);
+    return sealFeedbackFromEvents(ledger.readVerified(), SCOPE);
+  };
+
+  it("rebuilds the feedback of the latest back_to_S2 evaluation after the latest completed seal", () => {
+    expect(read([completed(1, 1), evaluated()])).toEqual({ unlinked_decision_ids: ["d-cache"], weak: 1, contradictions: 0, invalid: 2 });
+    expect(read([completed(1, 1), evaluated(), evaluated({ unlinked_decision_ids: ["d-queue"], feedback_counts: { weak: 0, contradictions: 3, invalid: 0 } })])).toEqual({
+      unlinked_decision_ids: ["d-queue"],
+      weak: 0,
+      contradictions: 3,
+      invalid: 0,
+    });
+  });
+
+  it("counts every evaluation when no seal has completed", () => {
+    expect(read([evaluated()])).not.toBeNull();
+  });
+
+  it("is null for an evaluation that precedes the latest seal, for a pass and for other routes", () => {
+    expect(read([completed(1, 1), evaluated(), completed(2, 2)])).toBeNull();
+    expect(read([completed(1, 1)])).toBeNull();
+    expect(read([completed(1, 1), evaluated({ status: "pass", route: null, reason_codes: [], unlinked_decision_ids: [], feedback_counts: null })])).toBeNull();
+    expect(read([completed(1, 1), evaluated({ route: "J3", reason_codes: ["probe_error"], unlinked_decision_ids: [], feedback_counts: null })])).toBeNull();
+  });
+
+  it("canary_missing adds no field: the counts stay three integers", () => {
+    const missing = evaluated({ reason_codes: ["canary_missing"], unlinked_decision_ids: [], feedback_counts: { weak: 0, contradictions: 0, invalid: 0 } });
+    expect(read([completed(1, 1), missing])).toEqual({ unlinked_decision_ids: [], weak: 0, contradictions: 0, invalid: 0 });
+  });
+
+  it("ignores another item, a non-omf actor and a payload that fails the schema", () => {
+    const forged = { ...evaluated(), actor: "human:dev@example.invalid" };
+    const broken: NewEvent = { actor: "omf", type: "gate2.evaluated", payload: { goal_id: SCOPE.goal_id, work_id: SCOPE.work_id, round: "x" } };
+    expect(read([completed(1, 1), evaluated({}, OTHER_SCOPE), forged, broken])).toBeNull();
   });
 });

@@ -78,6 +78,7 @@ describe("HANDOFF_ROUTES", () => {
     expect(j).toEqual({
       j2_open: "J2",
       gate2_exhausted: "J3",
+      scenarios_need_review: "J3",
       audit_flag: "J4",
       sealed_failed: "J4",
       flaky_scenario: "J4",
@@ -111,6 +112,12 @@ describe("HANDOFF_ROUTES", () => {
       const other = "w-aaaaaaaaaaaa";
       expect(HANDOFF_ROUTES[code].options(other).join("\n").replaceAll(other, "ID"), code).toBe(options.join("\n").replaceAll(WORK, "ID"));
     }
+  });
+
+  it("offers scenarios_need_review no rerun, because a rerun reuses the standing seal and stops again", () => {
+    const options = HANDOFF_ROUTES.scenarios_need_review.options(WORK);
+    expect(options).toEqual([`omf work show ${WORK}`, `omf veto ${WORK}`]);
+    expect(options.join("\n")).not.toContain(" run ");
   });
 
   it("names a command that runs the line again only with the 'after M3h' prefix", () => {

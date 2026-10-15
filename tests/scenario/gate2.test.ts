@@ -14,6 +14,8 @@ import { validateDef } from "../../src/core/schema.js";
 import { SCOPE } from "../helpers/decision.js";
 import type { Gate2Input, Gate2ReasonCode, Gate2Route } from "../../src/scenario/gate2.js";
 import { EXPOSURE_LIMIT } from "../../src/scenario/types.js";
+import { EXPOSURE_LIMIT_DEFAULT } from "../../src/feedback/types.js";
+import type { WorkItem } from "../../src/work/types.js";
 import {
   DECISIONS_DIGEST,
   baselineScenarios,
@@ -382,6 +384,16 @@ describe("gate2EventFor", () => {
     }
   });
 
+  it("carries the seal feedback counts for back_to_S2 and null otherwise", () => {
+    const back = gate2EventFor(SCOPE, 1, evaluateGate2(unlink(passingInput())), digests);
+    expect(back.payload["feedback_counts"]).toEqual({ weak: 0, contradictions: 0, invalid: 0 });
+    expect(validateDef("scenario.schema.json", "ev_gate2_evaluated", back.payload)).toEqual({ ok: true });
+    const pass = gate2EventFor(SCOPE, 1, evaluateGate2(passingInput()), digests);
+    expect(pass.payload["feedback_counts"]).toBeNull();
+    const j3: Gate2Result = { status: "fail", route: "J3", reasons: [{ code: "probe_error" }], not_run: [], aggregate: null };
+    expect(gate2EventFor(SCOPE, 1, j3, digests).payload["feedback_counts"]).toBeNull();
+  });
+
   it("writes a pass with a null route, and zero counts when there was no set to count", () => {
     const pass = gate2EventFor(SCOPE, 1, evaluateGate2(passingInput()), digests);
     expect(validateDef("scenario.schema.json", "ev_gate2_evaluated", pass.payload)).toEqual({ ok: true });
@@ -507,6 +519,9 @@ import { join } from "node:path";
 import { symlinkSync } from "node:fs";
 import { SymlinkRefusedError } from "../../src/core/safe-fs.js";
 import { splitDigest } from "../../src/vault/vault.js";
+import { runDecideDefer } from "../../src/cli/decide.js";
+import { gate1ForItem } from "../../src/decision/gate1-item.js";
+import { HUMAN, NOW, addOpen } from "../helpers/decision-fixture.js";
 import { sealedCtx, seedSealedItem } from "../helpers/scenario-fixture.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
@@ -577,5 +592,55 @@ describe("runGate2", () => {
       { split: "train", digest: splitDigest(s.scenarios, new Map(), "train") },
       { split: "test", digest: splitDigest(s.scenarios, new Map(), "test") },
     ]);
+  });
+});
+
+describe("runGate2, GATE-1 for the item's state", () => {
+  const HOUR = 3_600_000;
+
+  /** An unsealed item with one open question that a person deferred for an hour; `now` is two hours later. */
+  function lapsed() {
+    const s = seedSealedItem(DEFAULT_SPECS, { seal: false });
+    addOpen(s.f, "d-wait");
+    const signed = new Date(NOW.getTime() - 3 * HOUR);
+    runDecideDefer(
+      s.f.fx.location,
+      s.f.workId,
+      "d-wait",
+      {
+        owner: "dev",
+        reason: "Waiting on the cache benchmark.",
+        revisit_trigger: "After the benchmark lands.",
+        default: "Keep the current behavior.",
+        expires_at: new Date(NOW.getTime() - 2 * HOUR).toISOString(),
+      },
+      HUMAN,
+      signed,
+    );
+    return s;
+  }
+  const codes = (result: Gate2Result): string[] => (result.status === "pass" ? [] : result.reasons.map((reason) => reason.code));
+  const inProgress = (item: WorkItem): WorkItem => ({ ...item, front: { ...item.front, state: "in_progress" } });
+
+  it("takes GATE-1 as passed for an in_progress item: an expired deferral gives no gate1_not_passing", async () => {
+    const s = lapsed();
+    const started = sealedCtx(s, { item: inProgress(s.f.item) });
+    expect(codes(await runGate2(started))).not.toContain("gate1_not_passing");
+  });
+
+  it("on a ready item the GATE-1 verdict is the one gate1ForItem gives", async () => {
+    const s = lapsed();
+    const expected = gate1ForItem(s.f.fx.location, s.f.item, s.f.fx.ledger.readVerified(), NOW).result;
+    expect(expected.status).toBe("blocked_on_user");
+    const result = await runGate2(sealedCtx(s));
+    expect(codes(result)).toContain("gate1_not_passing");
+    const reason = result.status === "pass" ? undefined : result.reasons.find((r) => r.code === "gate1_not_passing");
+    expect(reason).toMatchObject({ count: expected.status === "pass" ? 0 : expected.reasons.length });
+  });
+});
+
+describe("exposure limit", () => {
+  it("is the same number in the scenario module and the feedback module", () => {
+    expect(EXPOSURE_LIMIT_DEFAULT).toBe(EXPOSURE_LIMIT);
   });
 });

@@ -5,6 +5,7 @@ import { readConfig } from "../core/config.js";
 import type { OmfConfig } from "../core/config.js";
 import { Ledger } from "../core/ledger.js";
 import type { ProjectLocation } from "../core/paths.js";
+import { assertLineSafe, guardRefusal } from "../vault/line-guard.js";
 import { claimStatus } from "./claim.js";
 import {
   type Classification,
@@ -161,13 +162,19 @@ function gateError(gate: GateId): GateResult {
  * A gate is code from outside. Anything but a result for this gate with a known verdict and closed-code
  * reasons is a gate error, so a free-text reason can never reach evidence, a handoff or the ledger.
  */
-function checkedResult(id: Exclude<GateId, "GATE-4">, raw: unknown): GateResult {
-  const r = raw as { gate?: unknown; verdict?: unknown; reasons?: unknown } | null;
+export function checkedResult(id: Exclude<GateId, "GATE-4">, raw: unknown): GateResult {
+  const r = raw as { gate?: unknown; verdict?: unknown; reasons?: unknown; stop?: unknown } | null;
   if (r === null || typeof r !== "object" || r.gate !== id) return gateError(id);
   const { verdict, reasons } = r;
   if (verdict !== "pass" && verdict !== "fail" && verdict !== "not_run") return gateError(id);
   if (!Array.isArray(reasons) || !reasons.every((x): x is string => typeof x === "string" && REASON_SHAPE.test(x))) return gateError(id);
-  return { gate: id, verdict, reasons: [...reasons] };
+  const result: GateResult = { gate: id, verdict, reasons: [...reasons] };
+  // Only a GATE-2 fail may name where the line stops; on any other gate or verdict a stop is ignored.
+  if (id === "GATE-2" && verdict === "fail" && "stop" in r && r.stop !== undefined) {
+    if (r.stop !== "J2" && r.stop !== "J3" && r.stop !== "J7") return gateError(id);
+    return { ...result, stop: r.stop };
+  }
+  return result;
 }
 
 type Reading =
@@ -417,7 +424,11 @@ class Line {
       reading = { status: "skipped" };
     } else {
       try {
-        reading = interpret(id, await station.run(this.stationContext(id)));
+        // The guard runs before every station (spec §11 rule 4, §8). A refusal is this station's J7 stop with a closed
+        // code; the station does not run. Any other error from the guard is a station error like one from the station.
+        reading = this.guarded()
+          ? interpret(id, await station.run(this.stationContext(id)))
+          : interpret(id, { kind: "blocked", reason_code: "gate_blocked" });
       } catch (err) {
         if (err instanceof RunAbort) throw err;
         reading = { status: "error" }; // the message is dropped: it may hold anything
@@ -436,6 +447,17 @@ class Line {
     if (reading.status === "skipped") return;
     const reason = "reason_code" in reading ? reading.reason_code : "station_error";
     this.stop = { kind: "station", station: id, result: reading.status, reason_code: reason };
+  }
+
+  /** True when the line-entry guard passes for this location; false on a guard refusal; any other error is rethrown. */
+  private guarded(): boolean {
+    try {
+      assertLineSafe(this.env.options.location);
+      return true;
+    } catch (err) {
+      if (guardRefusal(err) === null) throw err;
+      return false;
+    }
   }
 
   private stationContext(id: StationId): StationContext {
@@ -474,9 +496,16 @@ class Line {
     this.trail.push({ node: id, status: result.verdict, digest: null });
     this.ran.push({ node: id, result: result.verdict });
     if (result.verdict === "pass") return index + 1;
-    // GATE-2 fail goes back to S2; the visit guard in `visit` bounds the loop. Anything else stops the line.
-    if (id === "GATE-2" && result.verdict === "fail") return LINE_ORDER.indexOf("S2");
-    this.stop = { kind: "gate", gate: id, verdict: result.verdict, reasons: result.reasons };
+    // Only a GATE-2 fail without a stop route goes back to S2; the visit guard in `visit` bounds the loop.
+    // Anything else stops the line, a GATE-2 fail with a stop route at that route's J act.
+    if (id === "GATE-2" && result.verdict === "fail" && result.stop === undefined) return LINE_ORDER.indexOf("S2");
+    this.stop = {
+      kind: "gate",
+      gate: id,
+      verdict: result.verdict,
+      reasons: result.reasons,
+      ...(result.stop === undefined ? {} : { stop: result.stop }),
+    };
     return index;
   }
 
@@ -587,7 +616,9 @@ class Line {
 
 /**
  * Throws what beginRun throws before a run exists: a WError (claim_held, wrong_state, needs_human, governance,
- * malformed; a ledger already corrupt at entry is `governance`) or, rarely, another error from its own reads and
+ * malformed; a ledger already corrupt at entry is `governance`), a guard error (`PokaYokeError`, `SymlinkRefusedError`
+ * or `UnsafePathError`: none is a WError; beginRun's `assertLineSafe(location)` (src/work/w-run.ts) throws them before it
+ * reads, claims or appends anything) or, rarely, another error from its own reads and
  * writes (a LedgerCorruptError if the chain breaks between its governance read and its sweep, w-run.ts repairGoal);
  * and TypeError for a GATE-1 key. After beginRun every end is a LineResult: a station or gate exception is a
  * station error or gate_error; a veto, a lost claim, a drifted config, or any WError from the run object

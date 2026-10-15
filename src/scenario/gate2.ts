@@ -317,6 +317,7 @@ export function gate2EventFor(
   digests: { seal_id: string | null; set_sha256: string | null; decisions_digest: string },
 ): NewEvent {
   const reasons = result.status === "fail" ? result.reasons : [];
+  const feedback = sealFeedbackFor(result);
   const unlinked = reasons.find((reason) => reason.code === "unlinked_decisions")?.decision_ids ?? [];
   const aggregate = result.aggregate;
   return gate2EvaluatedEvent(scope, {
@@ -337,6 +338,7 @@ export function gate2EventFor(
     },
     set_sha256: digests.set_sha256,
     decisions_digest: digests.decisions_digest,
+    feedback_counts: feedback === null ? null : { weak: feedback.weak, contradictions: feedback.contradictions, invalid: feedback.invalid },
   });
 }
 
@@ -479,7 +481,9 @@ export interface Gate2Context {
  *
  * - The guards come first: a symlink in state or sealed material in the repository throws before anything is read
  *   or run (spec §11 rule 4). A corrupt ledger throws too; the adapter turns a throw into `not_run`.
- * - GATE-1 is the same four-call snapshot `decide lint` takes; a later change swaps it for M3b2's `gate1ForItem`.
+ * - GATE-1 makes the same four calls as `gate1ForItem` (an agreement test covers it) and is not swapped for it. It is
+ *   taken as passed for an item that is already `in_progress`: it was checked before the start, and `decide` refuses a
+ *   started item, so a time-based failure (an expired deferral) now could not be answered.
  * - The set is probed only when its digest matches `seal.completed`: a tampered set is not run, it is reported.
  * - Exposure is asked per split digest and only when the set is readable; a missing set has nothing to count.
  */
@@ -496,10 +500,13 @@ export async function runGate2(ctx: Gate2Context): Promise<Gate2Result> {
   const scope: DecisionScope = { goal_id: ctx.item.front.goal_id, work_id: ctx.item.front.work_id };
   const leak = loadLeakContext(ctx.location.dir, scope.goal_id, events);
   const state = foldDecisions(events, scope);
-  const gate1 = evaluateGate1(state, ctx.now, {
-    leak,
-    intentQuestionIds: intentQuestionIds(ctx.item.intent.candidate.open_questions.length),
-  });
+  const gate1: Gate1Result =
+    ctx.item.front.state === "in_progress"
+      ? { status: "pass" }
+      : evaluateGate1(state, ctx.now, {
+          leak,
+          intentQuestionIds: intentQuestionIds(ctx.item.intent.candidate.open_questions.length),
+        });
 
   const seals = foldSeals(events, scope);
   const seal = seals.latest;

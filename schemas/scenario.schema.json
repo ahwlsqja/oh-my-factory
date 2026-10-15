@@ -78,7 +78,7 @@
       }
     },
     "ev_gate2_evaluated": {
-      "type": "object", "additionalProperties": false, "required": ["goal_id", "work_id", "round", "seal_id", "status", "route", "reason_codes", "unlinked_decision_ids", "not_run_decision_ids", "counts", "set_sha256", "decisions_digest"],
+      "type": "object", "additionalProperties": false, "required": ["goal_id", "work_id", "round", "seal_id", "status", "route", "reason_codes", "unlinked_decision_ids", "not_run_decision_ids", "counts", "set_sha256", "decisions_digest", "feedback_counts"],
       "properties": {
         "goal_id": { "$ref": "#/$defs/ev_goal_id" },
         "work_id": { "$ref": "#/$defs/ev_work_id" },
@@ -91,7 +91,8 @@
         "not_run_decision_ids": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/ev_decision_id" } },
         "counts": { "type": "object", "additionalProperties": false, "required": ["active", "behavior_train", "behavior_test", "canaries", "contaminated", "retired"], "properties": { "active": { "$ref": "#/$defs/ev_count" }, "behavior_train": { "$ref": "#/$defs/ev_count" }, "behavior_test": { "$ref": "#/$defs/ev_count" }, "canaries": { "$ref": "#/$defs/ev_count" }, "contaminated": { "$ref": "#/$defs/ev_count" }, "retired": { "$ref": "#/$defs/ev_count" } } },
         "set_sha256": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/ev_digest" }] },
-        "decisions_digest": { "$ref": "#/$defs/ev_digest" }
+        "decisions_digest": { "$ref": "#/$defs/ev_digest" },
+        "feedback_counts": { "anyOf": [{ "type": "null" }, { "type": "object", "additionalProperties": false, "required": ["weak", "contradictions", "invalid"], "properties": { "weak": { "$ref": "#/$defs/ev_count" }, "contradictions": { "$ref": "#/$defs/ev_count" }, "invalid": { "$ref": "#/$defs/ev_count" } } }] }
       }
     },
     "decision_id": { "type": "string", "pattern": "^d-[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },

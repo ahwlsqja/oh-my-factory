@@ -204,3 +204,11 @@ describe("M3b2 reason codes", () => {
     }
   });
 });
+
+describe("scenarios_need_review", () => {
+  it("is appended after the M3b2 codes, in the list and in the schema, and the schema accepts it", () => {
+    expect(W_REASON_CODES.at(-1)).toBe("scenarios_need_review");
+    expect(schemaDoc().$defs.reason_code?.enum ?? []).toContain("scenarios_need_review");
+    expect(accepts("work.parked", { ...scope, outcome: "blocked", reason_code: "scenarios_need_review" })).toBe(true);
+  });
+});

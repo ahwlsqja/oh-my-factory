@@ -12,7 +12,8 @@
       "enum": [
         "j2_open", "gate_blocked", "budget_exhausted", "infra_failure", "manual_required", "station_error",
         "visit_cap", "stalled", "gate_not_run", "station_skipped", "evidence_incomplete", "run_killed",
-        "audit_flag", "sealed_failed", "flaky_scenario", "within_variance", "gate2_exhausted", "reentry_loop"
+        "audit_flag", "sealed_failed", "flaky_scenario", "within_variance", "gate2_exhausted", "reentry_loop",
+        "scenarios_need_review"
       ]
     },
     "recommendation": { "enum": ["merge_recommended", "not_recommended", "human_needed"] },
