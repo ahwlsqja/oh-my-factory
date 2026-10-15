@@ -134,3 +134,22 @@ describe("W-pokayoke-sealed-in-repo: GATE-2 refuses before it does anything", ()
     expect(s.f.fx.ledger.readVerified(), "nothing was appended").toHaveLength(before);
   });
 });
+
+describe("W-pokayoke-sealed-in-repo: the seal stage", () => {
+  it("refuses before the author runs, before any ledger event and before any vault file", async () => {
+    const { probeSealRefusal } = await import("../helpers/seal-fixture.js");
+    const { PokaYokeError } = await import("../../src/vault/pokayoke.js");
+    const { SymlinkRefusedError } = await import("../../src/core/safe-fs.js");
+    const cases = [
+      ["canary_in_repo", PokaYokeError],
+      ["symlink_in_state", SymlinkRefusedError],
+    ] as const;
+    for (const [kind, errorClass] of cases) {
+      const probe = await probeSealRefusal(kind);
+      expect(probe.error, kind).toBeInstanceOf(errorClass);
+      expect(probe.calls, `${kind}: no author call`).toBe(0);
+      expect(probe.eventsAfter, `${kind}: no ledger event`).toBe(probe.eventsBefore);
+      expect(probe.vaultEntries, `${kind}: no vault file`).toEqual([]);
+    }
+  });
+});
