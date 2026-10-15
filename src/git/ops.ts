@@ -225,6 +225,141 @@ export async function treePaths(target: GitTarget, sha: string): Promise<string[
     .filter((path) => path.length > 0);
 }
 
+/** One commit of a chain: its sha and its parents' shas (none for a root, two or more for a merge). */
+export interface ChainEntry {
+  sha: string;
+  parents: string[];
+}
+
+/** One tracked path: `mode` is the six-digit octal text (100644, 100755, 120000 symlink, 160000 gitlink with `type` "commit"). */
+export interface TreeEntryInfo {
+  mode: string;
+  type: "blob" | "commit";
+  sha: string;
+  path: string;
+}
+
+/** A path as `<rev>:<path>` and `cat-file --batch` read it: no empty, `.` or `..` segment, no newline or NUL, not absolute. */
+function requireTreePath(path: string): void {
+  const bad = path === "" || path.startsWith("/") || path.includes("\0") || path.includes("\n");
+  if (bad || path.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
+    throw new Error("path must be a plain path inside the tree");
+  }
+}
+
+/** The tree id of a commit, null when `sha` has none (missing, or a blob). */
+export async function treeSha(target: GitTarget, sha: string): Promise<string | null> {
+  requireSha("sha", sha);
+  try {
+    return (await git(target, ["rev-parse", "--verify", "--quiet", `${sha}^{tree}`])).toString("utf8").trim();
+  } catch (error) {
+    if (exitedWith(error) !== null) return null;
+    throw error;
+  }
+}
+
+/** The object id at `path` of commit `sha`, null when absent. A directory gives its tree id, so compare against a blob id you computed. */
+export async function blobId(target: GitTarget, sha: string, path: string): Promise<string | null> {
+  requireSha("sha", sha);
+  requireTreePath(path);
+  try {
+    return (await git(target, ["rev-parse", "--verify", "--quiet", `${sha}:${path}`])).toString("utf8").trim();
+  } catch (error) {
+    if (exitedWith(error) !== null) return null;
+    throw error;
+  }
+}
+
+/**
+ * The raw bytes of the blob at `path`, through `cat-file --batch` so no filter or conversion applies. Null when the path is absent or
+ * is not a blob. A blob over `maxBytes` throws `HostGitError` `output_limit`: an oversized file, never a missing one.
+ */
+export async function readBlob(target: GitTarget, sha: string, path: string, maxBytes: number): Promise<Buffer | null> {
+  requireSha("sha", sha);
+  requireTreePath(path);
+  const raw = await git(target, ["cat-file", "--batch"], { input: `${sha}:${path}\n`, maxOutputBytes: maxBytes + 256 });
+  const eol = raw.indexOf(0x0a);
+  if (eol < 0) throw new Error("unexpected git cat-file output");
+  const header = raw.subarray(0, eol).toString("utf8");
+  if (header.endsWith(" missing")) return null;
+  const [, type, length] = header.split(" ");
+  const size = Number(length);
+  if (!Number.isInteger(size) || size < 0) throw new Error("unexpected git cat-file output");
+  if (type !== "blob") return null;
+  if (size > maxBytes) throw new HostGitError("output_limit");
+  return Buffer.from(raw.subarray(eol + 1, eol + 1 + size));
+}
+
+/** The history of `head`, oldest first (`rev-list --parents --topo-order --reverse`). A history longer than `limit` throws. */
+export async function commitChain(target: GitTarget, head: string, limit = 2000): Promise<ChainEntry[]> {
+  requireSha("head", head);
+  if (!Number.isInteger(limit) || limit < 1) throw new Error("limit must be a positive integer");
+  const args = ["rev-list", "--parents", "--topo-order", "--reverse", `--max-count=${limit + 1}`, head];
+  const chain = (await git(target, args))
+    .toString("utf8")
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const [sha = "", ...parents] = line.split(" ");
+      return { sha, parents };
+    });
+  if (chain.length > limit) throw new Error(`the commit chain is longer than ${limit}`);
+  return chain;
+}
+
+const TREE_RECORD = /^(\d{6}) (blob|commit) ([0-9a-f]{40})\t([\s\S]+)$/;
+
+/** Every path of the tree of `sha` with mode, type and id (`ls-tree -r -z --full-tree`), as strict UTF-8 like `treePaths`. */
+export async function treeEntries(target: GitTarget, sha: string): Promise<TreeEntryInfo[]> {
+  requireSha("sha", sha);
+  const out = await git(target, ["ls-tree", "-r", "-z", "--full-tree", sha]);
+  const entries: TreeEntryInfo[] = [];
+  for (const record of decodeUtf8Strict(out).split("\0")) {
+    if (record === "") continue;
+    const match = TREE_RECORD.exec(record);
+    if (match === null) throw new Error("unexpected `git ls-tree` output");
+    const [, mode = "", type = "", id = "", path = ""] = match;
+    entries.push({ mode, type: type === "commit" ? "commit" : "blob", sha: id, path });
+  }
+  return entries;
+}
+
+/**
+ * The bytes of each distinct blob of `shas` from one `cat-file --batch`. Content over `maxTotalBytes` throws `HostGitError`
+ * `output_limit` (declared sizes are checked as well as the output cap), a missing object or a non-blob throws, an empty list
+ * returns an empty map without starting git.
+ */
+export async function readBlobs(
+  target: GitTarget,
+  shas: readonly string[],
+  maxTotalBytes: number,
+): Promise<Map<string, Buffer>> {
+  const unique = [...new Set(shas)];
+  for (const sha of unique) requireSha("blob", sha);
+  const blobs = new Map<string, Buffer>();
+  if (unique.length === 0) return blobs;
+  const raw = await git(target, ["cat-file", "--batch"], {
+    input: `${unique.join("\n")}\n`,
+    maxOutputBytes: maxTotalBytes + 100 * unique.length,
+  });
+  let offset = 0;
+  let total = 0;
+  for (const sha of unique) {
+    const eol = raw.indexOf(0x0a, offset);
+    if (eol < 0) throw new Error("unexpected git cat-file output");
+    const [id, type, length] = raw.subarray(offset, eol).toString("utf8").split(" ");
+    const size = Number(length);
+    if (id !== sha || type !== "blob" || !Number.isInteger(size) || size < 0) {
+      throw new Error("unexpected git cat-file output");
+    }
+    total += size;
+    if (total > maxTotalBytes) throw new HostGitError("output_limit");
+    blobs.set(sha, Buffer.from(raw.subarray(eol + 1, eol + 1 + size)));
+    offset = eol + 1 + size + 1;
+  }
+  return blobs;
+}
+
 function requireAbsolute(label: string, path: string): void {
   if (!isAbsolute(path)) throw new Error(`${label} must be an absolute path`);
 }

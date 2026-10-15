@@ -360,3 +360,54 @@ describe("bundle import without a transport", () => {
     expect(stderr).toContain("transport 'file' not allowed");
   });
 });
+
+describe("tree, blob and chain reads", () => {
+  it("treeSha and blobId resolve shas and plain paths, are null for what is absent, and refuse a path that is not plain", async () => {
+    expect(await ops.treeSha(fx.quarantine, fx.head)).toBe(gitIn(fx.work, "rev-parse", "HEAD^{tree}").trim());
+    expect(await ops.treeSha(fx.quarantine, "0".repeat(40))).toBeNull();
+    await expect(ops.treeSha(fx.quarantine, "main")).rejects.toThrow("sha must be a 40-hex commit sha");
+    expect(await ops.blobId(fx.quarantine, fx.base, "src/a.ts")).toBe(
+      gitIn(fx.work, "rev-parse", `${fx.base}:src/a.ts`).trim(),
+    );
+    expect(await ops.blobId(fx.quarantine, fx.base, "src/nope.ts")).toBeNull();
+    for (const bad of ["", "../a", "./src/a.ts", "src//a.ts", "/src/a.ts", "a\nb"]) {
+      await expect(ops.blobId(fx.quarantine, fx.base, bad), JSON.stringify(bad)).rejects.toThrow(
+        "path must be a plain path inside the tree",
+      );
+    }
+  });
+
+  it("readBlob returns raw bytes, null for a missing path or a directory, and refuses a blob over the cap", async () => {
+    expect(await ops.readBlob(fx.quarantine, fx.base, "latin1.txt", 1024)).toEqual(Buffer.from("café 1\n", "latin1"));
+    expect(await ops.readBlob(fx.quarantine, fx.base, "src/nope.ts", 1024)).toBeNull();
+    expect(await ops.readBlob(fx.quarantine, fx.base, "src", 1024)).toBeNull();
+    expect(await ops.readBlob(fx.quarantine, fx.base, "bin.dat", 200)).toHaveLength(200);
+    expect(await codeOf(ops.readBlob(fx.quarantine, fx.base, "bin.dat", 100))).toBe("output_limit");
+  });
+
+  it("commitChain lists a history oldest first with parents and refuses one longer than the limit", async () => {
+    expect(await ops.commitChain(fx.quarantine, fx.head)).toEqual([
+      { sha: fx.base, parents: [] },
+      { sha: fx.head, parents: [fx.base] },
+    ]);
+    await expect(ops.commitChain(fx.quarantine, fx.head, 1)).rejects.toThrow("longer than 1");
+  });
+
+  it("treeEntries lists every path with mode and type, and readBlobs reads each distinct blob once and fails closed", async () => {
+    const entries = await ops.treeEntries(fx.quarantine, fx.head);
+    const byPath = new Map(entries.map((entry) => [entry.path, entry]));
+    expect(byPath.get("l.txt")).toMatchObject({ mode: "120000", type: "blob" });
+    expect(byPath.get("run.sh")).toMatchObject({ mode: "100755", type: "blob" });
+    expect(byPath.get("*")?.mode).toBe("100644");
+
+    const shas = entries.map((entry) => entry.sha);
+    const blobs = await ops.readBlobs(fx.quarantine, shas, 1024 * 1024);
+    expect(blobs.get(byPath.get("l.txt")?.sha ?? "")?.toString("utf8")).toBe("src/a.ts");
+    expect(blobs.size).toBe(new Set(shas).size);
+    expect(await codeOf(ops.readBlobs(fx.quarantine, shas, 10))).toBe("output_limit");
+    const unexpected = "unexpected git cat-file output";
+    await expect(ops.readBlobs(fx.quarantine, ["0".repeat(40)], 1024)).rejects.toThrow(unexpected);
+    await expect(ops.readBlobs(fx.quarantine, [fx.head], 1024)).rejects.toThrow(unexpected);
+    expect((await ops.readBlobs(fx.quarantine, [], 10)).size).toBe(0);
+  });
+});
