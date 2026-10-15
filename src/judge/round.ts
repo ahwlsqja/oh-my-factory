@@ -51,12 +51,13 @@ function configuredBase(ref: string | null): PinnedImage {
 
 /**
  * Builds the two images a round runs on from the judge config's digest-pinned bases, both checked before anything is
- * built. The harness image comes first and is reused when the image named by its full context hash exists; the SUT image
- * is then built from the candidate commit in the quarantine. A failed SUT build therefore leaves only the cached harness
- * image, and the SUT image is the one image the lease owns. `contract.run` is not baked in: the round hands it to the relay.
+ * built and both made local through the reviewed pull. The harness image comes first and is reused when the image named
+ * by its full context hash exists; the SUT image is then built from the candidate commit in the quarantine. A failed SUT
+ * build therefore leaves only the cached harness image, and the SUT image is the one image the lease owns. `contract.run`
+ * is not baked in: the round hands it to the relay.
  */
 export async function buildRoundImages(input: {
-  runtime: Pick<ContainerRuntime, "build" | "imageInfo">;
+  runtime: Pick<ContainerRuntime, "build" | "imageInfo" | "ensureImage">;
   config: JudgeConfig;
   contract: Pick<InterfaceContract, "build" | "run">;
   candidate: { quarantine: GitTarget; sha: string };
@@ -65,6 +66,10 @@ export async function buildRoundImages(input: {
 }): Promise<ImageLease> {
   const sutBase = configuredBase(input.config.sut_base_image);
   const harnessBase = configuredBase(input.config.harness_base_image);
+  // The build runs with --pull=false, but BuildKit would still fetch a missing base itself. Both bases are made local
+  // through the reviewed pull first (digest-pinned, local endpoint only), so a build never reaches the network.
+  await input.runtime.ensureImage(harnessBase);
+  await input.runtime.ensureImage(sutBase);
   const harness = await ensureHarnessImage({
     runtime: input.runtime,
     base: harnessBase,
