@@ -32,3 +32,7 @@ The `work.started` event type is the string `WORK_STARTED_EVENT` (`src/scenario/
 ## Known limits
 
 The symlink guard does not stop a writer that races the walk (spec §8). The poka-yoke is a name and canary scan, not a proof. GATE-2 requires one contradiction canary per set but cannot require a useful one beyond the static rule. The contradiction-canary rule proves static unsatisfiability only for the shape "exact `stdout_matches` plus `json_path` entries that the exact text cannot satisfy"; `exit_code` never counts toward it. `fixtures/**` and `src/scenario/fixtures.ts` are guarded by review and a drift test only; CODEOWNERS and branch protection are an owner decision.
+
+The poka-yoke repository scan refuses with `scan_incomplete` when the tree holds more than 300,000 entries or any entry it cannot read, and it skips only a fixed list of directories (`.git`, `node_modules`, `.venv`, `venv`, `__pycache__`). A large repository with other build output directories is therefore refused until the output is moved or the scan changes; an override or a git-aware scan (only tracked and unignored files) is future work.
+
+A null fixture that fails to start but still exits 1 with no output looks the same as `null-error` working as designed: the host adapter keeps no stderr in an observation, so GATE-2 cannot tell the two apart. A signal, a spawn error, or any other status or stdout is counted as a probe error.
