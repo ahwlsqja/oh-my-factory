@@ -11,6 +11,17 @@
         "context": "colima-omf-m3f",
         "arch": "aarch64"
       }
+    },
+    {
+      "test": "G-work-copy-real",
+      "result": "pass",
+      "at": "2026-10-15T10:18:21.330Z",
+      "omf_commit": "7fdf3812881cda60ed63c5703bd7e30cb5aeb6f3",
+      "docker": {
+        "server_version": "29.2.1",
+        "context": "colima-omf-m3f",
+        "arch": "aarch64"
+      }
     }
   ]
 }
