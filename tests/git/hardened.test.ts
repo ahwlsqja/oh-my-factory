@@ -3,7 +3,8 @@ import { dirname, join } from "node:path";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { HARDENED_GIT_CONFIG, HostGitError, createScratchGitDir, hardenedGitEnv, runHostGit } from "../../src/git/hardened.js";
 import { type GitFixture, gitFixture } from "../helpers/git-fixture.js";
-import { makeTempDir } from "../helpers/tmp.js";
+import { makeEmptyQuarantine } from "../helpers/ops-fixture.js";
+import { gitIn, makeTempDir } from "../helpers/tmp.js";
 
 let fx: GitFixture;
 beforeAll(() => {
@@ -163,5 +164,24 @@ describe("createScratchGitDir", () => {
     vi.stubEnv("HOME", home);
     await expect(createScratchGitDir(join(home, ".claude", "scratch"))).rejects.toThrow(/must not live inside/);
     await expect(createScratchGitDir(join(fx.repo, "inside"), fx.repo)).rejects.toThrow(/must live outside the repository/);
+  });
+});
+
+describe("runHostGit refuses a repository whose own config defines a driver", () => {
+  const keys = ["filter.evil.smudge", "filter.evil.clean", "filter.evil.process", "diff.evil.textconv", "diff.evil.command", "diff.external", "include.path", "includeIf.gitdir:/x/.path"];
+  for (const key of keys) {
+    it(`${key} -> gitdir_invalid`, async () => {
+      const q = makeEmptyQuarantine();
+      await expect(runHostGit(q, ["rev-parse", "--git-dir"])).resolves.toBeDefined();
+      gitIn(q.gitDir, "config", key, "/bin/true");
+      await expect(runHostGit(q, ["rev-parse", "--git-dir"])).rejects.toMatchObject({ code: "gitdir_invalid" });
+    });
+  }
+
+  it("hooks and fsmonitor in the config stay allowed: the hardened prefix overrides them", async () => {
+    const q = makeEmptyQuarantine();
+    gitIn(q.gitDir, "config", "core.fsmonitor", "/bin/true");
+    gitIn(q.gitDir, "config", "core.hooksPath", "/tmp");
+    await expect(runHostGit(q, ["rev-parse", "--git-dir"])).resolves.toBeDefined();
   });
 });

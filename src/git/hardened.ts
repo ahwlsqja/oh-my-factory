@@ -1,11 +1,12 @@
 import { spawn } from "node:child_process";
-import { lstatSync, mkdirSync, mkdtempSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { assertOutsideAgentHomes, assertOutsideRepo } from "../core/paths.js";
 
 /**
  * Flat argv prefix for every git call that touches data a container wrote. The order is fixed and tested byte for
- * byte. `protocol.file.allow=never` stays: a bundle is imported without the transport layer (`bundleVerify`,
+ * byte. The prefix does not switch off `filter.*`, `diff.*.textconv` or `diff.external`: `checkTarget` refuses a repository whose
+ * own config defines one (M3e review), and the diff calls pass `--no-ext-diff --no-textconv`. `protocol.file.allow=never` stays: a bundle is imported without the transport layer (`bundleVerify`,
  * `unbundle`, `fsckStrict`, M3e-D22), and no per-operation override exists.
  */
 export const HARDENED_GIT_CONFIG: readonly string[] = [
@@ -84,6 +85,48 @@ const DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_DIAGNOSTIC_BYTES = 64 * 1024;
 
+/**
+ * Config the hardened prefix cannot neutralise. A `filter.*` driver runs on `checkout-index`, `archive` and `update-index`
+ * for any tree whose `.gitattributes` names it, `diff.*.textconv`, `diff.*.command` and `diff.external` run on a diff, and an
+ * include pulls in config this check never read. The config of a quarantine is written by OMF and never carries one, so a
+ * repository that does is refused. (`core.fsmonitor` and `core.hooksPath` are not listed: `HARDENED_GIT_CONFIG` overrides them.)
+ * The file is read as text, not through git, so the check needs no process and cannot be redirected by `PATH`.
+ */
+const SECTION = /^\s*\[\s*([A-Za-z0-9-]+)(?:\s+"(?:[^"\\]|\\.)*"|\.[^\s\]]*)?\s*\](.*)$/;
+const KEY = /^\s*([A-Za-z][A-Za-z0-9-]*)\s*(?:[=#;]|$)/;
+
+function definesDriver(text: string): boolean {
+  let section = "";
+  for (const line of text.split(/\r?\n/)) {
+    const header = SECTION.exec(line);
+    let rest = line;
+    if (header !== null) {
+      section = (header[1] ?? "").toLowerCase();
+      if (section === "filter" || section === "include" || section === "includeif") return true;
+      rest = header[2] ?? "";
+    }
+    const key = KEY.exec(rest)?.[1]?.toLowerCase();
+    if (key === undefined || section !== "diff") continue;
+    if (key === "textconv" || key === "command" || key === "external") return true;
+  }
+  return false;
+}
+
+/** Throws `gitdir_invalid` when the repository's own config (`config`, and `config.worktree` when it exists) defines a driver or an include. */
+function assertNoDrivers(gitDir: string): void {
+  for (const name of ["config", "config.worktree"]) {
+    const file = join(gitDir, name);
+    if (lstatSync(file, { throwIfNoEntry: false }) === undefined) continue;
+    let text: string;
+    try {
+      text = readFileSync(file, "utf8");
+    } catch {
+      throw new HostGitError("gitdir_invalid");
+    }
+    if (definesDriver(text)) throw new HostGitError("gitdir_invalid");
+  }
+}
+
 function checkTarget(target: GitTarget, args: readonly string[]): void {
   for (const value of [target.gitDir, target.workTree, target.indexFile]) {
     if (value !== undefined && !isAbsolute(value)) throw new HostGitError("not_absolute");
@@ -94,6 +137,7 @@ function checkTarget(target: GitTarget, args: readonly string[]): void {
   if (dir === undefined || !dir.isDirectory() || head === undefined || !head.isFile() || objects === undefined || !objects.isDirectory()) {
     throw new HostGitError("gitdir_invalid");
   }
+  assertNoDrivers(target.gitDir);
   // The first argument that is not an option names the subcommand.
   if (args.find((arg) => !arg.startsWith("-")) === "read-tree" && target.indexFile === undefined) throw new HostGitError("gitdir_invalid");
 }

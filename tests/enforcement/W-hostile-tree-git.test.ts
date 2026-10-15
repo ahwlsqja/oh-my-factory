@@ -153,4 +153,52 @@ describe("W-hostile-tree-git", () => {
     run("update-index", "-q", "--refresh");
     expect(sentinelCount()).toBeGreaterThan(before);
   });
+
+  // filter, textconv and diff.external are not neutralised by the hardened prefix: they are closed by refusing a repository whose own config defines one.
+  it("a quarantine whose config defines a filter, a textconv or diff.external is refused by every ops call, and no driver runs", async () => {
+    const root = realTempDir("omf-driver-");
+    const sentinels = join(root, "sentinels");
+    mkdirSync(sentinels);
+    const trap = join(root, "trap.sh");
+    writeFileSync(trap, `#!/bin/sh\necho ran >> "${sentinels}/ran-$$"\ncat\n`);
+    chmodSync(trap, 0o755);
+    const driverKeys = ["filter.evil.clean", "filter.evil.smudge", "diff.evil.textconv", "diff.external"];
+    for (const key of driverKeys) {
+      const q = makeEmptyQuarantine();
+      gitIn(q.gitDir, "config", key, trap);
+      await expect(ops.resolveCommit(q, w.head)).rejects.toMatchObject({ code: "gitdir_invalid" });
+      await expect(ops.archiveTar(q, w.head, join(root, `${key}.tar`))).rejects.toMatchObject({ code: "gitdir_invalid" });
+      mkdirSync(join(root, `export-${key}`));
+      await expect(ops.exportTree(q, w.head, join(root, `export-${key}`))).rejects.toMatchObject({ code: "gitdir_invalid" });
+      await expect(ops.isDirClean({ ...q, indexFile: join(root, `index-${key}`) }, w.head, w.tree)).rejects.toMatchObject({ code: "gitdir_invalid" });
+    }
+    expect(readdirSync(sentinels)).toEqual([]);
+  });
+
+  it("control: the same driver config is live when git is run without the refusal (bare checkout-index and archive)", () => {
+    const root = realTempDir("omf-driver-ctl-");
+    const sentinels = join(root, "sentinels");
+    mkdirSync(sentinels);
+    const trap = join(root, "trap.sh");
+    writeFileSync(trap, `#!/bin/sh\necho ran >> "${sentinels}/ran-$$"\ncat\n`);
+    chmodSync(trap, 0o755);
+    const repo = join(root, "r");
+    mkdirSync(repo);
+    gitIn(repo, "init", "-q");
+    put(repo, ".gitattributes", "* filter=evil\n*.ts diff=evil\n");
+    put(repo, "a.ts", "1\n");
+    commitAll(repo, "one");
+    gitIn(repo, "config", "filter.evil.smudge", trap);
+    gitIn(repo, "config", "filter.evil.clean", trap);
+    gitIn(repo, "config", "diff.evil.textconv", trap);
+    const env = { ...gitEnv(), HOME: w.home, GIT_CONFIG_NOSYSTEM: "1" };
+    spawnSync("git", ["archive", "-o", join(root, "o.tar"), "HEAD"], { cwd: repo, env, stdio: "ignore" });
+    const afterArchive = sentinelCount2(sentinels);
+    expect(afterArchive).toBeGreaterThan(0);
+    put(repo, "a.ts", "2\n");
+    spawnSync("git", ["diff", "HEAD"], { cwd: repo, env, stdio: "ignore" });
+    expect(sentinelCount2(sentinels)).toBeGreaterThan(afterArchive);
+  });
 });
+
+const sentinelCount2 = (dir: string): number => readdirSync(dir).length;
