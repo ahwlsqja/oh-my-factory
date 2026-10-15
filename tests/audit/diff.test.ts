@@ -93,7 +93,18 @@ describe("assessDiffRisk", () => {
     expect(outcome.effective.rules).toEqual(["extra", "watched-path"]);
   });
 
-  it("a path that cannot be judged (glob characters) is high", () => {
-    expect(assessDiffRisk(facts("src/[a].ts"), declaredNormal, none).effective).toMatchObject({ class: "high", rules: ["unclassifiable"] });
+  it("a glob character in a diff path is a literal character: the real rules still match and the path is listed", () => {
+    const outcome = assessDiffRisk(facts(".github/workflows/build[1].yml"), declaredNormal, none);
+    expect(outcome.effective).toEqual({ class: "high", rules: ["ci"], paths: [".github/workflows/build[1].yml"] });
+    expect(outcome.raised).toBe(true);
+  });
+
+  it("Next.js route paths with brackets or parentheses are not a finding", () => {
+    expect(assessDiffRisk(facts("app/posts/[id]/page.tsx", "app/(group)/x/page.tsx"), declaredNormal, none).effective).toEqual(declaredNormal);
+  });
+
+  it("a backslash or a control character cannot be judged: high, unclassifiable, listed", () => {
+    expect(assessDiffRisk(facts("src/a\\b.ts"), declaredNormal, none).effective).toEqual({ class: "high", rules: ["unclassifiable"], paths: ["src/a\\b.ts"] });
+    expect(assessDiffRisk(facts("src/a\nb.ts"), declaredNormal, none).effective).toMatchObject({ class: "high", rules: ["unclassifiable"] });
   });
 });

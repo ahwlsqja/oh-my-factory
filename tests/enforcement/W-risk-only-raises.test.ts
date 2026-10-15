@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assessDiffRisk, classifyDiff } from "../../src/audit/diff.js";
 import { rawDiff } from "../../src/git/ops.js";
-import { classifyRisk } from "../../src/work/risk.js";
+import { classifyLiteralPaths } from "../../src/work/risk.js";
 import type { RiskAssessment } from "../../src/work/types.js";
 import { type GitFixture, gitFixture } from "../helpers/git-fixture.js";
 
@@ -61,13 +61,13 @@ describe("W-risk-only-raises", () => {
 
   it("no pair of declared and diff-based assessments gives a lower effective class, and the declared rules are never dropped", () => {
     const declareds: RiskAssessment[] = [normal, { class: "high", rules: ["auth"], paths: ["a"] }, { class: "high", rules: ["undeclared"], paths: [] }];
-    const diffs: string[][] = [[], ["src/a.ts"], [".github/workflows/x.yml"], ["src/auth/y.ts", "db/migrations/1.sql"], ["src/[odd].ts"]];
+    const diffs: string[][] = [[], ["src/a.ts"], [".github/workflows/x.yml"], ["src/auth/y.ts", "db/migrations/1.sql"], ["src/[odd].ts"], [".github/workflows/b[1].yml"], ["src/odd\\name.ts"]];
     for (const declared of declareds) {
       for (const paths of diffs) {
         const facts = classifyDiff(paths.map((path) => ({ status: "M" as const, path, old_mode: "100644", new_mode: "100644" })), [], []);
         const { effective } = assessDiffRisk(facts, declared, none);
         if (declared.class === "high") expect(effective.class).toBe("high");
-        if (paths.length > 0 && classifyRisk({ declaredPaths: paths, watchedGlobs: [], extraGlobs: [], tracked: [] }).class === "high") expect(effective.class).toBe("high");
+        if (paths.length > 0 && classifyLiteralPaths({ paths, watchedGlobs: [], extraGlobs: [] }).class === "high") expect(effective.class).toBe("high");
         for (const rule of declared.rules) expect(effective.rules).toContain(rule);
       }
     }

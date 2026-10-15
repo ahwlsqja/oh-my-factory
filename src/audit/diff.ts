@@ -1,6 +1,6 @@
 import type { RawDiffEntry } from "../git/ops.js";
 import { normalizePath } from "../work/fingerprint.js";
-import { classifyRisk, isTestPath, raiseRisk } from "../work/risk.js";
+import { classifyLiteralPaths, isTestPath, raiseRisk } from "../work/risk.js";
 import type { RiskAssessment } from "../work/types.js";
 
 export interface DiffFacts {
@@ -58,9 +58,9 @@ export interface RiskOutcome {
 }
 
 /**
- * The risk of the real diff, and the effective risk (M3e-D11, M3e-D12). An empty diff skips the recompute: `classifyRisk` returns
+ * The risk of the real diff, and the effective risk (M3e-D11, M3e-D12). An empty diff skips the recompute: `classifyRisk` would return
  * `undeclared` for zero paths, which is not a finding about the diff, so the effective risk is the declared one. Otherwise the diff's
- * own paths are classified and `raiseRisk` can only raise.
+ * own paths are classified as literal paths (a `[` in `app/posts/[id]/page.tsx` is not a glob) and `raiseRisk` can only raise.
  */
 export function assessDiffRisk(
   facts: DiffFacts,
@@ -68,7 +68,7 @@ export function assessDiffRisk(
   globs: { watchedGlobs: readonly string[]; extraGlobs: readonly string[] },
 ): RiskOutcome {
   if (facts.empty) return { recomputed: null, effective: declared, raised: false };
-  const recomputed = classifyRisk({ declaredPaths: facts.paths, watchedGlobs: globs.watchedGlobs, extraGlobs: globs.extraGlobs, tracked: [] });
+  const recomputed = classifyLiteralPaths({ paths: facts.paths, watchedGlobs: globs.watchedGlobs, extraGlobs: globs.extraGlobs });
   const effective = raiseRisk(declared, recomputed);
   const raised = effective.class !== declared.class || effective.rules.some((rule) => !declared.rules.includes(rule));
   return { recomputed, effective, raised };

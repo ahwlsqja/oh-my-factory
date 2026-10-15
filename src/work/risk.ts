@@ -107,6 +107,39 @@ export function classifyRisk(input: RiskInput): RiskAssessment {
   return { class: sorted.length > 0 ? "high" : "normal", rules: sorted, paths: [...paths].sort() };
 }
 
+/**
+ * The risk of paths that are known to be literal, such as the paths of a real git diff. Unlike `classifyRisk`, a glob character
+ * in the path is just a character (`app/posts/[id]/page.tsx`, `.github/workflows/build[1].yml`): every rule matcher runs on the
+ * path string itself. Only a control character, a backslash or an empty path cannot be judged. Every path that raised the class
+ * is listed in `paths`, unclassifiable ones included. Declarations keep using `classifyRisk`.
+ */
+export function classifyLiteralPaths(input: { paths: readonly string[]; watchedGlobs: readonly string[]; extraGlobs: readonly string[] }): RiskAssessment {
+  const rules: Array<{ rule: RiskRule; matches: (path: string) => boolean }> = [
+    ...DEFAULT_HIGH_RISK.map(({ rule, globs }) => ({ rule, matches: picomatch([...globs], MATCH_OPTIONS) })),
+  ];
+  if (input.watchedGlobs.length > 0) rules.push({ rule: "watched-path", matches: picomatch([...input.watchedGlobs], MATCH_OPTIONS) });
+  if (input.extraGlobs.length > 0) rules.push({ rule: "extra", matches: picomatch([...input.extraGlobs], MATCH_OPTIONS) });
+
+  const found = new Set<RiskRule>();
+  const paths = new Set<string>();
+  for (const raw of input.paths) {
+    const path = normalizePath(raw);
+    if (path === "" || raw.includes("\\") || CONTROL_CHARS.test(raw)) {
+      found.add("unclassifiable");
+      paths.add(raw);
+      continue;
+    }
+    for (const { rule, matches } of rules) {
+      if (matches(path)) {
+        found.add(rule);
+        paths.add(path);
+      }
+    }
+  }
+  const sorted = [...found].sort();
+  return { class: sorted.length > 0 ? "high" : "normal", rules: sorted, paths: [...paths].sort() };
+}
+
 const testMatcher = picomatch([...TEST_GLOBS], MATCH_OPTIONS);
 
 /**
