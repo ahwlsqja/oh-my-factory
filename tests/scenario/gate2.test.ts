@@ -384,6 +384,16 @@ describe("gate2EventFor", () => {
     }
   });
 
+  it("carries the seal feedback counts for back_to_S2 and null otherwise", () => {
+    const back = gate2EventFor(SCOPE, 1, evaluateGate2(unlink(passingInput())), digests);
+    expect(back.payload["feedback_counts"]).toEqual({ weak: 0, contradictions: 0, invalid: 0 });
+    expect(validateDef("scenario.schema.json", "ev_gate2_evaluated", back.payload)).toEqual({ ok: true });
+    const pass = gate2EventFor(SCOPE, 1, evaluateGate2(passingInput()), digests);
+    expect(pass.payload["feedback_counts"]).toBeNull();
+    const j3: Gate2Result = { status: "fail", route: "J3", reasons: [{ code: "probe_error" }], not_run: [], aggregate: null };
+    expect(gate2EventFor(SCOPE, 1, j3, digests).payload["feedback_counts"]).toBeNull();
+  });
+
   it("writes a pass with a null route, and zero counts when there was no set to count", () => {
     const pass = gate2EventFor(SCOPE, 1, evaluateGate2(passingInput()), digests);
     expect(validateDef("scenario.schema.json", "ev_gate2_evaluated", pass.payload)).toEqual({ ok: true });

@@ -317,6 +317,7 @@ export function gate2EventFor(
   digests: { seal_id: string | null; set_sha256: string | null; decisions_digest: string },
 ): NewEvent {
   const reasons = result.status === "fail" ? result.reasons : [];
+  const feedback = sealFeedbackFor(result);
   const unlinked = reasons.find((reason) => reason.code === "unlinked_decisions")?.decision_ids ?? [];
   const aggregate = result.aggregate;
   return gate2EvaluatedEvent(scope, {
@@ -337,6 +338,7 @@ export function gate2EventFor(
     },
     set_sha256: digests.set_sha256,
     decisions_digest: digests.decisions_digest,
+    feedback_counts: feedback === null ? null : { weak: feedback.weak, contradictions: feedback.contradictions, invalid: feedback.invalid },
   });
 }
 

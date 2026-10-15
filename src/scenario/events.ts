@@ -105,6 +105,8 @@ export interface Gate2EventInput {
   counts: Gate2Counts;
   set_sha256: string | null;
   decisions_digest: string;
+  /** The three plain counts a re-seal prompt may carry (`sealFeedbackFor`); null unless the route is `back_to_S2`. */
+  feedback_counts: { weak: number; contradictions: number; invalid: number } | null;
 }
 
 /** Adds the scope, validates against the event's definition and returns an actor-`omf` event. Throws before anything is appended. */
@@ -176,6 +178,7 @@ export function gate2EvaluatedEvent(scope: DecisionScope, input: Gate2EventInput
     counts: { ...input.counts },
     set_sha256: input.set_sha256,
     decisions_digest: input.decisions_digest,
+    feedback_counts: input.feedback_counts === null ? null : { ...input.feedback_counts },
   });
 }
 
@@ -345,4 +348,28 @@ export function markScenarioStatus(
     }
     return scenarioStatusChangedEvent(scope, { seal_id: sealId, scenario_id: scenarioId, status, reason });
   });
+}
+
+/**
+ * The feedback the next S2 prompt carries: the latest `gate2.evaluated` of the item with route `back_to_S2` whose seq follows the
+ * latest `seal.completed` (every such event counts when no seal has completed), rebuilt from `unlinked_decision_ids` and
+ * `feedback_counts`. Like `foldSeals` it reads only actor `omf` events that name the item and pass `ev_gate2_evaluated`.
+ * null when there is none. `canary_missing` adds no field: the fixed seal instructions carry that requirement.
+ */
+export function sealFeedbackFromEvents(events: readonly LedgerEvent[], scope: DecisionScope): SealFeedback | null {
+  const after = foldSeals(events, scope).latest?.seq ?? -1;
+  let found: SealFeedback | null = null;
+  for (const event of events) {
+    if (event.type !== "gate2.evaluated" || event.actor !== "omf" || !inScope(event, scope) || event.seq <= after) continue;
+    if (!validateDef(SCHEMA, "ev_gate2_evaluated", event.payload).ok) continue;
+    const payload = event.payload as unknown as Pick<Gate2EventInput, "route" | "unlinked_decision_ids" | "feedback_counts">;
+    if (payload.route !== "back_to_S2" || payload.feedback_counts === null) continue;
+    found = {
+      unlinked_decision_ids: [...payload.unlinked_decision_ids],
+      weak: payload.feedback_counts.weak,
+      contradictions: payload.feedback_counts.contradictions,
+      invalid: payload.feedback_counts.invalid,
+    };
+  }
+  return found;
 }
