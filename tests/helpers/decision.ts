@@ -49,7 +49,7 @@ export const NOISE: NewEvent = { actor: "omf", type: "goal.measured", payload: {
 export function rawDecisionEvent(
   type: string,
   payload: Record<string, unknown>,
-  options: { scope?: DecisionScope; actor?: string } = {},
+  options: { scope?: DecisionScope | undefined; actor?: string | undefined } = {},
 ): NewEvent {
   const scope = options.scope ?? SCOPE;
   return {

@@ -115,8 +115,8 @@ export function runBudgetCommand(status: ProjectLocation, args: BudgetArgs, acto
 /** What a person typed after `omf budget raise`: strings, because validation is `parseBudgetRaiseArgs`'s job. */
 export interface BudgetRaiseArgs {
   id: string;
-  kind?: string;
-  amount?: string;
+  kind?: string | undefined;
+  amount?: string | undefined;
   /** `--rounds <n>`, the work item form. */
   rounds?: string;
   /** `--usd <amount>`, the work item form. */

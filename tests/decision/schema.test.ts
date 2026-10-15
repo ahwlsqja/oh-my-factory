@@ -20,7 +20,6 @@ interface Def {
 const schema = JSON.parse(readFileSync(schemaUrl(FILE), "utf8")) as { $defs: Record<string, Def> };
 
 const scope = { goal_id: "g-hello", work_id: "w-0123456789ab" };
-const argv = ["node", "dist/cli.js"];
 const qas = {
   source: "a user",
   stimulus: "runs the command",
