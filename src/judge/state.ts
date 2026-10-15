@@ -220,3 +220,5 @@ export async function sweepOrphans(input: SweepInput): Promise<SweepResult> {
   }
   return result;
 }
+
+export type { FeedbackSlot, RoundState } from "./round-state.js";
