@@ -2,6 +2,7 @@ import { type StateStore, createMarkdownStore, findWorkItem } from "../adapters/
 import { Ledger, type LedgerEvent } from "../core/ledger.js";
 import { LockHeldError, type LockOwner } from "../core/lock.js";
 import type { ProjectLocation } from "../core/paths.js";
+import { assertLineSafe } from "../vault/line-guard.js";
 import { type ClaimStatus, claimItem, claimStatus, releaseItem } from "./claim.js";
 import { type Governance, type GovernanceCode, GovernanceError, governanceDrift, readGovernance } from "./governance.js";
 import { verifiedItems, verifyItemAgainstLedger } from "./ledger-verify.js";
@@ -167,6 +168,9 @@ export function beginRun(options: BeginRunOptions): WRun {
   const now = options.now ?? ((): Date => new Date());
   const mint = options.newRunId ?? newRunId;
   const { location, workId } = options;
+  // Rule 4: M3b1's run entry refuses while sealed material sits in the repository or an OMF worktree,
+  // before it reads, claims or appends anything.
+  assertLineSafe(location);
   const ctx: WContext = {
     ledger: new Ledger(location.dir, now),
     store: options.store ?? createMarkdownStore(location.dir),

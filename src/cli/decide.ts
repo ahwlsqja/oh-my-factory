@@ -29,6 +29,7 @@ import {
   markNotApplicable,
   resolveDecision,
 } from "../decision/write.js";
+import { assertLineSafe } from "../vault/line-guard.js";
 import { claimStatus, withItemLock } from "../work/claim.js";
 import { verifyItemAgainstLedger } from "../work/ledger-verify.js";
 import type { WorkItem } from "../work/types.js";
@@ -66,6 +67,9 @@ function loadConsistentItem(location: ProjectLocation, workId: string): WorkItem
  * Decisions must not change while a run holds the claim either (M3a design A12). Plain errors: exit 2.
  */
 export function requireDecidableItem(location: ProjectLocation, workId: string): WorkItem {
+  // Rule 4: a write while sealed material sits in the repository or an OMF worktree is refused before it
+  // reads or appends anything. Every decide write goes through this function.
+  assertLineSafe(location);
   const item = loadConsistentItem(location, workId);
   if (item.front.state !== "ready") {
     throw new Error(`work item ${workId} is ${item.front.state}; decisions can be changed only while it is ready`);
