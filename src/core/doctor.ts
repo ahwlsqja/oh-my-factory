@@ -56,6 +56,16 @@ export interface PreflightReport {
   warnings: string[];
 }
 
+/** The probe is advisory: one that throws is reported as unmeasurable with its error text and never stops the report. */
+function safeIsolation(probeIsolation: IsolationProbe, env: NodeJS.ProcessEnv, tools: PreflightReport["tools"]): AdvisoryIsolation {
+  try {
+    return probeIsolation(env, tools);
+  } catch (error) {
+    const base = unmeasuredProbe(env, tools);
+    return { ...base, measured: "unmeasurable", failure: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 /** Runs `cmd args` with PATH taken from `env`; any failure means "not usable". */
 function probe(cmd: string, args: string[], env: NodeJS.ProcessEnv): ToolProbe {
   const result = spawnSync(cmd, args, { encoding: "utf8", timeout: 5000, killSignal: "SIGKILL", env });
@@ -171,7 +181,7 @@ export function runDoctor(
     tools: reported,
     repo: { is_git_repo: toplevel !== null, toplevel },
     project: { initialized, dir, ledger: ledgerResult },
-    isolation: probeIsolation(env, reported),
+    isolation: safeIsolation(probeIsolation, env, reported),
     ok: problems.length === 0,
     problems,
     warnings,

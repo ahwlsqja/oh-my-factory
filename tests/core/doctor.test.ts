@@ -265,6 +265,19 @@ describe("runDoctor: advisory isolation and an atomic preflight.json", () => {
     expect(claimsL2.isolation.advisory).toBe(true);
   });
 
+  it("reports a throwing probe as unmeasurable and still writes preflight.json", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const e = env(home, stubBin({ dockerDaemon: true }));
+    const { projectDir } = initProject(repo, e);
+    const report = runDoctor(repo, e, undefined, () => {
+      throw new Error("docker inspect exploded");
+    });
+    expect(report.isolation).toMatchObject({ declared: "L2", measured: "unmeasurable", advisory: true, failure: "docker inspect exploded" });
+    const written = JSON.parse(readFileSync(join(projectDir, "preflight.json"), "utf8")) as { isolation: { measured: string } };
+    expect(written.isolation.measured).toBe("unmeasurable");
+  });
+
   it("replaces preflight.json atomically at 0600, also when it existed as 0644, and leaves no temp file", () => {
     const repo = makeGitRepo();
     const home = makeTempDir("omf-home-");
