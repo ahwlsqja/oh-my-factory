@@ -52,6 +52,24 @@
         "max_rounds": { "type": "integer", "minimum": 1, "maximum": 50 },
         "max_model_usd": { "type": "number", "minimum": 0.000001, "maximum": 10000 }
       }
+    },
+    "judge": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "k": { "type": "integer", "minimum": 2, "maximum": 10 },
+        "sut_base_image": { "type": "string", "minLength": 1 },
+        "harness_base_image": { "type": "string", "minLength": 1 },
+        "docker_context": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$" },
+        "step_timeout_ms": { "type": "integer", "minimum": 1000, "maximum": 120000 },
+        "memory_mb": { "type": "integer", "minimum": 64, "maximum": 4096 },
+        "cpus": { "type": "number", "minimum": 0.1, "maximum": 4 },
+        "pids_limit": { "type": "integer", "minimum": 16, "maximum": 4096 },
+        "tmp_tmpfs_mb": { "type": "integer", "minimum": 1, "maximum": 1024 },
+        "scratch_tmpfs_mb": { "type": "integer", "minimum": 1, "maximum": 1024 },
+        "work_tmpfs_mb": { "type": "integer", "minimum": 16, "maximum": 2048 },
+        "state_tmpfs_mb": { "type": "integer", "minimum": 1, "maximum": 256 }
+      }
     }
   }
 }

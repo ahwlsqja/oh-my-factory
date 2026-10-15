@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse as parseToml } from "smol-toml";
+import { isDigestPinned } from "../container/image-ref.js";
 import { sha256Hex } from "./canonical-json.js";
 import { validate } from "./schema.js";
 
@@ -37,11 +38,38 @@ export interface WConfig {
   max_model_usd: number;
 }
 
+/**
+ * The container judge (spec §5.5). The two base images are digest-pinned or absent: `null` means "not configured",
+ * and a run that needs one stops with a closed reason instead of guessing. `docker_context` names the Docker
+ * context every container operation uses; `null` means no container operation runs, and the client's current
+ * context is never consulted. The tmpfs sizes are per mount; each role's mounts are charged to `memory_mb`.
+ */
+export interface JudgeConfig {
+  /** Repetitions per scenario. 1 cannot see a flaky scenario, so the floor is 2. */
+  k: number;
+  sut_base_image: string | null;
+  harness_base_image: string | null;
+  docker_context: string | null;
+  step_timeout_ms: number;
+  memory_mb: number;
+  cpus: number;
+  pids_limit: number;
+  /** `/tmp` of every role. */
+  tmp_tmpfs_mb: number;
+  /** `/scratch` of the SUT. */
+  scratch_tmpfs_mb: number;
+  /** `/work` of a work copy. */
+  work_tmpfs_mb: number;
+  /** `/state` of the harness. */
+  state_tmpfs_mb: number;
+}
+
 export interface OmfConfig {
   isolation: { declared: "L2" };
   roles: Record<RoleName, { vendor: Vendor; model?: string; effort?: string }>;
   reconciler: ReconcilerConfig;
   w: WConfig;
+  judge: JudgeConfig;
 }
 
 export class ConfigError extends Error {}
@@ -71,6 +99,20 @@ export const CONFIG_DEFAULTS: OmfConfig = {
   },
   // Small on purpose (M3b2-D13): the default is that a person raises the limit, not that a loop runs long.
   w: { max_rounds: 3, max_model_usd: 5 },
+  judge: {
+    k: 3,
+    sut_base_image: null,
+    harness_base_image: null,
+    docker_context: null,
+    step_timeout_ms: 10_000,
+    memory_mb: 512,
+    cpus: 1,
+    pids_limit: 256,
+    tmp_tmpfs_mb: 64,
+    scratch_tmpfs_mb: 64,
+    work_tmpfs_mb: 256,
+    state_tmpfs_mb: 16,
+  },
 };
 
 interface RawConfig {
@@ -78,6 +120,26 @@ interface RawConfig {
   roles?: Partial<Record<RoleName, { vendor?: Vendor; model?: string; effort?: string }>>;
   reconciler?: Partial<ReconcilerConfig>;
   w?: Partial<WConfig>;
+  judge?: Partial<JudgeConfig>;
+}
+
+/**
+ * tmpfs is charged to the container's memory, so a role whose mounts add up to more than `memory_mb` could be
+ * killed for memory by writing files. Refusing the config says so before any container exists.
+ */
+function requireTmpfsFits(judge: JudgeConfig): void {
+  const roles: [string, number][] = [
+    ["sut", judge.tmp_tmpfs_mb + judge.scratch_tmpfs_mb],
+    ["harness", judge.tmp_tmpfs_mb + judge.state_tmpfs_mb],
+    ["workcopy", judge.tmp_tmpfs_mb + judge.work_tmpfs_mb],
+  ];
+  for (const [role, total] of roles) {
+    if (total > judge.memory_mb) {
+      throw new ConfigError(
+        `judge tmpfs sizes of the ${role} container (${total} MiB) exceed judge.memory_mb (${judge.memory_mb})`,
+      );
+    }
+  }
 }
 
 function table(parent: Record<string, unknown> | undefined, key: string): Record<string, unknown> | undefined {
@@ -108,6 +170,14 @@ export function parseConfig(text: string): OmfConfig {
   if (table(table(root, "roles"), "reconciler")?.vendor === "codex") {
     throw new ConfigError('roles.reconciler.vendor "codex" needs a container; M3');
   }
+  // A tag can be re-pointed under the judge, so an unpinned image is refused with its name before the schema runs.
+  const judgeTable = table(root, "judge");
+  for (const key of ["sut_base_image", "harness_base_image"] as const) {
+    const value = judgeTable?.[key];
+    if (typeof value === "string" && !isDigestPinned(value)) {
+      throw new ConfigError(`judge.${key} must be pinned by digest`);
+    }
+  }
   const checked = validate("config.schema.json", root);
   if (!checked.ok) throw new ConfigError(`config.toml is invalid: ${checked.errors}`);
 
@@ -119,11 +189,14 @@ export function parseConfig(text: string): OmfConfig {
   if (reconciler.kind === "command" && reconciler.command === null) {
     throw new ConfigError('reconciler.kind "command" requires reconciler.command');
   }
+  const judge: JudgeConfig = { ...CONFIG_DEFAULTS.judge, ...raw.judge };
+  requireTmpfsFits(judge);
   return {
     isolation: { ...CONFIG_DEFAULTS.isolation, ...raw.isolation },
     roles,
     reconciler,
     w: { ...CONFIG_DEFAULTS.w, ...raw.w },
+    judge,
   };
 }
 

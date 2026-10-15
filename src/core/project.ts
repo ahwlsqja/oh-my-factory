@@ -29,6 +29,15 @@ max_model_usd = 5.0
 # model = "..."          # omit for the vendor default
 # timeout_ms = 120000    # 1000..600000
 # max_budget_usd = 1.5
+
+# Optional. The container judge. Without both images and a Docker context, no scenario runs in a container.
+# [judge]
+# k = 3                                  # repetitions per scenario, 2..10
+# sut_base_image = "name@sha256:..."     # pinned by digest (64 hex digits), never a tag
+# harness_base_image = "name@sha256:..."
+# docker_context = "my-local-context"    # a local Docker context; the client's current context is never used
+# memory_mb = 512                        # per container; tmp_tmpfs_mb, scratch_tmpfs_mb, work_tmpfs_mb and
+#                                        # state_tmpfs_mb (tmpfs sizes) must fit inside it
 `;
 
 export const PROJECT_INITIALIZED = "project.initialized";
