@@ -88,7 +88,7 @@ export async function buildRoundImages(input: {
   const harness = await ensureHarnessImage({
     runtime: input.runtime,
     base: input.harnessBase,
-    labels: input.labels,
+    labels: { ...input.labels, role: "harness" },
     contextRoot: input.contextRoot,
     timeoutMs: BUILD_TIMEOUT_MS,
   });
