@@ -115,8 +115,9 @@ function unwrap(inspect: unknown): Json {
  * value. Mounts from the three places Docker reports them are merged and de-duplicated, so a bind that
  * appears only in `HostConfig.Binds` still counts. Environment values are dropped here and never held.
  *
- * The field mapping follows the Docker Engine API and is checked against fixtures only. If the M3f gated
- * run shows a real daemon omits one of these fields, fix the mapping there; do not add a default here.
+ * The field mapping follows the Docker Engine API and is checked against fixtures only. The only fields
+ * that read as empty when absent are the ones the Engine API marks omitempty (Sysctls, Runtime, Mounts);
+ * for every other field a default would hide an unknown, so the parser throws instead.
  */
 export function containerFactsFromInspect(inspect: unknown): ContainerFacts {
   const top = unwrap(inspect);
@@ -146,7 +147,9 @@ export function containerFactsFromInspect(inspect: unknown): ContainerFacts {
     devicePaths = devices.map((device) => text(device as Json, "PathOnHost", "HostConfig.Devices"));
   } else throw new InspectParseError("HostConfig.Devices");
 
-  const sysctls = own(host, "Sysctls");
+  // The Engine API omits Sysctls and Runtime when unset (omitempty). Absence is the absence of a weakening
+  // setting, so Sysctls reads as empty and Runtime as "" (which the evaluator still flags as not runc).
+  const sysctls = own(host, "Sysctls") ?? null;
   if (sysctls !== null && !isRecord(sysctls)) throw new InspectParseError("HostConfig.Sysctls");
 
   return {
@@ -169,6 +172,6 @@ export function containerFactsFromInspect(inspect: unknown): ContainerFacts {
     cgroupns_mode: text(host, "CgroupnsMode", "HostConfig.CgroupnsMode"),
     volumes_from: strings(host, "VolumesFrom", "HostConfig.VolumesFrom"),
     sysctls: sysctls === null ? [] : Object.keys(sysctls).sort(),
-    runtime: text(host, "Runtime", "HostConfig.Runtime"),
+    runtime: own(host, "Runtime") === undefined ? "" : text(host, "Runtime", "HostConfig.Runtime"),
   };
 }

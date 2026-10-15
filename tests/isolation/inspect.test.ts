@@ -114,9 +114,21 @@ describe("containerFactsFromInspect", () => {
     "HostConfig.UsernsMode",
     "HostConfig.CgroupnsMode",
     "HostConfig.VolumesFrom",
-    "HostConfig.Sysctls",
-    "HostConfig.Runtime",
   ];
+
+  it("reads a realistic inspect that omits the keys the Engine API leaves out when unset", () => {
+    const doc = goldenInspect() as unknown as { HostConfig: Record<string, unknown> };
+    delete doc.HostConfig.Sysctls;
+    delete doc.HostConfig.Runtime;
+    delete doc.HostConfig.Tmpfs;
+    const facts = containerFactsFromInspect(doc);
+    expect(facts.sysctls).toEqual([]);
+    expect(facts.runtime).toBe("");
+    doc.HostConfig.Sysctls = null;
+    expect(containerFactsFromInspect(doc).sysctls).toEqual([]);
+    doc.HostConfig.Sysctls = "x";
+    expect(() => containerFactsFromInspect(doc)).toThrow(/HostConfig\.Sysctls/);
+  });
 
   it.each(REQUIRED)("fails closed when %s is missing, naming only that field", (path) => {
     const doc = without(path) as { Config?: { Env?: string[] } };
