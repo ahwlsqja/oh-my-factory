@@ -46,6 +46,16 @@ describe("W-risk-only-raises", () => {
     expect((await assess(fx, normal)).effective).toEqual(normal);
   });
 
+  it("the declared assessment is never rewritten, even when the diff raises the effective class", async () => {
+    const fx = gitFixture({ "src/a.ts": "1\n", ".github/workflows/ci.yml": "on: push\n" }, { ".github/workflows/ci.yml": "on: [push]\n" });
+    const declared: RiskAssessment = { class: "normal", rules: [], paths: [] };
+    const before = structuredClone(declared);
+    const outcome = await assess(fx, declared);
+    expect(outcome.raised).toBe(true);
+    expect(declared).toEqual(before);
+    expect(outcome.effective).not.toBe(declared);
+  });
+
   it("an empty diff keeps the declared risk and reports no recompute", async () => {
     const fx = gitFixture({ "src/a.ts": "1\n" }, { "src/a.ts": "2\n" });
     const declared: RiskAssessment = { class: "high", rules: ["undeclared"], paths: [] };
