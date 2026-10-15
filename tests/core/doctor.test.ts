@@ -201,12 +201,37 @@ describe("runDoctor", () => {
     expect(parallel).toEqual(sequential);
   });
 
+  it("runs the slow probes at the same time", async () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const bin = stubBin({ dockerDaemon: true });
+    // Three probes that each take 1 s: one after another they need at least 3 s, together about 1 s.
+    for (const name of ["claude", "codex"]) {
+      writeFileSync(join(bin, name), `#!/bin/sh\n/bin/sleep 1\necho "${name} 1.0"\n`);
+      chmodSync(join(bin, name), 0o755);
+    }
+    writeFileSync(
+      join(bin, "docker"),
+      '#!/bin/sh\nif [ "$1" = "info" ]; then /bin/sleep 1; echo 29.0.0; else echo "Docker version 29.0.0"; fi\n',
+    );
+    const e = env(home, bin);
+    const started = Date.now();
+    const report = await runDoctorParallel(repo, e);
+    const elapsed = Date.now() - started;
+    expect(report.tools.claude.found && report.tools.codex.found && report.tools.docker.daemon).toBe(true);
+    expect(elapsed).toBeLessThan(2500);
+    // The same stubs probed one after another cannot be faster than their sum, which proves the bound above is not trivial.
+    const sequentialStarted = Date.now();
+    runDoctor(repo, e);
+    expect(Date.now() - sequentialStarted).toBeGreaterThanOrEqual(3000);
+  }, 20_000);
+
   it("a probe that hangs is cut off and counts as not found", async () => {
     const repo = makeGitRepo();
     const home = makeTempDir("omf-home-");
     const bin = stubBin({ dockerDaemon: true });
     const claude = join(bin, "claude");
-    writeFileSync(claude, "#!/bin/sh\nexec sleep 30\n");
+    writeFileSync(claude, "#!/bin/sh\nexec /bin/sleep 30\n");
     chmodSync(claude, 0o755);
     const started = Date.now();
     const report = await runDoctorParallel(repo, env(home, bin));
