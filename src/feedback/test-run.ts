@@ -302,7 +302,7 @@ export function authorizeTestReseal(
  * `consumed_incomplete` and `consumed_other_candidate` are real states on the host (the handoff and the
  * `blocked` outcomes use them), but they are not a result for this code, so the evidence reads them as not run.
  * A total of 0 is not a pass either (E7). `flaky` is dropped here and nothing else carries test-split flakiness into the classifier: it reads
- * flaky counts of the train split only. Known gap until the station that builds the evidence passes the test-split flakiness on.
+ * flaky counts of the train split only. S6 completes the run with a `pass` that counts only scenarios that passed in every repetition, so a flaky test scenario leaves pass < total and the classifier reads `sealed_failed`: a conservative reading, not `flaky_scenario`.
  */
 export function evidenceSealedTest(field: SealedTestField): { pass: number; total: number } | "not run" {
   if (typeof field === "string") return "not run";
