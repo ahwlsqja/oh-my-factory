@@ -27,7 +27,7 @@ describe("enforcement README, final pass", () => {
   it("states what M3d leaves partial or unenforced", () => {
     const readme = read("tests/enforcement/README.md");
     expect(readme).toContain("Status after M3d");
-    expect(readme).toContain("re-run the same canary");
+    expect(readme).toContain("re-ran the same canary");
     expect(readme).toContain("forge a `human:*` reseal event");
     expect(readme).toContain("one per-goal `disclosure` budget");
   });

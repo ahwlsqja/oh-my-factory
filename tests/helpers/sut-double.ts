@@ -44,6 +44,63 @@ export const exited = (stdout: string, status = 0): ProcessResult => ({
 
 type Run = HarnessVerdict["runs"][number];
 
+export interface HarnessDoubleOptions {
+  /** A step whose expectation has a `json_path` (only the contradiction canary has one) is scored a pass: a judge that accepts the contradiction. */
+  passJsonPath?: boolean;
+}
+
+/** The harness side of the protocol: holds the loaded set and answers load, begin, observe and verdict. */
+export class HarnessDouble {
+  private set: HarnessSet | null = null;
+  private readonly runs = new Map<string, Run>();
+
+  constructor(private readonly options: HarnessDoubleOptions = {}) {}
+
+  private scenario(ref: string) {
+    const found = this.set?.scenarios.find((entry) => entry.scenario_ref === ref);
+    if (found === undefined) throw new Error(`harness double: unknown scenario ${ref}`);
+    return found;
+  }
+
+  answer(request: HarnessRequest): HarnessReply {
+    const { nonce } = request;
+    switch (request.op) {
+      case "load":
+        this.set = request.set;
+        this.runs.clear();
+        return { op: "load", nonce, scenarios_total: request.set.scenarios.length };
+      case "begin": {
+        const scenario = this.scenario(request.scenario_ref);
+        const first = scenario.steps[0];
+        if (first === undefined) throw new Error("harness double: scenario without steps");
+        this.runs.set(`${request.scenario_ref}#${request.rep}`, {
+          scenario_ref: request.scenario_ref,
+          rep: request.rep,
+          outcome: "pass",
+          steps_passed: 0,
+          steps_total: scenario.steps.length,
+        });
+        return { op: "begin", nonce, steps_total: scenario.steps.length, invoke: first.invoke };
+      }
+      case "observe": {
+        const scenario = this.scenario(request.scenario_ref);
+        const step = scenario.steps[request.step_index];
+        const run = this.runs.get(`${request.scenario_ref}#${request.rep}`);
+        if (step === undefined || run === undefined) throw new Error("harness double: observe out of order");
+        const pass =
+          (this.options.passJsonPath === true && step.expect.json_path !== null) ||
+          evaluateExpect({ ...step.expect, note: "" }, request.observation).pass;
+        if (pass) run.steps_passed += 1;
+        else run.outcome = FAULTS.has(request.observation.outcome) ? "error" : "fail";
+        const next = scenario.steps[request.step_index + 1];
+        return { op: "observe", nonce, step_pass: pass, next: pass && next !== undefined ? next.invoke : null };
+      }
+      case "verdict":
+        return { op: "verdict", nonce, verdict: { schema_version: 1, nonce, runs: [...this.runs.values()] } };
+    }
+  }
+}
+
 export class RuntimeDouble implements ContainerRuntime {
   readonly context = "colima-test";
   /** `create:<role>:<name>`, `start:<name>`, `exec:<role>:<name>`, `remove:<name>`, `removeAllSync:<names>`. */
@@ -59,8 +116,7 @@ export class RuntimeDouble implements ContainerRuntime {
   }[] = [];
   tamper: Tamper | null = null;
   private readonly live = new Map<string, SutState>();
-  private set: HarnessSet | null = null;
-  private readonly runs = new Map<string, Run>();
+  private readonly harness = new HarnessDouble();
 
   constructor(private readonly candidate: Candidate) {}
 
@@ -128,51 +184,9 @@ export class RuntimeDouble implements ContainerRuntime {
 
   private harnessExec(stdin: string): ProcessResult {
     const request = JSON.parse(stdin) as HarnessRequest;
-    const reply = this.answer(request);
+    const reply = this.harness.answer(request);
     const out = this.tamper === null ? reply : this.tamper(request, reply);
     const stdout = out === null ? "" : typeof out === "string" ? out : `${JSON.stringify(out)}\n`;
     return { kind: "exited", status: 0, signal: null, stdout, stderr: "" };
-  }
-
-  private scenario(ref: string) {
-    const found = this.set?.scenarios.find((entry) => entry.scenario_ref === ref);
-    if (found === undefined) throw new Error(`harness double: unknown scenario ${ref}`);
-    return found;
-  }
-
-  private answer(request: HarnessRequest): HarnessReply {
-    const { nonce } = request;
-    switch (request.op) {
-      case "load":
-        this.set = request.set;
-        this.runs.clear();
-        return { op: "load", nonce, scenarios_total: request.set.scenarios.length };
-      case "begin": {
-        const scenario = this.scenario(request.scenario_ref);
-        const first = scenario.steps[0];
-        if (first === undefined) throw new Error("harness double: scenario without steps");
-        this.runs.set(`${request.scenario_ref}#${request.rep}`, {
-          scenario_ref: request.scenario_ref,
-          rep: request.rep,
-          outcome: "pass",
-          steps_passed: 0,
-          steps_total: scenario.steps.length,
-        });
-        return { op: "begin", nonce, steps_total: scenario.steps.length, invoke: first.invoke };
-      }
-      case "observe": {
-        const scenario = this.scenario(request.scenario_ref);
-        const step = scenario.steps[request.step_index];
-        const run = this.runs.get(`${request.scenario_ref}#${request.rep}`);
-        if (step === undefined || run === undefined) throw new Error("harness double: observe out of order");
-        const pass = evaluateExpect({ ...step.expect, note: "" }, request.observation).pass;
-        if (pass) run.steps_passed += 1;
-        else run.outcome = FAULTS.has(request.observation.outcome) ? "error" : "fail";
-        const next = scenario.steps[request.step_index + 1];
-        return { op: "observe", nonce, step_pass: pass, next: pass && next !== undefined ? next.invoke : null };
-      }
-      case "verdict":
-        return { op: "verdict", nonce, verdict: { schema_version: 1, nonce, runs: [...this.runs.values()] } };
-    }
   }
 }
