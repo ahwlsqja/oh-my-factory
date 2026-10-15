@@ -224,11 +224,6 @@ export function parseConfig(text: string): OmfConfig {
   if (table(table(root, "roles"), "reconciler")?.vendor === "codex") {
     throw new ConfigError('roles.reconciler.vendor "codex" needs a container; M3');
   }
-  if (table(table(root, "roles"), "implementer")?.vendor === "codex") {
-    throw new ConfigError(
-      'roles.implementer.vendor "codex" is not supported: only the claude implementer runs in a container in this version',
-    );
-  }
   // A tag can be re-pointed under the judge, so an unpinned image is refused with its name before the schema runs.
   const judgeTable = table(root, "judge");
   for (const key of ["sut_base_image", "harness_base_image"] as const) {

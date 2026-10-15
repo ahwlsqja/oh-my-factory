@@ -412,6 +412,25 @@ describe("runDoctor: advisory isolation and an atomic preflight.json", () => {
     expect(claimsL2.isolation.advisory).toBe(true);
   });
 
+  it("hands the probe the project when the config names a codex implementer", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const e = env(home, stubBin({ dockerDaemon: true }));
+    initProject(repo, e);
+    const file = join(projectDir(repo, e), "config.toml");
+    const text = readFileSync(file, "utf8");
+    const swapped = text.replace('implementer = { vendor = "claude" }', 'implementer = { vendor = "codex" }');
+    expect(swapped).not.toBe(text);
+    writeFileSync(file, swapped);
+    const vendors: string[] = [];
+    const spy: IsolationProbe = (_env, _tools, project) => {
+      vendors.push(project === null ? "no project" : project.config.roles.implementer.vendor);
+      return { declared: "L2", measured: "unmeasured", advisory: true, note: "n", failure: null };
+    };
+    runDoctor(repo, e, undefined, spy);
+    expect(vendors).toEqual(["codex"]);
+  });
+
   it("hands the probe the project and its config, or null when there is none or config.toml is unreadable", () => {
     const repo = makeGitRepo();
     const home = makeTempDir("omf-home-");

@@ -381,10 +381,8 @@ describe("[implementer]", () => {
     );
   });
 
-  it("says why a codex implementer is refused, and still allows codex for the other roles", () => {
-    expect(() => parseConfig('[roles]\nimplementer = { vendor = "codex" }\n')).toThrow(
-      /roles\.implementer\.vendor "codex" is not supported: only the claude implementer runs in a container in this version/,
-    );
+  it("accepts a codex implementer in the config, because only the station that starts it refuses", () => {
+    expect(parseConfig('[roles]\nimplementer = { vendor = "codex" }\n').roles.implementer).toEqual({ vendor: "codex" });
     expect(
       parseConfig('[roles]\nimplementer = { vendor = "claude", model = "some-model" }\n').roles.implementer,
     ).toEqual({ vendor: "claude", model: "some-model" });
