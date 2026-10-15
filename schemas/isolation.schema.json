@@ -97,10 +97,13 @@
         "measured_at": { "$ref": "#/$defs/timestamp" },
         "facts": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/container_facts" }] },
         "checks": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/container_checks" }] },
-        "level": { "enum": ["L1", "L2", "L3"] },
+        "level": { "enum": ["L1", "L2"] },
         "violations": { "type": "array", "uniqueItems": true, "maxItems": 64, "items": { "$ref": "#/$defs/violation_code" } },
         "facts_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
-      }
+      },
+      "allOf": [
+        { "if": { "properties": { "level": { "const": "L2" } }, "required": ["level"] }, "then": { "properties": { "violations": { "type": "array", "maxItems": 0 }, "mode": { "type": "string", "const": "container" } } } }
+      ]
     },
     "measurement_list": { "type": "array", "maxItems": 1000, "items": { "$ref": "#/$defs/stage_measurement" } }
   }

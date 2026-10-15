@@ -129,23 +129,42 @@ export interface RunIsolation {
 }
 
 /**
+ * Whether a recorded level agrees with the rest of its record. L2 needs a container run with no
+ * violation, a host run is never above L1, and L3 does not exist in v0.1. A record that disagrees with
+ * itself was edited or produced by something other than the evaluator.
+ */
+function levelIsConsistent(entry: StageMeasurement): boolean {
+  if (entry.level === "L3") return false;
+  if (entry.level === "L2") return entry.mode === "container" && entry.violations.length === 0;
+  return entry.level === "L1";
+}
+
+/**
  * Stage level = the minimum over EVERY measurement of that stage in the run, not the latest: an L1
  * container in round 1 followed by an L2 container in round 2 stays L1. Run level = the
  * minimum over the four stage levels, a missing stage counting as `unmeasured`, so no label above
- * `unmeasured` exists until all four stages were measured.
+ * `unmeasured` exists until all four stages were measured. A stage with any record whose level its own
+ * violations or mode do not support is shown as L1 and counts as `unmeasured` for the run.
  */
 export function runIsolation(runId: string, measurements: readonly StageMeasurement[]): RunIsolation {
   const stages: Record<IsolationStage, StageSummary | null> = { author: null, implementer: null, sut: null, harness: null };
+  const untrusted = new Set<IsolationStage>();
   for (const stage of ISOLATION_STAGES) {
     const [first, ...rest] = measurements.filter((entry) => entry.stage === stage);
     if (first === undefined) continue;
     let level: IsolationLevel = first.level;
+    let trusted = true;
     const seen = new Set<ViolationCode>();
     const hashes: string[] = [];
     for (const entry of [first, ...rest]) {
+      if (!levelIsConsistent(entry)) trusted = false;
       if (compareLevel(entry.level, level) < 0) level = entry.level;
       for (const code of entry.violations) seen.add(code);
       if (!hashes.includes(entry.facts_sha256)) hashes.push(entry.facts_sha256);
+    }
+    if (!trusted) {
+      level = "L1";
+      untrusted.add(stage);
     }
     stages[stage] = {
       level,
@@ -154,7 +173,7 @@ export function runIsolation(runId: string, measurements: readonly StageMeasurem
       facts_sha256s: hashes,
     };
   }
-  const levels = ISOLATION_STAGES.map((stage): MeasuredLevel => stages[stage]?.level ?? "unmeasured");
+  const levels = ISOLATION_STAGES.map((stage): MeasuredLevel => (untrusted.has(stage) ? "unmeasured" : (stages[stage]?.level ?? "unmeasured")));
   return {
     run_id: runId,
     stages,

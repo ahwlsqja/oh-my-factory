@@ -105,6 +105,44 @@ describe("runIsolation", () => {
   });
 });
 
+describe("runIsolation with a recorded level the record does not support", () => {
+  const everyStageL2 = (): StageMeasurement[] => ISOLATION_STAGES.map((stage) => measurement(stage, "L2"));
+  const withSut = (replacement: StageMeasurement): StageMeasurement[] => [...everyStageL2().filter((m) => m.stage !== "sut"), replacement];
+
+  it("does not trust L2 recorded next to a violation", () => {
+    const result = runIsolation(RUN, withSut(measurement("sut", "L2", ["privileged"])));
+    expect(result.level).toBe("unmeasured");
+    expect(result.stages.sut?.level).toBe("L1");
+  });
+
+  it("does not trust a host-mode record above the host level", () => {
+    const result = runIsolation(RUN, withSut({ ...measurement("sut", "L2"), mode: "host" }));
+    expect(result.level).toBe("unmeasured");
+  });
+
+  it("does not trust any L3 in v0.1", () => {
+    const result = runIsolation(RUN, withSut(measurement("sut", "L3")));
+    expect(result.level).toBe("unmeasured");
+  });
+
+  it("still takes a consistent record at face value", () => {
+    expect(runIsolation(RUN, everyStageL2()).level).toBe("L2");
+  });
+
+  it("is rejected by the schema too", () => {
+    const doc = (m: StageMeasurement): Record<string, unknown> => ({
+      schema_version: 1,
+      run_id: RUN,
+      stages: { author: [], implementer: [], sut: [m], harness: [] },
+      level: "L1",
+    });
+    expect(validate("isolation.schema.json", doc(measurement("sut", "L2", ["privileged"]))).ok).toBe(false);
+    expect(validate("isolation.schema.json", doc({ ...measurement("sut", "L2"), mode: "host" })).ok).toBe(false);
+    expect(validate("isolation.schema.json", doc(measurement("sut", "L3"))).ok).toBe(false);
+    expect(validate("isolation.schema.json", doc(measurement("sut", "L2"))).ok).toBe(true);
+  });
+});
+
 describe("isolation.schema.json", () => {
   const document = (): Record<string, unknown> => ({
     schema_version: 1,
