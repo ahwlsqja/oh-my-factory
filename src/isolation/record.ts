@@ -19,7 +19,7 @@ import {
 /** The author stage is measured at seal. This names the seal event (its ledger seq) and the scenario set it covered. */
 export interface AuthorScope {
   seal_seq: number;
-  facts_sha256: string;
+  set_sha256: string;
 }
 
 /** The payload of an `isolation.measured` event, after the schema check. */
@@ -94,7 +94,7 @@ function sealOf(events: readonly LedgerEvent[], scope: RunScope): AuthorScope | 
   const fold = foldSeals(events, { goal_id: scope.goal_id, work_id: scope.work_id });
   const { latest } = fold;
   if (fold.anomalies > 0 || latest === null || latest.author.isolation === "host_command") return null;
-  return { seal_seq: latest.seq, facts_sha256: latest.set_sha256 };
+  return { seal_seq: latest.seq, set_sha256: latest.set_sha256 };
 }
 
 /**
@@ -121,7 +121,7 @@ export function loadRunIsolation(_itemDir: string, scope: RunScope, events: read
       payload.stage === "author"
         ? seal !== null &&
           payload.author_scope?.seal_seq === seal.seal_seq &&
-          payload.author_scope.facts_sha256 === seal.facts_sha256
+          payload.author_scope.set_sha256 === seal.set_sha256
         : payload.run_id === scope.run_id;
     if (!counts) continue;
     // The events carry the level, the violation codes and the facts hash; the facts themselves stay in isolation.json.

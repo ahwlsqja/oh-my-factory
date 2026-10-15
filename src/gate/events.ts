@@ -98,7 +98,7 @@ export function auditCompletedEvent(scope: EventScope, report: WorkAudit): NewEv
 export function isolationMeasuredEvent(
   scope: EventScope,
   measurement: StageMeasurement,
-  authorScope: { seal_seq: number; facts_sha256: string } | null,
+  authorScope: { seal_seq: number; set_sha256: string } | null,
 ): NewEvent {
   if (measurement.stage === "author" && authorScope === null) {
     throw new Error("invalid isolation.measured event: the author stage needs author_scope");
@@ -115,7 +115,7 @@ export function isolationMeasuredEvent(
     level: measurement.level,
     violations: [...measurement.violations],
     facts_sha256: measurement.facts_sha256,
-    author_scope: authorScope === null ? null : { seal_seq: authorScope.seal_seq, facts_sha256: authorScope.facts_sha256 },
+    author_scope: authorScope === null ? null : { seal_seq: authorScope.seal_seq, set_sha256: authorScope.set_sha256 },
   };
   const check = validate("gate-event.schema.json", { type: "isolation.measured", payload });
   if (!check.ok) throw new Error(`invalid isolation.measured event: ${check.errors}`);

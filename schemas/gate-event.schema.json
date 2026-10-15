@@ -102,8 +102,8 @@
             {
               "type": "object",
               "additionalProperties": false,
-              "required": ["seal_seq", "facts_sha256"],
-              "properties": { "seal_seq": { "type": "integer", "minimum": 1 }, "facts_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+              "required": ["seal_seq", "set_sha256"],
+              "properties": { "seal_seq": { "type": "integer", "minimum": 1 }, "set_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
             }
           ]
         }

@@ -9,7 +9,6 @@ import { isolationPath, loadRunIsolation, recordStageMeasurement } from "../../s
 import { sealCompletedEvent } from "../../src/scenario/events.js";
 import type { AuthorIsolation } from "../../src/scenario/types.js";
 import {
-  ISOLATION_LEVELS,
   ISOLATION_STAGES,
   VIOLATION_CODES,
   type IsolationLevel,
@@ -80,12 +79,12 @@ describe("isolationMeasuredEvent", () => {
 
   it("needs author_scope for the author stage and refuses it for every other stage", () => {
     expect(() => isolationMeasuredEvent(scope(), m("author", "L2", A), null)).toThrow(/needs author_scope/);
-    expect(() => isolationMeasuredEvent(scope(), m("sut", "L2", A), { seal_seq: 1, facts_sha256: SET })).toThrow(
+    expect(() => isolationMeasuredEvent(scope(), m("sut", "L2", A), { seal_seq: 1, set_sha256: SET })).toThrow(
       /belongs to the author stage only/,
     );
-    expect(isolationMeasuredEvent(scope(), m("author", "L2", A), { seal_seq: 3, facts_sha256: SET }).payload.author_scope).toEqual({
+    expect(isolationMeasuredEvent(scope(), m("author", "L2", A), { seal_seq: 3, set_sha256: SET }).payload.author_scope).toEqual({
       seal_seq: 3,
-      facts_sha256: SET,
+      set_sha256: SET,
     });
   });
 
@@ -173,7 +172,7 @@ describe("loadRunIsolation: the ledger is the authority", () => {
   it("is L2 only with all four stages measured, and a later L1 round lowers it", () => {
     const { ledger, itemDir } = setup();
     const seq = sealAndStart(ledger);
-    recordStageMeasurement(ledger, scope(), itemDir, m("author", "L2", A), { seal_seq: seq, facts_sha256: SET });
+    recordStageMeasurement(ledger, scope(), itemDir, m("author", "L2", A), { seal_seq: seq, set_sha256: SET });
     for (const stage of ["implementer", "sut", "harness"] as const) recordStageMeasurement(ledger, scope(), itemDir, m(stage, "L2", B));
     const healthy = loadRunIsolation(itemDir, scope(), ledger.readVerified());
     expect(healthy.level).toBe("L2");
@@ -227,7 +226,7 @@ describe("loadRunIsolation: the ledger is the authority", () => {
   it("resolves the author stage through the seal, so a resumed run with a new run id still has it", () => {
     const { ledger, itemDir } = setup();
     const seq = sealAndStart(ledger);
-    recordStageMeasurement(ledger, scope(), itemDir, m("author", "L2", A), { seal_seq: seq, facts_sha256: SET });
+    recordStageMeasurement(ledger, scope(), itemDir, m("author", "L2", A), { seal_seq: seq, set_sha256: SET });
     ledger.append({ actor: "omf", type: "work.resumed", payload: { goal_id: GOAL, work_id: WORK, run_id: RUN2 } });
     const resumed = loadRunIsolation(itemDir, scope(RUN2), ledger.readVerified());
     expect(resumed.stages.author).toMatchObject({ level: "L2", measurements: 1 });
@@ -237,24 +236,24 @@ describe("loadRunIsolation: the ledger is the authority", () => {
   it("leaves the author unmeasured when its scope does not match the item's latest seal", () => {
     const wrongFacts = setup();
     const seq1 = sealAndStart(wrongFacts.ledger);
-    recordStageMeasurement(wrongFacts.ledger, scope(), wrongFacts.itemDir, m("author", "L2", A), { seal_seq: seq1, facts_sha256: B });
+    recordStageMeasurement(wrongFacts.ledger, scope(), wrongFacts.itemDir, m("author", "L2", A), { seal_seq: seq1, set_sha256: B });
     expect(loadRunIsolation(wrongFacts.itemDir, scope(), wrongFacts.ledger.readVerified()).stages.author).toBeNull();
 
     const resealed = setup();
     const seq2 = sealAndStart(resealed.ledger);
-    recordStageMeasurement(resealed.ledger, scope(), resealed.itemDir, m("author", "L2", A), { seal_seq: seq2, facts_sha256: SET });
+    recordStageMeasurement(resealed.ledger, scope(), resealed.itemDir, m("author", "L2", A), { seal_seq: seq2, set_sha256: SET });
     resealed.ledger.append(sealEvent(B, { round: 2, sealId: "seal-fedcba9876543210" }));
     expect(loadRunIsolation(resealed.itemDir, scope(), resealed.ledger.readVerified()).stages.author).toBeNull();
 
     const noSeal = setup();
-    recordStageMeasurement(noSeal.ledger, scope(), noSeal.itemDir, m("author", "L2", A), { seal_seq: 1, facts_sha256: SET });
+    recordStageMeasurement(noSeal.ledger, scope(), noSeal.itemDir, m("author", "L2", A), { seal_seq: 1, set_sha256: SET });
     expect(loadRunIsolation(noSeal.itemDir, scope(), noSeal.ledger.readVerified()).stages.author).toBeNull();
   });
 
   it("does not let another goal's later seal with the same work id replace the item's seal", () => {
     const { ledger, itemDir } = setup();
     const seq = sealAndStart(ledger);
-    recordStageMeasurement(ledger, scope(), itemDir, m("author", "L2", A), { seal_seq: seq, facts_sha256: SET });
+    recordStageMeasurement(ledger, scope(), itemDir, m("author", "L2", A), { seal_seq: seq, set_sha256: SET });
     ledger.append(sealEvent(B, { goal: "g-other", sealId: "seal-fedcba9876543210" }));
     expect(loadRunIsolation(itemDir, scope(), ledger.readVerified()).stages.author).toMatchObject({ level: "L2", measurements: 1 });
   });
@@ -262,7 +261,7 @@ describe("loadRunIsolation: the ledger is the authority", () => {
   it("reads no seal when a schema-invalid omf seal.completed comes last", () => {
     const { ledger, itemDir } = setup();
     const seq = sealAndStart(ledger);
-    recordStageMeasurement(ledger, scope(), itemDir, m("author", "L2", A), { seal_seq: seq, facts_sha256: SET });
+    recordStageMeasurement(ledger, scope(), itemDir, m("author", "L2", A), { seal_seq: seq, set_sha256: SET });
     ledger.append({ actor: "omf", type: "seal.completed", payload: { goal_id: GOAL, work_id: WORK, round: 2, set_sha256: B } });
     expect(loadRunIsolation(itemDir, scope(), ledger.readVerified()).stages.author).toBeNull();
   });
@@ -270,7 +269,7 @@ describe("loadRunIsolation: the ledger is the authority", () => {
   it("reads no seal when a seal id repeats", () => {
     const { ledger, itemDir } = setup();
     const seq = sealAndStart(ledger);
-    recordStageMeasurement(ledger, scope(), itemDir, m("author", "L2", A), { seal_seq: seq, facts_sha256: SET });
+    recordStageMeasurement(ledger, scope(), itemDir, m("author", "L2", A), { seal_seq: seq, set_sha256: SET });
     ledger.append(sealEvent(B, { round: 2 }));
     expect(loadRunIsolation(itemDir, scope(), ledger.readVerified()).stages.author).toBeNull();
   });
@@ -278,7 +277,7 @@ describe("loadRunIsolation: the ledger is the authority", () => {
   it("reports the author unmeasured when the seal says the author ran as a host command", () => {
     const { ledger, itemDir } = setup();
     const seq = sealAndStart(ledger, RUN, { isolation: "host_command" });
-    recordStageMeasurement(ledger, scope(), itemDir, m("author", "L2", A), { seal_seq: seq, facts_sha256: SET });
+    recordStageMeasurement(ledger, scope(), itemDir, m("author", "L2", A), { seal_seq: seq, set_sha256: SET });
     expect(loadRunIsolation(itemDir, scope(), ledger.readVerified()).stages.author).toBeNull();
   });
 });
