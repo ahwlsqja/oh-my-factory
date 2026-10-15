@@ -114,6 +114,12 @@ describe("HANDOFF_ROUTES", () => {
     }
   });
 
+  it("offers scenarios_need_review no rerun, because a rerun reuses the standing seal and stops again", () => {
+    const options = HANDOFF_ROUTES.scenarios_need_review.options(WORK);
+    expect(options).toEqual([`omf work show ${WORK}`, `omf veto ${WORK}`]);
+    expect(options.join("\n")).not.toContain(" run ");
+  });
+
   it("names a command that runs the line again only with the 'after M3h' prefix", () => {
     for (const code of W_REASON_CODES) {
       for (const option of HANDOFF_ROUTES[code].options(WORK)) {

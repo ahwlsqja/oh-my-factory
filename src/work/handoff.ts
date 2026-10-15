@@ -84,8 +84,8 @@ export const HANDOFF_ROUTES: Readonly<Record<ReasonCode, Route>> = {
   scenarios_need_review: {
     j: "J3",
     state: "The sealed scenarios, or what they were written from, need a person before the line can go on.",
-    question: "Should the scenarios be repaired or rewritten, or should the item be dropped?",
-    options: retry,
+    question: "The line cannot go on with these scenarios, because a rerun reuses the standing seal. Should the item be dropped?",
+    options: review,
   },
   audit_flag: {
     j: "J4",
