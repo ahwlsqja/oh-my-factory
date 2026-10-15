@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { appendFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { EXIT, exitFor } from "../../src/cli/exit.js";
@@ -26,13 +26,24 @@ describe("exit code module", () => {
 
 type Place = "no-git" | "git-uninitialized" | "initialized";
 
+/** PATH with a reachable fake docker in front, so doctor results do not depend on the host's Docker. */
+function pathWithDocker(): string {
+  const bin = makeTempDir("omf-docker-");
+  writeFileSync(
+    join(bin, "docker"),
+    '#!/bin/sh\nif [ "$1" = "info" ]; then echo 29.0.0; else echo "Docker version 29.0.0"; fi\n',
+  );
+  chmodSync(join(bin, "docker"), 0o755);
+  return `${bin}:${process.env.PATH ?? ""}`;
+}
+
 /** Runs `args` in the given place. A fresh repository and home each time, so rows do not influence each other. */
 function run(place: Place, args: string[]): number {
   const home = makeTempDir("omf-home-");
   if (place === "no-git") return omf(args, makeTempDir(), home).code;
   const repo = makeGitRepo();
   if (place === "initialized") omf(["init"], repo, home);
-  return omf(args, repo, home).code;
+  return omf(args, repo, home, args[0] === "doctor" ? { PATH: pathWithDocker() } : undefined).code;
 }
 
 // [command, no git repository, git repository not initialized, initialized project with nothing else created]
@@ -97,9 +108,10 @@ describe("exit codes of init, doctor and ledger verify by condition", () => {
   it("doctor: 1 when it finds a problem (finding problems is its job), 0 once the project is initialized", () => {
     const repo = makeGitRepo();
     const home = makeTempDir("omf-home-");
-    expect(omf(["doctor"], repo, home).code).toBe(1);
+    const withDocker = { PATH: pathWithDocker() };
+    expect(omf(["doctor"], repo, home, withDocker).code).toBe(1);
     omf(["init"], repo, home);
-    expect(omf(["doctor"], repo, home).code).toBe(0);
+    expect(omf(["doctor"], repo, home, withDocker).code).toBe(0);
   });
 
   it("doctor: a missing agent CLI is only a warning (0), and --strict makes it a problem (1)", () => {

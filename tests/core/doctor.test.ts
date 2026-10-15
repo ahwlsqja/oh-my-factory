@@ -103,18 +103,18 @@ describe("runDoctor", () => {
     for (const warning of report.warning_details) expect(warning.fix).toMatch(/\S/);
   });
 
-  it("warns about an unreachable docker daemon", () => {
+  it("reports an unreachable docker daemon as a problem", () => {
     const repo = makeGitRepo();
     const home = makeTempDir("omf-home-");
     const e = env(home, stubBin({ dockerDaemon: false }));
     initProject(repo, e);
     const report = runDoctor(repo, e);
-    expect(report.ok).toBe(true);
-    expect(report.warnings).toEqual(["docker daemon is not reachable"]);
-    expect(report.warning_details[0]?.fix).toContain("docker info");
+    expect(report.ok).toBe(false);
+    expect(report.problems).toEqual(["docker daemon is not reachable"]);
+    expect(report.problem_details[0]?.fix).toContain("docker info");
   });
 
-  it("--strict promotes every warning to a problem, as before warnings existed", () => {
+  it("--strict promotes the missing-tool warnings to problems", () => {
     const repo = makeGitRepo();
     const home = makeTempDir("omf-home-");
     const bin = makeTempDir("omf-bin-");
@@ -131,6 +131,19 @@ describe("runDoctor", () => {
     expect(report.problems).toEqual(
       expect.arrayContaining(["claude not found on PATH", "codex not found on PATH", "docker daemon is not reachable"]),
     );
+  });
+
+  it("--strict leaves a torn tail a warning and keeps the exit status ok", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const e = env(home, stubBin({ dockerDaemon: true }));
+    const dir = projectDir(repo, e);
+    initProject(repo, e);
+    appendFileSync(join(dir, "ledger.jsonl"), '{"schema_version":1,"se');
+    const report = runDoctor(repo, e, undefined, undefined, { strict: true });
+    expect(report.warnings).toContain(TORN_TAIL_WARNING);
+    expect(report.problems).not.toContain(TORN_TAIL_WARNING);
+    expect(report.ok).toBe(true);
   });
 
   it("a missing git is still a problem, and every problem has a fix line", () => {

@@ -192,7 +192,7 @@ async function probeAllInParallel(env: NodeJS.ProcessEnv): Promise<Probes> {
 }
 
 export interface DoctorOptions {
-  /** Promote every warning to a problem: the behavior before warnings existed. */
+  /** Promote the missing-tool warnings to problems; a torn ledger tail stays a warning. */
   strict?: boolean;
 }
 
@@ -236,6 +236,8 @@ function buildReport(
   const warn = (message: string, fix: string, neededBy: readonly string[] = []): void => {
     warningDetails.push({ message, fix, needed_by: [...neededBy] });
   };
+  // A torn tail never failed doctor before warnings existed, so `--strict` leaves it a warning.
+  const isPromotable = (finding: Finding): boolean => finding.message !== TORN_TAIL_WARNING;
 
   const { git, docker, daemon, claude, codex } = probes;
   if (!git.found) problem("git not found on PATH", "install git and make sure it is on PATH");
@@ -246,10 +248,9 @@ function buildReport(
       NEEDED_BY.docker,
     );
   } else if (!daemon) {
-    warn(
+    problem(
       "docker daemon is not reachable",
       "start Docker (for example Docker Desktop) and check it with: docker info",
-      NEEDED_BY.docker,
     );
   }
   for (const [name, tool] of [
@@ -328,8 +329,8 @@ function buildReport(
   }
 
   const strict = options.strict === true;
-  const problemList = strict ? [...problemDetails, ...warningDetails] : problemDetails;
-  const warningList = strict ? [] : warningDetails;
+  const problemList = strict ? [...problemDetails, ...warningDetails.filter(isPromotable)] : problemDetails;
+  const warningList = strict ? warningDetails.filter((finding) => !isPromotable(finding)) : warningDetails;
   const reported: PreflightReport["tools"] = { git, docker: { ...docker, daemon }, claude, codex };
   const report: PreflightReport = {
     schema_version: 1,
