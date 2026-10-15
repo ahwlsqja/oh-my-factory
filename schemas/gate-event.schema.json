@@ -80,7 +80,7 @@
         "run_id": { "$ref": "#/$defs/run_id" },
         "stage": { "enum": ["author", "implementer", "sut", "harness"] },
         "mode": { "enum": ["container", "host"] },
-        "level": { "enum": ["L1", "L2", "L3"] },
+        "level": { "enum": ["L1", "L2"] },
         "violations": {
           "type": "array",
           "uniqueItems": true,
@@ -107,7 +107,10 @@
             }
           ]
         }
-      }
+      },
+      "allOf": [
+        { "if": { "properties": { "level": { "const": "L2" } }, "required": ["level"] }, "then": { "properties": { "violations": { "type": "array", "maxItems": 0 }, "mode": { "const": "container" } } } }
+      ]
     }
   },
   "oneOf": [

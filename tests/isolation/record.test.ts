@@ -89,6 +89,16 @@ describe("isolationMeasuredEvent", () => {
     });
   });
 
+  it("refuses a measurement that contradicts itself", () => {
+    const l2WithViolation = { ...m("sut", "L2", A), violations: ["privileged" as ViolationCode] };
+    const l2OnHost = { ...m("sut", "L2", A), mode: "host" as const };
+    const l3 = { ...m("sut", "L2", A), level: "L3" as unknown as IsolationLevel };
+    for (const bad of [l2WithViolation, l2OnHost, l3]) {
+      expect(() => isolationMeasuredEvent(scope(), bad, null)).toThrow(/invalid isolation.measured event/);
+    }
+    expect(() => isolationMeasuredEvent(scope(), { ...m("sut", "L1", A), mode: "host" }, null)).not.toThrow();
+  });
+
   it("refuses a malformed id before anything is written", () => {
     expect(() => isolationMeasuredEvent({ ...scope(), goal_id: "G 1" }, m("sut", "L2", A), null)).toThrow(
       /invalid isolation.measured event/,
@@ -101,7 +111,7 @@ describe("isolationMeasuredEvent", () => {
     };
     const props = schema.$defs.isolation_measured_payload.properties;
     expect(props.stage?.enum).toEqual([...ISOLATION_STAGES]);
-    expect(props.level?.enum).toEqual([...ISOLATION_LEVELS]);
+    expect(props.level?.enum).toEqual(["L1", "L2"]);
     expect(props.mode?.enum).toEqual(["container", "host"]);
     expect(props.violations?.items?.enum).toEqual([...VIOLATION_CODES]);
   });
