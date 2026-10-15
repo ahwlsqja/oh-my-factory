@@ -307,6 +307,24 @@ describe("main", () => {
     expect(JSON.parse(readFileSync(evidenceFile, "utf8")).runs).toEqual([RECORD]);
   });
 
+  it("--record stamps the commit read before the run, not the one found after it", () => {
+    const { deps, calls, evidenceFile } = harness();
+    const run = deps.run;
+    let reads = 0;
+    deps.run = (command, args, options) => {
+      if (command === "git" && args[0] === "rev-parse") {
+        reads += 1;
+        calls.push("git rev-parse");
+        return { status: 0, stdout: `${(reads === 1 ? "a" : "b").repeat(40)}\n`, stderr: "" };
+      }
+      return run(command, args, options);
+    };
+    expect(script.main(["--record"], {}, deps)).toBe(EXIT.ok);
+    expect(reads).toBe(1);
+    expect(calls.indexOf("git rev-parse")).toBeLessThan(calls.findIndex((call) => call.startsWith("colima start")));
+    expect(JSON.parse(readFileSync(evidenceFile, "utf8")).runs).toEqual([RECORD]);
+  });
+
   it("--record writes nothing when the tests failed", () => {
     const { deps, evidenceFile } = harness({ vitest: { status: 1 } });
     expect(script.main(["--record"], {}, deps)).toBe(EXIT.failed);

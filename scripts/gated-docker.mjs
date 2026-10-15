@@ -132,8 +132,7 @@ function refuse(deps, message) {
   return EXIT.refused;
 }
 
-function record(deps, testEnv, reportFile) {
-  const head = deps.run("git", ["rev-parse", "HEAD"], { cwd: deps.root }).stdout.trim();
+function record(deps, testEnv, reportFile, head) {
   const info = deps.run("docker", ["--context", CONTEXT, "info", "--format", "{{.ServerVersion}} {{.Architecture}}"], {
     env: { PATH: testEnv.PATH, DOCKER_CONFIG: testEnv.DOCKER_CONFIG },
   });
@@ -177,9 +176,14 @@ export function main(argv, env, deps) {
   ]) {
     if (deps.run(tool, probe, {}).status !== 0) return refuse(deps, `${tool} is not installed or does not run`);
   }
+  // The commit is read together with the clean-tree check, before the run: the record names the code that was tested.
+  let head = "";
   if (args.record) {
     const tree = deps.run("git", ["status", "--porcelain"], { cwd: deps.root });
     if (tree.status !== 0 || tree.stdout.trim() !== "") return refuse(deps, "--record needs a clean working tree");
+    const read = deps.run("git", ["rev-parse", "HEAD"], { cwd: deps.root });
+    head = read.stdout.trim();
+    if (read.status !== 0 || head === "") return refuse(deps, "--record could not read the current commit");
   }
 
   const plan = colimaPlan();
@@ -214,7 +218,7 @@ export function main(argv, env, deps) {
       { cwd: deps.root, env: testEnv, inherit: true },
     );
     if (vitest.status !== 0) return EXIT.failed;
-    return args.record ? record(deps, testEnv, reportFile) : EXIT.ok;
+    return args.record ? record(deps, testEnv, reportFile, head) : EXIT.ok;
   } finally {
     exec(plan.stop);
     if (previous !== "" && previous !== CONTEXT) {
