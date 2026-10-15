@@ -48,6 +48,8 @@ describe("E2-w-seal-canary-no-leak", () => {
       .map((line) => {
         const args = line.split(" ");
         const run = omf(args[0] === "decide" ? [...args.slice(0, 2), l.f.workId, ...args.slice(2)] : args, l.f.fx.repo, l.f.fx.home);
+        // A refusal prints little, so a non-zero exit would pass the no-leak checks below for nothing.
+        expect(run.code, `${line} exits 0`).toBe(0);
         return `${run.stdout}\n${run.stderr}`;
       })
       .join("\n");
