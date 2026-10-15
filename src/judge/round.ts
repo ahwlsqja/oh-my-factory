@@ -1,0 +1,316 @@
+import { goldenFor } from "../container/golden.js";
+import { digestOf, type PinnedImage } from "../container/image-ref.js";
+import { createMeasured, type MeasureDeps, NotGoldenError } from "../container/measure.js";
+import type { ContainerRuntime, ImageInfo } from "../container/runtime.js";
+import { type ContainerSpec, containerName, type OwnedLabels, type TmpfsSpec } from "../container/spec.js";
+import { registerCleanup } from "../core/cleanup-registry.js";
+import type { JudgeConfig } from "../core/config.js";
+import type { DecisionClass } from "../decision/types.js";
+import type { ScenarioRunner, StepLimits } from "../scenario/runner.js";
+import type { ScenarioSplit, StoredKind } from "../scenario/types.js";
+import { createHarnessClient, type HarnessSet, type HarnessVerdict } from "./harness-protocol.js";
+import { createContainerScenarioRunner } from "./relay.js";
+
+const MAX_OUTPUT_BYTES = 1024 * 1024;
+type Outcome = "pass" | "fail" | "error";
+/** Observation outcomes the harness scores `error`: a refused or faulty step is never evidence about the candidate. */
+const FAULTS = new Set(["timeout", "output_limit", "error", "refused"]);
+
+export interface RoundScenario {
+  scenario_ref: string;
+  split: ScenarioSplit;
+  kind: StoredKind;
+  category: DecisionClass;
+  set: HarnessSet["scenarios"][number];
+}
+
+/** The images one round runs on. Built by the S4 station; this task only reads it. */
+export interface ImageLease {
+  sut: ImageInfo;
+  harness: ImageInfo;
+  harness_context_sha256: string;
+  sut_base: PinnedImage;
+  harness_base: PinnedImage;
+  labels: OwnedLabels;
+}
+
+export interface ScenarioTally {
+  scenario_ref: string;
+  category: DecisionClass;
+  kind: StoredKind;
+  outcomes: Outcome[];
+  verdict: "pass" | "fail" | "flaky" | "error";
+}
+
+export interface RoundVerdict {
+  phase: "train" | "test";
+  k: number;
+  candidate_sha: string;
+  tallies: ScenarioTally[];
+  /** Behavior scenarios only. */
+  counts: { total: number; pass: number; fail: number; flaky: number; error: number };
+  /** Contradiction canaries only: `rejected` counts the canaries the candidate failed in every rep (the good outcome). */
+  contradiction: { scenarios: number; rejected: number };
+  harness_context_sha256: string;
+  sut_base_digest: string;
+  harness_base_digest: string;
+}
+
+export type JudgeRoundCode = "set_invalid" | "no_scenarios" | "round_error" | "verdict_mismatch";
+/** The message is the code only: no scenario text, path or container output can reach a log through it. */
+export class JudgeRoundError extends Error {
+  constructor(
+    readonly code: JudgeRoundCode,
+    options?: ErrorOptions,
+  ) {
+    super(code, options);
+    this.name = "JudgeRoundError";
+  }
+}
+
+/**
+ * All reps agree: pass or fail. Both seen: flaky (the scenario is not a verdict, spec 5.5). Any `error` rep, and no rep at all,
+ * is `error`: an empty list never reads as a pass.
+ */
+export function scenarioVerdict(outcomes: readonly Outcome[]): ScenarioTally["verdict"] {
+  if (outcomes.length === 0 || outcomes.includes("error")) return "error";
+  const passes = outcomes.filter((outcome) => outcome === "pass").length;
+  if (passes === outcomes.length) return "pass";
+  return passes === 0 ? "fail" : "flaky";
+}
+
+function specFor(
+  role: "sut" | "harness",
+  image: ImageInfo,
+  labels: OwnedLabels,
+  serial: number,
+  config: JudgeConfig,
+): ContainerSpec {
+  const own: TmpfsSpec =
+    role === "sut"
+      ? { destination: "/scratch", size_mb: config.scratch_tmpfs_mb, exec: false, owned: true }
+      : { destination: "/state", size_mb: config.state_tmpfs_mb, exec: false, owned: true };
+  const owned: OwnedLabels = { ...labels, role };
+  return {
+    name: containerName(owned, serial),
+    image: image.id,
+    labels: owned,
+    tmpfs: [{ destination: "/tmp", size_mb: config.tmp_tmpfs_mb, exec: false, owned: false }, own],
+    limits: { memory_mb: config.memory_mb, cpus: config.cpus, pids: config.pids_limit },
+  };
+}
+
+function assertSet(scenarios: readonly RoundScenario[]): void {
+  const refs = new Set(scenarios.map((scenario) => scenario.scenario_ref));
+  const consistent = scenarios.every(
+    (scenario) => scenario.set.scenario_ref === scenario.scenario_ref && scenario.set.steps.length > 0,
+  );
+  if (refs.size !== scenarios.length || !consistent) throw new JudgeRoundError("set_invalid");
+}
+
+const sameInvoke = (
+  a: { argv: readonly string[]; stdin: string },
+  b: { argv: readonly string[]; stdin: string },
+): boolean =>
+  a.stdin === b.stdin && a.argv.length === b.argv.length && a.argv.every((element, index) => element === b.argv[index]);
+
+interface RunRecord {
+  scenario_ref: string;
+  rep: number;
+  outcome: Outcome;
+  steps_passed: number;
+  steps_total: number;
+}
+
+type Harness = ReturnType<typeof createHarnessClient>;
+
+/**
+ * One (scenario, rep): ask the harness for the first step, relay it to a fresh SUT container, give the observation back
+ * and follow what the harness says. The host keeps its own record of the result from the `step_pass` replies it saw, so the
+ * final verdict can be checked against it. Anything the harness says that the host's own set contradicts (a different step,
+ * a step after a failure, a missing next step) is `verdict_mismatch`.
+ */
+async function relayOne(
+  client: Harness,
+  runner: ScenarioRunner,
+  scenario: RoundScenario,
+  rep: number,
+  limits: StepLimits,
+): Promise<RunRecord> {
+  const { steps } = scenario.set;
+  const ref = scenario.scenario_ref;
+  const begin = await client.begin(ref, rep);
+  const first = steps[0];
+  if (begin.steps_total !== steps.length || first === undefined || !sameInvoke(begin.invoke, first.invoke)) {
+    throw new JudgeRoundError("verdict_mismatch");
+  }
+  const session = await runner.openScenario({ kind: "candidate", handle: ref });
+  let invoke = begin.invoke;
+  let index = 0;
+  let passed = 0;
+  let outcome: Outcome = "pass";
+  try {
+    for (;;) {
+      const observation = await session.runStep({ argv: invoke.argv, stdin: invoke.stdin }, limits);
+      const reply = await client.observe(ref, rep, index, observation);
+      if (reply.step_pass) passed += 1;
+      else outcome = FAULTS.has(observation.outcome) ? "error" : "fail";
+      const wanted = steps[index + 1];
+      if (!reply.step_pass || wanted === undefined) {
+        if (reply.next !== null) throw new JudgeRoundError("verdict_mismatch");
+        break;
+      }
+      if (reply.next === null || !sameInvoke(reply.next, wanted.invoke)) throw new JudgeRoundError("verdict_mismatch");
+      invoke = reply.next;
+      index += 1;
+    }
+  } finally {
+    await session.close();
+  }
+  return { scenario_ref: ref, rep, outcome, steps_passed: passed, steps_total: steps.length };
+}
+
+/** E7d: the verdict is evidence only when it matches, run for run, what the host saw. No verdict, or a different one, is never a pass. */
+function crossCheck(verdict: HarnessVerdict, expected: readonly RunRecord[]): void {
+  if (verdict.runs.length !== expected.length) throw new JudgeRoundError("verdict_mismatch");
+  for (const want of expected) {
+    const got = verdict.runs.find((run) => run.scenario_ref === want.scenario_ref && run.rep === want.rep);
+    if (
+      got === undefined ||
+      got.outcome !== want.outcome ||
+      got.steps_passed !== want.steps_passed ||
+      got.steps_total !== want.steps_total
+    ) {
+      throw new JudgeRoundError("verdict_mismatch");
+    }
+  }
+}
+
+function summarize(
+  input: {
+    scenarios: readonly RoundScenario[];
+    phase: "train" | "test";
+    k: number;
+    candidate_sha: string;
+    images: ImageLease;
+  },
+  expected: readonly RunRecord[],
+): RoundVerdict {
+  const tallies: ScenarioTally[] = input.scenarios.map((scenario) => {
+    const outcomes = expected
+      .filter((run) => run.scenario_ref === scenario.scenario_ref)
+      .sort((a, b) => a.rep - b.rep)
+      .map((run) => run.outcome);
+    return {
+      scenario_ref: scenario.scenario_ref,
+      category: scenario.category,
+      kind: scenario.kind,
+      outcomes,
+      verdict: scenarioVerdict(outcomes),
+    };
+  });
+  const behavior = tallies.filter((tally) => tally.kind === "behavior");
+  const canaries = tallies.filter((tally) => tally.kind === "contradiction_canary");
+  const count = (list: readonly ScenarioTally[], verdict: ScenarioTally["verdict"]): number =>
+    list.filter((tally) => tally.verdict === verdict).length;
+  return {
+    phase: input.phase,
+    k: input.k,
+    candidate_sha: input.candidate_sha,
+    tallies,
+    counts: {
+      total: behavior.length,
+      pass: count(behavior, "pass"),
+      fail: count(behavior, "fail"),
+      flaky: count(behavior, "flaky"),
+      error: count(behavior, "error"),
+    },
+    contradiction: { scenarios: canaries.length, rejected: count(canaries, "fail") },
+    harness_context_sha256: input.images.harness_context_sha256,
+    sut_base_digest: digestOf(input.images.sut_base),
+    harness_base_digest: digestOf(input.images.harness_base),
+  };
+}
+
+export interface JudgeRoundInput {
+  runtime: ContainerRuntime;
+  measure: MeasureDeps;
+  config: JudgeConfig;
+  images: ImageLease;
+  scenarios: readonly RoundScenario[];
+  phase: "train" | "test";
+  candidate_sha: string;
+  /** The contract's `run` argv (see the relay). */
+  run: readonly string[];
+  /** Reserved for the host-side build contexts; nothing is staged or mounted by the round itself. */
+  stageRoot: string;
+  forbidden: readonly string[];
+  round: number;
+  now: () => Date;
+}
+
+/**
+ * One round of the two-container judge (spec 5.5, M3f-D4/D5/D7/D8). One harness container per round holds the scenarios
+ * (loaded over stdin, so no path is mounted) and judges; for each rep and each scenario a NEW SUT container is created,
+ * measured against its golden before it starts, used for the steps of that scenario only and removed before the next one is
+ * created, so a candidate cannot carry a file, a background process or a dead PID 1 from one scenario or rep into another.
+ * A container that is not golden is never started (NotGoldenError passes through for the station to map to J7).
+ *
+ * The harness verdict is then checked against the host's own record. Any scenario that ends `error` (a runtime fault) fails
+ * the whole round with `round_error`; a round with no scenarios is `no_scenarios`, never a pass. Containers are removed on
+ * success, on any failure and, through the shared cleanup registry, on SIGINT and SIGTERM.
+ */
+export async function runJudgeRound(input: JudgeRoundInput): Promise<RoundVerdict> {
+  const { runtime, config, images, scenarios } = input;
+  if (scenarios.length === 0) throw new JudgeRoundError("no_scenarios");
+  assertSet(scenarios);
+  const labels: OwnedLabels = { ...images.labels, round: input.round };
+  const limits: StepLimits = { timeoutMs: config.step_timeout_ms, maxOutputBytes: MAX_OUTPUT_BYTES };
+  const live = new Set<string>();
+  const unregister = registerCleanup(() => runtime.removeAllSync([...live]));
+  let serial = 0;
+  const create = async (role: "sut" | "harness", image: ImageInfo) => {
+    serial += 1;
+    const spec = specFor(role, image, labels, serial, config);
+    live.add(spec.name); // before the create: a signal in the middle of it still removes the name
+    return createMeasured(input.measure, spec, goldenFor({ role, image, forbidden: input.forbidden }));
+  };
+  try {
+    const harness = await create("harness", images.harness);
+    const client = createHarnessClient(runtime, harness.handle, limits);
+    await client.load({ schema_version: 1, scenarios: scenarios.map((scenario) => scenario.set) });
+    const runner = createContainerScenarioRunner({
+      runtime,
+      run: input.run,
+      acquire: async () => {
+        const sut = await create("sut", images.sut);
+        return {
+          handle: sut.handle,
+          release: async () => {
+            await runtime.remove(sut.handle);
+            live.delete(sut.handle.name);
+          },
+        };
+      },
+    });
+    const expected: RunRecord[] = [];
+    for (let rep = 1; rep <= config.k; rep += 1) {
+      for (const scenario of scenarios) expected.push(await relayOne(client, runner, scenario, rep, limits));
+    }
+    crossCheck(await client.verdict(), expected);
+    await runtime.remove(harness.handle);
+    live.delete(harness.handle.name);
+    const verdict = summarize(
+      { scenarios, phase: input.phase, k: config.k, candidate_sha: input.candidate_sha, images },
+      expected,
+    );
+    if (verdict.tallies.some((tally) => tally.verdict === "error")) throw new JudgeRoundError("round_error");
+    return verdict;
+  } catch (error) {
+    if (error instanceof JudgeRoundError || error instanceof NotGoldenError) throw error;
+    throw new JudgeRoundError("round_error", { cause: error });
+  } finally {
+    if (live.size > 0) runtime.removeAllSync([...live]);
+    unregister();
+  }
+}
