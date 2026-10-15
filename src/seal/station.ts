@@ -1,5 +1,8 @@
 import type { SealFailureCode } from "../scenario/events.js";
-import type { StopRoute } from "../scenario/gate2-adapter.js";
+import { GATE_ERROR_REASON, type Gate2Outcome, type StopRoute, evaluateGate2Step } from "../scenario/gate2-adapter.js";
+import type { ExposureCount, J3SamplingHook } from "../scenario/gate2.js";
+import type { ScenarioRunner, StepLimits } from "../scenario/runner.js";
+import type { SealFeedback } from "../scenario/types.js";
 import { assertLineSafe, guardRefusal, locationEnv } from "../vault/line-guard.js";
 import { type SealDeps, type SealStageResult, runSealStage } from "./seal.js";
 
@@ -61,4 +64,51 @@ export async function runS2Station(deps: S2StationDeps): Promise<S2Outcome> {
     return { step: { next: "stop", route: "J7", code }, stage: null };
   }
   return { step: stepOf(stage), stage };
+}
+
+export interface LinePassDeps extends S2StationDeps {
+  runner: ScenarioRunner;
+  limits?: StepLimits;
+  sample?: J3SamplingHook;
+  exposureCount?: ExposureCount;
+}
+
+/**
+ * The result of one pass. `back_to_S2` carries the feedback for the next S2 (decision ids and counts only);
+ * `retry_s2` is an author failure; `stop` ends the line at the named route. M3b2's sequencer repeats this
+ * unit, owns the visit caps and persists the stops (it is the only caller that loops).
+ */
+export type LinePass =
+  | { status: "pass"; seal: "stored" | "reused"; not_run: string[]; gate2: Gate2Outcome }
+  | { status: "back_to_S2"; seal: "stored" | "reused"; feedback: SealFeedback | null; gate2: Gate2Outcome }
+  | { status: "retry_s2"; code: SealFailureCode }
+  | { status: "stop"; route: StopRoute; code: string };
+
+/**
+ * One S2 then GATE-2 pass, guarded at entry and again before each stage (the stage functions run the guard
+ * themselves, so a hostile file that appears between S2 and GATE-2 is caught). Nothing here loops and nothing
+ * here knows M3b2: it takes a location, a runner and an author, and returns what to do next.
+ */
+export async function runS2ThenGate2(deps: LinePassDeps): Promise<LinePass> {
+  const env = deps.env ?? locationEnv(deps.location);
+  try {
+    assertLineSafe(deps.location, env);
+  } catch (err) {
+    const code = guardRefusal(err);
+    if (code === null) throw err;
+    return { status: "stop", route: "J7", code };
+  }
+  const s2 = await runS2Station({ ...deps, env });
+  const step = s2.step;
+  if (step.next === "retry_s2") return { status: "retry_s2", code: step.code };
+  if (step.next === "stop") return { status: "stop", route: step.route, code: step.code };
+  const gate2 = await evaluateGate2Step({
+    ...deps,
+    env,
+    now: deps.now(),
+    preflight: () => assertLineSafe(deps.location, env),
+  });
+  if (gate2.verdict === "pass") return { status: "pass", seal: step.seal, not_run: gate2.not_run, gate2 };
+  if (gate2.next === "back_to_S2") return { status: "back_to_S2", seal: step.seal, feedback: gate2.feedback, gate2 };
+  return { status: "stop", route: gate2.stop_route ?? "J7", code: gate2.reasons[0] ?? GATE_ERROR_REASON };
 }

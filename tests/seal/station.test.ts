@@ -1,9 +1,10 @@
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import type { ScenarioRunner } from "../../src/scenario/runner.js";
 import { createCommandAuthor } from "../../src/seal/session.js";
-import { runS2Station } from "../../src/seal/station.js";
+import { runS2Station, runS2ThenGate2 } from "../../src/seal/station.js";
 import { ledgerEvents } from "../helpers/enforcement-goal.js";
-import { ROUND2, appendWorkStarted, plantCanary, prompts, sealDeps, sealStored, setupLine, writeYaml } from "../helpers/line-fixture.js";
+import { ROUND2, appendWorkStarted, passDeps, plantCanary, prompts, sealDeps, sealStored, setupLine, writeYaml } from "../helpers/line-fixture.js";
 
 describe("runS2Station", () => {
   it("stores a set and hands over to GATE-2", async () => {
@@ -57,5 +58,39 @@ describe("runS2Station", () => {
     expect(out.stage).toBeNull();
     expect(existsSync(l.promptLog)).toBe(false);
     expect(ledgerEvents(l.f.fx, "seal.requested")).toHaveLength(0);
+  });
+});
+
+describe("runS2ThenGate2", () => {
+  it("passes a set that links every resolved non-quantitative decision, with the quantitative one not_run", async () => {
+    const l = setupLine();
+    const out = await runS2ThenGate2(passDeps(l, writeYaml(l, "r2.yaml", ROUND2)));
+    expect(out).toMatchObject({ status: "pass", seal: "stored", not_run: ["d-latency"] });
+    expect(ledgerEvents(l.f.fx, "gate2.evaluated")).toHaveLength(1);
+  });
+
+  it("stops at entry on sealed material in the repository: no author call, no event", async () => {
+    const l = setupLine();
+    plantCanary(l.f.fx.repo);
+    const out = await runS2ThenGate2(passDeps(l, writeYaml(l, "r2.yaml", ROUND2)));
+    expect(out).toEqual({ status: "stop", route: "J7", code: "sealed_material_in_repo" });
+    expect(prompts(l)).toHaveLength(0);
+    expect(ledgerEvents(l.f.fx, "seal.requested")).toHaveLength(0);
+    expect(ledgerEvents(l.f.fx, "gate2.evaluated")).toHaveLength(0);
+  });
+
+  it("stops at J7 with gate_error when GATE-2 throws, and records no gate2.evaluated", async () => {
+    const l = setupLine();
+    const candidate: ScenarioRunner = {
+      id: "candidate-double",
+      executes: "candidate",
+      openScenario: async () => {
+        throw new Error("must not open a session");
+      },
+    };
+    const out = await runS2ThenGate2({ ...passDeps(l, writeYaml(l, "r2.yaml", ROUND2)), runner: candidate });
+    expect(out).toEqual({ status: "stop", route: "J7", code: "gate_error" });
+    expect(ledgerEvents(l.f.fx, "seal.completed")).toHaveLength(1);
+    expect(ledgerEvents(l.f.fx, "gate2.evaluated")).toHaveLength(0);
   });
 });
