@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { writeFileSync } from "node:fs";
-import { delimiter, join, resolve } from "node:path";
+import { join } from "node:path";
 import { expect, it } from "vitest";
 import { createDockerRuntime } from "../../src/container/docker-cli.js";
 import { containerSpecFor, forbiddenPaths, goldenFor } from "../../src/container/golden.js";
@@ -14,14 +14,9 @@ import { Ledger } from "../../src/core/ledger.js";
 import { loadRunIsolation } from "../../src/isolation/record.js";
 import { makeTempDir } from "../helpers/tmp.js";
 import { setupVault } from "../helpers/vault-project.js";
-import { GATED_CONTEXT, describeGated, gatedDockerConfig } from "./helpers.js";
+import { GATED_CONTEXT, describeGated, gatedDockerConfig, gatedPath } from "./helpers.js";
 
 const WORK = "w-0123456789ab";
-/** The caller's PATH without the offline docker shim that tests/global-setup.ts puts first; a gated test needs the real client. */
-const REAL_PATH = (process.env.PATH ?? "")
-  .split(delimiter)
-  .filter((dir) => resolve(dir) !== resolve("tests", "helpers", "bin-shims"))
-  .join(delimiter);
 const MARKER = `omf-vault-marker-${randomBytes(8).toString("hex")}`;
 
 /**
@@ -33,7 +28,7 @@ function baseImage(config: string): PinnedImage {
   if (fromEnv !== undefined && fromEnv !== "") return pinnedImage(fromEnv);
   const docker = (args: string[]) =>
     spawnSync("docker", ["--context", GATED_CONTEXT, ...args], {
-      env: { PATH: REAL_PATH, DOCKER_CONFIG: config },
+      env: { PATH: gatedPath(), DOCKER_CONFIG: config },
       encoding: "utf8",
       timeout: 300_000,
     });
@@ -48,7 +43,7 @@ describeGated("G-real-isolation-probe", () => {
     const runtime = createDockerRuntime({
       context: GATED_CONTEXT,
       dockerConfig: config,
-      env: { PATH: REAL_PATH, HOME: makeTempDir("omf-gated-home-") },
+      env: { PATH: gatedPath(), HOME: makeTempDir("omf-gated-home-") },
     });
     const base = baseImage(config);
     const image = await runtime.ensureImage(base);
@@ -123,7 +118,7 @@ describeGated("G-real-isolation-probe", () => {
         "docker",
         ["--context", GATED_CONTEXT, "ps", "-a", "-q", "--filter", `label=omf.run=${runId}`],
         {
-          env: { PATH: REAL_PATH, DOCKER_CONFIG: config },
+          env: { PATH: gatedPath(), DOCKER_CONFIG: config },
           encoding: "utf8",
         },
       );

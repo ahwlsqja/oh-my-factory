@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { makeTempDir } from "../helpers/tmp.js";
 import {
@@ -10,6 +11,7 @@ import {
   findLeaks,
   gatedDocker,
   gatedEnabled,
+  gatedPath,
   scrubInspect,
 } from "./helpers.js";
 
@@ -24,6 +26,13 @@ function configWith(...names: string[]): string {
 }
 
 describe("gated helpers", () => {
+  it("gatedPath drops the offline docker shim and keeps every other PATH entry in order", () => {
+    const shim = fileURLToPath(new URL("../helpers/bin-shims", import.meta.url));
+    const path = ["/opt/homebrew/bin", shim, "/usr/bin", `${shim}/`].join(delimiter);
+    expect(gatedPath({ PATH: path })).toBe(["/opt/homebrew/bin", "/usr/bin"].join(delimiter));
+    expect(gatedPath({})).toBe("");
+  });
+
   it("the switch is exactly OMF_GATED=docker", () => {
     expect(gatedEnabled({})).toBe(false);
     expect(gatedEnabled({ OMF_GATED: "1" })).toBe(false);

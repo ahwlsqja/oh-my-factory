@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
-import { join } from "node:path";
+import { delimiter, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe } from "vitest";
 
 /**
@@ -11,6 +12,20 @@ import { describe } from "vitest";
  * any other context, so a gated test cannot touch the default daemon or another profile by mistake.
  */
 export const GATED_CONTEXT = "colima-omf-m3f";
+
+/** The offline docker shim that tests/global-setup.ts puts first on PATH for every vitest worker, gated runs included. */
+const SHIM_DIR = fileURLToPath(new URL("../helpers/bin-shims", import.meta.url));
+
+/**
+ * The caller's PATH without the offline docker shim, so a gated test reaches the real docker client. The gated
+ * DOCKER_CONFIG still limits that client to the one context.
+ */
+export function gatedPath(env: NodeJS.ProcessEnv = process.env): string {
+  return (env.PATH ?? "")
+    .split(delimiter)
+    .filter((dir) => resolve(dir) !== SHIM_DIR)
+    .join(delimiter);
+}
 
 export class GatedRefusal extends Error {
   constructor(message: string) {
@@ -91,7 +106,7 @@ export function gatedDocker(
     throw new GatedRefusal("a gated call may not choose the context or the daemon");
   const { context, config } = assertGatedConfig();
   const result = spawnSync("docker", ["--context", context, ...args], {
-    env: { PATH: process.env.PATH ?? "", DOCKER_CONFIG: config },
+    env: { PATH: gatedPath(), DOCKER_CONFIG: config },
     input,
     encoding: "utf8",
   });
