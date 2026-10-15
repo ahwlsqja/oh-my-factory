@@ -3,42 +3,526 @@
   "title": "OMF gate, audit and isolation events (M3e)",
   "description": "Validates { type, payload } of the events M3e writes. Every string is an id, a gate line or a member of a closed list, so no gate output, path, canary or scenario text can enter.",
   "$defs": {
-    "goal_id": { "type": "string", "pattern": "^g-[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },
-    "work_id": { "type": "string", "pattern": "^w-[0-9a-f]{12}$" },
-    "run_id": { "type": "string", "pattern": "^r-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}$" },
-    "gate_name": { "enum": ["fast", "full", "deep"] },
+    "audit_completed_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goal_id",
+        "work_id",
+        "run_id",
+        "diff_files",
+        "diff_empty",
+        "tests_edited",
+        "tests_added",
+        "canary_status",
+        "canary_hits",
+        "judge_config_touched",
+        "judge_files_checked",
+        "high_risk_paths",
+        "projections_touched",
+        "special_entries",
+        "risk_declared",
+        "risk_effective",
+        "risk_rules",
+        "risk_raised",
+        "prove_status",
+        "prove_reason"
+      ],
+      "properties": {
+        "goal_id": {
+          "$ref": "#/$defs/goal_id"
+        },
+        "work_id": {
+          "$ref": "#/$defs/work_id"
+        },
+        "run_id": {
+          "$ref": "#/$defs/run_id"
+        },
+        "diff_files": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "diff_empty": {
+          "type": "boolean"
+        },
+        "tests_edited": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tests_added": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "canary_status": {
+          "enum": [
+            "scanned",
+            "not_run"
+          ]
+        },
+        "canary_hits": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "judge_config_touched": {
+          "type": "boolean"
+        },
+        "judge_files_checked": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "high_risk_paths": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "projections_touched": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "special_entries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "risk_declared": {
+          "enum": [
+            "normal",
+            "high"
+          ]
+        },
+        "risk_effective": {
+          "enum": [
+            "normal",
+            "high"
+          ]
+        },
+        "risk_rules": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "ci",
+              "auth",
+              "migration",
+              "test",
+              "goal-factory",
+              "lockfile",
+              "watched-path",
+              "extra",
+              "undeclared",
+              "unclassifiable"
+            ]
+          }
+        },
+        "risk_raised": {
+          "type": "boolean"
+        },
+        "prove_status": {
+          "enum": [
+            "PROVEN",
+            "FAILED",
+            "MISCONFIGURED",
+            "not_run"
+          ]
+        },
+        "prove_reason": {
+          "enum": [
+            "test-passed-without-fix",
+            "working-tree-not-clean",
+            "invalid-base-ref",
+            "base-not-ancestor",
+            "no-non-test-change",
+            "empty-revert-patch",
+            "revert-failed",
+            "baseline-test-failed",
+            "test-command-unrunnable",
+            "interrupted",
+            null
+          ]
+        }
+      }
+    },
+    "goal_id": {
+      "type": "string",
+      "pattern": "^g-[a-z0-9]+(-[a-z0-9]+)*$",
+      "maxLength": 80
+    },
+    "work_id": {
+      "type": "string",
+      "pattern": "^w-[0-9a-f]{12}$"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^r-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}$"
+    },
+    "gate_name": {
+      "enum": [
+        "fast",
+        "full",
+        "deep"
+      ]
+    },
     "gates_evaluated_payload": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["goal_id", "work_id", "run_id", "line", "status", "failing", "misconfigured", "reasons"],
+      "required": [
+        "goal_id",
+        "work_id",
+        "run_id",
+        "line",
+        "status",
+        "failing",
+        "misconfigured",
+        "reasons"
+      ],
       "properties": {
-        "goal_id": { "$ref": "#/$defs/goal_id" },
-        "work_id": { "$ref": "#/$defs/work_id" },
-        "run_id": { "$ref": "#/$defs/run_id" },
+        "goal_id": {
+          "$ref": "#/$defs/goal_id"
+        },
+        "work_id": {
+          "$ref": "#/$defs/work_id"
+        },
+        "run_id": {
+          "$ref": "#/$defs/run_id"
+        },
         "line": {
           "type": "string",
           "pattern": "^OMF_GATES: fast=(pass|fail|skip|empty) full=(pass|fail|skip|empty) deep=(pass|fail|skip|empty)$"
         },
-        "status": { "enum": ["GREEN", "RED", "MISCONFIGURED"] },
-        "failing": { "type": "array", "uniqueItems": true, "maxItems": 3, "items": { "$ref": "#/$defs/gate_name" } },
-        "misconfigured": { "type": "array", "uniqueItems": true, "maxItems": 3, "items": { "$ref": "#/$defs/gate_name" } },
+        "status": {
+          "enum": [
+            "GREEN",
+            "RED",
+            "MISCONFIGURED"
+          ]
+        },
+        "failing": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/gate_name"
+          }
+        },
+        "misconfigured": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/gate_name"
+          }
+        },
         "reasons": {
           "type": "array",
           "uniqueItems": true,
           "maxItems": 6,
-          "items": { "enum": ["line_absent", "line_duplicated", "line_malformed", "required_skipped", "required_empty", "no_required_gates"] }
+          "items": {
+            "enum": [
+              "line_absent",
+              "line_duplicated",
+              "line_malformed",
+              "required_skipped",
+              "required_empty",
+              "no_required_gates"
+            ]
+          }
         }
       }
+    },
+    "isolation_measured_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goal_id",
+        "work_id",
+        "run_id",
+        "stage",
+        "mode",
+        "level",
+        "violations",
+        "facts_sha256",
+        "author_scope"
+      ],
+      "properties": {
+        "goal_id": {
+          "$ref": "#/$defs/goal_id"
+        },
+        "work_id": {
+          "$ref": "#/$defs/work_id"
+        },
+        "run_id": {
+          "$ref": "#/$defs/run_id"
+        },
+        "stage": {
+          "enum": [
+            "author",
+            "implementer",
+            "sut",
+            "harness"
+          ]
+        },
+        "mode": {
+          "enum": [
+            "container",
+            "host"
+          ]
+        },
+        "level": {
+          "enum": [
+            "L1",
+            "L2"
+          ]
+        },
+        "violations": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 26,
+          "items": {
+            "enum": [
+              "no_container",
+              "docker_socket_mounted",
+              "docker_socket_present",
+              "privileged",
+              "cap_added",
+              "caps_not_dropped",
+              "host_network",
+              "network_not_none",
+              "host_pid",
+              "root_user",
+              "rootfs_writable",
+              "unexpected_mount",
+              "mount_not_read_only",
+              "forbidden_mount_source",
+              "unexpected_env_name",
+              "vendor_binary_present",
+              "credential_present",
+              "no_new_privileges_missing",
+              "security_opt_unconfined",
+              "device_mapped",
+              "host_ipc",
+              "host_uts",
+              "userns_host",
+              "volumes_from",
+              "sysctl_set",
+              "runtime_unexpected"
+            ]
+          }
+        },
+        "facts_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "author_scope": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "seal_seq",
+                "set_sha256"
+              ],
+              "properties": {
+                "seal_seq": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "set_sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "level": {
+                "const": "L2"
+              }
+            },
+            "required": [
+              "level"
+            ]
+          },
+          "then": {
+            "properties": {
+              "violations": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "mode": {
+                "const": "container"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "gate3_evaluated_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goal_id",
+        "work_id",
+        "run_id",
+        "passed",
+        "failed",
+        "route"
+      ],
+      "properties": {
+        "goal_id": {
+          "$ref": "#/$defs/goal_id"
+        },
+        "work_id": {
+          "$ref": "#/$defs/work_id"
+        },
+        "run_id": {
+          "$ref": "#/$defs/run_id"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "failed": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 10,
+          "items": {
+            "enum": [
+              "canary_hit",
+              "canary_not_scanned",
+              "judge_config_changed",
+              "judge_config_not_checked",
+              "contradiction_canary_passing",
+              "contradiction_canary_not_run",
+              "gate_line_misconfigured",
+              "gate_line_not_run",
+              "isolation_below_declared",
+              "isolation_unmeasured"
+            ]
+          }
+        },
+        "route": {
+          "enum": [
+            "none",
+            "J6",
+            "J7"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "passed": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "failed": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "route": {
+                "const": "none"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "passed": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "failed": {
+                "type": "array",
+                "minItems": 1
+              },
+              "route": {
+                "enum": [
+                  "J6",
+                  "J7"
+                ]
+              }
+            }
+          }
+        }
+      ]
     }
   },
   "oneOf": [
     {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "payload"],
+      "required": [
+        "type",
+        "payload"
+      ],
       "properties": {
-        "type": { "const": "gates.evaluated" },
-        "payload": { "$ref": "#/$defs/gates_evaluated_payload" }
+        "type": {
+          "const": "audit.completed"
+        },
+        "payload": {
+          "$ref": "#/$defs/audit_completed_payload"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "type": {
+          "const": "gates.evaluated"
+        },
+        "payload": {
+          "$ref": "#/$defs/gates_evaluated_payload"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "type": {
+          "const": "isolation.measured"
+        },
+        "payload": {
+          "$ref": "#/$defs/isolation_measured_payload"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "type": {
+          "const": "gate3.evaluated"
+        },
+        "payload": {
+          "$ref": "#/$defs/gate3_evaluated_payload"
+        }
       }
     }
   ]

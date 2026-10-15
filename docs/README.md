@@ -24,6 +24,13 @@ Start with the top-level [README](../README.md) for what OMF is and the command 
 - [Enforcement tests](../tests/enforcement/README.md): which test backs each control claim in the spec. A claim
   without a test is labelled "not enforced" in the spec.
 
+## Verification line
+
+- [Gates, audit and isolation](isolation-and-gates.md): what the integrity line is, what it proves and what is not
+  enforced yet.
+- [Where the contract differs from the spec](m3c-spec-deviations.md): where the scenario and seal contract is more exact
+  than the spec's examples, and how it joins the line.
+
 ## Examples
 
 - [hello-goal](../examples/hello-goal/README.md): the goal loop end to end, offline, with a stand-in for the model.

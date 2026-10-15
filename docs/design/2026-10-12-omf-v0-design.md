@@ -625,10 +625,14 @@ handoff:
 were not enforced. Arc's `useWorktrees` has no consumer. Kilroy's worktree boundary is a sentence
 in a prompt, and its review command runs with permission bypass in the source repo.
 
-- `omf doctor` measures the isolation actually in effect: the vault is not mounted, the credential
-  scope, the sandbox values and the egress rules. It writes the result as a preflight report
-  (`preflight.json`, after Kilroy's `--preflight`). The evidence report carries this measured
-  level. GATE-3 fails if the measured level is lower than the declared one.
+- The measured isolation level comes from the ledger. Each run measures its stages (author at seal,
+  then implementer, SUT and harness) and appends one `isolation.measured` event per measurement:
+  the vault is not mounted, the credential scope, the sandbox values and the egress rules.
+  The ledger is the authority; the host-only `isolation.json` is a view of those events. The
+  evidence report carries the level derived from them. GATE-3 fails if the measured level is lower
+  than the declared one.
+- `omf doctor` reports isolation in `preflight.json` (after Kilroy's `--preflight`) as advisory
+  only: a declared level and a label, never enforced and never part of `ok`.
 - Permission-bypass flags are allowed only inside an L2 or L3 container. They are never used on the
   host or in the user's source checkout.
 - Implementer sessions get an OMF-owned config directory. They never inherit the user's `~/.claude`
