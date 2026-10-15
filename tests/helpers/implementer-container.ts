@@ -8,6 +8,7 @@ import type { ContainerHandle, ContainerRuntime } from "../../src/container/runt
 import { type ContainerSpec, IMPLEMENTER_FIXED_ENV } from "../../src/container/spec.js";
 import { type TarEntry, tarOfEntries } from "../../src/container/tar-dir.js";
 import { CONFIG_DEFAULTS } from "../../src/core/config.js";
+import { KILL_ALL_ARGV } from "../../src/implementer/workspace.js";
 import { FIXTURE_RUN_ID, FIXTURE_WORK_ID, SUT_BASE } from "./container-fixture.js";
 import { FakeDocker } from "./fake-docker.js";
 import type { FakeExecCall, FakeResult } from "./fake-docker-core.mjs";
@@ -30,8 +31,10 @@ export interface LocalExec {
   ran: boolean;
 }
 
-/** The kill-all exec as the double recognises it, by whole-argv equality (workspace.ts `KILL_ALL_ARGV` is pinned to the same value). */
-const KILL_ALL: readonly string[] = ["sh", "-c", "kill -9 -1"];
+/** The kill-all exec as the double recognises it: the very argv the source sends, so the double follows any change to it. */
+const KILL_ALL: readonly string[] = KILL_ALL_ARGV;
+/** Any other script that signals processes widely (kill of -1, pkill, killall) is refused, never spawned on the host. */
+const PROCESS_KILLER = /\b(pkill|killall)\b|\bkill\b[^\n]*(\s-1\b|\s-[A-Za-z0-9]+\s+-1\b)/;
 /** Commands the double will run on the host. */
 const ALLOWED_COMMANDS: readonly string[] = ["sh", "tar", "git", "base64"];
 
@@ -84,6 +87,10 @@ export class LocalTreeContainer {
     if (!ALLOWED_COMMANDS.includes(command)) {
       this.execs.push({ argv: call.argv, workdir: call.workdir, ran: false });
       return { status: 127, stdout: "", stderr: `command not allowed in the local double: ${command}` };
+    }
+    if (call.argv.some((part) => PROCESS_KILLER.test(part))) {
+      this.execs.push({ argv: call.argv, workdir: call.workdir, ran: false });
+      return { status: 126, stdout: "", stderr: "process-killing script refused by the local double" };
     }
     // `detached` makes the child lead its own process group, which is what the simulated kill-all signals. The typings of
     // `spawnSync` omit the option although Node honours it, so the options are built apart from the call.

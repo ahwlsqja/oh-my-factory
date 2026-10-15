@@ -138,19 +138,22 @@ describe("createClaudeSession", () => {
     ["timeout", "escaped", ESCAPED_KEY.slice(0, -1)],
     ["output_limit", "escaped", ESCAPED_KEY.slice(0, -1)],
     ["output_limit", "short", KEY.slice(0, 1)],
-  ] as const)("leaves no key prefix in the log of a cut %s stream ending in a %s partial key", async (kind, _form, tail) => {
-    for (const stream of ["stdout", "stderr"] as const) {
-      const answer = { kind, stdout: "", stderr: "", [stream]: `output ${tail}` } as const;
-      const { runtime } = scriptedExec([exited(0), answer]);
-      const outcome = await createClaudeSession({ runtime, credential, model: "claude-sonnet-5-5" }).run(
-        HANDLE,
-        REQUEST,
-      );
-      expect(outcome.log).not.toContain(KEY.slice(0, 8));
-      expect(outcome.log).not.toContain(ESCAPED_KEY.slice(0, 8));
-      expect(outcome.log).toContain("[redacted]");
-    }
-  });
+  ] as const)(
+    "leaves no key prefix in the log of a cut %s stream ending in a %s partial key",
+    async (kind, _form, tail) => {
+      for (const stream of ["stdout", "stderr"] as const) {
+        const answer = { kind, stdout: "", stderr: "", [stream]: `output ${tail}` } as const;
+        const { runtime } = scriptedExec([exited(0), answer]);
+        const outcome = await createClaudeSession({ runtime, credential, model: "claude-sonnet-5-5" }).run(
+          HANDLE,
+          REQUEST,
+        );
+        expect(outcome.log).not.toContain(KEY.slice(0, 8));
+        expect(outcome.log).not.toContain(ESCAPED_KEY.slice(0, 8));
+        expect(outcome.log).toContain("[redacted]");
+      }
+    },
+  );
 
   it("is spawn_failed when the settings cannot be written or the runtime refuses, and never runs claude then", async () => {
     const failedWrite = scriptedExec([exited(1)]);

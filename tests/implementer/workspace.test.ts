@@ -221,6 +221,20 @@ describe("killAllProcesses", () => {
     expect(tree.local.killedGroups.every((group) => tree.local.spawnedGroups.includes(group))).toBe(true);
   });
 
+  it.each(["kill -KILL -1", "pkill -9 sh", "killall sh", "echo x; kill -s KILL -1"])(
+    "refuses %s on the host: status 126, recorded as not run",
+    async (script) => {
+      const tree = await open();
+      const result = await tree.runtime.exec(tree.handle, {
+        argv: ["sh", "-c", script],
+        timeoutMs: 5000,
+        maxOutputBytes: 10_000,
+      });
+      expect(result).toMatchObject({ kind: "exited", status: 126 });
+      expect(tree.local.execs.at(-1)).toMatchObject({ ran: false });
+    },
+  );
+
   it("reports a failed exec as not ok", async () => {
     const tree = await open();
     answer(tree, KILL_ALL_ARGV[2] ?? "", exited(1));
