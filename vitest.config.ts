@@ -26,6 +26,14 @@ export default defineConfig({
       include: ["src/**/*.ts"],
       reporter: ["text-summary", "json-summary", "lcov", "html"],
       reportsDirectory: "coverage",
+      // Ratchet: set a little below the measured numbers. Raise these, never lower them
+      // (see docs/maintainers/testing.md).
+      thresholds: {
+        statements: 88,
+        branches: 86,
+        functions: 91,
+        lines: 89,
+      },
     },
     ...(Number.isInteger(maxWorkers) && maxWorkers > 0 ? { maxWorkers } : {}),
   },

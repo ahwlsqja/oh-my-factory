@@ -55,29 +55,33 @@ The after-under-load run is the meaningful one: it passes at a load that previou
 reproduce the old failure on demand, because the old code under synthetic load was not re-run; treat the
 before/after as evidence of headroom, not a proof.
 
-## Coverage (report only)
+## Coverage (thresholds)
 
 ```sh
 npm run test:coverage
 ```
 
-`@vitest/coverage-v8` is pinned to exactly the installed vitest version (5.0.2); bump them together. The report
+`@vitest/coverage-v8` is pinned to exactly the installed vitest version (5.0.3); bump them together. The report
 lands in `coverage/` (text summary, `coverage-summary.json`, `lcov.info`, HTML) and is git-ignored. CI runs the
-`coverage (report only)` job on ubuntu with Node 24, writes a table to the job summary and uploads `coverage/` as
-the `coverage-report` artifact. The job is not in the aggregate `ci` job's `needs`, so it cannot block a merge.
+`coverage` job on ubuntu with Node 24, writes a table to the job summary and uploads `coverage/` as the
+`coverage-report` artifact. The job fails when any metric is below its threshold in `vitest.config.ts`, and it is in
+the aggregate `ci` job's `needs`, so it blocks a merge.
 
-Baseline, measured on this branch (`src/**/*.ts`):
+Baseline and thresholds (`src/**/*.ts`):
 
-| metric | covered | pct |
+| metric | measured | threshold |
 |---|---|---|
-| statements | 3425 / 4043 | 84.71% |
-| branches | 2180 / 2635 | 82.73% |
-| functions | 651 / 737 | 88.33% |
-| lines | 2911 / 3398 | 85.66% |
+| statements | 90.59% (7252 / 8005) | 88 |
+| branches | 88.74% (4866 / 5483) | 86 |
+| functions | 93.49% (1323 / 1415) | 91 |
+| lines | 91.66% (6118 / 6674) | 89 |
+
+Ratchet rule: thresholds only ever go up. Raise them in the same change that improves coverage, to about two points
+below the new measurement (rounded down). Never lower a threshold to make a change pass; add the missing tests
+instead.
 
 Known undercount: CLI tests run `dist/cli/main.js` as a child process, which v8 coverage in the test process cannot
-see, so `src/cli/*` numbers are low. Merging child-process coverage is future work. No thresholds are set yet; add them
-below the measured numbers and only ever raise them.
+see, so `src/cli/*` numbers are low. Merging child-process coverage is future work.
 
 ## Flake soak
 

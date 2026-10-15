@@ -122,9 +122,9 @@ jobs:
           annotations: true
           persona: regular
 
-  # Report-only: not part of the aggregate "ci" needs, so a failure here never blocks a merge.
+  # Fails when coverage drops below the thresholds in vitest.config.ts; part of the aggregate "ci" needs.
   coverage:
-    name: coverage (report only)
+    name: coverage
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -152,7 +152,6 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  # Report-only: Biome is configured but the bulk format is pending, so findings are shown and never fail.
   biome:
     name: biome
     runs-on: ubuntu-latest
@@ -176,7 +175,7 @@ jobs:
   ci:
     name: ci
     if: always()
-    needs: [test, lint, biome, package, dependency-review, zizmor]
+    needs: [test, lint, biome, coverage, package, dependency-review, zizmor]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
