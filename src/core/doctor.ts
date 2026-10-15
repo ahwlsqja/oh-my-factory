@@ -1,10 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
+import type { IsolationLevel, MeasuredLevel } from "../isolation/types.js";
 import { sealedProblem } from "../vault/pokayoke.js";
 import { TORN_TAIL_WARNING, type VerifyResult } from "./ledger.js";
 import { NotAGitRepoError, type ProjectLocation, UnsupportedRepoError, locateProject, repoToplevel } from "./paths.js";
+import { writePrivateFileAtomic } from "./private-fs.js";
 import { projectProblem, readProjectStatus } from "./project.js";
 import { SymlinkRefusedError, assertStateTreeClean } from "./safe-fs.js";
 
@@ -12,6 +14,30 @@ export interface ToolProbe {
   found: boolean;
   version: string | null;
 }
+
+/**
+ * What `omf doctor` can say about isolation. It is advisory: a measurement belongs to a run and lives in the ledger
+ * (`isolation.measured`), GATE-3 never reads `preflight.json`, and nothing here is enforced.
+ * `unmeasurable` means the container runtime is missing or unreachable; `failure` then holds the probe's own failure text.
+ */
+export interface AdvisoryIsolation {
+  declared: IsolationLevel;
+  measured: MeasuredLevel | "unmeasurable";
+  advisory: true;
+  note: string;
+  failure: string | null;
+}
+
+/** Synchronous like `runDoctor`. M3f supplies the real probe; the default says nothing was measured. */
+export type IsolationProbe = (env: NodeJS.ProcessEnv, tools: PreflightReport["tools"]) => AdvisoryIsolation;
+
+export const unmeasuredProbe: IsolationProbe = () => ({
+  declared: "L2",
+  measured: "unmeasured",
+  advisory: true,
+  note: "isolation is measured per run from the ledger, never here; this field is advisory, not enforced, and no sealing guarantee is claimed",
+  failure: null,
+});
 
 export interface PreflightReport {
   schema_version: 1;
@@ -24,7 +50,7 @@ export interface PreflightReport {
   };
   repo: { is_git_repo: boolean; toplevel: string | null };
   project: { initialized: boolean; dir: string | null; ledger: VerifyResult | null };
-  isolation: { declared: "L2"; measured: "unmeasured"; note: string };
+  isolation: AdvisoryIsolation;
   ok: boolean;
   problems: string[];
   warnings: string[];
@@ -69,6 +95,7 @@ export function runDoctor(
   cwd: string,
   env: NodeJS.ProcessEnv = process.env,
   now: () => Date = () => new Date(),
+  probeIsolation: IsolationProbe = unmeasuredProbe,
 ): PreflightReport {
   const problems: string[] = [];
 
@@ -137,27 +164,22 @@ export function runDoctor(
     }
   }
 
+  const reported: PreflightReport["tools"] = { git, docker: { ...docker, daemon }, claude, codex };
   const report: PreflightReport = {
     schema_version: 1,
     generated_at: now().toISOString(),
-    tools: { git, docker: { ...docker, daemon }, claude, codex },
+    tools: reported,
     repo: { is_git_repo: toplevel !== null, toplevel },
     project: { initialized, dir, ledger: ledgerResult },
-    isolation: {
-      declared: "L2",
-      measured: "unmeasured",
-      note: "isolation is measured from M3 onward; until then no sealing guarantee is claimed",
-    },
+    isolation: probeIsolation(env, reported),
     ok: problems.length === 0,
     problems,
     warnings,
   };
-  // Never when the tree has a link: writeFileSync would follow a symlinked preflight.json.
+  // Never when the tree has a link: a linked state directory would take the temp file and the rename somewhere else.
   if (initialized && treeClean && dir !== null) {
-    const preflightPath = join(dir, "preflight.json");
-    writeFileSync(preflightPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
-    // writeFileSync keeps the mode of an existing file, so set it explicitly.
-    chmodSync(preflightPath, 0o600);
+    // Temp file plus rename: a concurrent reader sees the old report or the new one, and the mode is 0600 even over a 0644 file.
+    writePrivateFileAtomic(join(dir, "preflight.json"), `${JSON.stringify(report, null, 2)}\n`);
   }
   return report;
 }

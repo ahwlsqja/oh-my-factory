@@ -6,12 +6,13 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { runDoctor } from "../../src/core/doctor.js";
+import { type IsolationProbe, runDoctor } from "../../src/core/doctor.js";
 import { TORN_TAIL_WARNING } from "../../src/core/ledger.js";
 import { projectDir } from "../../src/core/paths.js";
 import { initProject } from "../../src/core/project.js";
@@ -212,5 +213,72 @@ describe("runDoctor: initialized means a verified ledger holding project.initial
     const report = runDoctor(repo, e);
     expect(report.warnings).toContain(TORN_TAIL_WARNING);
     expect(report.ok).toBe(true);
+  });
+});
+
+describe("runDoctor: advisory isolation and an atomic preflight.json", () => {
+  it("reports isolation as advisory and unmeasured by default", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const e = env(home, stubBin({ dockerDaemon: true }));
+    const report = runDoctor(repo, e);
+    expect(report.isolation).toEqual({
+      declared: "L2",
+      measured: "unmeasured",
+      advisory: true,
+      note: expect.any(String),
+      failure: null,
+    });
+    expect(report.isolation.note).toContain("not enforced");
+  });
+
+  it("reports an injected probe verbatim and never lets it change ok or problems", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const e = env(home, stubBin({ dockerDaemon: true }));
+    initProject(repo, e);
+    const baseline = runDoctor(repo, e);
+    const seen: unknown[] = [];
+    const unreachable: IsolationProbe = (probeEnv, tools) => {
+      seen.push(probeEnv.PATH, tools.docker.found);
+      return {
+        declared: "L2",
+        measured: "unmeasurable",
+        advisory: true,
+        note: "probe note",
+        failure: "Cannot connect to the Docker daemon at unix:///x.sock",
+      };
+    };
+    const report = runDoctor(repo, e, undefined, unreachable);
+    expect(report.isolation).toEqual({
+      declared: "L2",
+      measured: "unmeasurable",
+      advisory: true,
+      note: "probe note",
+      failure: "Cannot connect to the Docker daemon at unix:///x.sock",
+    });
+    expect(seen).toEqual([e.PATH, true]);
+    expect([report.ok, report.problems]).toEqual([baseline.ok, baseline.problems]);
+    // Even a probe that claims L2 is only a label: the report stays advisory and ok does not move.
+    const claimsL2 = runDoctor(repo, e, undefined, () => ({ declared: "L2", measured: "L2", advisory: true, note: "n", failure: null }));
+    expect([claimsL2.ok, claimsL2.problems]).toEqual([baseline.ok, baseline.problems]);
+    expect(claimsL2.isolation.advisory).toBe(true);
+  });
+
+  it("replaces preflight.json atomically at 0600, also when it existed as 0644, and leaves no temp file", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const e = env(home, stubBin({ dockerDaemon: true }));
+    const { projectDir } = initProject(repo, e);
+    const path = join(projectDir, "preflight.json");
+    writeFileSync(path, "{}\n", { mode: 0o644 });
+    chmodSync(path, 0o644);
+    const inodeBefore = statSync(path).ino;
+    const report = runDoctor(repo, e);
+    // A rename puts a new inode in place; an in-place rewrite would keep the old one and expose a truncated file to readers.
+    expect(statSync(path).ino).not.toBe(inodeBefore);
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(JSON.parse(readFileSync(path, "utf8"))).toEqual(report);
+    expect(readdirSync(projectDir).filter((name) => name.endsWith(".tmp"))).toEqual([]);
   });
 });
