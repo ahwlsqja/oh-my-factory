@@ -11,6 +11,14 @@ export class NotAGitRepoError extends Error {
   }
 }
 
+/** The git executable could not be started (it is not on PATH). Distinct from git failing in a directory. */
+export class GitNotFoundError extends Error {
+  constructor() {
+    super("git not found on PATH");
+    this.name = "GitNotFoundError";
+  }
+}
+
 export class UnsupportedRepoError extends Error {
   constructor(
     readonly cwd: string,
@@ -47,6 +55,7 @@ function git(args: string[], cwd: string): string {
     return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: gitEnv() });
   } catch (err) {
     const failure = err as NodeJS.ErrnoException & { status?: number | null; stderr?: string };
+    if (failure.code === "ENOENT") throw new GitNotFoundError();
     const stderr = typeof failure.stderr === "string" ? failure.stderr : "";
     if (failure.status === 128 && /not a git repository/i.test(stderr)) throw new NotAGitRepoError(cwd);
     throw new Error(`git ${args.join(" ")} failed in ${cwd}: ${stderr.trim() || failure.message}`);

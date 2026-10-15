@@ -6,7 +6,14 @@ import { isAbsolute, join } from "node:path";
 import type { IsolationLevel, MeasuredLevel } from "../isolation/types.js";
 import { sealedProblem } from "../vault/pokayoke.js";
 import { TORN_TAIL_WARNING, type VerifyResult } from "./ledger.js";
-import { NotAGitRepoError, type ProjectLocation, UnsupportedRepoError, locateProject, repoToplevel } from "./paths.js";
+import {
+  GitNotFoundError,
+  NotAGitRepoError,
+  type ProjectLocation,
+  UnsupportedRepoError,
+  locateProject,
+  repoToplevel,
+} from "./paths.js";
 import { writePrivateFileAtomic } from "./private-fs.js";
 import { projectProblem, readProjectStatus } from "./project.js";
 import { SymlinkRefusedError, assertStateTreeClean } from "./safe-fs.js";
@@ -270,7 +277,10 @@ function buildReport(
   try {
     toplevel = repoToplevel(cwd);
   } catch (err) {
-    if (err instanceof UnsupportedRepoError) {
+    if (err instanceof GitNotFoundError) {
+      // The probe above already reported a missing git; repoToplevel runs git with the process environment, which can differ.
+      if (git.found) problem(err.message, "install git and make sure it is on PATH");
+    } else if (err instanceof UnsupportedRepoError) {
       problem(err.message, "run omf from a repository with a regular working tree (not a bare repository)");
     } else if (err instanceof NotAGitRepoError) {
       problem("not inside a git repository", "run omf from inside a git repository, or create one with: git init");

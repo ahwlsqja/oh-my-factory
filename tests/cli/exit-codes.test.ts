@@ -150,6 +150,27 @@ describe("exit codes of init, doctor and ledger verify by condition", () => {
     expect(strict.stdout).toContain("docker daemon is not reachable");
   });
 
+  it("doctor: a PATH without git is reported as a problem with its fix line (1), not a crash", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const out = omf(["doctor"], repo, home, { PATH: makeTempDir("omf-nogit-") });
+    expect(out.code, out.stderr).toBe(1);
+    expect(out.stdout).toContain("git not found on PATH");
+    expect(out.stdout).toContain("fix: install git");
+    expect(out.stderr).not.toContain("ENOENT");
+    const json = JSON.parse(omf(["doctor", "--json"], repo, home, { PATH: makeTempDir("omf-nogit-") }).stdout) as {
+      problems: string[];
+      repo: { is_git_repo: boolean };
+    };
+    expect(json.problems).toEqual(["git not found on PATH"]);
+    expect(json.repo.is_git_repo).toBe(false);
+    // The commands that cannot run say the same thing, with the same fix.
+    const init = omf(["init"], repo, home, { PATH: makeTempDir("omf-nogit-") });
+    expect(init.code).toBe(2);
+    expect(init.stderr).toContain("git not found on PATH");
+    expect(init.stderr).toContain("install git");
+  });
+
   it("ledger verify: 0 sound, 0 with a torn tail, 1 corrupt, 2 not initialized", () => {
     const repo = makeGitRepo();
     const home = makeTempDir("omf-home-");

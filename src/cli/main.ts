@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import { runDoctorParallel } from "../core/doctor.js";
 import { Ledger, TORN_TAIL_WARNING } from "../core/ledger.js";
-import { NotAGitRepoError, resolveProject } from "../core/paths.js";
+import { GitNotFoundError, NotAGitRepoError, resolveProject } from "../core/paths.js";
 import { assertStateTreeClean } from "../core/safe-fs.js";
 import { exitFor } from "./exit.js";
 import { registerDecideCommands } from "./decide.js";
@@ -125,6 +125,7 @@ function corruptionHint(seq: number, path: string): string {
 
 /** The second stderr line for the errors a person can fix, or null when the message says it all. */
 function errorHint(err: unknown): string | null {
+  if (err instanceof GitNotFoundError) return "  install git and make sure it is on PATH";
   if (err instanceof NotAGitRepoError) return "  run omf from inside a git repository, or create one with: git init";
   const corrupt = err instanceof Error ? CORRUPT_MESSAGE.exec(err.message) : null;
   if (corrupt?.[1] !== undefined) {
