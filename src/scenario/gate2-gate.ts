@@ -3,8 +3,8 @@ import { exposureCountFor } from "../feedback/events.js";
 import { locationEnv } from "../vault/line-guard.js";
 import { openVault } from "../vault/vault.js";
 import type { Gate } from "../work/gates.js";
-import { evaluateGate2Step } from "./gate2-adapter.js";
 import { createHostFixtureRunner } from "./fixtures.js";
+import { evaluateGate2Step } from "./gate2-adapter.js";
 
 /**
  * The real GATE-2 as the line runs it. It maps the adapter's outcome onto the line's gate result:
@@ -41,8 +41,9 @@ export function gate2Gate(): Gate {
           ? { gate: "GATE-2", verdict: "fail", reasons: outcome.reasons, stop: "J3" }
           : { gate: "GATE-2", verdict: "fail", reasons: outcome.reasons };
       }
+      // A stop always names a route; if one is ever missing, fail closed rather than loop to S2.
       return outcome.stop_route === null
-        ? { gate: "GATE-2", verdict: "fail", reasons: outcome.reasons }
+        ? { gate: "GATE-2", verdict: "not_run", reasons: ["gate_error"] }
         : { gate: "GATE-2", verdict: "fail", reasons: outcome.reasons, stop: outcome.stop_route };
     },
   };

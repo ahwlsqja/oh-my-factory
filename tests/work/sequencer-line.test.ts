@@ -9,7 +9,7 @@ import { readEvidence, trustedRecommendation } from "../../src/work/evidence.js"
 import type { Gate } from "../../src/work/gates.js";
 import { handoffFile } from "../../src/work/handoff.js";
 import { LINE_ORDER, type StationId } from "../../src/work/line-types.js";
-import { type Station, runLine } from "../../src/work/sequencer.js";
+import { type Station, checkedResult, runLine } from "../../src/work/sequencer.js";
 import { HUMAN, addOpen, resolveOpen } from "../helpers/decision-fixture.js";
 import { plantCanary } from "../helpers/line-fixture.js";
 import { PLANTED, cleanStations, finished, passGate, passGates, setupLine, station, stationsOf, textOf } from "../helpers/line.js";
@@ -354,5 +354,11 @@ describe("runLine, GATE-2 stop routes", () => {
     expect(result.reason_code).not.toBe("scenarios_need_review");
     expect(result.evidence.gates.per_gate["GATE-2"]).toBe("pass");
     expect(result.evidence.gates.per_gate["GATE-3"]).toBe("fail");
+  });
+
+  it("checkedResult drops a stop on a GATE-3 fail and on a GATE-2 pass, and keeps it on a GATE-2 fail", () => {
+    expect(checkedResult("GATE-3", { gate: "GATE-3", verdict: "fail", reasons: ["canary_hit"], stop: "J3" })).not.toHaveProperty("stop");
+    expect(checkedResult("GATE-2", { gate: "GATE-2", verdict: "pass", reasons: [], stop: "J3" })).not.toHaveProperty("stop");
+    expect(checkedResult("GATE-2", { gate: "GATE-2", verdict: "fail", reasons: ["canary_hit"], stop: "J3" })).toHaveProperty("stop", "J3");
   });
 });

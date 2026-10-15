@@ -161,7 +161,7 @@ function gateError(gate: GateId): GateResult {
  * A gate is code from outside. Anything but a result for this gate with a known verdict and closed-code
  * reasons is a gate error, so a free-text reason can never reach evidence, a handoff or the ledger.
  */
-function checkedResult(id: Exclude<GateId, "GATE-4">, raw: unknown): GateResult {
+export function checkedResult(id: Exclude<GateId, "GATE-4">, raw: unknown): GateResult {
   const r = raw as { gate?: unknown; verdict?: unknown; reasons?: unknown; stop?: unknown } | null;
   if (r === null || typeof r !== "object" || r.gate !== id) return gateError(id);
   const { verdict, reasons } = r;

@@ -53,7 +53,7 @@ function releaseOne(l: LineFixture, index: number): void {
 }
 
 describe("gate2Gate", () => {
-  it("is the GATE-2 gate, and builds nothing until it is evaluated", () => {
+  it("is the GATE-2 gate with an evaluate function", () => {
     const gate = gate2Gate();
     expect(gate.id).toBe("GATE-2");
     expect(typeof gate.evaluate).toBe("function");
