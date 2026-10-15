@@ -310,7 +310,8 @@ export async function applyPatchToDir(scratchGitDir: string, dir: string, patch:
  * 3. `diff-files --quiet` (exit 1 is dirty);
  * 4. `ls-files -o --directory` must print nothing. No ignore rule applies (`core.excludesFile=/dev/null`, and
  *    `--exclude-standard` is not passed), so a file the tree's own `.gitignore` names still counts.
- * A root `.git` is checked last: `ls-files -o` never lists it, and it is never part of a tree.
+ * A `.git` entry anywhere under `dir` is checked last (lstat walk, no symlink follow): git skips entries named `.git`,
+ * so `ls-files -o` never lists one, and none is ever part of a tree.
  */
 export async function isDirClean(target: GitTarget, sha: string, dir: string): Promise<boolean> {
   requireSha("sha", sha);
@@ -327,7 +328,16 @@ export async function isDirClean(target: GitTarget, sha: string, dir: string): P
     throw error;
   }
   const untracked = await git(scoped, ["ls-files", "-o", "--directory"]);
-  return untracked.length === 0 && lstatOrNull(join(dir, ".git")) === null;
+  return untracked.length === 0 && !containsDotGit(dir);
+}
+
+/** True when any entry under `dir` (or `dir` itself, at the root) is named `.git`. Symlinks are never followed. */
+function containsDotGit(dir: string): boolean {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === ".git") return true;
+    if (entry.isDirectory() && containsDotGit(join(dir, entry.name))) return true;
+  }
+  return false;
 }
 
 const SMALL_OUTPUT_BYTES = 1024 * 1024;

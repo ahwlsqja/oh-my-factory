@@ -178,6 +178,18 @@ describe("materialising and checking a tree", () => {
     expect(existsSync(join(fx.gitDir, "index"))).toBe(false);
   });
 
+  it("isDirClean rejects a .git file or directory planted inside a tracked directory", async () => {
+    const file = realTempDir("omf-clean-");
+    await ops.exportTree(fx.quarantine, fx.head, file);
+    writeFileSync(join(file, "src", ".git"), "gitdir: /nonexistent\n"); // git skips entries named .git, so ls-files never sees it
+    expect(await ops.isDirClean(withIndex(fx.quarantine), fx.head, file)).toBe(false);
+    const nested = realTempDir("omf-clean-");
+    await ops.exportTree(fx.quarantine, fx.head, nested);
+    mkdirSync(join(nested, "src", ".git"));
+    writeFileSync(join(nested, "src", ".git", "x"), "x");
+    expect(await ops.isDirClean(withIndex(fx.quarantine), fx.head, nested)).toBe(false);
+  });
+
   it("isDirClean needs a private index of its own", async () => {
     const dir = realTempDir("omf-clean-");
     await expect(ops.isDirClean(fx.quarantine, fx.head, dir)).rejects.toThrow("private target.indexFile");
