@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PinnedImage } from "../container/image-ref.js";
@@ -78,8 +78,13 @@ export function writeHarnessContext(
   base: PinnedImage,
   contextSha256: string,
 ): void {
-  const write = (name: string, data: string | Buffer): void =>
-    writeFileSync(join(dir, name), data, { mode: 0o600, flag: "wx" });
+  // The files end up in the image as written, and the harness runs as the sandbox user: a 0600 file would belong to root and be
+  // unreadable there. The context directory is 0700, so 0644 files are still private on the host.
+  const write = (name: string, data: string | Buffer): void => {
+    const file = join(dir, name);
+    writeFileSync(file, data, { mode: 0o644, flag: "wx" });
+    chmodSync(file, 0o644);
+  };
   write("Dockerfile", renderHarnessDockerfile(sources, base, contextSha256));
   write("main.mjs", sources.main);
   write("matcher.mjs", sources.matcher);
