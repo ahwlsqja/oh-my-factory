@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { execArgv } from "../../src/container/argv.js";
 import { createDockerRuntime } from "../../src/container/docker-cli.js";
+import { createDockerRuntimeSync } from "../../src/container/docker-sync.js";
 import { ContainerSpecError, SECRET_ENV_NAMES, type SecretEnvName } from "../../src/container/spec.js";
 import { IMPLEMENTER_BASE, TEST_SECRET, secretHandle, specFor } from "../helpers/container-fixture.js";
 import { FakeDocker, fakeDockerBin, verbOf } from "../helpers/fake-docker.js";
@@ -90,6 +91,43 @@ describe("the runtime and a secret", () => {
     expect(argv).toContain("ANTHROPIC_API_KEY");
     expect(argv.some((element) => element.includes(TEST_SECRET))).toBe(false);
     expect(JSON.stringify(fake.state.calls)).not.toContain(TEST_SECRET);
+  });
+
+  it.each(["sut", "harness", "workcopy"] as const)(
+    "refuses a secret for a %s handle before the value is read or anything reaches the daemon",
+    async (role) => {
+      const fake = new FakeDocker();
+      const { runtime, handle } = await started(fake, []);
+      let reads = 0;
+      const secret = {
+        name: "ANTHROPIC_API_KEY" as const,
+        reveal: () => {
+          reads += 1;
+          return TEST_SECRET;
+        },
+      };
+      await expect(runtime.exec({ ...handle, role }, { ...PLAIN, secret })).rejects.toMatchObject({
+        code: "invalid_exec",
+      });
+      expect(reads).toBe(0);
+      expect(fake.calls("exec")).toHaveLength(0);
+    },
+  );
+
+  it("refuses a secret in the synchronous twin, which never carries one", () => {
+    const calls: string[][] = [];
+    const runtime = createDockerRuntimeSync({
+      context: "fake",
+      run: (argv) => {
+        calls.push([...argv]);
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+    const handle = { name: "omf-x", id: "abc", role: "implementer" } as const;
+    expect(() => runtime.execSync(handle, { ...PLAIN, secret: secretHandle() })).toThrow(
+      expect.objectContaining({ code: "invalid_exec" }),
+    );
+    expect(calls).toEqual([]);
   });
 
   it("refuses a secret name in ExecSpec.env before anything reaches the daemon", async () => {
