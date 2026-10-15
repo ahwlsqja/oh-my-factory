@@ -69,7 +69,7 @@ export function parseClaudeLog(log: string): { cost_micro_usd: number | null; no
  * Counts, then removes, the key in both spellings: stream-json escapes `"` and `\`, so a key holding either appears
  * in a different form than in stderr. The escaped form goes first because it can contain the plain one.
  */
-function scrub(text: string, credential: Credential): { text: string; hits: number } {
+function scrub(text: string, credential: Credential, cut = false): { text: string; hits: number } {
   const plain = credential.reveal();
   const escaped = JSON.stringify(plain).slice(1, -1);
   let hits = 0;
@@ -80,7 +80,22 @@ function scrub(text: string, credential: Credential): { text: string; hits: numb
     out = parts.join(REDACTED);
   }
   hits += out.split(plain).length - 1;
-  return { text: redact(out, credential), hits };
+  out = redact(out, credential);
+  if (cut) out = withoutPartialKeyTail(out, [escaped, plain]);
+  return { text: out, hits };
+}
+
+/**
+ * A stream cut at a byte cap, a timeout or a kill can end in the first characters of the key. Complete occurrences are
+ * handled by the caller; this replaces the longest proper prefix of either spelling that the text ends with.
+ */
+function withoutPartialKeyTail(text: string, forms: readonly string[]): string {
+  for (let k = Math.max(...forms.map((form) => form.length)) - 1; k >= 1; k--) {
+    for (const form of forms) {
+      if (k < form.length && text.endsWith(form.slice(0, k))) return text.slice(0, text.length - k) + REDACTED;
+    }
+  }
+  return text;
 }
 
 /** The request's model must be the one the session reports to the ledger, and the argv builder must accept the values. */
@@ -145,8 +160,9 @@ export function createClaudeSession(deps: {
       }
 
       const raw = outputOf(result);
-      const stdout = scrub(raw.stdout, deps.credential);
-      const stderr = scrub(raw.stderr, deps.credential);
+      const cut = result.kind !== "exited";
+      const stdout = scrub(raw.stdout, deps.credential, cut);
+      const stderr = scrub(raw.stderr, deps.credential, cut);
       const log = stderr.text === "" ? stdout.text : `${stdout.text}\n[stderr]\n${stderr.text}`;
       const hits = stdout.hits + stderr.hits;
       const code = failureCodeOf(result);
