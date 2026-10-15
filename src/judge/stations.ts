@@ -6,6 +6,8 @@ import { type JudgeEngine, realEngine, releaseHeld } from "./engine.js";
 import { withEntryCheck } from "./entry-check.js";
 import { type FeedbackSlot, RoundHolder } from "./round-state.js";
 import { s4Station } from "./s4-station.js";
+import { s5Station } from "./s5-station.js";
+import { containerWorkCopies } from "./work-copies.js";
 
 export interface JudgeLineDeps {
   location: ProjectLocation;
@@ -25,6 +27,7 @@ export type ResolvedDeps = JudgeLineDeps & { engine: JudgeEngine };
 
 export interface JudgeStations {
   S4: Station;
+  S5: Station;
   /** Wraps the S2 station with the test-split entry check. */
   withEntryCheck(s2: Station): Station;
   /** Passed to `runLine` as `onLineEnd`: removes the round images this line still owns. Idempotent. */
@@ -37,6 +40,14 @@ export function judgeStations(deps: JudgeLineDeps): JudgeStations {
   const holder = new RoundHolder();
   return {
     S4: s4Station(resolved, holder),
+    S5: s5Station({
+      location: deps.location,
+      candidates: deps.candidates,
+      feedback: deps.feedback,
+      round: () => holder.current(),
+      copies: (ctx, contract) => containerWorkCopies(deps, ctx, contract),
+      ...(deps.gateTimeoutMs === undefined ? {} : { gateTimeoutMs: deps.gateTimeoutMs }),
+    }),
     withEntryCheck: (s2) => withEntryCheck(s2, resolved),
     dispose: () => releaseHeld(resolved.runtime, resolved.engine, holder),
   };
