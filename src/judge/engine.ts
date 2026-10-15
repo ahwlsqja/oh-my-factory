@@ -1,6 +1,6 @@
-import { forbiddenPaths } from "../container/golden.js";
 import type { ContainerRuntime } from "../container/runtime.js";
 import type { ProjectLocation } from "../core/paths.js";
+import { judgeForbiddenPaths } from "./forbidden.js";
 import type { RoundHolder } from "./round-state.js";
 import { buildRoundImages, disposeImages, runJudgeRound } from "./round.js";
 
@@ -20,7 +20,7 @@ export function realEngine(): JudgeEngine {
     buildRoundImages,
     runJudgeRound,
     disposeImages,
-    forbiddenPaths: (location) => forbiddenPaths(location, process.env),
+    forbiddenPaths: judgeForbiddenPaths,
   };
 }
 

@@ -1,10 +1,9 @@
 import { join } from "node:path";
-import { forbiddenPaths } from "../container/golden.js";
 import type { ContainerRuntime } from "../container/runtime.js";
 import { readConfig } from "../core/config.js";
 import { Ledger } from "../core/ledger.js";
 import type { ProjectLocation } from "../core/paths.js";
-import { locationEnv } from "../vault/line-guard.js";
+import { judgeForbiddenPaths } from "./forbidden.js";
 import { runJudgeRound } from "./round.js";
 import type { TestJudge } from "./s6-station.js";
 
@@ -41,7 +40,7 @@ export function containerTestJudge(deps: TestJudgeDeps): TestJudge {
       candidate_sha: state.candidate_sha,
       run: state.run,
       stageRoot,
-      forbidden: forbiddenPaths(deps.location, locationEnv(deps.location)),
+      forbidden: judgeForbiddenPaths(deps.location),
       round: ctx.round,
       now,
     });

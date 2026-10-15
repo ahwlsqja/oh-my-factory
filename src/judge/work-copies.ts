@@ -1,6 +1,5 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { forbiddenPaths } from "../container/golden.js";
 import { pinnedImage } from "../container/image-ref.js";
 import type { ContainerRuntime } from "../container/runtime.js";
 import { ContainerWorkCopyFactory } from "../container/work-copy.js";
@@ -9,6 +8,7 @@ import { Ledger } from "../core/ledger.js";
 import type { ProjectLocation } from "../core/paths.js";
 import type { InterfaceContract } from "../decision/types.js";
 import type { StationContext } from "../work/sequencer.js";
+import { judgeForbiddenPaths } from "./forbidden.js";
 
 /** The closed reasons the copies could not be set up: no base image configured, or anything the environment refused. */
 export class WorkCopiesError extends Error {
@@ -22,8 +22,6 @@ export interface WorkCopiesDeps {
   location: ProjectLocation;
   runtime: ContainerRuntime;
   stageRoot?: (itemDir: string, runId: string) => string;
-  /** Only read to find the paths a container must never see; defaults to the process environment. */
-  env?: NodeJS.ProcessEnv;
 }
 
 /**
@@ -58,7 +56,7 @@ export async function containerWorkCopies(
       labels: { work_id: ctx.workId, run_id: ctx.runId, round: ctx.round },
       config,
       stageRoot,
-      forbidden: forbiddenPaths(deps.location, deps.env ?? process.env),
+      forbidden: judgeForbiddenPaths(deps.location),
     });
   } catch (error) {
     throw error instanceof WorkCopiesError ? error : new WorkCopiesError("environment");

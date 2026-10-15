@@ -61,8 +61,7 @@ describe("containerWorkCopies", () => {
       join(s.f.fx.location.dir, "config.toml"),
       `\n[judge]\nsut_base_image = "${IMAGE}"\ndocker_context = "colima-omf-m3f"\n`,
     );
-    const env = { ...s.f.fx.env, HOME: s.f.fx.home }; // the temp home, never the real one
-    const copies = await containerWorkCopies({ location: s.f.fx.location, runtime: s.runtime, env }, s.ctx, CONTRACT);
+    const copies = await containerWorkCopies({ location: s.f.fx.location, runtime: s.runtime }, s.ctx, CONTRACT);
     expect(copies).toBeInstanceOf(ContainerWorkCopyFactory);
     expect(s.calls).toEqual(["ensureImage"]);
   });
