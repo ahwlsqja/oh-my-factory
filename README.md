@@ -314,7 +314,8 @@ Known limits of the goal loop:
   words gets through.
 - Duplicate detection compares the title words and the declared paths. A reworded title for the same change is a
   new item.
-- With no disclosure budget declared, the number of times the model is asked is bounded by the rounds only.
+- With no disclosure budget declared, the number of times the model is asked is bounded by the rounds only. Masked feedback to the implementer exists as library code with tests, with no command or station calling it yet; once it is wired into the line it will never be released until a `disclosure` budget is declared.
+- A declared `disclosure` budget is one pool per goal. Goal re-seeds draw from it today; masked-feedback releases will draw from the same pool once they are wired into the line, so either can use it up and block the other. Only a person raises it (`omf budget raise <id> disclosure <amount>`).
 - Subscription and keychain logins are not supported for the reconciler yet; use an API key.
 - A re-approval resets the wall-time limit to the value in `goal.md`: raises made earlier with `omf budget raise <id> wall_time` do not carry over, and the approval screen does not show them. After re-approving a stale goal that should keep running, raise the wall time again.
 

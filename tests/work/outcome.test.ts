@@ -86,3 +86,21 @@ describe("outcome-to-state table (M3-D19)", () => {
     expect(dispositionOf(input("flawed", false))).toEqual(submit("not_recommended"));
   });
 });
+
+describe("M3d reason codes", () => {
+  it("parks a blocked outcome for the three codes only a person can clear, and submits a forced noise downgrade as not_recommended", () => {
+    for (const reason_code of ["test_run_incomplete", "test_reseal_required", "scenarios_exhausted"] as const) {
+      expect(dispositionOf({ outcome: "blocked", exhausted: false, reason_code }), reason_code).toEqual({
+        action: "park",
+        item_state: "unchanged",
+        counts_toward_stop_if: false,
+      });
+    }
+    expect(dispositionOf({ outcome: "flawed", exhausted: false, reason_code: "noise_unverified" })).toEqual({
+      action: "submit",
+      item_state: "awaiting_review",
+      recommendation: "not_recommended",
+      counts_toward_stop_if: true,
+    });
+  });
+});

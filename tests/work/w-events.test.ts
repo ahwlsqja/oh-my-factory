@@ -205,9 +205,18 @@ describe("M3b2 reason codes", () => {
   });
 });
 
+describe("M3d reason codes", () => {
+  it("accepts the four reason codes M3d adds (test split, reseal, noise, exhausted scenarios)", () => {
+    for (const reason_code of ["test_run_incomplete", "test_reseal_required", "noise_unverified", "scenarios_exhausted"]) {
+      expect(accepts("work.parked", { ...scope, outcome: "blocked", reason_code }), reason_code).toBe(true);
+      expect(accepts("work.failed", { ...scope, outcome: "blocked", reason_code }), reason_code).toBe(true);
+    }
+  });
+});
+
 describe("scenarios_need_review", () => {
   it("is appended after the M3b2 codes, in the list and in the schema, and the schema accepts it", () => {
-    expect(W_REASON_CODES.at(-1)).toBe("scenarios_need_review");
+    expect(W_REASON_CODES.indexOf("scenarios_need_review")).toBe(M3B1_CODES.length + M3B2_CODES.length);
     expect(schemaDoc().$defs.reason_code?.enum ?? []).toContain("scenarios_need_review");
     expect(accepts("work.parked", { ...scope, outcome: "blocked", reason_code: "scenarios_need_review" })).toBe(true);
   });

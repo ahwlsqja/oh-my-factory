@@ -95,6 +95,10 @@ describe("HANDOFF_ROUTES", () => {
       station_skipped: "J6",
       evidence_incomplete: "J6",
       infra_failure: "J6",
+      test_run_incomplete: "J6",
+      test_reseal_required: "J3",
+      noise_unverified: "J4",
+      scenarios_exhausted: "J3",
     });
   });
 
@@ -118,6 +122,14 @@ describe("HANDOFF_ROUTES", () => {
     const options = HANDOFF_ROUTES.scenarios_need_review.options(WORK);
     expect(options).toEqual([`omf work show ${WORK}`, `omf veto ${WORK}`]);
     expect(options.join("\n")).not.toContain(" run ");
+  });
+
+  it("offers no rerun for the states a rerun cannot clear", () => {
+    for (const code of ["scenarios_need_review", "scenarios_exhausted", "test_reseal_required", "test_run_incomplete"] as const) {
+      const options = HANDOFF_ROUTES[code].options(WORK);
+      expect(options, code).toEqual([`omf work show ${WORK}`, `omf veto ${WORK}`]);
+      expect(options.join("\n"), code).not.toContain(" run ");
+    }
   });
 
   it("names a command that runs the line again only with the 'after M3h' prefix", () => {

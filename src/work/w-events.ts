@@ -63,6 +63,11 @@ export const W_REASON_CODES = [
   "reentry_loop",
   // Added by the real GATE-2: the sealed scenarios, or what they were written from, need a person.
   "scenarios_need_review",
+  // M3d: the test split and the feedback channel. All four need a person (or a forced downgrade), so none counts as a retryable failure.
+  "test_run_incomplete",
+  "test_reseal_required",
+  "noise_unverified",
+  "scenarios_exhausted",
 ] as const;
 export type ReasonCode = (typeof W_REASON_CODES)[number];
 
