@@ -5,10 +5,16 @@ export interface ProcessOptions {
   cwd: string;
   /** Used verbatim; callers strip what the child must not see. */
   env: NodeJS.ProcessEnv;
-  stdin?: string;
+  /** A string is sent as UTF-8; a Buffer is sent byte for byte (a tar stream for a work copy is not text). */
+  stdin?: string | Buffer;
   timeoutMs: number;
-  /** Combined stdout and stderr bytes; one byte more stops the command. */
+  /** Combined stdout and stderr bytes; one byte more stops the command (or, with `tailOnly`, is dropped from the front). */
   maxOutputBytes: number;
+  /**
+   * Keeps only the last `maxOutputBytes` of each stream and never stops the command for the volume of its output. For a
+   * command that may legitimately print a lot (a build) and whose success is decided by its exit status.
+   */
+  tailOnly?: boolean;
 }
 
 export type ProcessResult =
@@ -66,6 +72,23 @@ export function liveGroupCount(): number {
   return live.size;
 }
 
+/** Drops bytes from the front of `chunks` until at most `limit` are left. */
+function trimToTail(chunks: Buffer[], limit: number): void {
+  let size = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  while (size > limit) {
+    const first = chunks[0];
+    if (first === undefined) return;
+    const excess = size - limit;
+    if (first.length <= excess) {
+      chunks.shift();
+      size -= first.length;
+    } else {
+      chunks[0] = first.subarray(excess);
+      size = limit;
+    }
+  }
+}
+
 /**
  * Runs `argv` in its own process group and never lets the group outlive the call (spec §4.2: a measure
  * command is untrusted code). The group is SIGKILLed on timeout, when the output limit is hit, and right
@@ -120,6 +143,11 @@ export function runProcessGroup(argv: readonly string[], options: ProcessOptions
       (sink: Buffer[]) =>
       (chunk: Buffer): void => {
         if (settled) return;
+        if (options.tailOnly === true) {
+          sink.push(chunk);
+          trimToTail(sink, options.maxOutputBytes);
+          return;
+        }
         const room = options.maxOutputBytes - total;
         if (chunk.length > room) {
           sink.push(chunk.subarray(0, room));

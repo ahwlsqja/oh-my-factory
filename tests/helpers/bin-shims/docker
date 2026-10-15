@@ -1,0 +1,17 @@
+#!/bin/sh
+# Offline tests never reach a real Docker daemon: this shim sits first on the test PATH (tests/global-setup.ts).
+# `--version` answers like an installed client so `omf doctor` sees a binary, `info` fails like a stopped daemon,
+# and every other verb exits 1. A test that needs a working docker uses FakeDocker (in process) or
+# tests/helpers/fake-docker.ts `fakeDockerBin()` (a stateful program on PATH) instead.
+if [ "$1" = "--version" ]; then
+  echo "Docker version 0.0.0, build omf-test-shim"
+  exit 0
+fi
+for arg in "$@"; do
+  if [ "$arg" = "info" ]; then
+    echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running? (omf test shim)" >&2
+    exit 1
+  fi
+done
+echo "docker is not available in offline tests (omf test shim)" >&2
+exit 1

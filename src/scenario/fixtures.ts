@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runProcessGroup } from "../adapters/process-group.js";
-import type { ProcessResult } from "../adapters/process-group.js";
+import { observationOf } from "./observe.js";
 import type { FixtureId, ScenarioRunner, ScenarioSession } from "./runner.js";
-import type { RefusalCode, StepObservation } from "./types.js";
+import type { RefusalCode } from "./types.js";
 
 export interface FixtureEntry {
   id: FixtureId;
@@ -95,26 +95,6 @@ export interface HostFixtureRunnerOptions {
   fixturesDir?: string | undefined;
 }
 
-/**
- * `runProcessGroup` decodes stdout lossily, so invalid UTF-8 arrives as U+FFFD. Fail closed: such output is an
- * `error` observation, never evidence about the implementation. A status of null means the group leader ended
- * by a signal; it is never mapped to an exit code.
- */
-function observe(result: ProcessResult): StepObservation {
-  switch (result.kind) {
-    case "timeout":
-      return { outcome: "timeout" };
-    case "output_limit":
-      return { outcome: "output_limit" };
-    case "error":
-      return { outcome: "error" };
-    case "exited":
-      if (result.status === null) return { outcome: "signaled", signal: result.signal ?? "unknown" };
-      if (result.stdout.includes("�")) return { outcome: "error" };
-      return { outcome: "exited", exit_code: result.status, stdout: result.stdout };
-  }
-}
-
 function refusedSession(code: RefusalCode): ScenarioSession {
   return { runStep: async () => ({ outcome: "refused", code }), close: async () => {} };
 }
@@ -150,7 +130,7 @@ export function createHostFixtureRunner(options: HostFixtureRunnerOptions = {}):
             timeoutMs: limits.timeoutMs,
             maxOutputBytes: limits.maxOutputBytes,
           });
-          return observe(result);
+          return observationOf(result);
         },
         async close() {
           closed = true;

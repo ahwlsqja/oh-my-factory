@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "runs": [
+    {
+      "test": "G-inspect-parser-real",
+      "result": "pass",
+      "at": "2026-10-15T07:54:58.379Z",
+      "omf_commit": "b2872c3ef390f49e93546877b685d5b5e70b45a5",
+      "docker": {
+        "server_version": "29.2.1",
+        "context": "colima-omf-m3f",
+        "arch": "aarch64"
+      }
+    },
+    {
+      "test": "G-work-copy-real",
+      "result": "pass",
+      "at": "2026-10-15T10:18:21.330Z",
+      "omf_commit": "7fdf3812881cda60ed63c5703bd7e30cb5aeb6f3",
+      "docker": {
+        "server_version": "29.2.1",
+        "context": "colima-omf-m3f",
+        "arch": "aarch64"
+      }
+    },
+    {
+      "test": "G-two-container-roundtrip",
+      "result": "pass",
+      "at": "2026-10-15T10:18:45.012Z",
+      "omf_commit": "fb80e0229c4dc980eb1d7768fbfa381d31e68ffb",
+      "docker": {
+        "server_version": "29.2.1",
+        "context": "colima-omf-m3f",
+        "arch": "aarch64"
+      }
+    }
+  ]
+}

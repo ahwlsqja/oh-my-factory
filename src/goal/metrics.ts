@@ -2,7 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { canonicalize, sha256Hex } from "../core/canonical-json.js";
 import type { Ledger, LedgerEvent } from "../core/ledger.js";
+import { isDigestPinned } from "../container/image-ref.js";
 import { writePrivateFile } from "../core/private-fs.js";
+import { safeText } from "../core/safe-text.js";
 import { validate } from "../core/schema.js";
 import { METRIC_ID_PATTERN } from "./goal-file.js";
 
@@ -36,6 +38,16 @@ export class MetricError extends Error {
     super(message);
     this.name = "MetricError";
   }
+}
+
+/**
+ * The one sentence for "this metric's image is not pinned by digest", or null when it is pinned or absent. Proposing
+ * and locking both use it, so a metric that cannot be proposed cannot be locked either (M3-D13). The image is
+ * untrusted text and is printed through `safeText`.
+ */
+export function unpinnedImageProblem(metric: Pick<MetricDefinition, "metric_id" | "image">): string | null {
+  if (metric.image === null || isDigestPinned(metric.image)) return null;
+  return `metric ${metric.metric_id} image ${safeText(metric.image)} is not pinned by digest; use <name>@sha256:<64 hex digits>`;
 }
 
 export function proposalFile(projectDir: string, metricId: string): string {
@@ -117,6 +129,9 @@ export function proposeMetric(
   };
   const check = validate("metric-proposal.schema.json", proposal);
   if (!check.ok) throw new MetricError(`invalid metric proposal: ${check.errors}`);
+  // After the schema, so an image that is not even a reference ("--privileged") keeps its schema error.
+  const unpinned = unpinnedImageProblem(proposal);
+  if (unpinned !== null) throw new MetricError(unpinned);
   ledger.appendWith(() => {
     writePrivateFile(proposalFile(projectDir, metric.metric_id), `${JSON.stringify(proposal, null, 2)}\n`);
     return {

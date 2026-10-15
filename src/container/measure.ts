@@ -1,0 +1,175 @@
+import type { ProcessResult } from "../adapters/process-group.js";
+import type { RecordSink, RunScope } from "../audit/work-audit.js";
+import { type StageGolden, evaluateStage, measurementHash } from "../isolation/evaluate.js";
+import { InspectParseError, containerFactsFromInspect } from "../isolation/inspect.js";
+import { recordStageMeasurement } from "../isolation/record.js";
+import type {
+  ContainerChecks,
+  ContainerFacts,
+  IsolationStage,
+  StageMeasurement,
+  ViolationCode,
+} from "../isolation/types.js";
+import type { ContainerHandle, ContainerRuntime } from "./runtime.js";
+import { type ContainerSpec, ROLE_STAGE } from "./spec.js";
+
+/**
+ * `inspect_unparseable`: the daemon's document lacked an isolation field (absence is never a pass). `probe_failed` and
+ * `probe_malformed`: the in-container probe did not answer in the fixed grammar. `create_failed`: the container was made
+ * but could not be started. None records a measurement; the stage stays unmeasured.
+ */
+export type MeasureErrorCode = "inspect_unparseable" | "probe_failed" | "probe_malformed" | "create_failed";
+
+export class MeasureError extends Error {
+  constructor(readonly code: MeasureErrorCode) {
+    super(code);
+    this.name = "MeasureError";
+  }
+}
+
+/** The container was measured below its golden. The L1 is already recorded and the container removed. */
+export class NotGoldenError extends Error {
+  constructor(readonly violations: readonly ViolationCode[]) {
+    super(violations.join(","));
+    this.name = "NotGoldenError";
+  }
+}
+
+/**
+ * One line per finding, always ending in `end`, so a truncated answer is malformed and never clean. A constant: nothing
+ * from the host, a scenario or the candidate is ever interpolated into it. A tripwire for base images that ship a vendor
+ * CLI, a credential file or a socket; the daemon's `docker inspect` stays the authority.
+ */
+const PROBE_SCRIPT = [
+  'for b in claude codex docker gh aws gcloud az kubectl; do command -v "$b" >/dev/null 2>&1 && echo "vendor:$b"; done',
+  'for h in "$HOME" /root; do for f in .claude .claude.json .codex .aws .ssh .netrc .config/gh .docker/config.json; do [ -e "$h/$f" ] && echo "cred:$f"; done; done',
+  's=0; for p in /var/run/docker.sock /run/docker.sock; do [ -S "$p" ] && s=1; done; echo "socket:$s"',
+  "echo end",
+].join("\n");
+
+export const CONTAINER_PROBE_ARGV: readonly string[] = Object.freeze(["sh", "-c", PROBE_SCRIPT]);
+
+const PROBE_TIMEOUT_MS = 15_000;
+const PROBE_MAX_BYTES = 16 * 1024;
+const MAX_PROBE_LINES = 64;
+const VENDOR_LINE = /^vendor:([a-z0-9-]{1,32})$/;
+const CRED_LINE = /^cred:([A-Za-z0-9._/-]{1,64})$/;
+
+/** Anything but the fixed lines ending in `end` is `probe_malformed`: an answer that cannot be read is not a clean one. */
+export function parseProbe(stdout: string): ContainerChecks {
+  const lines = stdout.split("\n");
+  if (lines.at(-1) === "") lines.pop();
+  if (lines.length > MAX_PROBE_LINES || lines.at(-1) !== "end") throw new MeasureError("probe_malformed");
+  lines.pop();
+  const vendors = new Set<string>();
+  const credentials = new Set<string>();
+  let socket: boolean | null = null;
+  for (const line of lines) {
+    const vendor = VENDOR_LINE.exec(line)?.[1];
+    const credential = CRED_LINE.exec(line)?.[1];
+    if (vendor !== undefined) vendors.add(vendor);
+    else if (credential !== undefined) credentials.add(credential);
+    else if ((line === "socket:0" || line === "socket:1") && socket === null) socket = line === "socket:1";
+    else throw new MeasureError("probe_malformed");
+  }
+  if (socket === null) throw new MeasureError("probe_malformed");
+  return {
+    vendor_binaries: [...vendors].sort(),
+    credential_paths: [...credentials].sort(),
+    docker_socket_present: socket,
+  };
+}
+
+/** A probe that did not exit 0 (timeout, output limit, runner error, non-zero status) did not answer. */
+export function probeChecks(result: ProcessResult): ContainerChecks {
+  if (result.kind !== "exited" || result.status !== 0) throw new MeasureError("probe_failed");
+  return parseProbe(result.stdout);
+}
+
+const NO_CHECKS: ContainerChecks = { vendor_binaries: [], credential_paths: [], docker_socket_present: false };
+
+/** The PRE-GATE: the daemon's facts alone, before the container starts. The checks were never observed, so the record holds `checks: null` and a hash over `null`. */
+export function judgeFacts(
+  stage: IsolationStage,
+  facts: ContainerFacts,
+  golden: StageGolden,
+  at: Date,
+): StageMeasurement {
+  const judged = evaluateStage(stage, { facts, checks: NO_CHECKS }, golden, at);
+  return { ...judged, checks: null, facts_sha256: measurementHash(stage, "container", facts, null) };
+}
+
+/** The full judgment once the in-container probe has answered. */
+export function judgeObserved(
+  stage: IsolationStage,
+  facts: ContainerFacts,
+  checks: ContainerChecks,
+  golden: StageGolden,
+  at: Date,
+): StageMeasurement {
+  return evaluateStage(stage, { facts, checks }, golden, at);
+}
+
+export interface MeasureDeps {
+  runtime: ContainerRuntime;
+  sink: RecordSink;
+  scope: RunScope;
+  itemDir: string;
+  now: () => Date;
+}
+
+export interface MeasuredContainer {
+  handle: ContainerHandle;
+  measurement: StageMeasurement;
+}
+
+/**
+ * create -> inspect -> parse -> PRE-GATE (facts alone) -> start -> in-container probe -> full judgment -> record.
+ *
+ * A facts violation records L1, removes the container and throws `NotGoldenError`; the container never started, so neither its
+ * entrypoint nor the probe's `sh` ran. A probe-only violation records L1, removes and throws. A parse or probe failure removes
+ * the container and records nothing. Only a golden container is returned, still running, for the caller to use and remove. An
+ * error from `create` (no context, a remote endpoint) propagates as the runtime raised it: no container exists yet.
+ */
+export async function createMeasured(
+  deps: MeasureDeps,
+  spec: ContainerSpec,
+  golden: StageGolden,
+): Promise<MeasuredContainer> {
+  const stage = ROLE_STAGE[spec.labels.role];
+  const { runtime } = deps;
+  const handle = await runtime.create(spec);
+  let keep = false;
+  try {
+    let facts: ContainerFacts;
+    try {
+      facts = containerFactsFromInspect(await runtime.inspect(handle));
+    } catch (error) {
+      if (error instanceof InspectParseError) throw new MeasureError("inspect_unparseable");
+      throw error;
+    }
+    const pre = judgeFacts(stage, facts, golden, deps.now());
+    if (pre.violations.length > 0) {
+      recordStageMeasurement(deps.sink, deps.scope, deps.itemDir, pre);
+      throw new NotGoldenError(pre.violations);
+    }
+    try {
+      await runtime.start(handle);
+    } catch {
+      throw new MeasureError("create_failed");
+    }
+    const answer = await runtime.exec(handle, {
+      argv: CONTAINER_PROBE_ARGV,
+      timeoutMs: PROBE_TIMEOUT_MS,
+      maxOutputBytes: PROBE_MAX_BYTES,
+    });
+    const measurement = judgeObserved(stage, facts, probeChecks(answer), golden, deps.now());
+    recordStageMeasurement(deps.sink, deps.scope, deps.itemDir, measurement);
+    if (measurement.violations.length > 0) throw new NotGoldenError(measurement.violations);
+    keep = true;
+    return { handle, measurement };
+  } finally {
+    // Idempotent. A failed removal leaves an orphan that carries the omf.owner label for the owner-label sweep.
+    if (!keep) await runtime.remove(handle).catch(() => undefined);
+  }
+}

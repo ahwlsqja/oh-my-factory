@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { RecordSink, RunScope } from "../../src/audit/work-audit.js";
@@ -6,16 +6,16 @@ import { Ledger } from "../../src/core/ledger.js";
 import { isolationMeasuredEvent } from "../../src/gate/events.js";
 import { hostStage } from "../../src/isolation/evaluate.js";
 import { isolationPath, loadRunIsolation, recordStageMeasurement } from "../../src/isolation/record.js";
-import { sealCompletedEvent } from "../../src/scenario/events.js";
-import type { AuthorIsolation } from "../../src/scenario/types.js";
 import {
   ISOLATION_STAGES,
-  VIOLATION_CODES,
   type IsolationLevel,
   type IsolationStage,
   type StageMeasurement,
+  VIOLATION_CODES,
   type ViolationCode,
 } from "../../src/isolation/types.js";
+import { sealCompletedEvent } from "../../src/scenario/events.js";
+import type { AuthorIsolation } from "../../src/scenario/types.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
 const AT = new Date("2026-10-14T09:15:00Z");
@@ -192,6 +192,28 @@ describe("recordStageMeasurement", () => {
     };
     expect(() => recordStageMeasurement(sink, scope(), itemDir, m("sut", "L2", A))).toThrow("ledger down");
     expect(existsSync(isolationPath(itemDir, RUN))).toBe(false);
+  });
+});
+
+describe("recordStageMeasurement: the view cannot fail a measurement", () => {
+  it("still records the 1001st sut measurement of a run, and leaves the full view as it was", () => {
+    const { ledger, itemDir } = setup();
+    const path = isolationPath(itemDir, RUN);
+    const full = Array.from({ length: 1000 }, () => m("sut", "L2", A));
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(
+      path,
+      JSON.stringify({
+        schema_version: 1,
+        run_id: RUN,
+        stages: { author: [], implementer: [], sut: full, harness: [] },
+        level: "unmeasured",
+      }),
+    );
+    expect(() => recordStageMeasurement(ledger, scope(), itemDir, m("sut", "L2", B))).not.toThrow();
+    expect(ledger.readVerified().filter((e) => e.type === "isolation.measured")).toHaveLength(1);
+    const view = JSON.parse(readFileSync(path, "utf8")) as { stages: { sut: unknown[] } };
+    expect(view.stages.sut).toHaveLength(1000);
   });
 });
 

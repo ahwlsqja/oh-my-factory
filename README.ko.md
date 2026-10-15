@@ -109,7 +109,9 @@ OMF 는 루프 두 개를 돌립니다.
 - **격리는 선언이 아니라 측정.** *일부 구현됨.* 단계별 측정 타입, 단계 평가기, GATE-3 가 컨테이너 없이
   시험됩니다. 다만 라인은 아직 GATE-3 를 호출하지 않고 자리표시자로 읽으므로, 컨테이너 단계가 연결되기
   전까지 모든 full 실행은 GATE-3 에서 미실행으로 멈춥니다. 실제 컨테이너에서 잰 수준은 아직 강제되지
-  않으며 `omf doctor` 는 이를 참고용·미측정으로만 보고합니다 (`docs/isolation-and-gates.md`).
+  않으며 `omf doctor` 는 이를 참고용으로만 보고합니다. `[judge]` 가 없으면 `unmeasurable`
+  ("judge.docker_context is not set, so no container runtime is used") 이라 하고, 있으면 임시 컨테이너 하나를 재서
+  L2 또는 L1 로 보고합니다 (`docs/isolation-and-gates.md`).
 - **비어 있으면 실패.** *일부 구현됨.* 라인 뼈대 (`E7a`), GATE-2 (`E7b`), 게이트 줄·감사·GATE-3 (`E7c`) 는
   없는 측정을 통과가 아니라 실패로 읽습니다. 심판의 판정 파일 쪽은 컨테이너 실행기와 함께 옵니다.
 - **자동 머지도 자동 배포도 없음.** *설계됨.* 후보는 사람이 내보낼 때까지 로컬 `omf/*` 브랜치에
@@ -232,7 +234,10 @@ warning: measured on the host without isolation (--runner host)
 
 - 지표의 명령과 `--watch` 로 지정한 경로만 대상입니다. 지정하지 않으면 `omf metric propose` 가 경고합니다.
   지표가 읽지만 감시하지 않는 파일과 gitignore 된 입력은 새 승인 없이 바뀔 수 있습니다.
-- 컨테이너 이미지 태그는 바뀔 수 있습니다. 이미지를 고정하려면 digest 를 쓰세요.
+- 컨테이너 이미지 태그는 바뀔 수 있으므로 지표 이미지는 digest(`name@sha256:<64자리 16진수>`)로 고정해야 합니다.
+  `omf metric propose --image` 는 태그를 거부하고, 태그가 든 제안이 저장된 목표를 승인할 때도 거부합니다. 이 규칙
+  이전에 태그로 잠근 지표는 계속 측정되지만 `omf goal measure`, `omf goal tick` 을 `--runner docker`(기본값)로 실행할 때마다 경고가 나옵니다.
+  digest 로 고정하려면 지표를 다시 제안하세요.
 - `bands/<metric>.yaml` 은 목표와 함께 잠깁니다. 해시가 J1 승인에 들어가므로, 고치거나 새로 만들거나 지우면
   체제 변경입니다. 관리 한계가 잠기기 전에 승인한 목표는 다시 승인할 때까지 한계가 잠기지 않고, 승인 화면이
   그렇게 알려 줍니다.

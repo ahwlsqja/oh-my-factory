@@ -1,4 +1,4 @@
-import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { Ledger, LedgerCorruptError } from "../../src/core/ledger.js";
 import {
@@ -70,6 +70,27 @@ describe("metric proposals and locks", () => {
     );
     expect(readProposal(dir, "m-p95-latency")).toBeNull();
     expect(ledger.readVerified()).toEqual([]);
+  });
+
+  it("refuses an image that is not pinned by digest and records nothing", () => {
+    const dir = makeTempDir();
+    const ledger = new Ledger(dir);
+    for (const image of [
+      "alpine:3.20",
+      "alpine",
+      `alpine@sha256:${"a".repeat(63)}`,
+      "node:22",
+      "ghcr.io/acme/bench:1.2",
+    ]) {
+      expect(() => proposeMetric(ledger, dir, { ...metric, image }, "human:dev")).toThrow(MetricError);
+      expect(() => proposeMetric(ledger, dir, { ...metric, image }, "human:dev")).toThrow(
+        `metric m-p95-latency image ${image} is not pinned by digest`,
+      );
+    }
+    expect(readProposal(dir, "m-p95-latency")).toBeNull();
+    expect(existsSync(ledger.file)).toBe(false);
+    const pinned = `alpine@sha256:${"a".repeat(64)}`;
+    expect(proposeMetric(ledger, dir, { ...metric, image: pinned }, "human:dev").image).toBe(pinned);
   });
 
   it("hashes the definition only", () => {
@@ -149,7 +170,11 @@ describe("image references", () => {
     },
   );
 
-  it.each(["node:22", `node@sha256:${"a".repeat(64)}`, "ghcr.io/acme/bench:1.2"])("accepts the image %s", (image) => {
+  it.each([
+    `node@sha256:${"a".repeat(64)}`,
+    `ghcr.io/acme/bench@sha256:${"b".repeat(64)}`,
+    `registry.example.com:5000/team/app@sha256:${"c".repeat(64)}`,
+  ])("accepts the digest-pinned image %s", (image) => {
     const dir = makeTempDir();
     const proposal = proposeMetric(new Ledger(dir), dir, { ...metric, image }, "human:dev");
     expect(readProposal(dir, metric.metric_id)).toEqual(proposal);

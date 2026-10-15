@@ -112,8 +112,9 @@ or **designed** and not built yet.
 - **Isolation is measured, not declared.** *Partly built.* The per-stage measurement types, the stage
   evaluator and GATE-3 exist and are tested without a container. The line does not call GATE-3 yet: it
   still reads as a placeholder, so until the container stations are wired in, every full run stops at GATE-3 as
-  not run. A level measured on a real container is not enforced yet; `omf doctor` reports it as advisory and
-  unmeasured (`docs/isolation-and-gates.md`).
+  not run. A level measured on a real container is not enforced yet; `omf doctor` reports it as advisory: without a
+  `[judge]` section it says `unmeasurable` ("judge.docker_context is not set, so no container runtime is used"), and
+  with one it measures a throwaway container and reports L2 or L1 (`docs/isolation-and-gates.md`).
 - **Empty means fail.** *Partly built.* The line skeleton (`E7a`), GATE-2 (`E7b`) and the gate line, the
   audit and GATE-3 (`E7c`) read a missing measurement as a failure, never as a pass. The judge's verdict
   file arrives with the container runner.
@@ -238,7 +239,10 @@ Known limits of "metric code cannot change quietly":
 
 - Only the metric's command and the paths you declare with `--watch` are covered. `omf metric propose` warns when
   you give none. Files a metric reads but does not watch, and gitignored inputs, can change without a new approval.
-- A container image tag is mutable; pin an image digest to pin the image.
+- A container image tag is mutable, so a metric image must be pinned by digest (`name@sha256:<64 hex digits>`):
+  `omf metric propose --image` refuses a tag, and so does approving a goal whose stored proposal holds one. A metric
+  locked with a tag before this rule keeps measuring, and every `omf goal measure` and `omf goal tick` run with
+  `--runner docker` (the default) prints a warning for it; propose the metric again with a digest to pin it.
 - `bands/<metric>.yaml` is locked with the goal: its hash is part of the J1 approval, so editing, adding or
   deleting one is a regime change. A goal approved before bands were locked keeps unlocked bands until it is
   approved again, and the approval screen says so.

@@ -28,6 +28,7 @@
     "dist",
     "schemas",
     "fixtures",
+    "harness",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
     "README.md"
@@ -42,6 +43,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:gated": "node scripts/gated-docker.mjs",
     "lint": "biome lint .",
     "format:check": "biome format ."
   },

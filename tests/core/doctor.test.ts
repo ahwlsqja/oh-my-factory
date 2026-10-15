@@ -412,6 +412,24 @@ describe("runDoctor: advisory isolation and an atomic preflight.json", () => {
     expect(claimsL2.isolation.advisory).toBe(true);
   });
 
+  it("hands the probe the project and its config, or null when there is none or config.toml is unreadable", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const e = env(home, stubBin({ dockerDaemon: true }));
+    const seen: Array<{ dir: string; k: number } | null> = [];
+    const spy: IsolationProbe = (_env, _tools, project) => {
+      seen.push(project === null ? null : { dir: project.location.dir, k: project.config.judge.k });
+      return { declared: "L2", measured: "unmeasured", advisory: true, note: "n", failure: null };
+    };
+    runDoctor(repo, e, undefined, spy);
+    initProject(repo, e);
+    runDoctor(repo, e, undefined, spy);
+    writeFileSync(join(projectDir(repo, e), "config.toml"), "[judge");
+    const broken = runDoctor(repo, e, undefined, spy);
+    expect(seen).toEqual([null, { dir: projectDir(repo, e), k: 3 }, null]);
+    expect(broken.isolation.measured).toBe("unmeasured");
+  });
+
   it("reports a throwing probe as unmeasurable and still writes preflight.json", () => {
     const repo = makeGitRepo();
     const home = makeTempDir("omf-home-");

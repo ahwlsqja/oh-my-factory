@@ -11,7 +11,14 @@ import { type GoalSemantic, assertGoalId, readGoal, referencedMetrics, semanticH
 import { parseDuration } from "./duration.js";
 import { type BandsLockInfo, bandsLockInfo } from "./bands.js";
 import { changedPathsSince, headCommit, matchWatched } from "./git.js";
-import { type MetricDefinition, definitionOf, metricSha256, readProposal, writeLock } from "./metrics.js";
+import {
+  type MetricDefinition,
+  definitionOf,
+  metricSha256,
+  readProposal,
+  unpinnedImageProblem,
+  writeLock,
+} from "./metrics.js";
 
 /** The locked goal: the semantic fields J1 approved, and the commit the watched paths are compared with. */
 export interface GoalLock {
@@ -267,6 +274,14 @@ function lockGoalSerialized(
     if (proposal === null) throw new ApprovalError(`metric ${id} has no proposal; run omf metric propose ${id}`);
     return proposal;
   });
+  // A proposal made before the digest rule may still hold a tag. No new lock is created from it (M3-D13); a lock that
+  // already exists with a tag is not touched here and keeps measuring.
+  for (const proposal of proposals) {
+    const unpinned = unpinnedImageProblem(proposal);
+    if (unpinned !== null) {
+      throw new ApprovalError(`${unpinned}; nothing was approved. Propose the metric again with a digest`);
+    }
+  }
   const bands = bandsLockInfo(location.dir, goalId, metrics);
   if (expected !== undefined) requireShown(expected, goal.front, proposals, bands);
   const targetProposal = proposals[0];

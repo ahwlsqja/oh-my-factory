@@ -100,3 +100,25 @@ error fails the pull request. Run `npx biome format --write .` before committing
   warnings and infos are reported but do not fail the job. Promote a rule back to `error` once its count reaches zero.
 - Format: the whole repository was formatted in one commit, which is listed in `.git-blame-ignore-revs`. Run
   `git config blame.ignoreRevsFile .git-blame-ignore-revs` once so `git blame` skips it.
+
+## Docker-gated tests
+
+Suites under `tests/gated` need a real Docker daemon and are skipped unless `OMF_GATED=docker`; a skipped suite is not
+evidence. Nobody sets the switch by hand: `npm run test:gated` starts the dedicated colima profile `omf-m3f` (2 CPU,
+4 GiB), runs `vitest run tests/gated` against the `colima-omf-m3f` context only, and stops the profile afterwards. The
+test process gets a temporary `DOCKER_CONFIG` that holds only that context, a temporary `OMF_HOME`, and no `HOME`. The
+script never names another profile and never removes one. It starts the profile with `--activate=false`, so the user's
+current Docker context is left alone (and put back if it changed anyway).
+
+```sh
+npm run test:gated                                  # every gated suite
+npm run test:gated -- --only G-inspect-parser-real  # one suite
+npm run test:gated -- --record                      # also append a record per passed G- suite (clean tree only)
+```
+
+Records live in `docs/evidence/gated-runs.json` and are written only by `--record`, never from inside a test. Until a
+suite has a record, the docs say the behaviour it covers is not enforced. Gated suites are never part of CI.
+
+One older test predates this: the Docker case in `tests/adapters/measure-cmd.test.ts` runs only when
+`OMF_TEST_DOCKER=1` and uses the client's current Docker context, not the `omf-m3f` profile. It is not a gated suite,
+`npm run test:gated` does not run it, and it writes no record; do not set that switch for a gated run.

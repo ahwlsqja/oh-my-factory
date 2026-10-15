@@ -8,7 +8,15 @@ import { wallTimeLimitMs } from "./wall-time.js";
 import { type GoalFront, GoalFileError, readGoal, referencedMetrics, semanticHash } from "./goal-file.js";
 import { type GoalApproval, type GoalLock, GoalLockError, latestApproval, readGoalLock } from "./goal-lock.js";
 import { changedPathsSince, matchWatched } from "./git.js";
-import { MetricError, type MetricLock, lockedSha256, metricSha256, readLock, readProposal } from "./metrics.js";
+import {
+  MetricError,
+  type MetricLock,
+  lockedSha256,
+  metricSha256,
+  readLock,
+  readProposal,
+  unpinnedImageProblem,
+} from "./metrics.js";
 
 /**
  * `tampered`: an approval exists but a lock, the budget events or the goal lock do not verify against the
@@ -175,7 +183,14 @@ function draftProblems(dir: string, front: GoalFront): string[] {
   const problems: string[] = [];
   for (const id of referencedMetrics(front)) {
     try {
-      if (readProposal(dir, id) === null) problems.push(`metric ${id} has no proposal; run omf metric propose ${id}`);
+      const proposal = readProposal(dir, id);
+      if (proposal === null) {
+        problems.push(`metric ${id} has no proposal; run omf metric propose ${id}`);
+        continue;
+      }
+      // A proposal made before the digest rule may hold a tag; J1 would refuse to lock it, so it is not ready.
+      const unpinned = unpinnedImageProblem(proposal);
+      if (unpinned !== null) problems.push(`${unpinned}; propose the metric again with a digest`);
     } catch (err) {
       if (!(err instanceof MetricError)) throw err;
       problems.push(err.message);

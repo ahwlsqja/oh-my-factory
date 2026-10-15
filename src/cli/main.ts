@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
 import { Command } from "commander";
+import { containerIsolationProbe } from "../container/doctor-probe.js";
 import { runDoctorParallel } from "../core/doctor.js";
 import { Ledger, TORN_TAIL_WARNING } from "../core/ledger.js";
 import { GitNotFoundError, NotAGitRepoError, UnsupportedRepoError, resolveProject } from "../core/paths.js";
@@ -41,7 +42,7 @@ program
   .option("--json", "print the full report as JSON")
   .option("--strict", "treat the tool warnings (Docker missing or not running, an agent CLI missing) as problems")
   .action(async (options: { json?: boolean; strict?: boolean }) => {
-    const report = await runDoctorParallel(process.cwd(), process.env, undefined, undefined, {
+    const report = await runDoctorParallel(process.cwd(), process.env, undefined, containerIsolationProbe(), {
       strict: options.strict === true,
     });
     if (options.json) {

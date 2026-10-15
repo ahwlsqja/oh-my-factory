@@ -163,3 +163,97 @@ describe("containerFactsFromInspect", () => {
     expect(() => containerFactsFromInspect(noRw)).toThrow(/Mounts\[\]\.RW/);
   });
 });
+
+describe("omitempty keys and null slices", () => {
+  // Docker omits these HostConfig keys when they are unset (Go `omitempty`). None of them can hide a
+  // weakening by being absent, so absent, null and empty all leave the facts unchanged. StorageOpt,
+  // Annotations and Init are never read at all: no value of theirs can matter to isolation.
+  const NEUTRAL: ReadonlyArray<[string, unknown[]]> = [
+    ["Tmpfs", [undefined, null, {}]],
+    ["Sysctls", [undefined, null, {}]],
+    ["Mounts", [undefined, null, []]],
+    ["StorageOpt", [undefined, null, {}]],
+    ["Annotations", [undefined, null, {}]],
+    ["Init", [undefined, null, true, false]],
+  ];
+
+  it.each(NEUTRAL)("HostConfig.%s: unset in every form reads as the golden facts", (key, variants) => {
+    for (const variant of variants) {
+      const doc = goldenInspect();
+      if (variant === undefined) delete doc.HostConfig[key];
+      else doc.HostConfig[key] = variant;
+      expect(containerFactsFromInspect(doc), `${key}=${JSON.stringify(variant)}`).toEqual(GOLDEN_FACTS);
+    }
+  });
+
+  it("HostConfig.Runtime: absent reads as empty (the evaluator then flags it), null and a wrong type fail closed", () => {
+    const absent = goldenInspect();
+    delete absent.HostConfig.Runtime;
+    expect(containerFactsFromInspect(absent).runtime).toBe("");
+    for (const bad of [null, 7]) {
+      const doc = goldenInspect();
+      doc.HostConfig.Runtime = bad;
+      expect(() => containerFactsFromInspect(doc)).toThrow(/HostConfig\.Runtime/);
+    }
+  });
+
+  // Docker prints null for an empty list in these fields, and [] in some versions. The key itself is
+  // always printed, so a missing key is an unknown and must throw.
+  const SLICES: ReadonlyArray<[string, string | null]> = [
+    ["Binds", null],
+    ["Devices", "devices"],
+    ["CapAdd", "cap_add"],
+    ["CapDrop", "cap_drop"],
+    ["SecurityOpt", "security_opt"],
+    ["VolumesFrom", "volumes_from"],
+  ];
+
+  it.each(SLICES)("HostConfig.%s: null and [] read as empty, a missing key or a wrong type throws", (key, factsKey) => {
+    const field = `HostConfig.${key}`;
+    for (const empty of [null, []]) {
+      const doc = goldenInspect();
+      doc.HostConfig[key] = empty;
+      const facts = containerFactsFromInspect(doc) as unknown as Record<string, unknown>;
+      if (factsKey !== null) expect(facts[factsKey]).toEqual([]);
+    }
+    const missing = goldenInspect();
+    delete missing.HostConfig[key];
+    expect(() => containerFactsFromInspect(missing)).toThrow(new InspectParseError(field).message);
+    const wrong = goldenInspect();
+    wrong.HostConfig[key] = { not: "a list" };
+    expect(() => containerFactsFromInspect(wrong)).toThrow(new InspectParseError(field).message);
+  });
+});
+
+describe("HostConfig.Tmpfs", () => {
+  // `--tmpfs /tmp` is recorded only in HostConfig.Tmpfs (destination to mount options). It is not in the
+  // top-level Mounts, so a parser that ignores the key cannot see an unexpected tmpfs at all.
+  it("reads each entry as a tmpfs mount, read-only only when the options say ro", () => {
+    const doc = goldenInspect();
+    doc.Mounts = [];
+    doc.HostConfig.Binds = null;
+    doc.HostConfig.Tmpfs = { "/tmp": "rw,noexec,nosuid,size=16384k", "/scratch": "", "/ro": "ro,nosuid" };
+    expect(containerFactsFromInspect(doc).mounts).toEqual([
+      { type: "tmpfs", source: "", destination: "/ro", read_only: true },
+      { type: "tmpfs", source: "", destination: "/scratch", read_only: false },
+      { type: "tmpfs", source: "", destination: "/tmp", read_only: false },
+    ]);
+  });
+
+  it("counts a tmpfs once when it is also listed in the top-level Mounts", () => {
+    const doc = goldenInspect();
+    doc.HostConfig.Tmpfs = { "/tmp": "rw,size=1m" };
+    expect(containerFactsFromInspect(doc).mounts).toEqual(GOLDEN_FACTS.mounts);
+  });
+
+  it.each([
+    ["a string", "/tmp"],
+    ["a list", ["/tmp"]],
+    ["a non-string option value", { "/tmp": 5 }],
+    ["an empty destination", { "": "rw" }],
+  ])("fails closed on %s", (_label, value) => {
+    const doc = goldenInspect();
+    doc.HostConfig.Tmpfs = value;
+    expect(() => containerFactsFromInspect(doc)).toThrow(/HostConfig\.Tmpfs/);
+  });
+});

@@ -210,3 +210,90 @@ describe("[w] table (per-item W limits, M3-D18)", () => {
     expect(readConfig(projectWith("[w]\nmax_rounds = 4\n")).w).toEqual({ max_rounds: 4, max_model_usd: 5 });
   });
 });
+
+describe("[judge]", () => {
+  const D = "b".repeat(64);
+
+  it("defaults to three repetitions, no images and no Docker context", () => {
+    expect(parseConfig("").judge).toEqual({
+      k: 3,
+      sut_base_image: null,
+      harness_base_image: null,
+      docker_context: null,
+      step_timeout_ms: 10_000,
+      memory_mb: 512,
+      cpus: 1,
+      pids_limit: 256,
+      tmp_tmpfs_mb: 64,
+      scratch_tmpfs_mb: 64,
+      work_tmpfs_mb: 256,
+      state_tmpfs_mb: 16,
+    });
+    expect(CONFIG_DEFAULTS.judge.k).toBe(3);
+  });
+
+  it("merges a partial section over the defaults and accepts pinned images and a context name", () => {
+    const judge = parseConfig(
+      `[judge]\nk = 5\nsut_base_image = "node@sha256:${D}"\nharness_base_image = "node@sha256:${D}"\ndocker_context = "colima-omf"\n`,
+    ).judge;
+    expect(judge).toMatchObject({
+      k: 5,
+      sut_base_image: `node@sha256:${D}`,
+      docker_context: "colima-omf",
+      memory_mb: 512,
+    });
+  });
+
+  it("keeps the [judge] example in the shipped config commented out", () => {
+    expect(DEFAULT_CONFIG).toMatch(/^# \[judge\]$/m);
+    expect(DEFAULT_CONFIG).not.toMatch(/^\[judge\]/m);
+  });
+
+  it.each([
+    ["k below 2", "k = 1"],
+    ["k above 10", "k = 11"],
+    ["a fractional k", "k = 2.5"],
+    ["a timeout below 1000", "step_timeout_ms = 999"],
+    ["a memory limit below 64", "memory_mb = 63"],
+    ["cpus above 4", "cpus = 4.5"],
+    ["a pids limit below 16", "pids_limit = 15"],
+    ["a zero tmpfs size", "tmp_tmpfs_mb = 0"],
+    ["a context name that starts with a dash", 'docker_context = "-x"'],
+    ["a context name with a space", 'docker_context = "a b"'],
+    ["a context name of 65 characters", `docker_context = "${"a".repeat(65)}"`],
+    ["cpus with three decimals", "cpus = 1.005"],
+    ["cpus with three decimals just above the floor", "cpus = 0.101"],
+    ["an unknown key", "network = true"],
+  ])("refuses %s", (_name, line) => {
+    expect(() => parseConfig(`[judge]\n${line}\n`)).toThrow(/config\.toml is invalid/);
+  });
+
+  it.each([
+    ["a context name of 64 characters", `docker_context = "${"a".repeat(64)}"`],
+    ["cpus with two decimals", "cpus = 0.29"],
+    ["the cpus floor", "cpus = 0.1"],
+    ["the cpus ceiling", "cpus = 4"],
+  ])("accepts %s, which the argv layer accepts too", (_name, line) => {
+    expect(() => parseConfig(`[judge]\n${line}\n`)).not.toThrow();
+  });
+
+  it("refuses an image that is not pinned by digest, before the schema runs", () => {
+    expect(() => parseConfig('[judge]\nsut_base_image = "node:22"\n')).toThrow(
+      "judge.sut_base_image must be pinned by digest",
+    );
+    expect(() => parseConfig(`[judge]\nharness_base_image = "node@sha256:${"B".repeat(64)}"\n`)).toThrow(
+      "judge.harness_base_image must be pinned by digest",
+    );
+  });
+
+  it("refuses tmpfs sizes that do not fit in memory_mb, because tmpfs is charged to the container", () => {
+    // The work copy holds tmp (64) plus work (256) = 320 MiB.
+    expect(() => parseConfig("[judge]\nmemory_mb = 256\n")).toThrow(
+      /judge tmpfs sizes of the workcopy container \(320 MiB\) exceed judge\.memory_mb \(256\)/,
+    );
+    expect(() =>
+      parseConfig("[judge]\nmemory_mb = 100\ntmp_tmpfs_mb = 90\nscratch_tmpfs_mb = 11\nwork_tmpfs_mb = 16\n"),
+    ).toThrow(/sut container \(101 MiB\)/);
+    expect(parseConfig("[judge]\nmemory_mb = 320\n").judge.memory_mb).toBe(320);
+  });
+});

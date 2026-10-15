@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { liveGroupCount, runProcessGroup } from "../../src/adapters/process-group.js";
@@ -26,9 +26,29 @@ describe("runProcessGroup", () => {
     expect(result).toEqual({ kind: "exited", status: 3, signal: null, stdout: "out\n", stderr: "err\n" });
   });
 
+  it("with tailOnly keeps the last bytes of a long output and still reports the exit", async () => {
+    const result = await runProcessGroup(
+      ["sh", "-c", "head -c 3000 /dev/zero | tr '\\0' 'x'; echo END; echo oops >&2; exit 0"],
+      options({ maxOutputBytes: 100, tailOnly: true }),
+    );
+    expect(result).toMatchObject({ kind: "exited", status: 0, stderr: "oops\n" });
+    if (result.kind !== "exited") return;
+    expect(result.stdout).toHaveLength(100);
+    expect(result.stdout.endsWith("xxxEND\n")).toBe(true);
+  });
+
   it("delivers stdin", async () => {
     const result = await runProcessGroup(["cat"], options({ stdin: "hello" }));
     expect(result).toMatchObject({ kind: "exited", status: 0, stdout: "hello" });
+  });
+
+  it("delivers a binary Buffer on stdin byte for byte", async () => {
+    // A tar stream for a work copy is not text: it must not pass through a UTF-8 string.
+    const target = join(makeTempDir(), "stdin.bin");
+    const bytes = Buffer.from([0xff, 0xfe, 0x00, 0x80, 0x0a, 0xc3, 0x28]);
+    const result = await runProcessGroup(["sh", "-c", 'cat > "$1"', "sh", target], options({ stdin: bytes }));
+    expect(result).toMatchObject({ kind: "exited", status: 0 });
+    expect(readFileSync(target).equals(bytes)).toBe(true);
   });
 
   it("uses the given environment verbatim", async () => {

@@ -94,6 +94,22 @@ function fromMountSpec(entry: unknown): MountFact {
   };
 }
 
+/**
+ * `HostConfig.Tmpfs` (`--tmpfs`): destination to mount options. Docker omits the key when unset
+ * (omitempty), so absent and null read as no tmpfs. A tmpfs given with `--tmpfs` is NOT listed in the
+ * top-level `Mounts`, so ignoring this key would hide an unexpected tmpfs from the evaluator. It counts
+ * as read-only only when the options say `ro` and not `rw`.
+ */
+function fromTmpfs(value: unknown): MountFact[] {
+  if (value === undefined || value === null) return [];
+  if (!isRecord(value)) throw new InspectParseError("HostConfig.Tmpfs");
+  return Object.entries(value).map(([destination, options]) => {
+    if (destination === "" || typeof options !== "string") throw new InspectParseError("HostConfig.Tmpfs");
+    const tokens = options.split(",");
+    return { type: "tmpfs", source: "", destination, read_only: tokens.includes("ro") && !tokens.includes("rw") };
+  });
+}
+
 function mountKey(mount: MountFact): string {
   return `${mount.destination}\u0000${mount.source}\u0000${mount.type}\u0000${mount.read_only}`;
 }
@@ -116,9 +132,11 @@ function unwrap(inspect: unknown): Json {
  * value. Mounts from the three places Docker reports them are merged and de-duplicated, so a bind that
  * appears only in `HostConfig.Binds` still counts. Environment values are dropped here and never held.
  *
- * The field mapping follows the Docker Engine API and is checked against fixtures only. The only fields
- * that read as empty when absent are the ones the Engine API marks omitempty (Sysctls, Runtime, Mounts);
- * for every other field a default would hide an unknown, so the parser throws instead.
+ * The field mapping follows the Docker Engine API and is checked against real `docker inspect` output
+ * (tests/fixtures/docker-inspect). A field reads as empty when absent only if the runtime omits it when
+ * unset (omitempty: Sysctls, Runtime, HostConfig.Mounts, Tmpfs) and its absence cannot hide a weakening;
+ * StorageOpt, Annotations and Init are never read. For every other field a default would hide an unknown,
+ * so the parser throws instead.
  */
 export function containerFactsFromInspect(inspect: unknown): ContainerFacts {
   const top = unwrap(inspect);
@@ -132,6 +150,7 @@ export function containerFactsFromInspect(inspect: unknown): ContainerFacts {
     ...actual.map(fromMountEntry),
     ...strings(host, "Binds", "HostConfig.Binds").map(fromBind),
     ...listOfRecords(own(host, "Mounts"), "HostConfig.Mounts").map(fromMountSpec),
+    ...fromTmpfs(own(host, "Tmpfs")),
   ];
   for (const mount of sources) merged.set(mountKey(mount), mount);
 

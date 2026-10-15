@@ -39,7 +39,7 @@ The tests are `tests/enforcement/E7c-empty-means-fail.test.ts` and `tests/enforc
 
 ## `omf doctor` is advisory
 
-`omf doctor` reports the declared level and `unmeasured` (or `unmeasurable` when its probe fails), marked `advisory`. GATE-3 never reads `preflight.json`.
+`omf doctor` always runs its container probe and marks the result `advisory`. Without a `[judge]` section (no `judge.docker_context`) it reports `unmeasurable` with the note "judge.docker_context is not set, so no container runtime is used"; it also reports `unmeasurable` when the daemon is unreachable, the endpoint is not a local socket or the base image is not already local. Otherwise it measures one throwaway golden container and reports L2 or L1. GATE-3 never reads `preflight.json`.
 The level of a run comes only from `isolation.measured` events in the ledger; `isolation.json` and `audit.json` in
 a run directory are views of those events.
 
