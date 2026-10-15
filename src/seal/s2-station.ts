@@ -8,7 +8,7 @@ import type { Station, StationResult } from "../work/sequencer.js";
 import type { AgentSession } from "./session.js";
 import { type S2Outcome, runS2Station } from "./station.js";
 
-export interface S2StationDeps {
+export interface S2LineStationDeps {
   location: ProjectLocation;
   session: AgentSession;
   ids?: Ids;
@@ -50,7 +50,7 @@ function resultOf(outcome: S2Outcome): StationResult {
  * wired from the item. A stop becomes the station's blocked result with the code of its route (J2 `j2_open`, J3
  * `scenarios_need_review`, J7 `gate_blocked`); a seal that stands, stored now or reused, answers ok with the set digest.
  */
-export function s2Station(deps: S2StationDeps): Station {
+export function s2Station(deps: S2LineStationDeps): Station {
   const { location } = deps;
   return {
     id: "S2",
