@@ -54,9 +54,15 @@ export function verbOf(argv: readonly string[]): string {
 const exited = (stdout: string): ProcessResult => ({ kind: "exited", status: 0, signal: null, stdout, stderr: "" });
 
 /** Records every argv, answers the probe exec itself, and edits the container's inspect document. */
-export function tampered(run: DockerRunner, tamper: Tamper, seen: string[][]): DockerRunner {
+export function tampered(
+  run: DockerRunner,
+  tamper: Tamper,
+  seen: string[][],
+  envSeen?: Array<Readonly<Record<string, string>> | undefined>,
+): DockerRunner {
   return async (argv, options) => {
     seen.push([...argv]);
+    envSeen?.push(options.env);
     const verb = verbOf(argv);
     if (verb === "exec" && tamper.probe !== undefined) {
       return typeof tamper.probe === "string" ? exited(tamper.probe) : tamper.probe;
@@ -77,6 +83,8 @@ export interface MeasureFixture {
   deps: MeasureDeps;
   itemDir: string;
   seen: string[][];
+  /** The extra client environment of each call in seen (undefined for a call that had none). */
+  envs: Array<Readonly<Record<string, string>> | undefined>;
   /** Container lifecycle verbs only, in call order. */
   lifecycle(): string[];
   spec(role: ContainerRole, serial?: number): ContainerSpec;
@@ -87,14 +95,18 @@ export interface MeasureFixture {
 
 const LIFECYCLE = new Set(["create", "inspect", "start", "exec", "rm"]);
 
-export async function measureFixture(tamper: Tamper = {}): Promise<MeasureFixture> {
+export async function measureFixture(
+  tamper: Tamper = {},
+  options: { imageEnv?: string[] } = {},
+): Promise<MeasureFixture> {
   const fake = new FakeDocker();
-  // The fake core's default image env is PATH only, so the base reads env_names ["PATH"].
-  addImage(fake.state, BASE);
+  // The fake core's default image env is PATH only, so the base reads env_names ["PATH"]; `imageEnv` models an owner-built image.
+  addImage(fake.state, BASE, options.imageEnv === undefined ? {} : { env: options.imageEnv });
   const seen: string[][] = [];
+  const envs: Array<Readonly<Record<string, string>> | undefined> = [];
   const runtime: ContainerRuntime = createDockerRuntime({
     context: CONTEXT,
-    run: tampered(fake.run, { probe: CLEAN_PROBE, ...tamper }, seen),
+    run: tampered(fake.run, { probe: CLEAN_PROBE, ...tamper }, seen, envs),
   });
   const image: ImageInfo = await runtime.ensureImage(BASE);
   const dir = makeTempDir("omf-measure-");
@@ -105,6 +117,7 @@ export async function measureFixture(tamper: Tamper = {}): Promise<MeasureFixtur
     deps: { runtime, sink: ledger, scope, itemDir, now: () => AT },
     itemDir,
     seen,
+    envs,
     lifecycle: () => seen.map(verbOf).filter((verb) => LIFECYCLE.has(verb)),
     spec: (role, serial = 1) =>
       containerSpecFor({

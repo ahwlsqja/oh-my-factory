@@ -6,11 +6,14 @@ import type { StageGolden } from "../isolation/evaluate.js";
 import type { PinnedImage } from "./image-ref.js";
 import type { ImageInfo } from "./runtime.js";
 import {
+  CREDENTIAL_SHAPED_ENV_NAMES,
   type ContainerRole,
   type ContainerSpec,
+  IMPLEMENTER_ENV_NAMES,
   type ImageId,
   type OwnedLabels,
   type RoleLimits,
+  SECRET_ENV_NAMES,
   type TmpfsSpec,
   containerName,
   roleLimits,
@@ -85,17 +88,27 @@ export function forbiddenPaths(location: ProjectLocation, env: NodeJS.ProcessEnv
 }
 
 /**
- * The golden a role is judged against: no network, a read-only root, only the role's tmpfs mounts, the digest-pinned base
- * image's own environment names (trusted data), no vendor CLI and no credential file.
+ * The golden a role is judged against: a read-only root, only the role's tmpfs mounts, the digest-pinned base image's own
+ * environment names (trusted data), no credential file, and no vendor CLI except the one the role runs.
+ *
+ * Judge roles run on no network and no vendor CLI. The implementer is the one role on a network (`bridge`) and the one with a
+ * vendor CLI (`claude`); a `codex` binary or a `~/.codex` is a violation. Its env names are the image's own names MINUS the
+ * secret and every credential-shaped name, plus the daemon's, plus the fixed implementer names: an image that bakes in a key
+ * therefore measures `unexpected_env_name`, and the secret name is never allowed at create time (it appears only at exec).
  */
 export function goldenFor(input: { role: ContainerRole; image: ImageInfo; forbidden: readonly string[] }): StageGolden {
+  const implementer = input.role === "implementer";
+  const refused = new Set<string>([...SECRET_ENV_NAMES, ...CREDENTIAL_SHAPED_ENV_NAMES]);
+  const imageNames = implementer ? input.image.env_names.filter((name) => !refused.has(name)) : input.image.env_names;
   return {
     allowed_mounts: ROLE_DESTINATIONS[input.role].map((destination) => ({ source: "", destination, read_only: false })),
     forbidden_paths: [...input.forbidden],
-    allowed_env_names: [...new Set([...input.image.env_names, ...DAEMON_ENV_NAMES])].sort(),
-    network: "none",
+    allowed_env_names: [
+      ...new Set([...imageNames, ...DAEMON_ENV_NAMES, ...(implementer ? IMPLEMENTER_ENV_NAMES : [])]),
+    ].sort(),
+    network: implementer ? "bridge" : "none",
     require_read_only_rootfs: true,
-    allowed_vendor_binaries: [],
+    allowed_vendor_binaries: implementer ? ["claude"] : [],
     allowed_credential_paths: [],
   };
 }
