@@ -5,6 +5,7 @@ import type { LedgerEvent } from "../core/ledger.js";
 import { writePrivateFileAtomic } from "../core/private-fs.js";
 import { validate } from "../core/schema.js";
 import { isolationMeasuredEvent } from "../gate/events.js";
+import { foldSeals } from "../scenario/events.js";
 import {
   ISOLATION_STAGES,
   type IsolationLevel,
@@ -83,15 +84,17 @@ export function recordStageMeasurement(
   writePrivateFileAtomic(path, `${JSON.stringify(view, null, 2)}\n`);
 }
 
-/** The item's latest `seal.completed` event written by `omf`: its seq and the set hash it pinned. */
-function sealOf(events: readonly LedgerEvent[], workId: string): AuthorScope | null {
-  let found: AuthorScope | null = null;
-  for (const event of events) {
-    if (event.actor !== "omf" || event.type !== "seal.completed") continue;
-    const { work_id: id, set_sha256: set } = event.payload;
-    if (id === workId && typeof set === "string" && /^[0-9a-f]{64}$/.test(set)) found = { seal_seq: event.seq, facts_sha256: set };
-  }
-  return found;
+/**
+ * The item's latest valid `seal.completed`, folded by M3c's `foldSeals` (the same reading GATE-2 uses): bound to the goal and
+ * work item, schema-checked, one record per seal id. A fold anomaly (an invalid omf seal event, a repeated seal id) means the
+ * seal cannot be trusted, so there is none. A seal stamped `host_command` also leaves the author stage unmeasured: no
+ * container measured it, whatever a container-mode event claims.
+ */
+function sealOf(events: readonly LedgerEvent[], scope: RunScope): AuthorScope | null {
+  const fold = foldSeals(events, { goal_id: scope.goal_id, work_id: scope.work_id });
+  const { latest } = fold;
+  if (fold.anomalies > 0 || latest === null || latest.author.isolation === "host_command") return null;
+  return { seal_seq: latest.seq, facts_sha256: latest.set_sha256 };
 }
 
 /**
@@ -99,14 +102,15 @@ function sealOf(events: readonly LedgerEvent[], workId: string): AuthorScope | n
  * the scope's goal and work item counts: of this run for the three run-scoped stages, and for the author stage those whose
  * `author_scope` names the item's latest seal event and its set hash, from whichever run measured it (a resumed run gets a
  * new run id). A stage level is the minimum over all its events, so a restored older L2 never beats a later L1, and a forged
- * L2 with no event reads `unmeasured`. A seal that was superseded, or an item with no `omf` seal, leaves the author unmeasured.
+ * L2 with no event reads `unmeasured`. A seal that was superseded, an item with no valid `omf` seal, a seal fold with anomalies or a seal stamped `host_command`
+ * leaves the author unmeasured.
  *
  * `_itemDir` is part of the contract and deliberately unused: `isolation.json` is a view of these events and never an input,
  * so a missing, corrupt or edited file cannot change the answer. (Where several author events match one seal, the minimum is
  * taken rather than the latest: the stricter reading of the same rule.)
  */
 export function loadRunIsolation(_itemDir: string, scope: RunScope, events: readonly LedgerEvent[]): RunIsolation {
-  const seal = sealOf(events, scope.work_id);
+  const seal = sealOf(events, scope);
   const measured: StageMeasurement[] = [];
   for (const event of events) {
     if (event.actor !== "omf" || event.type !== "isolation.measured") continue;

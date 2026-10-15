@@ -6,6 +6,8 @@ import { Ledger } from "../../src/core/ledger.js";
 import { isolationMeasuredEvent } from "../../src/gate/events.js";
 import { hostStage } from "../../src/isolation/evaluate.js";
 import { isolationPath, loadRunIsolation, recordStageMeasurement } from "../../src/isolation/record.js";
+import { sealCompletedEvent } from "../../src/scenario/events.js";
+import type { AuthorIsolation } from "../../src/scenario/types.js";
 import {
   ISOLATION_LEVELS,
   ISOLATION_STAGES,
@@ -40,9 +42,25 @@ function setup(): { ledger: Ledger; itemDir: string } {
   return { ledger: new Ledger(dir, () => AT), itemDir: join(dir, "items", WORK) };
 }
 
+/** A valid `seal.completed` as M3c writes it; the seal id and the author stamp are the parts the loader reads. */
+function sealEvent(set: string, opts: { goal?: string; work?: string; sealId?: string; isolation?: AuthorIsolation; round?: number } = {}) {
+  return sealCompletedEvent(
+    { goal_id: opts.goal ?? GOAL, work_id: opts.work ?? WORK },
+    {
+      round: opts.round ?? 1,
+      seal_id: opts.sealId ?? "seal-0123456789abcdef",
+      author: { vendor: "claude", model: "m1", at: "2026-10-14T09:00:00Z", isolation: opts.isolation ?? "container" },
+      decisions_digest: A,
+      set_sha256: set,
+      counts: { authored: 1, stored: 1, behavior: 1, contradiction_canary: 0, train: 1, test: 0, rejected: 0, ignored_fields: 0 },
+      rejected_by_code: {},
+    },
+  );
+}
+
 /** The item's seal event, then the run's first W event. Returns the seal's ledger seq. */
-function sealAndStart(ledger: Ledger, runId: string = RUN): number {
-  const seal = ledger.append({ actor: "omf", type: "seal.completed", payload: { work_id: WORK, round: 1, set_sha256: SET } });
+function sealAndStart(ledger: Ledger, runId: string = RUN, opts: { isolation?: AuthorIsolation } = {}): number {
+  const seal = ledger.append(sealEvent(SET, opts));
   ledger.append({ actor: "omf", type: "work.started", payload: { goal_id: GOAL, work_id: WORK, run_id: runId, from: "ready" } });
   return seal.seq;
 }
@@ -215,11 +233,42 @@ describe("loadRunIsolation: the ledger is the authority", () => {
     const resealed = setup();
     const seq2 = sealAndStart(resealed.ledger);
     recordStageMeasurement(resealed.ledger, scope(), resealed.itemDir, m("author", "L2", A), { seal_seq: seq2, facts_sha256: SET });
-    resealed.ledger.append({ actor: "omf", type: "seal.completed", payload: { work_id: WORK, round: 2, set_sha256: B } });
+    resealed.ledger.append(sealEvent(B, { round: 2, sealId: "seal-fedcba9876543210" }));
     expect(loadRunIsolation(resealed.itemDir, scope(), resealed.ledger.readVerified()).stages.author).toBeNull();
 
     const noSeal = setup();
     recordStageMeasurement(noSeal.ledger, scope(), noSeal.itemDir, m("author", "L2", A), { seal_seq: 1, facts_sha256: SET });
     expect(loadRunIsolation(noSeal.itemDir, scope(), noSeal.ledger.readVerified()).stages.author).toBeNull();
+  });
+
+  it("does not let another goal's later seal with the same work id replace the item's seal", () => {
+    const { ledger, itemDir } = setup();
+    const seq = sealAndStart(ledger);
+    recordStageMeasurement(ledger, scope(), itemDir, m("author", "L2", A), { seal_seq: seq, facts_sha256: SET });
+    ledger.append(sealEvent(B, { goal: "g-other", sealId: "seal-fedcba9876543210" }));
+    expect(loadRunIsolation(itemDir, scope(), ledger.readVerified()).stages.author).toMatchObject({ level: "L2", measurements: 1 });
+  });
+
+  it("reads no seal when a schema-invalid omf seal.completed comes last", () => {
+    const { ledger, itemDir } = setup();
+    const seq = sealAndStart(ledger);
+    recordStageMeasurement(ledger, scope(), itemDir, m("author", "L2", A), { seal_seq: seq, facts_sha256: SET });
+    ledger.append({ actor: "omf", type: "seal.completed", payload: { goal_id: GOAL, work_id: WORK, round: 2, set_sha256: B } });
+    expect(loadRunIsolation(itemDir, scope(), ledger.readVerified()).stages.author).toBeNull();
+  });
+
+  it("reads no seal when a seal id repeats", () => {
+    const { ledger, itemDir } = setup();
+    const seq = sealAndStart(ledger);
+    recordStageMeasurement(ledger, scope(), itemDir, m("author", "L2", A), { seal_seq: seq, facts_sha256: SET });
+    ledger.append(sealEvent(B, { round: 2 }));
+    expect(loadRunIsolation(itemDir, scope(), ledger.readVerified()).stages.author).toBeNull();
+  });
+
+  it("reports the author unmeasured when the seal says the author ran as a host command", () => {
+    const { ledger, itemDir } = setup();
+    const seq = sealAndStart(ledger, RUN, { isolation: "host_command" });
+    recordStageMeasurement(ledger, scope(), itemDir, m("author", "L2", A), { seal_seq: seq, facts_sha256: SET });
+    expect(loadRunIsolation(itemDir, scope(), ledger.readVerified()).stages.author).toBeNull();
   });
 });
