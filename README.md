@@ -110,7 +110,8 @@ or **designed** and not built yet.
 - **Holdout, not homework.** *Designed.* Acceptance scenarios are sealed, written by the other
   vendor, and never shown to the implementer.
 - **Isolation is measured, not declared.** *Partly built.* The judge runs a candidate in two disposable containers (a
-  system under test and a harness; no network, no `docker.sock`, nothing of the vault) and measures each with
+  system under test and a harness; no network, no `docker.sock`, no mounted path; the harness holds the scenarios,
+  loaded over stdin, and the SUT never sees an expectation) and measures each with
   `docker inspect` before candidate code runs in it. GATE-3 reads those measurements from the ledger. Only the offline
   form against a fake Docker is tested: a level measured on a real container is not enforced until a gated run is
   recorded in `docs/evidence/gated-runs.json`, and the implementer and author containers do not exist yet, so a real
