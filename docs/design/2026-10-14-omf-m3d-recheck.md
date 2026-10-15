@@ -23,6 +23,7 @@ A row is changed here, never silently fixed in code: the commands that produced 
 | R15 | M3c GATE-2 `exposure_exhausted` calls `ExposureCount = ({split, digest}) => number` (no `reserveExposure`, no `scenario.exposed` event), and M3d supplies it | `exposureCountFor`, `exposureUnitsOf` | verified: `exposureCountFor` returns the (goal, work item) count for any key, and `src/scenario/gate2-gate.ts` passes it to GATE-2 |
 | R16 | Linked `decision_refs` resolve to `decision.class` through `foldDecisions` | the E2-W-b mapper | verified |
 | R17 | `DECISION_CLASSES` and `DecisionClass` in `src/decision/types.ts` | `src/feedback/types.ts` | verified |
+| R18 | A started item always reuses its standing seal (`src/seal/seal.ts`), so a rerun gets the same train and test digests | the handoff routes of `test_run_incomplete`, `test_reseal_required`, `scenarios_exhausted` | diff: a rerun cannot clear these states -> their routes offer `review` (show, veto) only; a fresh test digest is reachable only through a scenario status change, and the reseal verb (M3h) must add its own option |
 
 ## Commands
 
@@ -40,6 +41,7 @@ The commands that produced the table (run from the repository root):
 - R11: `grep -n "export const LINE_ORDER" src/work/line-types.ts`
 - R13, R14: `grep -rn "train_digest\|test_digest\|splitDigest" src --include='*.ts'`
 - R15: `grep -rn "ExposureCount\|exposure_exhausted" src --include='*.ts'`
+- R18: `grep -n "reused" src/seal/seal.ts`
 - R16, R17: `grep -rn "export function foldDecisions\|export const DECISION_CLASSES" src`
 
 R12 has no command: M3f is not merged.
