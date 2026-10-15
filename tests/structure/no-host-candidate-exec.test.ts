@@ -36,6 +36,10 @@ const MAY_SPAWN: readonly string[] = [
   "core/paths.ts",
   "git/hardened.ts",
   "goal/git.ts",
+  // Runs only OMF's own hash-verified fixtures, never repository code (`W-host-runner-fixture-only.test.ts`).
+  "scenario/fixtures.ts",
+  // Runs the seal author command, which is not candidate code; the author is a host stub and is reported as unmeasured.
+  "seal/session.ts",
 ];
 
 const NO_SPAWN_DIRS = ["gate", "audit", "isolation"];
