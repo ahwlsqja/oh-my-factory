@@ -1,12 +1,17 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { spawn, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { harnessEnv } from "../helpers/cli.js";
+import { waitForLine } from "../helpers/child.js";
+import { waitDead } from "../helpers/process.js";
 import { describe, expect, it } from "vitest";
 import { type StateStore, createMarkdownStore } from "../../src/adapters/state-markdown.js";
 import { claimFile, claimStatus } from "../../src/work/claim.js";
 import type { Gate, GateVerdict } from "../../src/work/gates.js";
-import { STATION_IDS, type StationId } from "../../src/work/line-types.js";
+import { LINE_ORDER, STATION_IDS, type StationId } from "../../src/work/line-types.js";
 import type { LineOptions } from "../../src/work/sequencer.js";
-import { newRunId } from "../../src/work/w-events.js";
+import { newRunId, wEvent } from "../../src/work/w-events.js";
 import { OK, type LineFixture, type StationBody, fakeGate, finished, passGates, setupLine, stationsOf } from "../helpers/line.js";
 
 /** Another run's claim: same process, a different acquired_at, so the sequencer finds a claim that is not its own. */
@@ -262,5 +267,105 @@ describe("runLine: stage timing", () => {
     expect(times.S2).toEqual({ visits: 2, total_ms: 20 });
     expect(times["GATE-2"]).toEqual({ visits: 2, total_ms: 0 });
     expect(times.S1).toEqual({ visits: 1, total_ms: 0 });
+  });
+});
+
+const CHILD = fileURLToPath(new URL("../helpers/line-child.mjs", import.meta.url));
+
+/** A claim whose process is gone: what a killed run leaves behind. */
+function plantStaleClaim(f: LineFixture): void {
+  const dead = spawnSync(process.execPath, ["-e", ""]).pid;
+  writeFileSync(claimFile(f.itemDir), JSON.stringify({ pid: dead, start_time: "x", acquired_at: "x" }));
+}
+
+const predecessorFiles = (f: LineFixture): string[] => f.files().filter((name) => name.endsWith(".predecessor.json"));
+const reclaims = (f: LineFixture) => f.events().filter((event) => event.type === "work.claim_reclaimed");
+const predecessorOf = (f: LineFixture, runId: string): Record<string, unknown> =>
+  JSON.parse(readFileSync(join(f.itemDir, "handoffs", `${runId}.predecessor.json`), "utf8")) as Record<string, unknown>;
+
+describe("runLine: the handoff for a killed predecessor", () => {
+  it("is written once for a stale claim on a ready item, with nothing reported as reached", async () => {
+    const f = setupLine();
+    plantStaleClaim(f);
+    // The first entry must park, not succeed: a submitted item is `awaiting_review`, and the later entry below would
+    // then throw `wrong_state` from beginRun instead of running.
+    const infra: StationBody = () => ({ kind: "blocked", reason_code: "infra_failure" });
+    const first = finished(await f.go({ stations: stationsOf([], { S3: infra }), gates: passGates([]) }));
+
+    const [reclaim] = reclaims(f);
+    expect(predecessorFiles(f)).toEqual([`handoffs/${first.run_id}.predecessor.json`]);
+    expect(predecessorOf(f, first.run_id)).toMatchObject({
+      kind: "killed_predecessor",
+      work_id: f.workId,
+      run_id: first.run_id,
+      predecessor_seq: reclaim?.seq,
+      outcome: "blocked",
+      reason_code: "run_killed",
+      ran: [],
+      remaining: [...LINE_ORDER],
+      decision_required: { j: "J6" },
+    });
+
+    finished(await f.go({ gates: passGates([]) })); // a later entry owes nothing more
+    expect(predecessorFiles(f)).toHaveLength(1);
+    expect(reclaims(f)).toHaveLength(1);
+  });
+
+  it("does not report the marker of a run that parked as the killed run's progress", async () => {
+    const f = setupLine();
+    const infra: StationBody = () => ({ kind: "blocked", reason_code: "infra_failure" });
+    finished(await f.go({ stations: stationsOf([], { S3: infra }), gates: passGates([]) }));
+    expect(f.fresh().progress.trim()).toBe("S3 entered"); // left by the run that parked
+
+    plantStaleClaim(f); // a later run died before it reached S3
+    const next = finished(await f.go({ gates: passGates([]) }));
+    expect(predecessorOf(f, next.run_id)).toMatchObject({ ran: [], remaining: [...LINE_ORDER] });
+  });
+
+  it("covers a reclaim that repairGoal did while entering the item (run.reclaimed is null)", async () => {
+    const f = setupLine();
+    // the ledger is one edge ahead of item.md, with a dead claim: the sweep at the start of beginRun reclaims and repairs
+    const killed = newRunId(new Date(), () => "0000");
+    f.fx.ledger.append(wEvent({ type: "work.started", payload: { goal_id: f.fx.goalId, work_id: f.workId, run_id: killed, from: "ready" } }));
+    plantStaleClaim(f);
+    const result = finished(await f.go({ gates: passGates([]) }));
+
+    expect(f.trail().slice(0, 4)).toEqual(["work.started", "work.claim_reclaimed", "work.repaired", "work.resumed"]);
+    const [reclaim] = reclaims(f);
+    expect(predecessorFiles(f)).toEqual([`handoffs/${result.run_id}.predecessor.json`]);
+    expect(predecessorOf(f, result.run_id)).toMatchObject({ predecessor_seq: reclaim?.seq, ran: [] });
+  });
+
+  it("after a real SIGKILL in S3: no evidence, claim_held while it lived, then a handoff from the marker and the ledger's round count", async () => {
+    const f = setupLine();
+    const child = spawn(process.execPath, [CHILD, f.fx.repo, f.workId], {
+      env: harnessEnv(f.fx.home, {}),
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    let out = "";
+    child.stdout?.on("data", (chunk: Buffer) => void (out += chunk.toString()));
+    try {
+      await waitForLine(child, "in S3 r-");
+      const killed = /in S3 (r-\S+)/.exec(out)?.[1];
+      await expect(f.go({ gates: passGates([]) })).rejects.toMatchObject({ code: "claim_held" });
+
+      const exited = new Promise<void>((done) => child.on("exit", () => done()));
+      child.kill("SIGKILL");
+      await exited;
+      expect(await waitDead(child.pid as number)).toBe(true);
+      expect(f.files()).toEqual([]); // a killed run leaves no evidence and no half-written file
+
+      const next = finished(await f.go({ gates: passGates([]) }));
+      expect(next.run_id).not.toBe(killed);
+      expect(predecessorOf(f, next.run_id)).toMatchObject({
+        kind: "killed_predecessor",
+        reason_code: "run_killed",
+        ran: [{ node: "S3", result: "entered" }],
+        remaining: LINE_ORDER.slice(LINE_ORDER.indexOf("S3")),
+      });
+      expect(f.events().filter((event) => event.type === "work.round").map((event) => event.payload.round)).toEqual([1, 2]);
+    } finally {
+      child.kill("SIGKILL");
+    }
   });
 });

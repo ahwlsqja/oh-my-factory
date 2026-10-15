@@ -29,7 +29,7 @@ import {
 import { type Gate4Result, type Gate4Warning, VisitCounter, evaluateGate4, gate4Result, roundSignature } from "./gate4.js";
 import { type GateResult, type GateVerdict, type Gate, GateBoard, defaultGates, injectedGateIds } from "./gates.js";
 import type { GovernanceCode } from "./governance.js";
-import { type HandoffRecord, buildHandoff, handoffFile, writeHandoff } from "./handoff.js";
+import { type HandoffRecord, buildHandoff, handoffFile, markerToRan, owedPredecessors, writeHandoff } from "./handoff.js";
 import {
   type GateId,
   LINE_ORDER,
@@ -42,7 +42,7 @@ import {
 import { type Disposition, OutcomeError, type WOutcome, dispositionOf } from "./outcome.js";
 import type { WorkItem } from "./types.js";
 import { type OwnedAppend, WorkBudgetError, foldReentry, foldWorkBudget, microUsd, recordLimits, recordRound, recordSpend } from "./w-budget.js";
-import { type ReasonCode, W_REASON_CODES } from "./w-events.js";
+import { type ReasonCode, W_REASON_CODES, lastStateEvent } from "./w-events.js";
 import { type RecheckFailure, type WRun, beginRun } from "./w-run.js";
 import { WError, type WErrorCode } from "./w-verbs.js";
 
@@ -606,6 +606,32 @@ export async function runLine(options: LineOptions): Promise<LineResult> {
     const ledger = new Ledger(options.location.dir, now);
     const own: OwnedAppend = { ledger, itemDir, claim: owner, scope: { goal_id: run.goalId, work_id: run.workId, run_id: run.runId } };
     clearEvidence(itemDir); // a killed run leaves none, and a stale file is never current
+
+    // A killed run leaves no result, so the ledger is asked who died (M3b2-D21): a work.claim_reclaimed after the
+    // item's last state event that no handoffs/*.predecessor.json covers. That also finds a reclaim `repairGoal`
+    // did while another item was entered, where `run.reclaimed` is null here. One record covers every owed reclaim
+    // (its seq is the newest). It sits after the entry recheck: a run that aborts there leaves the debt owed for the
+    // next entry instead of writing a record for an item nobody may run.
+    const history = ledger.readVerified();
+    const owed = owedPredecessors(itemDir, history, run.workId).at(-1);
+    if (owed !== undefined) {
+      // The progress marker is the killed run's only while the last state event is the item's start. After a park it
+      // belongs to the run that parked, and a killed run that never reached S3 wrote none.
+      const lastState = lastStateEvent(history, run.workId);
+      const reached = run.resumed && lastState?.event.type === "work.started" ? markerToRan(entry.item.progress) : [];
+      writeHandoff(
+        itemDir,
+        buildHandoff({
+          kind: "killed_predecessor",
+          scope: own.scope,
+          predecessor_seq: owed.seq,
+          classification: { outcome: "blocked", reason_code: "run_killed", unverified_areas: [] },
+          ran: reached,
+          remaining: LINE_ORDER.slice(LINE_ORDER.indexOf(reached[0]?.node ?? "S1")),
+          now: now(),
+        }),
+      );
+    }
     const config = readConfig(options.location.dir);
     guard(() => recordLimits(own, { max_rounds: config.w.max_rounds, max_model_micro_usd: microUsd(config.w.max_model_usd) }));
 
