@@ -22,6 +22,17 @@
         "context": "colima-omf-m3f",
         "arch": "aarch64"
       }
+    },
+    {
+      "test": "G-two-container-roundtrip",
+      "result": "pass",
+      "at": "2026-10-15T10:18:45.012Z",
+      "omf_commit": "fb80e0229c4dc980eb1d7768fbfa381d31e68ffb",
+      "docker": {
+        "server_version": "29.2.1",
+        "context": "colima-omf-m3f",
+        "arch": "aarch64"
+      }
     }
   ]
 }
