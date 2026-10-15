@@ -19,7 +19,8 @@ container.
 ## GATE-3
 
 GATE-3 passes only when no condition below is present. `failed` lists every condition found. The route is J7 when
-any isolation condition is present, otherwise J6.
+any isolation condition is present, otherwise J6. The route is advisory: it is recorded in `gate3.evaluated`, and the
+line's J act comes from the outcome classifier, not from this field.
 
 | Condition | Meaning |
 |---|---|
@@ -32,7 +33,7 @@ any isolation condition is present, otherwise J6.
 | `gate_line_misconfigured` | See the gate line above. A `red` line passes GATE-3: a failing gate is a gate result, not an integrity failure. |
 | `gate_line_not_run` | No gate run. |
 | `isolation_below_declared` | The run level is below the declared level. |
-| `isolation_unmeasured` | Fewer than four stages were measured, or no measurement at all. |
+| `isolation_unmeasured` | The run level reads `unmeasured`: no measurement at all, fewer than four stages measured, a stage with a record that contradicts itself (L2 with violations or on the host, or L3), an author stage that is missing because the seal is stamped `host_command`, superseded or absent, or the seal fold has anomalies. |
 
 The tests are `tests/enforcement/E7c-empty-means-fail.test.ts` and `tests/enforcement/W-gate3-isolation.test.ts`.
 
