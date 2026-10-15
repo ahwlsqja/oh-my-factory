@@ -20,7 +20,7 @@ import type { ScenarioProblem } from "./lint.js";
 import { runScenario } from "./runner.js";
 import type { FixtureId, ScenarioRunner, StepLimits } from "./runner.js";
 import { EXPOSURE_LIMIT, SCENARIO_SPLITS, isCanaryKind, scenarioRef } from "./types.js";
-import type { RefusalCode, ScenarioSplit, ScenarioStatus, SealFeedback, StoredScenario } from "./types.js";
+import type { RefusalCode, ScenarioSplit, ScenarioStatus, SealFeedback, StepObservation, StoredScenario } from "./types.js";
 
 /**
  * GATE-2, the pure part (spec §5.3; M3c-D7). A sealed scenario set is a judge only if it is not empty, has both splits, fails
@@ -387,8 +387,26 @@ async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T) 
   return results;
 }
 
-/** `runScenario` maps a refusal to "error" and drops the code; J7 needs the code, so the steps are watched. */
-function watchRefusals(runner: ScenarioRunner, seen: { code: RefusalCode | null }): ScenarioRunner {
+/** What a healthy OMF fixture does at every step. Anything else means the fixture did not run normally. */
+function behavedLikeFixture(id: FixtureId, observation: StepObservation): boolean {
+  if (observation.outcome !== "exited") return false;
+  if (id === "null-error") return observation.exit_code === 1 && observation.stdout === "";
+  if (id === "null-empty") return observation.exit_code === 0 && observation.stdout === "";
+  return observation.exit_code === 0;
+}
+
+interface ProbeWatch {
+  code: RefusalCode | null;
+  /** A step ended by a signal, or the fixture did something its source cannot do: it did not run normally. */
+  deviated: boolean;
+}
+
+/**
+ * `runScenario` maps a refusal to "error" and drops the code; J7 needs the code, so the steps are watched. It also
+ * folds a signal or a crashed fixture into a plain "fail", which here would read as "the null failed the scenario"
+ * (the good outcome); the watch records those so the probe can count them as not evaluated.
+ */
+function watchRefusals(runner: ScenarioRunner, id: FixtureId, seen: ProbeWatch): ScenarioRunner {
   return {
     id: runner.id,
     executes: runner.executes,
@@ -398,6 +416,7 @@ function watchRefusals(runner: ScenarioRunner, seen: { code: RefusalCode | null 
         async runStep(step, limits) {
           const observation = await inner.runStep(step, limits);
           if (observation.outcome === "refused") seen.code ??= observation.code;
+          else if (!behavedLikeFixture(id, observation)) seen.deviated = true;
           return observation;
         },
         close: () => inner.close(),
@@ -407,12 +426,14 @@ function watchRefusals(runner: ScenarioRunner, seen: { code: RefusalCode | null 
 }
 
 async function probeOnce(runner: ScenarioRunner, id: FixtureId, scenario: StoredScenario, limits?: StepLimits): Promise<ProbeRun> {
-  const seen: { code: RefusalCode | null } = { code: null };
+  const seen: ProbeWatch = { code: null, deviated: false };
   try {
-    const run = await runScenario(watchRefusals(runner, seen), { kind: "fixture", id }, scenario, limits);
+    const run = await runScenario(watchRefusals(runner, id, seen), { kind: "fixture", id }, scenario, limits);
+    // A fixture that did not run normally is not evidence about the scenario, whatever the matcher said.
+    const outcome = seen.deviated && run.outcome !== "error" ? "error" : run.outcome;
     return seen.code === null
-      ? { scenario_ref: run.scenario_ref, outcome: run.outcome }
-      : { scenario_ref: run.scenario_ref, outcome: run.outcome, refusal: seen.code };
+      ? { scenario_ref: run.scenario_ref, outcome }
+      : { scenario_ref: run.scenario_ref, outcome, refusal: seen.code };
   } catch {
     // An adapter that cannot even open a session (no scratch directory) is an environment fault: an error, never a pass.
     return { scenario_ref: scenarioRef(scenario.scenario_id), outcome: "error" };

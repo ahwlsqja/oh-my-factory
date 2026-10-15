@@ -445,7 +445,9 @@ describe("sealFeedbackFor", () => {
 });
 
 import { scenarioRef } from "../../src/scenario/types.js";
-import { DEFAULT_SPECS, STRONG_EXPECT, buildScenarios, fakeFixtureRunner } from "../helpers/scenario-fixture.js";
+import type { RunTarget, StepInput } from "../../src/scenario/runner.js";
+import type { StepObservation } from "../../src/scenario/types.js";
+import { DEFAULT_SPECS, STRONG_EXPECT, buildScenarios, fakeFixtureRunner, fixtureOf } from "../helpers/scenario-fixture.js";
 
 describe("runGate2Probes", () => {
   const scenarios = buildScenarios(DEFAULT_SPECS, "w-probe");
@@ -483,6 +485,22 @@ describe("runGate2Probes", () => {
     const broken = await runGate2Probes(fakeFixtureRunner({ failOpen: true }).runner, scenarios);
     expect(broken.null_error[0]).toEqual({ scenario_ref: refs[0], outcome: "error" });
   });
+
+  it("counts a fixture that did not run normally as an error, never as a failed scenario", async () => {
+    const killed = await runGate2Probes(
+      fakeFixtureRunner({ observe: (target, step) => (target.kind === "fixture" && target.id === "null-error" ? { outcome: "signaled", signal: "SIGKILL" } : fixtureOf(target, step)) }).runner,
+      scenarios,
+    );
+    expect(killed.null_error.map((p) => p.outcome)).toEqual(["error", "error", "error"]);
+    expect(killed.null_empty.map((p) => p.outcome)).toEqual(["fail", "fail", "fail"]);
+    const crashed = await runGate2Probes(
+      fakeFixtureRunner({ observe: (target, step) => (target.kind === "fixture" && target.id === "null-empty" ? { outcome: "exited", exit_code: 134, stdout: "" } : fixtureOf(target, step)) }).runner,
+      scenarios,
+    );
+    expect(crashed.null_empty.map((p) => p.outcome)).toEqual(["error", "error", "error"]);
+    const cannotStart = await runGate2Probes(fakeFixtureRunner({ observe: () => ({ outcome: "error" }) }).runner, scenarios);
+    expect(cannotStart.null_error.map((p) => p.outcome)).toEqual(["error", "error", "error"]);
+  });
 });
 
 import { join } from "node:path";
@@ -492,6 +510,16 @@ import { splitDigest } from "../../src/vault/vault.js";
 import { sealedCtx, seedSealedItem } from "../helpers/scenario-fixture.js";
 
 describe("runGate2", () => {
+  it.each([
+    ["a null fixture killed by a signal", (t: RunTarget, st: StepInput): StepObservation => (t.kind === "fixture" && t.id === "null-error" ? { outcome: "signaled", signal: "SIGKILL" } : fixtureOf(t, st))],
+    ["a null fixture that cannot start", (t: RunTarget, st: StepInput): StepObservation => (t.kind === "fixture" && t.id === "null-empty" ? { outcome: "error" } : fixtureOf(t, st))],
+  ])("does not pass when %s", async (_name, observe) => {
+    const s = seedSealedItem(DEFAULT_SPECS);
+    const result = await runGate2(sealedCtx(s, { runner: fakeFixtureRunner({ observe }).runner }));
+    expect(result.status).toBe("fail");
+    expect(result.status === "fail" ? result.reasons.map((r) => r.code) : []).toContain("probe_error");
+  });
+
   it("passes a strong sealed set, lists the quantitative decision as not_run, appends nothing and samples counts only", async () => {
     const s = seedSealedItem(DEFAULT_SPECS, { latency: true });
     const before = s.f.fx.ledger.readVerified().length;

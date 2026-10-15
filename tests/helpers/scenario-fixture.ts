@@ -173,6 +173,9 @@ export interface FakeRunnerOptions {
 }
 
 /** What the three OMF fixtures do (null-error, null-empty, echo-everything), without spawning a process. */
+export function fixtureOf(target: RunTarget, step: StepInput): StepObservation {
+  return fixtureLike(target, step);
+}
 function fixtureLike(target: RunTarget, step: StepInput): StepObservation {
   if (target.kind !== "fixture") return { outcome: "refused", code: "candidate_needs_container" };
   if (target.id === "null-error") return { outcome: "exited", exit_code: 1, stdout: "" };
