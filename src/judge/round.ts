@@ -19,8 +19,11 @@ export { disposeImages } from "./state.js";
 
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 type Outcome = "pass" | "fail" | "error";
-/** Observation outcomes the harness scores `error`: a refused or faulty step is never evidence about the candidate. */
-const FAULTS = new Set(["timeout", "output_limit", "error", "refused"]);
+/**
+ * Observation outcomes the harness scores `error`: a refused or faulty step is never evidence about the candidate. A signal, a
+ * timeout and the output limit are the candidate's doing, so the harness scores them `fail`; this list must agree with it.
+ */
+export const FAULTS: ReadonlySet<string> = new Set(["error", "refused"]);
 
 export interface RoundScenario {
   scenario_ref: string;

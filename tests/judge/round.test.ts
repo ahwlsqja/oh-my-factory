@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createArgv } from "../../src/container/argv.js";
 import { NotGoldenError } from "../../src/container/measure.js";
 import { roleTmpfs } from "../../src/container/spec.js";
-import { scenarioVerdict } from "../../src/judge/round.js";
+import { FAULTS, scenarioVerdict } from "../../src/judge/round.js";
 import { judgeConfig, lease, ref, runRound, scenarioOf, stepOf } from "../helpers/judge-fixture.js";
 import { measureHook, resetMeasureHook } from "../helpers/measure-mock.js";
 import { exited, RuntimeDouble } from "../helpers/sut-double.js";
@@ -22,6 +22,23 @@ describe("scenarioVerdict", () => {
     [[], "error"],
   ] as const)("%j is %s", (outcomes, verdict) => {
     expect(scenarioVerdict(outcomes)).toBe(verdict);
+  });
+});
+
+describe("fault outcomes", () => {
+  // The harness (harness/main.mjs judgeStep, pinned in harness-main.test.ts) scores error and refused `error` and everything
+  // else that is not a pass, including a signal, a timeout and the output limit, `fail`. The host must read it the same way.
+  it("lists exactly the outcomes the harness scores error", () => {
+    expect([...FAULTS].sort()).toEqual(["error", "refused"]);
+  });
+
+  it.each([
+    ["a timeout", { kind: "timeout", stdout: "", stderr: "" }],
+    ["the output limit", { kind: "output_limit", stdout: "", stderr: "" }],
+  ] as const)("%s from a candidate step is a failing scenario, never a round error", async (_name, result) => {
+    const double = new RuntimeDouble(() => result);
+    const verdict = await runRound(double, [scenarioOf(1, [stepOf(["a"], 0)])], { k: 1 });
+    expect(verdict.tallies.map((tally) => tally.verdict)).toEqual(["fail"]);
   });
 });
 

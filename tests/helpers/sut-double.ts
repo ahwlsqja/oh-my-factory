@@ -8,6 +8,7 @@ import type {
 } from "../../src/container/runtime.js";
 import type { ContainerSpec, ImageId } from "../../src/container/spec.js";
 import type { HarnessReply, HarnessRequest, HarnessSet, HarnessVerdict } from "../../src/judge/harness-protocol.js";
+import { FAULTS } from "../../src/judge/round.js";
 import { evaluateExpect } from "../../src/scenario/matcher.js";
 
 export const IMAGE: ImageInfo = {
@@ -41,7 +42,6 @@ export const exited = (stdout: string, status = 0): ProcessResult => ({
   stderr: "",
 });
 
-const FAULTS = new Set(["timeout", "output_limit", "error", "refused"]);
 type Run = HarnessVerdict["runs"][number];
 
 export class RuntimeDouble implements ContainerRuntime {
