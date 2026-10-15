@@ -125,8 +125,8 @@ or **designed** and not built yet.
 | Command | What it does |
 |---|---|
 | `omf init` | Creates host state for the current repository under `~/.omf`. Writes nothing to the repository or to the agent CLIs' configuration. |
-| `omf doctor` | Checks git, Docker, Claude Code and Codex, the repository and the ledger, and writes `preflight.json`. Runs the agent CLIs with a throwaway home. |
-| `omf ledger verify` | Checks the ledger's hash chain. |
+| `omf doctor [--json] [--strict]` | Checks git, Docker, Claude Code and Codex, the repository and the ledger, and writes `preflight.json`. Runs the agent CLIs with a throwaway home. A missing Docker or agent CLI is a warning that names the stage that needs it; every problem and warning has a one-line fix. `--strict` turns warnings into problems. |
+| `omf ledger verify [--json]` | Checks the ledger's hash chain. On a corrupt ledger, stderr line 2 gives the path, the line and the next step; `--json` gives the same as fields. Exit 2 before `omf init`. |
 | `omf goal new <id>` | Creates `goal.md` in host state from a template. |
 | `omf metric propose <id> --unit <u> -- <command>` | Proposes a metric: the command that prints its value, the unit, and the paths whose change is a regime change. |
 | `omf goal audit <id>` | Checks the goal, its locks and the ledger, and reports regime changes. Writes nothing. |
@@ -182,11 +182,14 @@ $ omf ledger verify
 ok: 1 event, head e3796f5ab9e6ec69…
 
 $ omf doctor
-problems:
-  - docker daemon is not reachable
+ok
+warning: docker daemon is not reachable (needed for: container judging, metric runs in a container)
+  fix: start Docker (for example Docker Desktop) and check it with: docker info
 ```
 
-`omf doctor --json` prints the full report.
+`omf doctor` exits 1 only for problems (for example `project not initialized; run omf init`, each with a `fix:` line).
+Warnings do not change the exit code; `omf doctor --strict` counts them as problems. `omf doctor --json` prints the full
+report, including `problem_details` and `warning_details` with the fix and the stages that need a tool.
 
 ## Define and measure a goal
 

@@ -120,8 +120,8 @@ OMF 는 루프 두 개를 돌립니다.
 | 명령 | 하는 일 |
 |---|---|
 | `omf init` | 현재 저장소의 호스트 상태를 `~/.omf` 아래에 만듭니다. 저장소와 에이전트 CLI 설정에는 아무것도 쓰지 않습니다. |
-| `omf doctor` | git, Docker, Claude Code, Codex, 저장소, 원장을 점검하고 `preflight.json` 을 씁니다. 에이전트 CLI 는 쓰고 버리는 임시 홈에서 실행합니다. |
-| `omf ledger verify` | 원장의 해시 체인을 확인합니다. |
+| `omf doctor [--json] [--strict]` | git, Docker, Claude Code, Codex, 저장소, 원장을 점검하고 `preflight.json` 을 씁니다. 에이전트 CLI 는 쓰고 버리는 임시 홈에서 실행합니다. Docker 나 에이전트 CLI 가 없으면 필요한 단계를 밝힌 경고로 보고하고, 문제와 경고마다 한 줄 조치(`fix`)가 붙습니다. `--strict` 는 경고를 문제로 봅니다. |
+| `omf ledger verify [--json]` | 원장의 해시 체인을 확인합니다. 원장이 손상됐으면 stderr 둘째 줄에 경로, 줄 번호, 다음 행동이 나오고 `--json` 은 같은 내용을 필드로 냅니다. `omf init` 전에는 종료 코드 2 입니다. |
 | `omf goal new <id>` | 템플릿으로 호스트 상태에 `goal.md` 를 만듭니다. |
 | `omf metric propose <id> --unit <u> -- <command>` | 지표를 제안합니다. 값을 출력하는 명령, 단위, 바뀌면 체제 변경(regime change)이 되는 경로를 적습니다. |
 | `omf goal audit <id>` | 목표, 잠금, 원장을 점검하고 체제 변경을 알려 줍니다. 아무것도 쓰지 않습니다. |
@@ -177,11 +177,14 @@ $ omf ledger verify
 ok: 1 event, head e3796f5ab9e6ec69…
 
 $ omf doctor
-problems:
-  - docker daemon is not reachable
+ok
+warning: docker daemon is not reachable (needed for: container judging, metric runs in a container)
+  fix: start Docker (for example Docker Desktop) and check it with: docker info
 ```
 
-`omf doctor --json` 은 보고서 전체를 출력합니다.
+`omf doctor` 는 문제가 있을 때만 종료 코드 1 입니다(예: `project not initialized; run omf init`, 항목마다 `fix:` 줄이
+붙습니다). 경고는 종료 코드를 바꾸지 않으며 `omf doctor --strict` 는 경고도 문제로 셉니다. `omf doctor --json` 은
+`problem_details` 와 `warning_details`(조치와 도구가 필요한 단계) 를 포함한 보고서 전체를 출력합니다.
 
 ## 목표를 정하고 재기
 
