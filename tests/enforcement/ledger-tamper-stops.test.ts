@@ -81,6 +81,8 @@ describe("ledger-tamper-stops", () => {
       ["budget", "declare", "g-x", "rounds", "3"],
       ["budget", "raise", "g-x", "rounds", "1"],
       ["budget", "raise", "g-x", "wall_time", "2h"],
+      ["budget", "raise", "w-0123456789ab", "--rounds", "1"],
+      ["budget", "raise", "w-0123456789ab", "--usd", "0.5"],
       // The chain is verified before the item or the --file is looked at (T9/T10 check order), so a missing
       // file is never what these report once the ledger is broken.
       ["decide", "add", "w-0123456789ab", "--file", "/nonexistent/entry.json"],

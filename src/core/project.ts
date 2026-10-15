@@ -17,6 +17,12 @@ implementer = { vendor = "claude" }
 judge = { vendor = "codex" }
 reconciler = { vendor = "claude" }
 
+[w]
+# Per-work-item limits, copied into the ledger at an item's first run. Raising one later is a recorded human act
+# (J8), never a config edit.
+max_rounds = 3
+max_model_usd = 5.0
+
 # Optional. Without this section the code defaults apply (kind "claude", 120 s timeout, no budget cap).
 # [reconciler]
 # kind = "claude"        # or "command"; "command" also needs command = ["node", "stub.js"]

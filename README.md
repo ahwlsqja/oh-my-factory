@@ -111,7 +111,7 @@ or **designed** and not built yet.
   vendor, and never shown to the implementer.
 - **Isolation is measured, not declared.** *Designed.* `omf doctor` will measure the isolation in
   effect, and a run fails if it is weaker than declared.
-- **Empty means fail.** *Designed.* Missing evidence fails a gate; it is never read as a pass.
+- **Empty means fail.** *Designed.* Missing evidence fails a gate; it is never read as a pass. Partly enforced (E7a, line skeleton).
 - **No auto-merge, no auto-deploy.** *Designed.* Candidates live on local `omf/*` branches until a
   person ships them.
 
@@ -134,6 +134,7 @@ or **designed** and not built yet.
 | `omf budget show <id> [--json]` | Prints the rounds, disclosure and wall-time budgets: declared, raised, consumed and remaining. |
 | `omf budget declare <id> <kind> <amount>` | J8: declares a `rounds` or `disclosure` budget, in an interactive terminal. |
 | `omf budget raise <id> <kind> <amount>` | J8: raises a `rounds`, `disclosure` or `wall_time` cap, in an interactive terminal. Wall time can only be raised, never declared. |
+| `omf budget raise <work_id> --rounds <n>` or `--usd <amount>` | J8: raises the round limit or the model spend limit of one work item, in an interactive terminal. The limits are copied from `[w]` in `config.toml` when the item's first run starts. It changes no state: run the item again afterwards. Usable once an item has had a line run (`omf run`, M3h); until then it refuses with exit 2 (no recorded limits). |
 | `omf work list <goal-id> [--state <s>] [--json]` | Lists a goal's work items. Items the ledger does not account for are reported as malformed (exit 1). |
 | `omf work show <work-id>` | Prints a work item's `item.md`, claim and `intent.md`. |
 | `omf work approve <work-id>` | Approves a high-risk work item so it can be dispatched, in an interactive terminal. |

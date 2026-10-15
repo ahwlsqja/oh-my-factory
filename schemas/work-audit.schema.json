@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OMF work audit (M3e)",
+  "description": "The audit of one run: facts about the real diff, the canary scan, the judge-config check, the risk recompute and the prove-test result. Counts, booleans, closed lists and capped path lists. Never a canary, a scenario or command output.",
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0 },
+    "path_list": { "type": "array", "maxItems": 200, "items": { "type": "string", "maxLength": 1024 } },
+    "surface_kind": { "enum": ["worktree", "diff", "commit_messages", "implementer_log", "prompt", "feedback"] },
+    "risk_rule": { "enum": ["ci", "auth", "migration", "test", "goal-factory", "lockfile", "watched-path", "extra", "undeclared", "unclassifiable"] },
+    "assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class", "rules", "paths"],
+      "properties": {
+        "class": { "enum": ["normal", "high"] },
+        "rules": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/risk_rule" } },
+        "paths": { "type": "array", "maxItems": 10000, "items": { "type": "string", "maxLength": 1024 } }
+      }
+    },
+    "canary_scan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "surfaces_scanned", "hits", "total", "symlinks_skipped", "truncated"],
+      "properties": {
+        "status": { "enum": ["scanned", "not_run"] },
+        "surfaces_scanned": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/surface_kind" } },
+        "hits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["surface", "count"],
+            "properties": { "surface": { "$ref": "#/$defs/surface_kind" }, "count": { "type": "integer", "minimum": 1 } }
+          }
+        },
+        "total": { "$ref": "#/$defs/count" },
+        "symlinks_skipped": { "$ref": "#/$defs/count" },
+        "truncated": { "type": "boolean" }
+      }
+    },
+    "prove_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason", "test_exit", "non_test_paths", "test_paths"],
+      "properties": {
+        "status": { "enum": ["PROVEN", "FAILED", "MISCONFIGURED"] },
+        "reason": {
+          "enum": [
+            "test-passed-without-fix", "working-tree-not-clean", "invalid-base-ref", "base-not-ancestor", "no-non-test-change",
+            "empty-revert-patch", "revert-failed", "baseline-test-failed", "test-command-unrunnable", "interrupted", null
+          ]
+        },
+        "test_exit": { "oneOf": [{ "type": "null" }, { "type": "integer" }] },
+        "non_test_paths": { "$ref": "#/$defs/count" },
+        "test_paths": { "$ref": "#/$defs/count" }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "diff", "tests_edited", "tests_edited_count", "tests_added", "canary", "judge_config_touched", "judge_files_checked",
+    "projections_touched", "risk", "high_risk_paths_touched", "high_risk_paths_count", "prove_test"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "diff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files", "empty", "special_entries"],
+      "properties": { "files": { "$ref": "#/$defs/count" }, "empty": { "type": "boolean" }, "special_entries": { "$ref": "#/$defs/count" } }
+    },
+    "tests_edited": { "$ref": "#/$defs/path_list" },
+    "tests_edited_count": { "$ref": "#/$defs/count" },
+    "tests_added": { "$ref": "#/$defs/count" },
+    "canary": { "$ref": "#/$defs/canary_scan" },
+    "judge_config_touched": { "type": "boolean" },
+    "judge_files_checked": { "$ref": "#/$defs/count" },
+    "projections_touched": { "$ref": "#/$defs/path_list" },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["declared", "recomputed", "effective", "raised"],
+      "properties": {
+        "declared": { "$ref": "#/$defs/assessment" },
+        "recomputed": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/assessment" }] },
+        "effective": { "$ref": "#/$defs/assessment" },
+        "raised": { "type": "boolean" }
+      }
+    },
+    "high_risk_paths_touched": { "$ref": "#/$defs/path_list" },
+    "high_risk_paths_count": { "$ref": "#/$defs/count" },
+    "prove_test": { "oneOf": [{ "const": "not_run" }, { "$ref": "#/$defs/prove_result" }] }
+  }
+}
