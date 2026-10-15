@@ -48,6 +48,19 @@ export const W_REASON_CODES = [
   "infra_failure",
   "manual_required",
   "station_error",
+  // Added by M3b2 (the line sequencer, GATE-4 and the outcome classifier). The schema enum gets the same twelve.
+  "visit_cap",
+  "stalled",
+  "gate_not_run",
+  "station_skipped",
+  "evidence_incomplete",
+  "run_killed",
+  "audit_flag",
+  "sealed_failed",
+  "flaky_scenario",
+  "within_variance",
+  "gate2_exhausted",
+  "reentry_loop",
 ] as const;
 export type ReasonCode = (typeof W_REASON_CODES)[number];
 

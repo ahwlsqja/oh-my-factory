@@ -25,7 +25,8 @@ import { verifiedItems, verifyItemAgainstLedger } from "../work/ledger-verify.js
 import { canTransition } from "../work/transitions.js";
 import { OPEN_STATES, TERMINAL_WORK_STATES, type WorkItem, type WorkState } from "../work/types.js";
 import { renderWorkItem } from "../work/work-item.js";
-import { confirmByTyping, requireTerminal } from "./confirm.js";
+import { type LimitKind, WorkBudgetError, microUsd, openItemBudget, raiseWorkLimit } from "../work/w-budget.js";
+import { type PromptStreams, type TerminalStreams, confirmByTyping, requireTerminal } from "./confirm.js";
 
 /** What a person typed after `omf budget declare|raise`: strings, because validation is `parseBudgetArgs`'s job. */
 export interface BudgetArgs {
@@ -110,6 +111,111 @@ export function runBudgetCommand(status: ProjectLocation, args: BudgetArgs, acto
   if (after === null) throw new Error("unreachable: a raised budget has no state");
   return `raised ${parsed.kind} budget of ${parsed.goalId} by ${parsed.amount} as ${actor}; ${after.remaining} remaining`;
 }
+
+/** What a person typed after `omf budget raise`: strings, because validation is `parseBudgetRaiseArgs`'s job. */
+export interface BudgetRaiseArgs {
+  id: string;
+  kind?: string;
+  amount?: string;
+  /** `--rounds <n>`, the work item form. */
+  rounds?: string;
+  /** `--usd <amount>`, the work item form. */
+  usd?: string;
+}
+
+export type ParsedBudgetRaise =
+  | { form: "goal"; args: BudgetArgs }
+  /** `amount` is in the unit the ledger stores (rounds, or micro-USD); `display` is what the person typed. */
+  | { form: "work"; workId: string; kind: LimitKind; amount: number; display: string };
+
+const WORK_ID_ARG = /^w-[0-9a-f]{12}$/;
+const USD_ARG = /^(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$/;
+
+/**
+ * Splits `omf budget raise` into its two forms without touching the ledger (M3b2 section 7). `--rounds` or
+ * `--usd` or a `w-` id selects the work item form; anything else is the goal form, unchanged. Amounts that
+ * are not positive (a zero, a sign, an exponent, a result that is not a safe integer of micro-dollars) are
+ * `WorkBudgetError("invalid_amount")`; main.ts exits 2 for every error, like the goal form.
+ */
+export function parseBudgetRaiseArgs(raw: BudgetRaiseArgs): ParsedBudgetRaise {
+  const { rounds, usd } = raw;
+  const workForm = rounds !== undefined || usd !== undefined || WORK_ID_ARG.test(raw.id);
+  if (!workForm) {
+    if (raw.kind === undefined || raw.amount === undefined) {
+      throw new Error("budget raise needs <kind> <amount> for a goal, or --rounds <n> or --usd <amount> for a work item");
+    }
+    const args: BudgetArgs = { verb: "raise", goalId: raw.id, kind: raw.kind, amount: raw.amount };
+    parseBudgetArgs(args);
+    return { form: "goal", args };
+  }
+  if (!WORK_ID_ARG.test(raw.id)) throw new Error(`--rounds and --usd raise a work item's limit; ${raw.id} is not a work id`);
+  if (raw.kind !== undefined || raw.amount !== undefined) throw new Error("a work item takes --rounds or --usd, not <kind> <amount>");
+  if (rounds !== undefined && usd === undefined) {
+    if (!/^[1-9][0-9]*$/.test(rounds) || !Number.isSafeInteger(Number(rounds))) {
+      throw new WorkBudgetError("invalid_amount", `--rounds must be a positive integer; got ${rounds}`);
+    }
+    return { form: "work", workId: raw.id, kind: "rounds", amount: Number(rounds), display: rounds };
+  }
+  if (usd !== undefined && rounds === undefined) {
+    let micro = 0;
+    try {
+      if (!USD_ARG.test(usd)) throw new RangeError("not a plain decimal");
+      micro = microUsd(Number(usd));
+    } catch (err) {
+      if (!(err instanceof RangeError)) throw err;
+      throw new WorkBudgetError("invalid_amount", `--usd must be a positive amount of dollars; got ${usd}`);
+    }
+    return { form: "work", workId: raw.id, kind: "model_micro_usd", amount: micro, display: `${usd} USD` };
+  }
+  throw new Error("give exactly one of --rounds <n> and --usd <amount>");
+}
+
+const dollars = (micro: number): string => (micro / 1_000_000).toFixed(6);
+
+/**
+ * The lines printed above the confirmation prompt: the item, the limits in force and what was used. Read-only;
+ * it applies the same checks as the write (`openItemBudget`), so an item the raise would refuse never reaches
+ * the prompt. Ids and numbers only.
+ */
+export function workLimitLines(location: ProjectLocation, workId: string): string[] {
+  const { item, state } = openItemBudget(location, workId, new Ledger(location.dir).readVerified());
+  const limit = state.effective;
+  if (limit === null) throw new Error("unreachable: openItemBudget returns recorded limits");
+  const unknown = state.spend.unknown_count > 0 ? `, ${state.spend.unknown_count} unknown` : "";
+  return [
+    `work ${workId} of goal ${item.front.goal_id} (${item.front.state})`,
+    `rounds: limit ${limit.max_rounds} (raised ${state.raised.rounds}), started ${state.rounds_started}`,
+    `model spend: limit ${dollars(limit.max_model_micro_usd)} USD (raised ${dollars(state.raised.model_micro_usd)}), spent ${dollars(state.spend.micro_usd)} USD${unknown}`,
+  ];
+}
+
+/**
+ * Everything `omf budget raise <work_id> --rounds|--usd` does after parsing: a terminal, the limits in force,
+ * the person retypes the work id, then the J8 write. Returns the exit code: 0 raised, 1 declined. Streams and
+ * `print` are parameters so a test runs the whole path without a terminal. It resumes nothing; a person then
+ * runs the item again (`omf run`, after M3h).
+ */
+export async function workLimitRaiseFlow(
+  location: ProjectLocation,
+  raise: Extract<ParsedBudgetRaise, { form: "work" }>,
+  actor: string,
+  io: PromptStreams = { input: process.stdin, output: process.stdout },
+  streams: TerminalStreams = process,
+  print: (line: string) => void = (line) => console.log(line),
+): Promise<0 | 1> {
+  requireTerminal("J8 work limit raise", "nothing was raised", streams);
+  for (const line of workLimitLines(location, raise.workId)) print(line);
+  const label = raise.kind === "rounds" ? "rounds" : "model spend";
+  const prompt = `Type ${raise.workId} to raise the ${label} limit by ${raise.display} as ${actor}: `;
+  if (!(await confirmByTyping(raise.workId, prompt, io))) {
+    console.error("not raised");
+    return 1;
+  }
+  raiseWorkLimit(location, raise.workId, raise.kind, raise.amount, actor);
+  print(`raised the ${label} limit of ${raise.workId} by ${raise.display} as ${actor}`);
+  return 0;
+}
+
 
 /** The wall time clock as `auditGoal` enforces it: the limit is the approved time plus the raises (D26). */
 export interface WallTimeReport {
@@ -219,32 +325,56 @@ export function registerBudgetCommands(program: Command): void {
       else for (const line of budgetLines(report)) console.log(line);
     });
 
-  const change = (verb: "declare" | "raise", description: string): void => {
-    budget
-      .command(verb)
-      .argument("<goal_id>")
-      .argument("<kind>", "rounds, disclosure or wall_time (wall_time can only be raised)")
-      .argument("<amount>", "a positive integer, or a duration such as 2h for wall_time")
-      .description(description)
-      .action(async (goalId: string, kind: string, amount: string) => {
+  /** The goal form of declare and raise, as it always was: a terminal, the budgets in force, a typed goal id. */
+  const goalBudgetFlow = async (status: ProjectLocation, args: BudgetArgs): Promise<void> => {
+    const { verb, goalId, kind, amount } = args;
+    // A usage error is reported as one, with or without a terminal.
+    parseBudgetArgs(args);
+    // No silent budget change (spec §6.2): without a terminal there is nobody to confirm.
+    requireTerminal(`J8 budget ${verb}`);
+    const actor = humanActor(status.repo);
+    for (const line of budgetLines(budgetReport(status, goalId))) console.log(line);
+    if (!(await confirmByTyping(goalId, `Type ${goalId} to ${verb} ${kind} ${amount} as ${actor}: `))) {
+      console.error(verb === "declare" ? "not declared" : "not raised");
+      process.exitCode = 1;
+      return;
+    }
+    console.log(runBudgetCommand(status, args, actor));
+  };
+
+  budget
+    .command("declare")
+    .argument("<goal_id>")
+    .argument("<kind>", "rounds, disclosure or wall_time (wall_time can only be raised)")
+    .argument("<amount>", "a positive integer, or a duration such as 2h for wall_time")
+    .description("J8: declare a rounds or disclosure budget (needs an interactive terminal)")
+    .action(async (goalId: string, kind: string, amount: string) => {
+      await goalBudgetFlow(requireProject(process.cwd()), { verb: "declare", goalId, kind, amount });
+    });
+
+  budget
+    .command("raise")
+    .argument("<id>", "a goal id, or a work id with --rounds or --usd")
+    // Optional only because the work item form takes neither; the goal form's missing-argument error moves from
+    // commander (exit 1) to parseBudgetRaiseArgs (exit 2), pinned by a test.
+    .argument("[kind]", "goal form: rounds, disclosure or wall_time")
+    .argument("[amount]", "goal form: a positive integer, or a duration such as 2h for wall_time")
+    .option("--rounds <n>", "work item form: raise the item's round limit by <n>")
+    .option("--usd <amount>", "work item form: raise the item's model spend limit by <amount> dollars")
+    .description("J8: raise a goal's rounds, disclosure or wall_time cap, or a work item's --rounds or --usd limit (needs an interactive terminal)")
+    .action(
+      async (id: string, kind: string | undefined, amount: string | undefined, options: { rounds?: string; usd?: string }) => {
         const status = requireProject(process.cwd());
-        const args: BudgetArgs = { verb, goalId, kind, amount };
-        // A usage error is reported as one, with or without a terminal.
-        parseBudgetArgs(args);
-        // No silent budget change (spec §6.2): without a terminal there is nobody to confirm.
-        requireTerminal(`J8 budget ${verb}`);
-        const actor = humanActor(status.repo);
-        for (const line of budgetLines(budgetReport(status, goalId))) console.log(line);
-        if (!(await confirmByTyping(goalId, `Type ${goalId} to ${verb} ${kind} ${amount} as ${actor}: `))) {
-          console.error(verb === "declare" ? "not declared" : "not raised");
-          process.exitCode = 1;
+        const parsed = parseBudgetRaiseArgs({ id, kind, amount, ...options });
+        if (parsed.form === "goal") {
+          await goalBudgetFlow(status, parsed.args);
           return;
         }
-        console.log(runBudgetCommand(status, args, actor));
-      });
-  };
-  change("declare", "J8: declare a rounds or disclosure budget (needs an interactive terminal)");
-  change("raise", "J8: raise a rounds, disclosure or wall_time cap (needs an interactive terminal)");
+        // No silent raise (spec §6.2): the terminal is checked before the actor, like the goal form.
+        requireTerminal("J8 work limit raise", "nothing was raised");
+        process.exitCode = await workLimitRaiseFlow(status, parsed, humanActor(status.repo));
+      },
+    );
 }
 
 const ALL_STATES: readonly WorkState[] = [...OPEN_STATES, ...TERMINAL_WORK_STATES];

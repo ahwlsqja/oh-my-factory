@@ -26,10 +26,22 @@ export const STOP_IF_UNREVIEWED_EVIDENCE = 3;
 export const REFRESH = { max_age: "14d", max_commits: 50, max_target_move: 1.0 } as const;
 export const EXTRA_HIGH_RISK_GLOBS: readonly string[] = [];
 
+/**
+ * Per-work-item limit a W line starts from (M3-D18). Task 2 copies it into a `work.limits_set` ledger event at an
+ * item's first run; after that the ledger is the authority and only a recorded human act raises it, so editing
+ * this table never loosens an item that already has limits.
+ */
+export interface WConfig {
+  max_rounds: number;
+  /** Dollars here for a person to read; the ledger holds integer micro-USD (M3b2-D2). */
+  max_model_usd: number;
+}
+
 export interface OmfConfig {
   isolation: { declared: "L2" };
   roles: Record<RoleName, { vendor: Vendor; model?: string; effort?: string }>;
   reconciler: ReconcilerConfig;
+  w: WConfig;
 }
 
 export class ConfigError extends Error {}
@@ -57,12 +69,15 @@ export const CONFIG_DEFAULTS: OmfConfig = {
     timeout_ms: 120_000,
     max_budget_usd: null,
   },
+  // Small on purpose (M3b2-D13): the default is that a person raises the limit, not that a loop runs long.
+  w: { max_rounds: 3, max_model_usd: 5 },
 };
 
 interface RawConfig {
   isolation?: { declared?: "L2" };
   roles?: Partial<Record<RoleName, { vendor?: Vendor; model?: string; effort?: string }>>;
   reconciler?: Partial<ReconcilerConfig>;
+  w?: Partial<WConfig>;
 }
 
 function table(parent: Record<string, unknown> | undefined, key: string): Record<string, unknown> | undefined {
@@ -101,7 +116,7 @@ export function parseConfig(text: string): OmfConfig {
   if (reconciler.kind === "command" && reconciler.command === null) {
     throw new ConfigError('reconciler.kind "command" requires reconciler.command');
   }
-  return { isolation: { ...CONFIG_DEFAULTS.isolation, ...raw.isolation }, roles, reconciler };
+  return { isolation: { ...CONFIG_DEFAULTS.isolation, ...raw.isolation }, roles, reconciler, w: { ...CONFIG_DEFAULTS.w, ...raw.w } };
 }
 
 function configPath(projectDir: string): string {

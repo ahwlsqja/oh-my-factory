@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { parseConfig } from "../../src/core/config.js";
 import { Ledger } from "../../src/core/ledger.js";
 import { NotAGitRepoError, projectDir, resolveProject } from "../../src/core/paths.js";
 import { DEFAULT_CONFIG, PROJECT_SUBDIRS, initProject, projectProblem, readProjectStatus, requireProject } from "../../src/core/project.js";
@@ -122,5 +123,15 @@ describe("projectProblem and requireProject", () => {
     expect(requireProject(repo, env).initialized).toBe(true);
     writeFileSync(join(location.dir, "ledger.jsonl"), "{}\n");
     expect(projectProblem(readProjectStatus(location))).toMatch(/^ledger corrupt at seq 1: /);
+  });
+});
+
+describe("the default config.toml text", () => {
+  it("writes an active [w] block that parses to the defaults", () => {
+    const home = makeTempDir("omf-home-");
+    const result = initProject(makeGitRepo(), { OMF_HOME: join(home, ".omf") });
+    const text = readFileSync(join(result.projectDir, "config.toml"), "utf8");
+    expect(text).toMatch(/^\[w\]$/m);
+    expect(parseConfig(text).w).toEqual({ max_rounds: 3, max_model_usd: 5 });
   });
 });
