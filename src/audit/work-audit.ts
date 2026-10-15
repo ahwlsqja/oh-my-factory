@@ -1,3 +1,4 @@
+import type { LedgerEvent, NewEvent } from "../core/ledger.js";
 import type { JudgeConfigDecl } from "../decision/types.js";
 import type { ProveTestResult } from "../gate/prove-test.js";
 import type { GitTarget } from "../git/hardened.js";
@@ -117,4 +118,16 @@ export function auditSignals(report: WorkAudit): AuditSignals {
     review_required:
       report.risk.effective.class === "high" || report.projections_touched.length > 0 || report.diff.special_entries > 0 || report.judge_config_touched,
   };
+}
+
+/** Where `recordAudit` appends. `Ledger` satisfies it: audit events are plain ledger appends (only the budget events are claim-checked). */
+export interface RecordSink {
+  append(event: NewEvent): LedgerEvent;
+}
+
+/** The three ids every gate, audit and isolation event carries. */
+export interface RunScope {
+  goal_id: string;
+  work_id: string;
+  run_id: string;
 }

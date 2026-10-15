@@ -3,6 +3,46 @@
   "title": "OMF gate, audit and isolation events (M3e)",
   "description": "Validates { type, payload } of the events M3e writes. Every string is an id, a gate line or a member of a closed list, so no gate output, path, canary or scenario text can enter.",
   "$defs": {
+    "audit_completed_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goal_id", "work_id", "run_id", "diff_files", "diff_empty", "tests_edited", "tests_added", "canary_status", "canary_hits",
+        "judge_config_touched", "judge_files_checked", "high_risk_paths", "projections_touched", "special_entries", "risk_declared", "risk_effective",
+        "risk_rules", "risk_raised", "prove_status", "prove_reason"
+      ],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "diff_files": { "type": "integer", "minimum": 0 },
+        "diff_empty": { "type": "boolean" },
+        "tests_edited": { "type": "integer", "minimum": 0 },
+        "tests_added": { "type": "integer", "minimum": 0 },
+        "canary_status": { "enum": ["scanned", "not_run"] },
+        "canary_hits": { "type": "integer", "minimum": 0 },
+        "judge_config_touched": { "type": "boolean" },
+        "judge_files_checked": { "type": "integer", "minimum": 0 },
+        "high_risk_paths": { "type": "integer", "minimum": 0 },
+        "projections_touched": { "type": "integer", "minimum": 0 },
+        "special_entries": { "type": "integer", "minimum": 0 },
+        "risk_declared": { "enum": ["normal", "high"] },
+        "risk_effective": { "enum": ["normal", "high"] },
+        "risk_rules": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["ci", "auth", "migration", "test", "goal-factory", "lockfile", "watched-path", "extra", "undeclared", "unclassifiable"] }
+        },
+        "risk_raised": { "type": "boolean" },
+        "prove_status": { "enum": ["PROVEN", "FAILED", "MISCONFIGURED", "not_run"] },
+        "prove_reason": {
+          "enum": [
+            "test-passed-without-fix", "working-tree-not-clean", "invalid-base-ref", "base-not-ancestor", "no-non-test-change",
+            "empty-revert-patch", "revert-failed", "baseline-test-failed", "test-command-unrunnable", "interrupted", null
+          ]
+        }
+      }
+    },
     "goal_id": { "type": "string", "pattern": "^g-[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },
     "work_id": { "type": "string", "pattern": "^w-[0-9a-f]{12}$" },
     "run_id": { "type": "string", "pattern": "^r-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}$" },
@@ -32,6 +72,15 @@
     }
   },
   "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": {
+        "type": { "const": "audit.completed" },
+        "payload": { "$ref": "#/$defs/audit_completed_payload" }
+      }
+    },
     {
       "type": "object",
       "additionalProperties": false,

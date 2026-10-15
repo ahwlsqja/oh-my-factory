@@ -1,8 +1,11 @@
+import type { WorkAudit } from "../audit/work-audit.js";
 import type { NewEvent } from "../core/ledger.js";
 import { validate } from "../core/schema.js";
+import type { RiskClass, RiskRule } from "../work/types.js";
+import type { ProveReason, ProveStatus } from "./prove-test.js";
 import type { GateRunResult } from "./run-gates.js";
 
-/** The three ids every gate, audit and isolation event carries (structural: this file takes no dependency on the audit module). */
+/** The three ids every gate, audit and isolation event carries (structural: only the `WorkAudit` type comes from the audit module). */
 interface EventScope {
   goal_id: string;
   work_id: string;
@@ -27,4 +30,60 @@ export function gatesEvaluatedEvent(scope: EventScope, result: GateRunResult): N
   const check = validate("gate-event.schema.json", { type: "gates.evaluated", payload });
   if (!check.ok) throw new Error(`invalid gates.evaluated event: ${check.errors}`);
   return { actor: "omf", type: "gates.evaluated", payload };
+}
+
+/**
+ * The closed fields of `audit.completed`. The event is the authority and `audit.json` a view:
+ * `loadAudit` accepts the file only when `auditPayloadOf(file)` equals the event, so every count, flag and class
+ * that GATE-3 reads is here. Counts, booleans and closed lists only: no path, canary or scenario text can enter.
+ */
+export interface AuditPayload {
+  diff_files: number;
+  diff_empty: boolean;
+  tests_edited: number;
+  tests_added: number;
+  canary_status: "scanned" | "not_run";
+  canary_hits: number;
+  judge_config_touched: boolean;
+  judge_files_checked: number;
+  high_risk_paths: number;
+  projections_touched: number;
+  special_entries: number;
+  risk_declared: RiskClass;
+  risk_effective: RiskClass;
+  risk_rules: RiskRule[];
+  risk_raised: boolean;
+  prove_status: ProveStatus | "not_run";
+  prove_reason: ProveReason | null;
+}
+
+export function auditPayloadOf(report: WorkAudit): AuditPayload {
+  const prove = report.prove_test;
+  return {
+    diff_files: report.diff.files,
+    diff_empty: report.diff.empty,
+    tests_edited: report.tests_edited_count,
+    tests_added: report.tests_added,
+    canary_status: report.canary.status,
+    canary_hits: report.canary.total,
+    judge_config_touched: report.judge_config_touched,
+    judge_files_checked: report.judge_files_checked,
+    high_risk_paths: report.high_risk_paths_count,
+    projections_touched: report.projections_touched.length,
+    special_entries: report.diff.special_entries,
+    risk_declared: report.risk.declared.class,
+    risk_effective: report.risk.effective.class,
+    risk_rules: [...report.risk.effective.rules],
+    risk_raised: report.risk.raised,
+    prove_status: prove === "not_run" ? "not_run" : prove.status,
+    prove_reason: prove === "not_run" ? null : prove.reason,
+  };
+}
+
+/** The `audit.completed` event as OMF appends it. The payload is checked against the schema first, like `wEvent`. */
+export function auditCompletedEvent(scope: EventScope, report: WorkAudit): NewEvent {
+  const payload: Record<string, unknown> = { ...scope, ...auditPayloadOf(report) };
+  const check = validate("gate-event.schema.json", { type: "audit.completed", payload });
+  if (!check.ok) throw new Error(`invalid audit.completed event: ${check.errors}`);
+  return { actor: "omf", type: "audit.completed", payload };
 }
