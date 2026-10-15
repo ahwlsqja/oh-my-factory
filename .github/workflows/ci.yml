@@ -29,8 +29,8 @@ jobs:
             node: "22.12.0"
     env:
       # Tests must never reach a real model. These stay empty and no secret is
-      # mapped into this job. OMF_TEST_DOCKER is deliberately unset, so the
-      # Docker-gated tests are skipped.
+      # mapped into this job. OMF_TEST_DOCKER and OMF_GATED are deliberately unset,
+      # so the Docker-gated tests are skipped.
       ANTHROPIC_API_KEY: ""
       OPENAI_API_KEY: ""
       CLAUDE_CODE_OAUTH_TOKEN: ""

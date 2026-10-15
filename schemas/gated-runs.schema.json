@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OMF gated run record (M3f)",
+  "description": "Validates docs/evidence/gated-runs.json: one entry per Docker-gated suite that passed on the dedicated colima profile, written only by `npm run test:gated -- --record`. Until an entry exists for a suite, the docs say the behaviour it covers is not enforced.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "runs"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "runs": { "type": "array", "items": { "$ref": "#/$defs/run" } }
+  },
+  "$defs": {
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["test", "result", "at", "omf_commit", "docker"],
+      "properties": {
+        "test": { "type": "string", "pattern": "^G-[a-z0-9-]+$", "maxLength": 80 },
+        "result": { "const": "pass" },
+        "at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+        },
+        "omf_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "docker": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["server_version", "context", "arch"],
+          "properties": {
+            "server_version": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "context": { "const": "colima-omf-m3f" },
+            "arch": { "type": "string", "minLength": 1, "maxLength": 32 }
+          }
+        }
+      }
+    }
+  }
+}
