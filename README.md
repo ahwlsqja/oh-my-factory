@@ -110,9 +110,10 @@ or **designed** and not built yet.
 - **Holdout, not homework.** *Designed.* Acceptance scenarios are sealed, written by the other
   vendor, and never shown to the implementer.
 - **Isolation is measured, not declared.** *Partly built.* The per-stage measurement types, the stage
-  evaluator and GATE-3 exist and are tested without a container, and a run level below the declared one
-  stops the line. A level measured on a real container is not enforced yet; `omf doctor` reports it as
-  advisory and unmeasured (`docs/isolation-and-gates.md`).
+  evaluator and GATE-3 exist and are tested without a container. The line does not call GATE-3 yet: it
+  still reads as a placeholder, so until the container stations are wired in, every full run stops at GATE-3 as
+  not run. A level measured on a real container is not enforced yet; `omf doctor` reports it as advisory and
+  unmeasured (`docs/isolation-and-gates.md`).
 - **Empty means fail.** *Partly built.* The line skeleton (`E7a`), GATE-2 (`E7b`) and the gate line, the
   audit and GATE-3 (`E7c`) read a missing measurement as a failure, never as a pass. The judge's verdict
   file arrives with the container runner.
