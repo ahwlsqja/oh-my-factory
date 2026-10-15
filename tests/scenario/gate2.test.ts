@@ -3,6 +3,7 @@ import {
   GATE2_REASON_CODES,
   GATE2_ROUTE_OF,
   evaluateGate2,
+  runGate2Probes,
   gate2EventFor,
   scenarioAggregate,
   sealFeedbackFor,
@@ -439,5 +440,46 @@ describe("sealFeedbackFor", () => {
     expect(sealFeedbackFor(result)).toEqual({ unlinked_decision_ids: ["d-cache"], weak: 0, contradictions: 0, invalid: 0 });
     const weak = evaluateGate2(nullPasses(passingInput()));
     expect(sealFeedbackFor(weak)).toEqual({ unlinked_decision_ids: [], weak: 1, contradictions: 0, invalid: 0 });
+  });
+});
+
+import { scenarioRef } from "../../src/scenario/types.js";
+import { DEFAULT_SPECS, STRONG_EXPECT, buildScenarios, fakeFixtureRunner } from "../helpers/scenario-fixture.js";
+
+describe("runGate2Probes", () => {
+  const scenarios = buildScenarios(DEFAULT_SPECS, "w-probe");
+  const refs = scenarios.map((s) => scenarioRef(s.scenario_id));
+
+  it("runs a behavior scenario against both nulls and a canary against all three", async () => {
+    const fake = fakeFixtureRunner();
+    const probes = await runGate2Probes(fake.runner, scenarios);
+    expect(probes.null_error.map((p) => p.scenario_ref)).toEqual(refs);
+    expect(probes.null_empty.map((p) => p.scenario_ref)).toEqual(refs);
+    expect(probes.echo.map((p) => p.scenario_ref), "only the canary meets the echo-everything stub").toEqual([refs[2]]);
+    expect(fake.opened).toHaveLength(7);
+    for (const run of [...probes.null_error, ...probes.null_empty, ...probes.echo]) expect(run.outcome).toBe("fail");
+  });
+
+  it("runs at most 8 scenarios at a time", async () => {
+    const many = buildScenarios(Array.from({ length: 20 }, () => ({ split: "train" as const, expect: STRONG_EXPECT })), "w-probe");
+    const fake = fakeFixtureRunner({ delayMs: 5 });
+    await runGate2Probes(fake.runner, many);
+    expect(fake.opened).toHaveLength(40);
+    expect(fake.maxOpen()).toBeGreaterThan(1);
+    expect(fake.maxOpen()).toBeLessThanOrEqual(8);
+  });
+
+  it("refuses a runner that executes candidate code", async () => {
+    const candidate = fakeFixtureRunner({ executes: "candidate" });
+    await expect(runGate2Probes(candidate.runner, scenarios)).rejects.toThrow("omf_fixture");
+    expect(candidate.opened).toHaveLength(0);
+  });
+
+  it("keeps the refusal code, and an adapter that throws is an error, never a pass", async () => {
+    const refusing = fakeFixtureRunner({ observe: () => ({ outcome: "refused", code: "fixture_hash_mismatch" }) });
+    const refused = await runGate2Probes(refusing.runner, scenarios);
+    expect(refused.null_error[0]).toMatchObject({ outcome: "error", refusal: "fixture_hash_mismatch" });
+    const broken = await runGate2Probes(fakeFixtureRunner({ failOpen: true }).runner, scenarios);
+    expect(broken.null_error[0]).toEqual({ scenario_ref: refs[0], outcome: "error" });
   });
 });

@@ -7,8 +7,10 @@ import type { ScenarioSetRead } from "../vault/vault.js";
 import type { AuthorOrder, EffectiveScenario, SealRecord } from "./events.js";
 import { contradictions, vaultDecisionLinks } from "./lint.js";
 import type { ScenarioProblem } from "./lint.js";
+import { runScenario } from "./runner.js";
+import type { FixtureId, ScenarioRunner, StepLimits } from "./runner.js";
 import { EXPOSURE_LIMIT, SCENARIO_SPLITS, isCanaryKind, scenarioRef } from "./types.js";
-import type { RefusalCode, ScenarioSplit, SealFeedback } from "./types.js";
+import type { RefusalCode, ScenarioSplit, SealFeedback, StoredScenario } from "./types.js";
 
 /**
  * GATE-2, the pure part (spec §5.3; M3c-D7). A sealed scenario set is a judge only if it is not empty, has both splits, fails
@@ -348,4 +350,85 @@ export function sealFeedbackFor(result: Gate2Result): SealFeedback | null {
     contradictions: reasonOf("contradiction")?.count ?? 0,
     invalid: reasonOf("scenario_invalid")?.count ?? 0,
   };
+}
+
+/** How many probe runs are in flight at once: each is one scenario session and one node process. */
+const PROBE_CONCURRENCY = 8;
+
+/** The runner is the only thing that may execute anything here, and only OMF's own fixtures (M3c-D5, M3c-D6). */
+function assertFixtureRunner(runner: ScenarioRunner): void {
+  if (runner.executes !== "omf_fixture") {
+    throw new Error(`GATE-2 probes run only on an omf_fixture runner (got ${runner.executes})`);
+  }
+}
+
+/** Runs `fn` over `items` with at most `limit` calls in flight. Results keep the order of `items`. */
+async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array<R>(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      results[index] = await fn(items[index] as T);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+/** `runScenario` maps a refusal to "error" and drops the code; J7 needs the code, so the steps are watched. */
+function watchRefusals(runner: ScenarioRunner, seen: { code: RefusalCode | null }): ScenarioRunner {
+  return {
+    id: runner.id,
+    executes: runner.executes,
+    async openScenario(target) {
+      const inner = await runner.openScenario(target);
+      return {
+        async runStep(step, limits) {
+          const observation = await inner.runStep(step, limits);
+          if (observation.outcome === "refused") seen.code ??= observation.code;
+          return observation;
+        },
+        close: () => inner.close(),
+      };
+    },
+  };
+}
+
+async function probeOnce(runner: ScenarioRunner, id: FixtureId, scenario: StoredScenario, limits?: StepLimits): Promise<ProbeRun> {
+  const seen: { code: RefusalCode | null } = { code: null };
+  try {
+    const run = await runScenario(watchRefusals(runner, seen), { kind: "fixture", id }, scenario, limits);
+    return seen.code === null
+      ? { scenario_ref: run.scenario_ref, outcome: run.outcome }
+      : { scenario_ref: run.scenario_ref, outcome: run.outcome, refusal: seen.code };
+  } catch {
+    // An adapter that cannot even open a session (no scratch directory) is an environment fault: an error, never a pass.
+    return { scenario_ref: scenarioRef(scenario.scenario_id), outcome: "error" };
+  }
+}
+
+/**
+ * Runs the active scenarios against OMF's own fixtures (spec §5.0 GATE-2, M3c-D17): every scenario against null-error
+ * and null-empty, a canary also against echo-everything. A behavior scenario that either null passes asserts too
+ * little; a canary that anything passes means the judge is broken or gamed. The matching is `runScenario`'s, not the
+ * adapter's, so a double and the real host adapter are judged the same way. Arrays keep the order of `active`.
+ */
+export async function runGate2Probes(runner: ScenarioRunner, active: readonly StoredScenario[], limits?: StepLimits): Promise<Gate2Probes> {
+  assertFixtureRunner(runner);
+  const jobs: { id: FixtureId; scenario: StoredScenario }[] = [];
+  for (const scenario of active) {
+    jobs.push({ id: "null-error", scenario }, { id: "null-empty", scenario });
+    if (isCanaryKind(scenario)) jobs.push({ id: "echo-everything", scenario });
+  }
+  const runs = await mapLimit(jobs, PROBE_CONCURRENCY, (job) => probeOnce(runner, job.id, job.scenario, limits));
+  const probes: Gate2Probes = { null_error: [], null_empty: [], echo: [] };
+  for (const [index, job] of jobs.entries()) {
+    const run = runs[index] as ProbeRun;
+    if (job.id === "null-error") probes.null_error.push(run);
+    else if (job.id === "null-empty") probes.null_empty.push(run);
+    else probes.echo.push(run);
+  }
+  return probes;
 }
