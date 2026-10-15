@@ -36,4 +36,6 @@ The symlink guard does not stop a writer that races the walk (spec §8). The pok
 
 The poka-yoke repository scan refuses with `scan_incomplete` when the tree holds more than 300,000 entries or any entry it cannot read, and it skips only a fixed list of directories (`.git`, `node_modules`, `.venv`, `venv`, `__pycache__`). A large repository with other build output directories is therefore refused until the output is moved or the scan changes; an override or a git-aware scan (only tracked and unignored files) is future work.
 
+The full poka-yoke scan now also runs before every station, on top of the scans in S2 and GATE-2. It covers the repository and every OMF worktree, with the same entry cap and skip list, so a large repository pays for the scan at every station of every round.
+
 A null fixture that fails to start but still exits 1 with no output looks the same as `null-error` working as designed: the host adapter keeps no stderr in an observation, so GATE-2 cannot tell the two apart. A signal, a spawn error, or any other status or stdout is counted as a probe error.
