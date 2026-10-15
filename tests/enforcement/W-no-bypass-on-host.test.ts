@@ -12,7 +12,11 @@ import { BYPASS_FLAGS, claudeArgv, claudeSettings } from "../../src/implementer/
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 /** Everything that ships or runs on the host: source, scripts, the harness image and the schemas. */
 const SHIPPED = ["src", "scripts", "harness", "schemas"];
-const BYPASS = /dangerously-skip-permissions|bypassPermissions/;
+/** Claude's spellings: allowed in one place only, the argv of the implementer container. */
+const CLAUDE_BYPASS = /dangerously-skip-permissions|bypassPermissions/;
+/** Codex's spellings: there is no Codex implementer in this version, so they are allowed nowhere that ships. */
+const CODEX_BYPASS = /dangerously-bypass-approvals-and-sandbox|--yolo\b|danger-full-access/;
+const BYPASS = new RegExp(`${CLAUDE_BYPASS.source}|${CODEX_BYPASS.source}`);
 const ARGV_FILE = "src/implementer/claude-argv.ts";
 const SESSION_FILE = "src/implementer/claude-session.ts";
 /** A value import of the process runner or any mention of node:child_process; a type-only import of `ProcessResult` is fine. */
@@ -33,7 +37,10 @@ function filesUnder(root: string): Source[] {
 }
 
 const shipped = (): Source[] => SHIPPED.flatMap(filesUnder);
-const bypassFiles = (files: readonly Source[]): string[] => files.filter((s) => BYPASS.test(s.text)).map((s) => s.file);
+const bypassFiles = (files: readonly Source[]): string[] =>
+  files.filter((s) => CLAUDE_BYPASS.test(s.text)).map((s) => s.file);
+const codexBypassFiles = (files: readonly Source[]): string[] =>
+  files.filter((s) => CODEX_BYPASS.test(s.text)).map((s) => s.file);
 
 const IMPORTS_ARGV = /(?:\bfrom|\bimport)\s*\(?\s*["'][^"']*claude-argv\.js["']/;
 const importersOfArgv = (files: readonly Source[]): string[] =>
@@ -47,6 +54,16 @@ describe("W-no-bypass-on-host", () => {
       { file: "src/c.ts", text: "const clean = 1;" },
     ];
     expect(bypassFiles(planted)).toEqual(["src/a.ts", "scripts/b.mjs"]);
+    const codex: Source[] = [
+      { file: "src/d.ts", text: 'const f = "--dangerously-bypass-approvals-and-sandbox";' },
+      { file: "scripts/e.mjs", text: 'args.push("--yolo")' },
+      { file: "harness/f.sh", text: "sandbox_mode = danger-full-access" },
+      { file: "src/g.ts", text: "const yolos = 1; const clean = 2;" },
+    ];
+    expect(codexBypassFiles(codex)).toEqual(["src/d.ts", "scripts/e.mjs", "harness/f.sh"]);
+    for (const spelling of ["--dangerously-bypass-approvals-and-sandbox", "--yolo", "danger-full-access"]) {
+      expect(BYPASS.test(`codex exec ${spelling}`), spelling).toBe(true);
+    }
     expect(
       importersOfArgv([
         { file: "src/x.ts", text: 'import { claudeArgv } from "./claude-argv.js";' },
@@ -64,6 +81,10 @@ describe("W-no-bypass-on-host", () => {
   it("names a bypass flag in exactly one shipped file", () => {
     expect(bypassFiles(shipped())).toEqual([ARGV_FILE]);
     expect(BYPASS_FLAGS).toEqual(["--dangerously-skip-permissions"]);
+  });
+
+  it("names no Codex permission-bypass spelling in any shipped file", () => {
+    expect(codexBypassFiles(shipped())).toEqual([]);
   });
 
   it("imports that file from the Claude session only", () => {
