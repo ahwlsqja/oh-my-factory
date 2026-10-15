@@ -6,6 +6,7 @@ import {
   ContainerSpecError,
   IDLE_ARGS,
   IDLE_ENTRYPOINT,
+  IMPLEMENTER_FIXED_ENV,
   type ImageId,
   type OwnedLabels,
   SANDBOX_USER,
@@ -52,6 +53,10 @@ function tmpfsOption(tmpfs: TmpfsSpec): string {
   return `${tmpfs.destination}:rw,size=${tmpfs.size_mb}m,nosuid,nodev${tmpfs.exec ? ",exec" : ""}${tmpfs.owned ? `,uid=${owner}` : ""}`;
 }
 
+/**
+ * Every role gets the same hardening flags. The implementer differs in exactly two values: it is the only role on a network
+ * (`bridge`, so the vendor CLI can reach its API; spec §7 L2) and it carries the fixed environment of `IMPLEMENTER_FIXED_ENV`.
+ */
 export function createArgv(spec: ContainerSpec, context: string | null): string[] {
   assertSpec(spec);
   const { limits } = spec;
@@ -64,7 +69,7 @@ export function createArgv(spec: ContainerSpec, context: string | null): string[
     "never",
     ...labelArgs(spec.labels),
     "--network",
-    "none",
+    spec.labels.role === "implementer" ? "bridge" : "none",
     "--cap-drop",
     "ALL",
     "--security-opt",
@@ -82,6 +87,9 @@ export function createArgv(spec: ContainerSpec, context: string | null): string[
     "1",
     "--env",
     "LC_ALL=C",
+    ...(spec.labels.role === "implementer"
+      ? IMPLEMENTER_FIXED_ENV.flatMap(([name, value]) => ["--env", `${name}=${value}`])
+      : []),
     ...spec.tmpfs.flatMap((tmpfs) => ["--tmpfs", tmpfsOption(tmpfs)]),
     "--entrypoint",
     IDLE_ENTRYPOINT,

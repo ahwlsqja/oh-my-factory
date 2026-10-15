@@ -101,7 +101,7 @@ class ContainerWorkCopy implements WorkCopy {
       image: ctx.image.id,
       labels: ctx.labels,
       serial: containerSerial,
-      judge: ctx.config,
+      limits: { kind: "judge", judge: ctx.config },
     });
     this.lastName = spec.name;
     let measured: MeasuredContainer;

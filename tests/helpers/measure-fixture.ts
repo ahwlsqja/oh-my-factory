@@ -6,12 +6,12 @@ import { type PinnedImage, pinnedImage } from "../../src/container/image-ref.js"
 import type { MeasureDeps } from "../../src/container/measure.js";
 import type { ContainerRuntime, ImageInfo } from "../../src/container/runtime.js";
 import type { ContainerRole, ContainerSpec } from "../../src/container/spec.js";
-import { CONFIG_DEFAULTS } from "../../src/core/config.js";
 import { Ledger } from "../../src/core/ledger.js";
 import type { StageGolden } from "../../src/isolation/evaluate.js";
 import { loadRunIsolation } from "../../src/isolation/record.js";
 import type { ViolationCode } from "../../src/isolation/types.js";
 import { FakeDocker } from "./fake-docker.js";
+import { limitsFor } from "./container-fixture.js";
 import { addImage } from "./fake-docker-core.mjs";
 import { makeTempDir } from "./tmp.js";
 
@@ -112,7 +112,7 @@ export async function measureFixture(tamper: Tamper = {}): Promise<MeasureFixtur
         image: BASE,
         labels: { work_id: WORK, run_id: RUN, round: 1 },
         serial,
-        judge: CONFIG_DEFAULTS.judge,
+        limits: limitsFor(role),
       }),
     golden: (role) => goldenFor({ role, image, forbidden: FORBIDDEN }),
     isolationEvents: () => ledger.readVerified().filter((event) => event.type === "isolation.measured"),
@@ -169,7 +169,12 @@ export const DEVIATIONS: readonly Deviation[] = [
 
 /** A `docker inspect` document of a golden container of `role`, written from the golden values and not from any argv. */
 export function goldenInspectDoc(role: ContainerRole): InspectDoc {
-  const destinations = { sut: ["/tmp", "/scratch"], harness: ["/tmp", "/state"], workcopy: ["/tmp", "/work"] }[role];
+  const destinations = {
+    sut: ["/tmp", "/scratch"],
+    harness: ["/tmp", "/state"],
+    workcopy: ["/tmp", "/work"],
+    implementer: ["/tmp", "/work", "/agent"],
+  }[role];
   return {
     Id: "c0ffee".padEnd(64, "0"),
     Config: { Image: BASE, User: "65532:65532", Env: ["PATH=/usr/bin", "LC_ALL=C"] },
@@ -185,7 +190,7 @@ export function goldenInspectDoc(role: ContainerRole): InspectDoc {
       Privileged: false,
       CapAdd: null,
       CapDrop: ["ALL"],
-      NetworkMode: "none",
+      NetworkMode: role === "implementer" ? "bridge" : "none",
       PidMode: "",
       ReadonlyRootfs: true,
       SecurityOpt: ["no-new-privileges"],

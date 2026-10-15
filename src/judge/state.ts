@@ -179,7 +179,7 @@ export interface SweepResult {
   skipped: string[];
 }
 
-const ROLE_OF_NAME = /^omf-(sut|harness|workcopy)-/;
+const ROLE_OF_NAME = /^omf-(sut|harness|workcopy|implementer)-/;
 
 /**
  * Removes what earlier runs of THIS work item left in the daemon and on disk. The item claim allows one run at a time, so any
@@ -213,10 +213,13 @@ export async function sweepOrphans(input: SweepInput): Promise<SweepResult> {
     }
   }
   for (const runId of earlier) {
-    const judgeDir = join(runsDir, runId, "judge");
-    if (!existsSync(judgeDir)) continue;
-    rmSync(judgeDir, { recursive: true, force: true });
-    result.staging += 1;
+    // `judge` holds judge staging; `implementer-stage` holds an implementer bundle, quarantine and tree that may carry the key.
+    for (const name of ["judge", "implementer-stage"]) {
+      const stageDir = join(runsDir, runId, name);
+      if (!existsSync(stageDir)) continue;
+      rmSync(stageDir, { recursive: true, force: true });
+      result.staging += 1;
+    }
   }
   return result;
 }

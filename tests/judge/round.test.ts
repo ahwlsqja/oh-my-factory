@@ -107,7 +107,7 @@ describe("runJudgeRound", () => {
     expect(double.specs.length).toBeGreaterThan(1);
     for (const spec of double.specs) {
       const role = spec.labels.role;
-      expect(spec.tmpfs).toEqual(roleTmpfs(role, judgeConfig()));
+      expect(spec.tmpfs).toEqual(roleTmpfs(role, { kind: "judge", judge: judgeConfig() }));
       const argv = createArgv(spec, null);
       expect(argv).toContain(`/tmp:rw,size=${judgeConfig().tmp_tmpfs_mb}m,nosuid,nodev,uid=65532,gid=65532`);
     }

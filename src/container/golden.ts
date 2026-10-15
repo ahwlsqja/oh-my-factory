@@ -1,7 +1,6 @@
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import type { JudgeConfig } from "../core/config.js";
 import { type ProjectLocation, omfHome } from "../core/paths.js";
 import type { StageGolden } from "../isolation/evaluate.js";
 import type { PinnedImage } from "./image-ref.js";
@@ -11,8 +10,10 @@ import {
   type ContainerSpec,
   type ImageId,
   type OwnedLabels,
+  type RoleLimits,
   type TmpfsSpec,
   containerName,
+  roleLimits,
   roleTmpfs,
 } from "./spec.js";
 
@@ -23,26 +24,27 @@ const ROLE_DESTINATIONS = {
   sut: ["/tmp", "/scratch"],
   harness: ["/tmp", "/state"],
   workcopy: ["/tmp", "/work"],
+  implementer: ["/tmp", "/work", "/agent"],
 } as const satisfies Record<ContainerRole, readonly TmpfsSpec["destination"][]>;
 
 /** Names the daemon adds itself (names only, values are never read); `PATH` because the daemon defaults it when the image sets none. */
 const DAEMON_ENV_NAMES = ["HOSTNAME", "HOME", "LC_ALL", "PATH"] as const;
 
-/** The one place a role, labels and the judge config become a `ContainerSpec`. */
+/** The one place a role, labels and the role's limits become a `ContainerSpec`. A limits kind that is not the role's is refused. */
 export function containerSpecFor(input: {
   role: ContainerRole;
   image: PinnedImage | ImageId;
   labels: Omit<OwnedLabels, "role">;
   serial: number;
-  judge: JudgeConfig;
+  limits: RoleLimits;
 }): ContainerSpec {
   const labels: OwnedLabels = { ...input.labels, role: input.role };
   return {
     name: containerName(labels, input.serial),
     image: input.image,
     labels,
-    tmpfs: roleTmpfs(input.role, input.judge),
-    limits: { memory_mb: input.judge.memory_mb, cpus: input.judge.cpus, pids: input.judge.pids_limit },
+    tmpfs: roleTmpfs(input.role, input.limits),
+    limits: roleLimits(input.role, input.limits),
   };
 }
 

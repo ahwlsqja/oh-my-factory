@@ -140,7 +140,9 @@ describe("ContainerWorkCopyFactory (spec section 4.8)", () => {
     await expect(factory.create({ quarantine: fx.quarantine, sha: fx.head })).rejects.toBeInstanceOf(MeasureError);
     expect(memory.specs[0]?.labels.role).toBe("workcopy");
     expect(memory.specs[0]?.tmpfs.find((tmpfs) => tmpfs.destination === "/work")).toMatchObject({ exec: true });
-    expect(memory.specs[0]?.tmpfs).toEqual(roleTmpfs("workcopy", workCopyDeps(memory).config));
+    expect(memory.specs[0]?.tmpfs).toEqual(
+      roleTmpfs("workcopy", { kind: "judge", judge: workCopyDeps(memory).config }),
+    );
     expect(memory.execs).toEqual([]);
     expect(memory.live.size).toBe(0);
   });

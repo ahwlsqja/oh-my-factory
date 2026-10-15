@@ -55,6 +55,40 @@ describe("W-judge-leak-sweep", () => {
     });
   });
 
+  it("also removes an earlier run's implementer container", async () => {
+    const itemDir = realTempDir("omf-sweep-item-");
+    put(itemDir, `runs/${EARLIER}/audit-1.json`, "{}");
+    const memory = new MemoryRuntime();
+    memory.owned = [
+      { kind: "container", name: `omf-implementer-${EARLIER}-1-1`, run_id: EARLIER },
+      { kind: "container", name: `omf-implementer-${CURRENT}-1-1`, run_id: CURRENT },
+    ];
+    expect(await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT })).toEqual({
+      containers: 1,
+      images: 0,
+      staging: 0,
+      skipped: [],
+    });
+    expect(memory.owned.map((resource) => resource.name)).toEqual([`omf-implementer-${CURRENT}-1-1`]);
+  });
+
+  it("also removes an earlier run's implementer-stage directory and keeps the current run's", async () => {
+    const itemDir = realTempDir("omf-sweep-item-");
+    put(itemDir, `runs/${EARLIER}/implementer-stage/round-1/bundle`, "x");
+    put(itemDir, `runs/${EARLIER}/judge/scratch`, "x");
+    put(itemDir, `runs/${CURRENT}/implementer-stage/round-1/bundle`, "x");
+    const memory = new MemoryRuntime();
+    expect(await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT })).toEqual({
+      containers: 0,
+      images: 0,
+      staging: 2,
+      skipped: [],
+    });
+    expect(existsSync(join(itemDir, "runs", EARLIER, "implementer-stage"))).toBe(false);
+    expect(existsSync(join(itemDir, "runs", EARLIER, "judge"))).toBe(false);
+    expect(existsSync(join(itemDir, "runs", CURRENT, "implementer-stage"))).toBe(true);
+  });
+
   it("skips and reports a labelled container whose name is off the pattern, and still sweeps the rest", async () => {
     const itemDir = realTempDir("omf-sweep-item-");
     put(itemDir, `runs/${EARLIER}/audit-1.json`, "{}");

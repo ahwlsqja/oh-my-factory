@@ -66,7 +66,7 @@ describeGated("G-real-isolation-probe", () => {
           image: base,
           labels: { work_id: WORK, run_id: runId, round: 1 },
           serial: 1,
-          judge: CONFIG_DEFAULTS.judge,
+          limits: { kind: "judge", judge: CONFIG_DEFAULTS.judge },
         }),
         goldenFor({ role, image, forbidden }),
       );

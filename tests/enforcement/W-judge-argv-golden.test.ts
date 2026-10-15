@@ -12,7 +12,7 @@ import {
   startArgv,
 } from "../../src/container/argv.js";
 import { pinnedImage } from "../../src/container/image-ref.js";
-import { CONTAINER_ROLES, type ContainerRole, type ContainerSpec, type TmpfsSpec } from "../../src/container/spec.js";
+import type { ContainerSpec, TmpfsSpec } from "../../src/container/spec.js";
 import {
   FIXTURE_RUN_ID,
   FIXTURE_WORK_ID,
@@ -22,25 +22,28 @@ import {
   specFor,
 } from "../helpers/container-fixture.js";
 
+const JUDGE_ROLES = ["sut", "harness", "workcopy"] as const;
+type JudgeRole = (typeof JUDGE_ROLES)[number];
+
 // W-judge-argv-golden (argv half): every container OMF creates comes from one reviewed argv function, pinned byte for
 // byte, and the spec type cannot express a mount, a volume, a privilege or a network (spec §7, M3f-D2). What the daemon
 // then reports about the container is judged by the per-run measurement.
-const HEAD = (role: ContainerRole): string =>
+const HEAD = (role: JudgeRole): string =>
   `--context colima-omf-m3f create --name omf-${role}-${FIXTURE_RUN_ID}-1-1 --pull never --label omf.owner=omf --label omf.work=${FIXTURE_WORK_ID} --label omf.run=${FIXTURE_RUN_ID} --label omf.round=1 --label omf.role=${role} --network none --cap-drop ALL --security-opt no-new-privileges --read-only --user 65532:65532 --pids-limit 256 --memory 512m --cpus 1 --stop-timeout 1 --env LC_ALL=C`;
 const OWNED = "nosuid,nodev,uid=65532,gid=65532";
 
-const GOLDEN: Record<ContainerRole, string> = {
+const GOLDEN: Record<JudgeRole, string> = {
   sut: `${HEAD("sut")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /scratch:rw,size=64m,${OWNED} --entrypoint sleep ${SUT_BASE} 2147483647`,
   harness: `${HEAD("harness")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /state:rw,size=16m,${OWNED} --entrypoint sleep ${HARNESS_BASE} 2147483647`,
   workcopy: `${HEAD("workcopy")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /work:rw,size=256m,nosuid,nodev,exec,uid=65532,gid=65532 --entrypoint sleep ${SUT_BASE} 2147483647`,
 };
 
 describe("the golden create argv", () => {
-  it.each(CONTAINER_ROLES)("%s: createArgv is pinned byte for byte", (role) => {
+  it.each(JUDGE_ROLES)("%s: createArgv is pinned byte for byte", (role) => {
     expect(createArgv(specFor(role), "colima-omf-m3f").join(" ")).toBe(GOLDEN[role]);
   });
 
-  it.each(CONTAINER_ROLES)("%s: no element holds whitespace, so the joined golden is faithful", (role) => {
+  it.each(JUDGE_ROLES)("%s: no element holds whitespace, so the joined golden is faithful", (role) => {
     expect(createArgv(specFor(role), "colima-omf-m3f").filter((element) => /\s/.test(element))).toEqual([]);
   });
 
@@ -68,7 +71,7 @@ function productSpace(): string[][] {
     { memory_mb: 65536, cpus: 64, pids: 32768 },
   ];
   for (const context of [null, "colima-omf-m3f", "a"]) {
-    for (const role of CONTAINER_ROLES) {
+    for (const role of JUDGE_ROLES) {
       for (const image of images) {
         for (const tmpfs of tmpfsSets) {
           for (const limits of limitSets) {
