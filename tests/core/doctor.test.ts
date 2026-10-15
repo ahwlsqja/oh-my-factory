@@ -103,15 +103,17 @@ describe("runDoctor", () => {
     for (const warning of report.warning_details) expect(warning.fix).toMatch(/\S/);
   });
 
-  it("reports an unreachable docker daemon as a problem", () => {
+  it("reports an unreachable docker daemon as a warning that names the stages needing it", () => {
     const repo = makeGitRepo();
     const home = makeTempDir("omf-home-");
     const e = env(home, stubBin({ dockerDaemon: false }));
     initProject(repo, e);
     const report = runDoctor(repo, e);
-    expect(report.ok).toBe(false);
-    expect(report.problems).toEqual(["docker daemon is not reachable"]);
-    expect(report.problem_details[0]?.fix).toContain("docker info");
+    expect(report.ok).toBe(true);
+    expect(report.problems).toEqual([]);
+    expect(report.warnings).toEqual(["docker daemon is not reachable"]);
+    expect(report.warning_details[0]?.fix).toContain("docker info");
+    expect(report.warning_details[0]?.needed_by).toEqual(["container judging", "metric runs in a container"]);
   });
 
   it("--strict promotes the missing-tool warnings to problems", () => {

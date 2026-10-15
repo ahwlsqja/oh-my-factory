@@ -125,7 +125,7 @@ or **designed** and not built yet.
 | Command | What it does |
 |---|---|
 | `omf init` | Creates host state for the current repository under `~/.omf`. Writes nothing to the repository or to the agent CLIs' configuration. |
-| `omf doctor [--json] [--strict]` | Checks git, Docker, Claude Code and Codex, the repository and the ledger, and writes `preflight.json`. Runs the agent CLIs with a throwaway home. A missing Docker or agent CLI is a warning that names the stage that needs it; every problem and warning has a one-line fix. `--strict` turns the missing-tool warnings into problems; a torn ledger tail stays a warning. An unreachable Docker daemon is a problem. |
+| `omf doctor [--json] [--strict]` | Checks git, Docker, Claude Code and Codex, the repository and the ledger, and writes `preflight.json`. Runs the agent CLIs with a throwaway home. A missing or unreachable Docker, or a missing agent CLI, is a warning that names the stage that needs it; every problem and warning has a one-line fix. `--strict` turns the missing-tool warnings into problems; a torn ledger tail stays a warning. |
 | `omf ledger verify [--json]` | Checks the ledger's hash chain. On a corrupt ledger, stderr line 2 gives the path, the line and the next step; `--json` gives the same as fields. Exit 2 before `omf init`. |
 | `omf goal new <id>` | Creates `goal.md` in host state from a template. |
 | `omf metric propose <id> --unit <u> -- <command>` | Proposes a metric: the command that prints its value, the unit, and the paths whose change is a regime change. |
@@ -188,7 +188,7 @@ warning: claude not found on PATH (needed for: the implementer, the sealing auth
 ```
 
 `omf doctor` exits 1 only for problems (for example `project not initialized; run omf init`, each with a `fix:` line).
-Warnings do not change the exit code; `omf doctor --strict` counts the missing-tool warnings as problems (a torn ledger tail stays a warning). An unreachable Docker daemon is a problem, not a warning. `omf doctor --json` prints the full
+Warnings do not change the exit code, so a machine without a running Docker still exits 0; `omf doctor --strict` counts the missing-tool warnings (no Docker binary, Docker not running, no agent CLI) as problems (a torn ledger tail stays a warning). `omf doctor --json` prints the full
 report, including `problem_details` and `warning_details` with the fix and the stages that need a tool.
 
 ## Define and measure a goal

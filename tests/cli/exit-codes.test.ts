@@ -131,6 +131,25 @@ describe("exit codes of init, doctor and ledger verify by condition", () => {
     expect(strict.stdout).toContain("claude not found on PATH");
   });
 
+  it("doctor: Docker installed but not running is a warning (0), and --strict makes it a problem (1)", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    omf(["init"], repo, home);
+    const bin = makeTempDir("omf-bin-");
+    writeFileSync(
+      join(bin, "docker"),
+      '#!/bin/sh\nif [ "$1" = "info" ]; then exit 1; else echo "Docker version 29.0.0"; fi\n',
+    );
+    chmodSync(join(bin, "docker"), 0o755);
+    symlinkSync(execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim(), join(bin, "git"));
+    const lenient = omf(["doctor"], repo, home, { PATH: bin });
+    expect(lenient.code, lenient.stdout).toBe(0);
+    expect(lenient.stderr).toContain("warning: docker daemon is not reachable (needed for: container judging");
+    const strict = omf(["doctor", "--strict"], repo, home, { PATH: bin });
+    expect(strict.code).toBe(1);
+    expect(strict.stdout).toContain("docker daemon is not reachable");
+  });
+
   it("ledger verify: 0 sound, 0 with a torn tail, 1 corrupt, 2 not initialized", () => {
     const repo = makeGitRepo();
     const home = makeTempDir("omf-home-");

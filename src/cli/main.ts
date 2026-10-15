@@ -39,7 +39,7 @@ program
   .command("doctor")
   .description("check tools, repository, ledger and isolation; writes preflight.json")
   .option("--json", "print the full report as JSON")
-  .option("--strict", "treat warnings (a missing Docker or agent CLI) as problems")
+  .option("--strict", "treat the tool warnings (Docker missing or not running, an agent CLI missing) as problems")
   .action(async (options: { json?: boolean; strict?: boolean }) => {
     const report = await runDoctorParallel(process.cwd(), process.env, undefined, undefined, {
       strict: options.strict === true,

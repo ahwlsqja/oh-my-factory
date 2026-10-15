@@ -192,7 +192,7 @@ async function probeAllInParallel(env: NodeJS.ProcessEnv): Promise<Probes> {
 }
 
 export interface DoctorOptions {
-  /** Promote the missing-tool warnings to problems; a torn ledger tail stays a warning. */
+  /** Promote the missing-tool warnings (a missing or unreachable Docker, a missing agent CLI) to problems; a torn ledger tail stays a warning. */
   strict?: boolean;
 }
 
@@ -248,9 +248,10 @@ function buildReport(
       NEEDED_BY.docker,
     );
   } else if (!daemon) {
-    problem(
+    warn(
       "docker daemon is not reachable",
       "start Docker (for example Docker Desktop) and check it with: docker info",
+      NEEDED_BY.docker,
     );
   }
   for (const [name, tool] of [
