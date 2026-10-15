@@ -109,9 +109,13 @@ or **designed** and not built yet.
   out a work item is next.
 - **Holdout, not homework.** *Designed.* Acceptance scenarios are sealed, written by the other
   vendor, and never shown to the implementer.
-- **Isolation is measured, not declared.** *Designed.* `omf doctor` will measure the isolation in
-  effect, and a run fails if it is weaker than declared.
-- **Empty means fail.** *Designed.* Missing evidence fails a gate; it is never read as a pass. Partly enforced (E7a, line skeleton).
+- **Isolation is measured, not declared.** *Partly built.* The per-stage measurement types, the stage
+  evaluator and GATE-3 exist and are tested without a container, and a run level below the declared one
+  stops the line. A level measured on a real container is not enforced yet; `omf doctor` reports it as
+  advisory and unmeasured (`docs/isolation-and-gates.md`).
+- **Empty means fail.** *Partly built.* The line skeleton (`E7a`), GATE-2 (`E7b`) and the gate line, the
+  audit and GATE-3 (`E7c`) read a missing measurement as a failure, never as a pass. The judge's verdict
+  file arrives with the container runner.
 - **No auto-merge, no auto-deploy.** *Designed.* Candidates live on local `omf/*` branches until a
   person ships them.
 

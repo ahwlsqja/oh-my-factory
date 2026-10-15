@@ -165,10 +165,10 @@ export function runDoctor(
         const problem = projectProblem(status);
         if (problem !== null) problems.push(problem);
         if (status.ledger?.ok && status.ledger.tornTail) warnings.push(TORN_TAIL_WARNING);
-        // Poka-yoke (spec §11 rule 4): sealed material in the repository or a worktree is a problem to fix before any run.
+        // Poka-yoke (spec §11 rule 4): vault material in the repository or a worktree is a problem to fix before any run.
         if (status.initialized) {
-          const sealed = sealedProblem(location, env);
-          if (sealed !== null) problems.push(sealed);
+          const vaultProblem = sealedProblem(location, env);
+          if (vaultProblem !== null) problems.push(vaultProblem);
         }
       }
     }
