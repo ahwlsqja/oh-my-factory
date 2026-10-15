@@ -70,7 +70,7 @@ export function measurementHash(
 
 function isRoot(user: string): boolean {
   const name = user.split(":")[0] ?? "";
-  return name === "" || name === "0" || name === "root";
+  return name === "" || name === "root" || /^[+-]?0+$/.test(name); // Docker parses a numeric uid with Atoi: "00" and "+0" are uid 0
 }
 
 function isDockerSocket(mount: MountFact): boolean {
@@ -78,7 +78,11 @@ function isDockerSocket(mount: MountFact): boolean {
 }
 
 const NO_NEW_PRIVILEGES = /^no-new-privileges(?:[:=]true)?$/;
-const UNCONFINED = /^(?:seccomp|apparmor)[:=]unconfined$/;
+/** Unconfined profiles, an unmasked /proc and /sys, a disabled SELinux label, and any custom seccomp profile (the golden pins none). */
+const UNCONFINED =
+  /^(?:(?:seccomp|apparmor|systempaths)[:=]unconfined|label[:=](?:disable|type:unconfined_t)|seccomp[:=].+)$/;
+/** Private IPC and PID namespaces; "host" and "container:<id>" (joining another container's namespace) are not. */
+const PRIVATE_NAMESPACE = new Set(["", "private", "shareable"]);
 
 /**
  * Judges observed container facts against a stage golden. L2 means zero violations; anything else is L1;
@@ -109,7 +113,7 @@ export function evaluateStage(
   flag("caps_not_dropped", !facts.cap_drop.some((cap) => cap.toUpperCase() === "ALL"));
   flag("host_network", facts.network_mode === "host");
   flag("network_not_none", facts.network_mode !== "host" && !networks.includes(facts.network_mode));
-  flag("host_pid", facts.pid_mode === "host");
+  flag("host_pid", !PRIVATE_NAMESPACE.has(facts.pid_mode));
   flag("root_user", isRoot(facts.user));
   flag("rootfs_writable", golden.require_read_only_rootfs && !facts.read_only_rootfs);
   flag("unexpected_env_name", facts.env_names.some((name) => !golden.allowed_env_names.includes(name)));
@@ -118,7 +122,7 @@ export function evaluateStage(
   flag("no_new_privileges_missing", !facts.security_opt.some((option) => NO_NEW_PRIVILEGES.test(option)));
   flag("security_opt_unconfined", facts.security_opt.some((option) => UNCONFINED.test(option)));
   flag("device_mapped", facts.devices.length > 0);
-  flag("host_ipc", facts.ipc_mode === "host");
+  flag("host_ipc", !PRIVATE_NAMESPACE.has(facts.ipc_mode));
   flag("host_uts", facts.uts_mode === "host");
   flag("userns_host", facts.userns_mode === "host");
   flag("volumes_from", facts.volumes_from.length > 0);
