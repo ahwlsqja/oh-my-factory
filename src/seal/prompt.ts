@@ -102,6 +102,7 @@ const INSTRUCTIONS: readonly string[] = [
   "",
   "- Step state: the steps of one scenario share one scratch directory (working directory, home and files); every scenario starts with an empty one.",
   "- An exact match compares the whole stdout including the trailing newline. stdout must be valid UTF-8.",
+  "- An anchored pattern is matched against the whole stdout including the trailing newline: $ matches only at the very end, and \\n is not an escape, so end a line-oriented pattern with \\s*$ (or put a literal newline before $).",
   "- A process killed by a signal never satisfies any expectation.",
   "- Every behavior scenario names the decisions it proves in decision_refs. A decision_ref must come from the linkable list below. Naming a quantitative decision invalidates the scenario.",
   "- A contradiction_canary must be statically unsatisfiable: an exact stdout_matches plus json_path entries that the exact text itself cannot satisfy (text that is not JSON, or JSON that disagrees with the path), so that no program can pass it. An exit_code entry cannot make a step unsatisfiable.",

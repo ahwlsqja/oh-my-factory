@@ -93,4 +93,13 @@ describe("buildSealPrompt feedback", () => {
       expect(codeOf(() => buildSealPrompt(sealInputsFor(f.item, state, leak, bad)))).toBe("forbidden_input");
     }
   });
+
+  it("states the trailing-newline rule for anchored patterns", () => {
+    const f = setupDecisionItem();
+    closeInterface(f);
+    const { state, leak } = snapshot(f);
+    const prompt = buildSealPrompt(sealInputsFor(f.item, state, leak));
+    expect(prompt).toContain("An anchored pattern is matched against the whole stdout including the trailing newline");
+    expect(prompt).toContain("end a line-oriented pattern with \\s*$");
+  });
 });
