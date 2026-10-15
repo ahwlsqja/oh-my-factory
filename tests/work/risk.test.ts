@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { type RiskInput, DEFAULT_HIGH_RISK, TEST_GLOBS, classifyRisk, isTestPath } from "../../src/work/risk.js";
+import { type RiskInput, DEFAULT_HIGH_RISK, TEST_GLOBS, classifyRisk, isTestPath, raiseRisk } from "../../src/work/risk.js";
+import type { RiskAssessment } from "../../src/work/types.js";
 
 function input(declaredPaths: string[], extra: Partial<RiskInput> = {}): RiskInput {
   return { declaredPaths, watchedGlobs: [], extraGlobs: [], tracked: [], ...extra };
@@ -166,5 +167,48 @@ describe("TEST_GLOBS and isTestPath", () => {
     expect(isTestPath("src/e2e/a.ts", ["e2e"])).toBe(false);
     expect(isTestPath("e2e/a.ts", ["e2e/*.ts"])).toBe(false); // a glob in the list is a literal name, not a pattern
     expect(isTestPath("src/a.ts", [""])).toBe(false);
+  });
+});
+
+describe("raiseRisk", () => {
+  const normal: RiskAssessment = { class: "normal", rules: [], paths: [] };
+  const highCi: RiskAssessment = { class: "high", rules: ["ci"], paths: [".github/workflows/ci.yml"] };
+  const highAuth: RiskAssessment = { class: "high", rules: ["auth"], paths: ["src/auth/login.ts"] };
+
+  it("normal and normal stay normal", () => {
+    expect(raiseRisk(normal, normal)).toEqual(normal);
+  });
+
+  it("normal declared with a high recompute is high, with the recomputed rules and paths", () => {
+    expect(raiseRisk(normal, highCi)).toEqual(highCi);
+  });
+
+  it("high declared with a normal recompute stays high and keeps the declared rules", () => {
+    expect(raiseRisk(highAuth, normal)).toEqual(highAuth);
+    expect(raiseRisk({ class: "high", rules: ["undeclared"], paths: [] }, normal)).toEqual({ class: "high", rules: ["undeclared"], paths: [] });
+  });
+
+  it("keeps rules and paths as a sorted union without duplicates", () => {
+    const raised = raiseRisk({ class: "high", rules: ["lockfile", "auth"], paths: ["b", "a"] }, { class: "high", rules: ["auth", "ci"], paths: ["c", "a"] });
+    expect(raised).toEqual({ class: "high", rules: ["auth", "ci", "lockfile"], paths: ["a", "b", "c"] });
+  });
+
+  it("is idempotent and never returns a lower class than either input", () => {
+    const all = [normal, highCi, highAuth, { class: "high" as const, rules: ["undeclared" as const], paths: [] }];
+    for (const declared of all) {
+      for (const recomputed of all) {
+        const once = raiseRisk(declared, recomputed);
+        expect(raiseRisk(once, recomputed)).toEqual(once);
+        expect(raiseRisk(once, declared)).toEqual(once);
+        if (declared.class === "high" || recomputed.class === "high") expect(once.class).toBe("high");
+        for (const rule of declared.rules) expect(once.rules).toContain(rule);
+      }
+    }
+  });
+
+  it("does not change its inputs", () => {
+    const declared: RiskAssessment = { class: "normal", rules: [], paths: ["x"] };
+    raiseRisk(declared, highCi);
+    expect(declared).toEqual({ class: "normal", rules: [], paths: ["x"] });
   });
 });

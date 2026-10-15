@@ -124,3 +124,16 @@ export function isTestPath(path: string, explicit: readonly string[] = []): bool
     return wanted !== "" && (lower === wanted || lower.startsWith(`${wanted}/`));
   });
 }
+
+/**
+ * The risk of a candidate after the audit recomputed it from the real diff (M3e-D11): high if either assessment is high,
+ * and the rules and paths are the sorted union. It never returns a class lower than `declared`, and it does not rewrite the
+ * item's stored risk; the effective class lives in the audit record and the ledger event.
+ */
+export function raiseRisk(declared: RiskAssessment, recomputed: RiskAssessment): RiskAssessment {
+  return {
+    class: declared.class === "high" || recomputed.class === "high" ? "high" : "normal",
+    rules: [...new Set([...declared.rules, ...recomputed.rules])].sort(),
+    paths: [...new Set([...declared.paths, ...recomputed.paths])].sort(),
+  };
+}
