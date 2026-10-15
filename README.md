@@ -240,8 +240,8 @@ Known limits of "metric code cannot change quietly":
   you give none. Files a metric reads but does not watch, and gitignored inputs, can change without a new approval.
 - A container image tag is mutable, so a metric image must be pinned by digest (`name@sha256:<64 hex digits>`):
   `omf metric propose --image` refuses a tag, and so does approving a goal whose stored proposal holds one. A metric
-  locked with a tag before this rule keeps measuring, and every `omf goal measure` and `omf goal tick` run prints a
-  warning for it; propose the metric again with a digest to pin it.
+  locked with a tag before this rule keeps measuring, and every `omf goal measure` and `omf goal tick` run with
+  `--runner docker` (the default) prints a warning for it; propose the metric again with a digest to pin it.
 - `bands/<metric>.yaml` is locked with the goal: its hash is part of the J1 approval, so editing, adding or
   deleting one is a regime change. A goal approved before bands were locked keeps unlocked bands until it is
   approved again, and the approval screen says so.
