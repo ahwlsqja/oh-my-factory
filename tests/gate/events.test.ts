@@ -7,7 +7,7 @@ import { MISCONFIGURED_REASONS, evaluateGateLine, formatGateLine, parseGateLine 
 import type { GateRunResult } from "../../src/gate/run-gates.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
-const SCOPE = { goal_id: "g-fast", work_id: "w-0123456789ab", run_id: "r-20261014T091500Z-ab12" };
+const SCOPE = { goal_id: "g-fast", work_id: "w-0123456789ab", run_id: "r-20261014T091500Z-ab12", round: 1 };
 
 function run(
   values: { fast: string; full: string; deep: string },

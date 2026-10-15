@@ -24,7 +24,7 @@ describe("W-audit-canary", () => {
       if (rec.loaded !== null) expect(auditSignals(rec.loaded).flawed).toContain("canary_hit");
       for (const text of [
         readFileSync(rec.ledger.file, "utf8"),
-        readFileSync(auditPath(rec.itemDir, SCOPE.run_id), "utf8"),
+        readFileSync(auditPath(rec.itemDir, SCOPE.run_id, SCOPE.round), "utf8"),
       ]) {
         expect(text).not.toContain(CANARY_TEXT);
       }

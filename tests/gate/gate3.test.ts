@@ -12,6 +12,7 @@ import {
 } from "../../src/gate/gate3.js";
 import { runGates } from "../../src/gate/run-gates.js";
 import type { CommandTarget } from "../../src/gate/ports.js";
+import { HEAD_SHA } from "../helpers/audit-diff-fixture.js";
 import { ALL_L2, SCOPE, cleanAudit, gateRunOf, healthyParts, isolationFor } from "../helpers/gate3-parts.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
@@ -168,7 +169,7 @@ describe("measuredFrom", () => {
     const itemDir = `${dir}/item`;
     mkdirSync(itemDir);
     const ledger = new Ledger(dir, () => new Date("2026-10-12T10:00:00.000Z"));
-    recordAudit(ledger, SCOPE, itemDir, cleanAudit());
+    recordAudit(ledger, SCOPE, itemDir, cleanAudit(), HEAD_SHA);
     const audit = loadAudit(itemDir, SCOPE, ledger.readVerified());
     expect(audit).not.toBeNull();
 

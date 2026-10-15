@@ -27,7 +27,7 @@ import { STATION_IDS } from "../../src/work/line-types.js";
 import type { StationId, StationStatus } from "../../src/work/line-types.js";
 import { validate } from "../../src/core/schema.js";
 import { auditCompletedEvent } from "../../src/gate/events.js";
-import { CANARY_TEXT, SCOPE, auditFixture, auditInput, surfacesWith } from "../helpers/audit-diff-fixture.js";
+import { CANARY_TEXT, HEAD_SHA, SCOPE, auditFixture, auditInput, surfacesWith } from "../helpers/audit-diff-fixture.js";
 import { recordAndLoad } from "../helpers/audit-record.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
@@ -42,7 +42,7 @@ describe("recordAudit", () => {
     const report = await cleanReport();
     const itemDir = makeTempDir("omf-item-");
     const ledger = new Ledger(makeTempDir("omf-ledger-"));
-    const file = auditPath(itemDir, SCOPE.run_id);
+    const file = auditPath(itemDir, SCOPE.run_id, SCOPE.round);
     const fileExistedAtAppend: boolean[] = [];
     const sink: RecordSink = {
       appendWith(build) {
@@ -51,12 +51,12 @@ describe("recordAudit", () => {
       },
     };
 
-    recordAudit(sink, SCOPE, itemDir, report);
+    recordAudit(sink, SCOPE, itemDir, report, HEAD_SHA);
 
     expect(fileExistedAtAppend).toEqual([false]);
     expect(statSync(file).mode & 0o777).toBe(0o600);
     expect(validate("work-audit.schema.json", JSON.parse(readFileSync(file, "utf8"))).ok).toBe(true);
-    expect(readdirSync(dirname(file))).toEqual(["audit.json"]);
+    expect(readdirSync(dirname(file))).toEqual(["audit-1.json"]);
     expect(ledger.readVerified().map((e) => e.type)).toEqual(["audit.completed"]);
   });
 
@@ -66,10 +66,10 @@ describe("recordAudit", () => {
     writeFileSync(join(itemDir, "runs"), "not a directory"); // the file write cannot create runs/<run_id>/
     const ledger = new Ledger(makeTempDir("omf-ledger-"));
 
-    expect(() => recordAudit(ledger, SCOPE, itemDir, report)).toThrow();
+    expect(() => recordAudit(ledger, SCOPE, itemDir, report, HEAD_SHA)).toThrow();
 
     expect(ledger.readVerified()).toHaveLength(1);
-    expect(existsSync(auditPath(itemDir, SCOPE.run_id))).toBe(false);
+    expect(existsSync(auditPath(itemDir, SCOPE.run_id, SCOPE.round))).toBe(false);
     expect(loadAudit(itemDir, SCOPE, ledger.readVerified())).toBeNull();
   });
 
@@ -77,7 +77,9 @@ describe("recordAudit", () => {
     const report = await cleanReport();
     const ledger = new Ledger(makeTempDir("omf-ledger-"));
     const broken = { ...report, schema_version: 2 } as unknown as WorkAudit;
-    expect(() => recordAudit(ledger, SCOPE, makeTempDir("omf-item-"), broken)).toThrow(/invalid audit report/);
+    expect(() => recordAudit(ledger, SCOPE, makeTempDir("omf-item-"), broken, HEAD_SHA)).toThrow(
+      /invalid audit report/,
+    );
     expect(ledger.readVerified()).toEqual([]);
   });
 
@@ -85,7 +87,10 @@ describe("recordAudit", () => {
     const report = await cleanReport({ surfaces: surfacesWith("implementer_log") });
     expect(report.canary.total).toBe(1);
     const rec = recordAndLoad(report);
-    const texts = [readFileSync(rec.ledger.file, "utf8"), readFileSync(auditPath(rec.itemDir, SCOPE.run_id), "utf8")];
+    const texts = [
+      readFileSync(rec.ledger.file, "utf8"),
+      readFileSync(auditPath(rec.itemDir, SCOPE.run_id, SCOPE.round), "utf8"),
+    ];
     for (const text of texts) expect(text).not.toContain(CANARY_TEXT);
     expect(rec.payload).toMatchObject({ canary_status: "scanned", canary_hits: 1 });
   });
@@ -107,7 +112,7 @@ describe("loadAudit", () => {
     const report = await cleanReport();
     const rec = recordAndLoad(report);
     expect(rec.loaded).toEqual(report);
-    rec.ledger.append(auditCompletedEvent(SCOPE, report)); // recordAudit refuses a repeat, so a duplicate can only come from a raw append
+    rec.ledger.append(auditCompletedEvent(SCOPE, report, HEAD_SHA)); // recordAudit refuses a repeat, so a duplicate can only come from a raw append
     expect(loadAudit(rec.itemDir, SCOPE, rec.ledger.readVerified())).toEqual(report);
   });
 
@@ -116,13 +121,13 @@ describe("loadAudit", () => {
     const rec = recordAndLoad(report);
     const forged = tamper(report);
     expect(validate("work-audit.schema.json", forged).ok).toBe(true); // the cross-check, not the schema, rejects it
-    writeFileSync(auditPath(rec.itemDir, SCOPE.run_id), JSON.stringify(forged));
+    writeFileSync(auditPath(rec.itemDir, SCOPE.run_id, SCOPE.round), JSON.stringify(forged));
     expect(loadAudit(rec.itemDir, SCOPE, rec.events)).toBeNull();
   });
 
   it("reads null for a missing file, a corrupt file and a run id that is not a run id", async () => {
     const rec = recordAndLoad(await cleanReport());
-    const file = auditPath(rec.itemDir, SCOPE.run_id);
+    const file = auditPath(rec.itemDir, SCOPE.run_id, SCOPE.round);
     writeFileSync(file, "{not json");
     expect(loadAudit(rec.itemDir, SCOPE, rec.events)).toBeNull();
     rmSync(file);
@@ -139,6 +144,7 @@ describe("loadAudit", () => {
       SCOPE,
       itemDir,
       report,
+      HEAD_SHA,
     );
     expect(loadAudit(itemDir, SCOPE, ledger.readVerified())).toBeNull();
   });
@@ -146,8 +152,8 @@ describe("loadAudit", () => {
   it("gives a file no authority from another run's event", async () => {
     const rec = recordAndLoad(await cleanReport());
     const other = "r-20261014T091500Z-cd34";
-    mkdirSync(dirname(auditPath(rec.itemDir, other)), { recursive: true });
-    copyFileSync(auditPath(rec.itemDir, SCOPE.run_id), auditPath(rec.itemDir, other));
+    mkdirSync(dirname(auditPath(rec.itemDir, other, SCOPE.round)), { recursive: true });
+    copyFileSync(auditPath(rec.itemDir, SCOPE.run_id, SCOPE.round), auditPath(rec.itemDir, other, SCOPE.round));
     expect(loadAudit(rec.itemDir, { ...SCOPE, run_id: other }, rec.events)).toBeNull();
   });
 
@@ -161,7 +167,7 @@ describe("loadAudit", () => {
     const rec = recordAndLoad(report);
     const forged = { ...report, high_risk_paths_touched: [], high_risk_paths_count: 0 };
     expect(validate("work-audit.schema.json", forged).ok).toBe(true); // the event cross-check, not the schema, rejects it
-    writeFileSync(auditPath(rec.itemDir, SCOPE.run_id), JSON.stringify(forged));
+    writeFileSync(auditPath(rec.itemDir, SCOPE.run_id, SCOPE.round), JSON.stringify(forged));
     expect(loadAudit(rec.itemDir, SCOPE, rec.events)).toBeNull();
   });
 
@@ -175,7 +181,7 @@ describe("loadAudit", () => {
     const rec = recordAndLoad(report);
     const forged = { ...report, high_risk_paths_touched: [] };
     expect(validate("work-audit.schema.json", forged).ok).toBe(true);
-    writeFileSync(auditPath(rec.itemDir, SCOPE.run_id), JSON.stringify(forged));
+    writeFileSync(auditPath(rec.itemDir, SCOPE.run_id, SCOPE.round), JSON.stringify(forged));
     expect(loadAudit(rec.itemDir, SCOPE, rec.events)).toBeNull();
     // the same holds for tests_edited, and repairAudit refuses to write such a report
     const edited = { ...report, tests_edited: [], tests_edited_count: 2 };
@@ -191,7 +197,7 @@ describe("loadAudit", () => {
     ]) {
       const itemDir = makeTempDir("omf-item-");
       const ledger = new Ledger(makeTempDir("omf-ledger-"));
-      recordAudit(ledger, other, itemDir, report);
+      recordAudit(ledger, other, itemDir, report, HEAD_SHA);
       expect(loadAudit(itemDir, SCOPE, ledger.readVerified())).toBeNull();
       expect(loadAudit(itemDir, other, ledger.readVerified())).toEqual(report);
     }
@@ -201,8 +207,8 @@ describe("loadAudit", () => {
     const report = await cleanReport();
     const rec = recordAndLoad(report);
     const differing = { ...report, canary: { ...report.canary, total: report.canary.total + 3 } };
-    expect(() => recordAudit(rec.ledger, SCOPE, rec.itemDir, differing)).toThrow(/already/);
-    expect(() => recordAudit(rec.ledger, SCOPE, rec.itemDir, report)).toThrow(/already/);
+    expect(() => recordAudit(rec.ledger, SCOPE, rec.itemDir, differing, HEAD_SHA)).toThrow(/already/);
+    expect(() => recordAudit(rec.ledger, SCOPE, rec.itemDir, report, HEAD_SHA)).toThrow(/already/);
     expect(rec.ledger.readVerified()).toHaveLength(1);
     expect(loadAudit(rec.itemDir, SCOPE, rec.ledger.readVerified())).toEqual(report);
   });
@@ -211,7 +217,7 @@ describe("loadAudit", () => {
     const report = await cleanReport();
     const rec = recordAndLoad(report);
     const differing = { ...report, canary: { ...report.canary, total: report.canary.total + 3 } };
-    rec.ledger.append(auditCompletedEvent(SCOPE, differing));
+    rec.ledger.append(auditCompletedEvent(SCOPE, differing, HEAD_SHA));
     expect(loadAudit(rec.itemDir, SCOPE, rec.ledger.readVerified())).toBeNull();
   });
 });
@@ -221,7 +227,7 @@ async function crashedRecord(report: WorkAudit) {
   const itemDir = makeTempDir("omf-item-");
   const ledger = new Ledger(makeTempDir("omf-ledger-"));
   writeFileSync(join(itemDir, "runs"), "blocker");
-  expect(() => recordAudit(ledger, SCOPE, itemDir, report)).toThrow();
+  expect(() => recordAudit(ledger, SCOPE, itemDir, report, HEAD_SHA)).toThrow();
   rmSync(join(itemDir, "runs"));
   return { itemDir, ledger, events: ledger.readVerified() };
 }
@@ -245,7 +251,7 @@ describe("repairAudit", () => {
         throw new Error("quarantine repo is gone");
       }),
     ).toBeNull();
-    expect(existsSync(auditPath(itemDir, SCOPE.run_id))).toBe(false);
+    expect(existsSync(auditPath(itemDir, SCOPE.run_id, SCOPE.round))).toBe(false);
     expect(ledger.readVerified()).toHaveLength(1);
   });
 
@@ -254,7 +260,7 @@ describe("repairAudit", () => {
     const { itemDir, ledger, events } = await crashedRecord(report);
     const differing = await cleanReport({ surfaces: surfacesWith("diff") });
     expect(await repairAudit(itemDir, SCOPE, events, async () => differing)).toBeNull();
-    expect(existsSync(auditPath(itemDir, SCOPE.run_id))).toBe(false);
+    expect(existsSync(auditPath(itemDir, SCOPE.run_id, SCOPE.round))).toBe(false);
     expect(ledger.readVerified()).toHaveLength(1);
   });
 

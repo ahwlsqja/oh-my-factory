@@ -5,6 +5,7 @@ import {
   gatesEvaluatedEvent,
   isolationMeasuredEvent,
 } from "../../src/gate/events.js";
+import { HEAD_SHA } from "../helpers/audit-diff-fixture.js";
 import { GREEN_LINE, cleanAudit, gateRunOf, measurement } from "../helpers/gate3-parts.js";
 import { setupW } from "../helpers/w-verbs-fixture.js";
 
@@ -17,10 +18,10 @@ describe("gate, audit and isolation events do not touch the W verifier", () => {
       const fx = setupW();
       const before = { verdict: fx.verdict(), verified: fx.verified() };
       const events = [
-        gatesEvaluatedEvent(fx.scope, gateRunOf(GREEN_LINE, ["fast", "full"])),
-        auditCompletedEvent(fx.scope, cleanAudit()),
+        gatesEvaluatedEvent({ ...fx.scope, round: 1 }, gateRunOf(GREEN_LINE, ["fast", "full"])),
+        auditCompletedEvent({ ...fx.scope, round: 1 }, cleanAudit(), HEAD_SHA),
         isolationMeasuredEvent(fx.scope, measurement("sut", "L2"), null),
-        gate3EvaluatedEvent(fx.scope, { passed: false, failed: ["canary_hit"], route: "J6" }),
+        gate3EvaluatedEvent({ ...fx.scope, round: 1 }, { passed: false, failed: ["canary_hit"], route: "J6" }),
       ];
       expect(events.map((event) => event.type)).toEqual([
         "gates.evaluated",
