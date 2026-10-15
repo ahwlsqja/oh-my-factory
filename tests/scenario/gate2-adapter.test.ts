@@ -4,7 +4,7 @@ import { evaluateGate2Step, gate2Outcome } from "../../src/scenario/gate2-adapte
 import type { Gate2ReasonCode, Gate2Result, Gate2Route, ScenarioAggregate } from "../../src/scenario/gate2.js";
 import type { ScenarioRunner } from "../../src/scenario/runner.js";
 import { ledgerEvents } from "../helpers/enforcement-goal.js";
-import { ROUND1, ROUND2, gate2Ctx, sealStored, setupLine, tamperSet, writeYaml } from "../helpers/line-fixture.js";
+import { ROUND1, ROUND2, gate2Ctx, plantCanary, sealStored, setupLine, tamperSet, writeYaml } from "../helpers/line-fixture.js";
 
 const AGG: ScenarioAggregate = {
   total: 3,
@@ -101,5 +101,21 @@ describe("evaluateGate2Step", () => {
     const outcome = await evaluateGate2Step({ ...gate2Ctx(l), runner: candidate });
     expect(outcome).toMatchObject({ verdict: "not_run", reasons: ["gate_error"], next: "stop", stop_route: "J7", result: null });
     expect(ledgerEvents(l.f.fx, "gate2.evaluated")).toHaveLength(0);
+  });
+
+  it("reports a guard refusal at the GATE-2 stage under the guard's closed code, like the S2 station", async () => {
+    const l = setupLine();
+    await sealStored(l, writeYaml(l, "r2.yaml", ROUND2));
+    plantCanary(l.f.fx.repo);
+    const sealed = await evaluateGate2Step(gate2Ctx(l));
+    expect(sealed).toMatchObject({ verdict: "not_run", reasons: ["sealed_material_in_repo"], next: "stop", stop_route: "J7", result: null });
+    expect(ledgerEvents(l.f.fx, "gate2.evaluated")).toHaveLength(0);
+  });
+
+  it("keeps gate_error for a throw that is not a guard refusal", async () => {
+    const l = setupLine();
+    await sealStored(l, writeYaml(l, "r2.yaml", ROUND2));
+    const outcome = await evaluateGate2Step({ ...gate2Ctx(l), preflight: () => { throw new Error("disk"); } });
+    expect(outcome.reasons).toEqual(["gate_error"]);
   });
 });

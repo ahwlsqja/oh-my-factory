@@ -1,6 +1,7 @@
 import type { Ledger } from "../core/ledger.js";
 import { decisionsDigest, foldDecisions } from "../decision/state.js";
 import type { DecisionScope } from "../decision/types.js";
+import { guardRefusal } from "../vault/line-guard.js";
 import { foldSeals } from "./events.js";
 import { type Gate2Context, type Gate2Result, type Gate2Route, gate2EventFor, runGate2, sealFeedbackFor } from "./gate2.js";
 import type { SealFeedback } from "./types.js";
@@ -8,7 +9,7 @@ import type { SealFeedback } from "./types.js";
 /** The routes that end the line (M3c-D21); `back_to_S2` is the only one that loops. */
 export type StopRoute = Exclude<Gate2Route, "back_to_S2">;
 export type Gate2Verdict = "pass" | "fail" | "not_run";
-/** The reason a throw leaves behind. Matches `^[a-z0-9_]+$`, the shape M3b2 requires of gate reasons. */
+/** The reason a throw that is not a guard refusal leaves behind. Matches `^[a-z0-9_]+$`, the shape M3b2 requires of gate reasons. */
 export const GATE_ERROR_REASON = "gate_error";
 
 /**
@@ -50,15 +51,18 @@ export interface Gate2StepContext extends Gate2Context {
 /**
  * One GATE-2 evaluation as the line runs it: `runGate2` (reads and probes, appends nothing), then exactly one
  * `gate2.evaluated` (M3c-D7). A throw (a guard refusal, a damaged install, a runner that may not run) is
- * `not_run`, stops at J7 and appends nothing, because nothing was evaluated. The event's digests are read
+ * `not_run`, stops at J7 and appends nothing, because nothing was evaluated. Its reason is the guard's closed code
+ * for a guard refusal and `gate_error` for anything else. The event's digests are read
  * inside the append, from the same ledger the event joins. The line is the only writer during a pass.
  */
 export async function evaluateGate2Step(ctx: Gate2StepContext): Promise<Gate2Outcome> {
   let result: Gate2Result;
   try {
     result = await runGate2(ctx);
-  } catch {
-    return { gate: "GATE-2", verdict: "not_run", reasons: [GATE_ERROR_REASON], next: "stop", stop_route: "J7", feedback: null, not_run: [], result: null };
+  } catch (err) {
+    // A guard refusal keeps the closed code the S2 station reports for the same cause (docs/m3c-spec-deviations.md V9).
+    const reason = guardRefusal(err) ?? GATE_ERROR_REASON;
+    return { gate: "GATE-2", verdict: "not_run", reasons: [reason], next: "stop", stop_route: "J7", feedback: null, not_run: [], result: null };
   }
   const scope: DecisionScope = { goal_id: ctx.item.front.goal_id, work_id: ctx.item.front.work_id };
   ctx.ledger.appendWith((events) => {
