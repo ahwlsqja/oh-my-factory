@@ -70,3 +70,18 @@ describe("confirmByTyping", () => {
     await expect(answer).resolves.toBe(false);
   });
 });
+
+// docs/README.md "Output policy": no escape byte, even when the streams say they are a terminal. readline in terminal
+// mode redraws the line with cursor escapes, so the prompt must not let it.
+describe("confirmByTyping on a terminal-like stream", () => {
+  it("writes no escape byte and still reads the typed line", async () => {
+    const io = fakeTerminal();
+    Object.assign(io.input, { isTTY: true });
+    Object.assign(io.output, { isTTY: true, columns: 80 });
+    const answer = confirmByTyping("g-fast", "Type g-fast: ", io);
+    io.input.write("g-fast\n");
+    await expect(answer).resolves.toBe(true);
+    expect(io.shown()).toBe("Type g-fast: ");
+    expect(io.shown()).not.toContain("\x1b");
+  });
+});
