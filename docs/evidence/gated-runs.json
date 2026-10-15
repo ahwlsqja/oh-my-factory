@@ -1,4 +1,16 @@
 {
   "schema_version": 1,
-  "runs": []
+  "runs": [
+    {
+      "test": "G-inspect-parser-real",
+      "result": "pass",
+      "at": "2026-10-15T07:54:58.379Z",
+      "omf_commit": "b2872c3ef390f49e93546877b685d5b5e70b45a5",
+      "docker": {
+        "server_version": "29.2.1",
+        "context": "colima-omf-m3f",
+        "arch": "aarch64"
+      }
+    }
+  ]
 }
