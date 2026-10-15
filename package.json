@@ -27,6 +27,7 @@
   "files": [
     "dist",
     "schemas",
+    "fixtures",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
     "README.md"

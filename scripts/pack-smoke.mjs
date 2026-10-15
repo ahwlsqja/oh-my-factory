@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 // npm always bundles README.* files, so README.ko.md ships even though package.json
 // "files" does not list it. It is allowed, but not required.
-const REQUIRED_TOP = ["dist", "schemas", "LICENSE", "THIRD_PARTY_NOTICES.md", "README.md", "package.json"];
+const REQUIRED_TOP = ["dist", "schemas", "fixtures", "LICENSE", "THIRD_PARTY_NOTICES.md", "README.md", "package.json"];
 const ALLOWED_TOP = new Set([...REQUIRED_TOP, "README.ko.md"]);
 
 const tmp = mkdtempSync(join(tmpdir(), "omf-pack-smoke-"));
@@ -53,7 +53,7 @@ try {
   }
   for (const required of REQUIRED_TOP) {
     if (!files.some((p) => p === required || p.startsWith(`${required}/`))) {
-      // LICENSE and README.md are matched by name; dist and schemas by prefix.
+      // LICENSE and README.md are matched by name; dist, schemas and fixtures by prefix.
       fail(`allowlisted entry missing from tarball: ${required}`);
     }
   }
