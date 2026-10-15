@@ -1,6 +1,6 @@
 import { budgetStateFromEvents } from "../core/budget.js";
 import type { Ledger, LedgerEvent } from "../core/ledger.js";
-import { feedbackEventsOf } from "./events.js";
+import { feedbackEvent, feedbackEventsOf } from "./events.js";
 import { FeedbackError } from "./types.js";
 
 /**
@@ -176,4 +176,114 @@ export function feedbackEntryCheck(
   if (budgetStateFromEvents(events, goalId, "disclosure") === null) return { status: "not_declared" };
   const block = testRunBlock(planTestRun(testRunStateFromEvents(events, goalId, workId), testDigest, candidateSha));
   return block === null ? { status: "proceed" } : { status: "blocked", reason_code: block.reason_code };
+}
+
+/**
+ * Consumes the test split BEFORE it runs, so a crash leaves "consumed, incomplete" and never "not yet run". The fold, the
+ * plan and the write share one ledger lock, so two processes cannot both consume. Error messages are fixed text: no caller
+ * string reaches them.
+ */
+export function beginTestRun(
+  ledger: Ledger,
+  input: { goalId: string; workId: string; runId: string; testDigest: string; candidateSha: string; testTotal: number },
+): LedgerEvent {
+  if (!Number.isInteger(input.testTotal) || input.testTotal < 1) {
+    throw new FeedbackError("invalid_input", "testTotal must be an integer of at least 1");
+  }
+  return ledger.appendWith((events) => {
+    const { state } = foldTestRuns(events, input.goalId, input.workId);
+    if (state.runs.some((r) => r.test_digest === input.testDigest)) {
+      throw new FeedbackError("test_already_consumed", "this test split was already consumed for the work item");
+    }
+    if (planTestRun(state, input.testDigest, input.candidateSha).action !== "run") {
+      throw new FeedbackError("reseal_not_authorized", "a fresh test split needs a person's authorization");
+    }
+    return feedbackEvent(
+      {
+        type: "feedback.test_run_consumed",
+        payload: {
+          goal_id: input.goalId,
+          work_id: input.workId,
+          run_id: input.runId,
+          test_digest: input.testDigest,
+          candidate_sha: input.candidateSha,
+          test_total: input.testTotal,
+        },
+      },
+      "omf",
+    );
+  });
+}
+
+/** Records the result of an open consumption (same digest, run id and commit). The counts are checked here and again by the fold. */
+export function completeTestRun(
+  ledger: Ledger,
+  input: { goalId: string; workId: string; runId: string; testDigest: string; candidateSha: string } & TestResult,
+): LedgerEvent {
+  return ledger.appendWith((events) => {
+    const { state, totals } = foldTestRuns(events, input.goalId, input.workId);
+    const open = state.runs.find(
+      (r) =>
+        r.status === "consumed_incomplete" &&
+        r.test_digest === input.testDigest &&
+        r.run_id === input.runId &&
+        r.candidate_sha === input.candidateSha,
+    );
+    if (open === undefined) throw new FeedbackError("no_open_test_run", "no open test-split consumption matches this run");
+    const { pass, total, flaky } = input;
+    const whole = [pass, total, flaky].every((n) => Number.isInteger(n) && n >= 0);
+    if (!whole || total !== totals.get(input.testDigest) || pass > total || flaky > total - pass) {
+      throw new FeedbackError("invalid_input", "the counts must be whole, match the consumed total and fit pass + flaky <= total");
+    }
+    return feedbackEvent(
+      {
+        type: "feedback.test_run_completed",
+        payload: {
+          goal_id: input.goalId,
+          work_id: input.workId,
+          run_id: input.runId,
+          test_digest: input.testDigest,
+          candidate_sha: input.candidateSha,
+          pass,
+          total,
+          flaky,
+        },
+      },
+      "omf",
+    );
+  });
+}
+
+/**
+ * The human act (J3 or J6) that lets ONE fresh test digest run after a consumed one. It names the latest consumed digest and
+ * never reopens it. With no run consumed yet only J3 is allowed: it names no digest and only restarts the exposure count for
+ * fresh scenarios. The M3h verb wraps this in requireTerminal and confirmByTyping; until then the actor check is the guard.
+ */
+export function authorizeTestReseal(
+  ledger: Ledger,
+  input: { goalId: string; workId: string; basis: "J3" | "J6" },
+  actor: string,
+): LedgerEvent {
+  if (!actor.startsWith("human:")) throw new FeedbackError("forbidden", "only a person may authorize a test reseal");
+  return ledger.appendWith((events) => {
+    const { state } = foldTestRuns(events, input.goalId, input.workId);
+    const latest = state.runs.at(-1);
+    if (latest === undefined) {
+      if (input.basis === "J6") throw new FeedbackError("nothing_to_reseal", "no test split was consumed yet; only J3 applies");
+    } else if (state.pending_authorization !== null) {
+      throw new FeedbackError("already_authorized", "a reseal is already authorized and unused");
+    }
+    return feedbackEvent(
+      {
+        type: "feedback.test_reseal_authorized",
+        payload: {
+          goal_id: input.goalId,
+          work_id: input.workId,
+          consumed_test_digest: latest === undefined ? null : latest.test_digest,
+          basis: input.basis,
+        },
+      },
+      actor,
+    );
+  });
 }
