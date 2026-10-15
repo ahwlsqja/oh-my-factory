@@ -7,6 +7,7 @@ import { validate } from "../../src/core/schema.js";
 import { claimStatus } from "../../src/work/claim.js";
 import { EVIDENCE_JSON, EVIDENCE_MD, readEvidence } from "../../src/work/evidence.js";
 import { type HandoffRecord, handoffFile, owedPredecessors } from "../../src/work/handoff.js";
+import { runVeto } from "../../src/cli/work.js";
 import { harnessEnv } from "../helpers/cli.js";
 import { waitForLine } from "../helpers/child.js";
 import { finished, injectedGates, setupLine } from "../helpers/line-enforce.js";
@@ -75,5 +76,26 @@ describe("W-killed-run-blocked", () => {
     } finally {
       child.kill("SIGKILL");
     }
+  });
+
+  // The first test cannot tell the entry clear from the atomic write that replaces both files on success, so
+  // this one stops the entry before it writes evidence: a veto during S1 aborts at the recheck before GATE-1.
+  it("clears planted evidence and temp files on entry even when the run then aborts before writing its own", async () => {
+    const line = setupLine();
+    const planted = [EVIDENCE_JSON, EVIDENCE_MD, "evidence.json.1.dead.tmp"];
+    for (const name of planted) writeFileSync(join(line.itemDir, name), "stale\n");
+
+    const { result } = await line.exec({
+      gates: injectedGates(),
+      scripts: {
+        S1: () => {
+          runVeto(line.location, line.workId, "human:dev@example.com", "stop");
+          return { kind: "ok" };
+        },
+      },
+    });
+
+    expect(result).toMatchObject({ kind: "aborted", reason: "vetoed" });
+    for (const name of planted) expect(existsSync(join(line.itemDir, name))).toBe(false);
   });
 });
