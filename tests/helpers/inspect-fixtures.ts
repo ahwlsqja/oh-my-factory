@@ -1,3 +1,6 @@
+import { containerFactsFromInspect } from "../../src/isolation/inspect.js";
+import type { StageGolden } from "../../src/isolation/evaluate.js";
+import type { ContainerChecks, ContainerFacts } from "../../src/isolation/types.js";
 // Fixtures for the isolation tests: one `docker inspect` document of a healthy implementer container, and
 // (added with the evaluator) the golden values M3g pins for that stage. Every path is invented. Nothing
 // here reads or writes the real home.
@@ -45,5 +48,31 @@ export function goldenInspect(): InspectDoc {
       Sysctls: {},
       Runtime: "runc",
     },
+  };
+}
+
+/**
+ * What M3g will pin for the implementer stage. The forbidden list is deliberately broad: the user's home
+ * is forbidden, so the worktree under the OMF home passes only because it is an exact allowed mount.
+ */
+export const GOLDEN_STAGE: StageGolden = {
+  allowed_mounts: [
+    { source: WORKTREE, destination: "/work", read_only: false },
+    { source: SCENARIOS, destination: "/scenarios", read_only: true },
+    { source: "", destination: "/tmp", read_only: false },
+  ],
+  forbidden_paths: [OMF_HOME, `${HOME}/repo`, `${HOME}/.claude`, `${HOME}/.codex`, HOME, "/var/run/docker.sock"],
+  allowed_env_names: ["PATH", "HOME", "OMF_STAGE"],
+  network: "none",
+  require_read_only_rootfs: true,
+  allowed_vendor_binaries: [],
+  allowed_credential_paths: [],
+};
+
+/** Facts parsed from the golden document plus a clean in-container probe: zero violations against GOLDEN_STAGE. */
+export function goldenObserved(): { facts: ContainerFacts; checks: ContainerChecks } {
+  return {
+    facts: containerFactsFromInspect(goldenInspect()),
+    checks: { vendor_binaries: [], credential_paths: [], docker_socket_present: false },
   };
 }
