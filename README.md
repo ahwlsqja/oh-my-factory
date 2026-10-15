@@ -146,7 +146,7 @@ or **designed** and not built yet.
 
 Exit codes: `0` ok, `1` needs attention (problems found, a declined confirmation, a tick that stopped or is waiting for your approval), `2` the command could not run, `3` blocked on a person (`omf decide lint`: open design decisions).
 
-Sealed scenarios and GATE-2 exist as library code only, with no command yet. After GATE-1 passes, an author session writes scenarios, OMF stamps them and stores them in a vault outside the repository (`vault/scenarios/<work-id>/<seal-id>/`), and GATE-2 refuses a set that is empty, lacks a split, passes against a program that does nothing, or leaves a resolved decision unlinked. Today the author is a stub process on the host, so the author stage is reported as unmeasured and sealing is not enforced. See [`docs/m3c-spec-deviations.md`](docs/m3c-spec-deviations.md).
+Sealed scenarios and GATE-2 exist as library code only, with no command yet. After GATE-1 passes, an author session writes scenarios, OMF stamps them and stores them in a vault outside the repository (`vault/scenarios/<work-id>/<seal-id>/`), and GATE-2 refuses a set that is empty, lacks a split, passes against a program that does nothing, has no contradiction canary (`canary_missing`), or leaves a resolved decision unlinked. Today the author is a stub process on the host, so the author stage is reported as unmeasured and sealing is not enforced. See [`docs/m3c-spec-deviations.md`](docs/m3c-spec-deviations.md).
 
 Not built yet: the container runner and judge, evidence reports, `omf ship`, goal sign-off (`omf goal sign`) and asking people for input in the middle of a run. The
 [design](docs/design/2026-10-12-omf-v0-design.md) describes all of them.
