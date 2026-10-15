@@ -11,9 +11,9 @@ import {
   type IsolationLevel,
   type IsolationStage,
   type RunIsolation,
+  runIsolation,
   type StageMeasurement,
   type ViolationCode,
-  runIsolation,
 } from "./types.js";
 
 /** The author stage is measured at seal. This names the seal event (its ledger seq) and the scenario set it covered. */
@@ -65,8 +65,8 @@ function readView(path: string, runId: string): StageMeasurement[] {
 
 /**
  * Ledger event first, then the file (the M2b order): a crash between the two leaves an event and a file that is one
- * entry behind, and the event is what counts. The view is checked against its schema before the event is appended, so a
- * malformed measurement fails here and never reaches the ledger. The file appends; it never replaces an earlier entry.
+ * entry behind, and the event is what counts. The measurement is checked against the schema before the event is appended, so a
+ * malformed one fails here and never reaches the ledger. The file is written best effort after the event and appends; it never replaces an earlier entry.
  */
 export function recordStageMeasurement(
   sink: RecordSink,
@@ -77,11 +77,18 @@ export function recordStageMeasurement(
 ): void {
   const event = isolationMeasuredEvent(scope, measurement, authorScope ?? null);
   const path = isolationPath(itemDir, scope.run_id);
-  const view = viewOf(scope.run_id, [...readView(path, scope.run_id), measurement]);
-  const check = validate("isolation.schema.json", view);
-  if (!check.ok) throw new Error(`invalid isolation.json: ${check.errors}`);
+  // The measurement alone is checked before the ledger: a malformed one never reaches it.
+  const single = validate("isolation.schema.json", viewOf(scope.run_id, [measurement]));
+  if (!single.ok) throw new Error(`invalid isolation.json: ${single.errors}`);
   sink.appendWith(() => event);
-  writePrivateFileAtomic(path, `${JSON.stringify(view, null, 2)}\n`);
+  // The file is a view of the events and never an input to a verdict, so it cannot fail a measurement: a run that outgrows
+  // the schema's list cap (or a full disk) keeps its ledger events and a view that stops at its last valid state.
+  try {
+    const view = viewOf(scope.run_id, [...readView(path, scope.run_id), measurement]);
+    if (validate("isolation.schema.json", view).ok) writePrivateFileAtomic(path, `${JSON.stringify(view, null, 2)}\n`);
+  } catch {
+    // best effort
+  }
 }
 
 /**
