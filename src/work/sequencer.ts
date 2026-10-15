@@ -616,6 +616,8 @@ export async function runLine(options: LineOptions): Promise<LineResult> {
     const entry = run.recheck();
     if (!entry.ok) throw new RunAbort(entry.reason, entry.code, null);
     itemDir = entry.item.dir;
+    // Read with the recheck, before clearEvidence and the ledger read: the limits written below are the ones it validated.
+    const config = readConfig(options.location.dir);
     const owner = claimStatus(itemDir).owner;
     if (owner === null || owner.pid !== process.pid) throw new RunAbort("claim_lost", null, null);
 
@@ -648,7 +650,6 @@ export async function runLine(options: LineOptions): Promise<LineResult> {
         }),
       );
     }
-    const config = readConfig(options.location.dir);
     guard(() => recordLimits(own, { max_rounds: config.w.max_rounds, max_model_micro_usd: microUsd(config.w.max_model_usd) }));
 
     line = new Line({ run, options, gates, injected, ledger, itemDir, own, config, now }, entry.item);
