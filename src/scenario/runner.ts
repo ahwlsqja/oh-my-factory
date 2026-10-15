@@ -1,6 +1,6 @@
 import { evaluateExpect } from "./matcher.js";
 import { scenarioRef } from "./types.js";
-import type { RefusalCode, StepObservation, StoredScenario } from "./types.js";
+import type { StepObservation, StoredScenario } from "./types.js";
 
 export type { RefusalCode, StepObservation } from "./types.js";
 

@@ -4,7 +4,6 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  assertOutsideAgentHomes,
   assertOutsideRepo,
   NotAGitRepoError,
   omfHome,
