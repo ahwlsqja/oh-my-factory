@@ -190,7 +190,7 @@ function anyFlaky(sealed: SealedInputs): boolean {
 
 /**
  * Maps what the line produced to the closed outcome (M3b2 skeleton section 4.5). Pure and total: the first matching row wins,
- * in this order: 1 station stop, 2 gate not run, 3 GATE-1, 4 GATE-3, 5 GATE-4, 6 completeness, 7 quality, 8 success.
+ * in this order: 1 station stop, 2 gate not run, 3 GATE-1, 4 GATE-2 stop, 5 GATE-3, 6 GATE-4, 7 completeness, 8 quality, 9 success.
  * Every row before the last can only lower the result; a `flawed` result needs an implementation behind it (round >= 1, D18).
  */
 export function classifyOutcome(input: ClassifierInput): Classification {
