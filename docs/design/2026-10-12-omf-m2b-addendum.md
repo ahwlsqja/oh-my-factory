@@ -82,7 +82,7 @@ The spec names `reconciler` only in `[roles]`. M2b decided:
 | Near-duplicate and paraphrase detection | known limit | Canaries and lint catch verbatim leaks and shapes, not meaning (spec §4.6). |
 | A single-digit target in the objective or approach | known limit | A standalone digit is allowed by seed lint, so "get it down to 5" with a locked `value: 5` reaches the model; decimals and longer numbers are caught. Writing the target in goal prose is the goal author's leak. |
 | W transitions (`in_progress`, `awaiting_review`, `done`, `failed`) | M3 | The table and states exist; M3 adds the verbs and the ledger events `verifyItemAgainstLedger` will then require. |
-| Recent outcome aggregates in the reconciler input (spec §4.4 step 4) | M3 | No W outcome exists until M3. M3 adds counts-only aggregates and extends the E2 canary test to them. |
+| Recent outcome aggregates in the reconciler input (spec §4.4 step 4) | done in M3 | The reconciler input carries `recent_outcomes`, four counts of how the last items ended; `W-aggregates-counts-only.test.ts` enforces counts only. |
 | The `codex` reconciler, `auth = "login_file"` and persistent vendor homes | M3 | They need a container (section 2). |
 | `[stop_if]`, `[refresh]` and `[risk]` tables | after a J8 path records their changes | Constants in M2b (D14). |
 | Event ingestion, external trackers | after v0.1 (§13) | |

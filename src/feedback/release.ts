@@ -17,7 +17,7 @@ import {
 /**
  * Masked feedback is the one channel from the sealed train scenarios to the implementer (spec §5.7, §4.6), so one
  * function owns it: it validates, folds the ladder and the budget from the ledger it holds locked, and writes the
- * disclosure unit together with the release record (M3d-D5, D7, D8, D10).
+ * disclosure unit together with the release record.
  */
 
 // The same patterns as the id definitions of work-event.schema.json (tests pin the equality through the feedback events).
@@ -84,7 +84,7 @@ function requireWellFormed(input: ReleaseInput): number {
   return limit;
 }
 
-/** The digest does not pin the layout, so a release must match the layout already recorded under it (review change 12). */
+/** The digest does not pin the layout, so a release must match the layout already recorded under it. */
 function sameLayout(layout: NonNullable<LadderState["layout"]>, workId: string, merged: readonly CategoryTally[]): boolean {
   return (
     layout.work_id === workId &&
@@ -98,10 +98,11 @@ function sameLayout(layout: NonNullable<LadderState["layout"]>, workId: string, 
  *    an error (zero is never a pass, E7); under MIN_CATEGORY_SIZE scenarios in total nothing is released, because a
  *    category below 5 would be a per-scenario verdict (spec §5.7), and nothing is consumed or appended.
  * 1. One `appendWithMany`, decided from the events seen under the lock: a declared `disclosure` budget is required even
- *    for a repeat (M3-D12); the layout must match; a release that shows any new score costs one unit and counts toward
- *    the exposure limit; a pure repeat is free (M3d-D5). The unit and the release are written together, so there is no
- *    window with a unit spent and no release, or a release without its unit.
- * The caller holds the item claim (M3b1); the lock makes the decision atomic even without it.
+ *    for a repeat; the layout must match; a release that shows any new score costs one unit and counts toward
+ *    the exposure limit; a pure repeat is free. The unit and the release are one write; a crash mid-write can at
+ *    worst leave the unit without its release (a unit lost, never a release unpaid).
+ * BudgetError(`invalid_event`) and LedgerCorruptError propagate unwrapped; callers must handle them as integrity stops.
+ * The caller holds the item claim; the lock makes the decision atomic even without it.
  */
 export function releaseFeedback(ledger: Ledger, input: ReleaseInput): ReleaseResult {
   const limit = requireWellFormed(input);

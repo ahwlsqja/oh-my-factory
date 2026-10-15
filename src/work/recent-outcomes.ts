@@ -5,7 +5,7 @@ import { classifyWEvent } from "./w-events.js";
 export const RECENT_OUTCOME_WINDOW = 10;
 
 /**
- * How recent work ended, as four counts (spec §4.6, M3d-D14). These are the only keys, so no title, id, path, risk
+ * How recent work ended, as four counts (spec §4.6). These are the only keys, so no title, id, path, risk
  * or reason code of any item can ride in a number, and none of the keys names a metric.
  */
 export interface RecentOutcomes {
@@ -16,7 +16,7 @@ export interface RecentOutcomes {
 }
 
 /**
- * Counts the last `window` items of one goal by how their last run ended. The ledger is the authority (M3b1-D2), so
+ * Counts the last `window` items of one goal by how their last run ended. The ledger is the authority, so
  * this reads the verified W events and never an item file: per item the outcome of its last submitted, failed or
  * parked event (actor `omf`, schema-valid; a forged or malformed event is `classifyWEvent` kind none or invalid and
  * is skipped, so it neither counts nor takes an item out of the count).
@@ -54,6 +54,10 @@ export function recentOutcomes(
         break;
       case "work.repaired":
         break;
+      default: {
+        const unreachable: never = w;
+        return unreachable;
+      }
     }
   }
   const counts: RecentOutcomes = { success: 0, flawed: 0, blocked: 0, manual: 0 };

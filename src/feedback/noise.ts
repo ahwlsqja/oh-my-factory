@@ -8,7 +8,7 @@ export interface NoiseCheckInput {
 }
 
 export interface NoiseCheck {
-  /** v0.1 never claims a variance estimate (M3-D10 a): there is no value that could read as "within variance, passed". */
+  /** v0.1 never claims a variance estimate: there is no value that could read as "within variance, passed". */
   status: "not_evaluated";
   k: number;
   flaky_train: number;
@@ -22,7 +22,7 @@ function requireInteger(value: number, min: number, what: string): void {
 }
 
 /**
- * The pure noise rule of the evidence report (M3-D10, M3d-D13). Fail closed: k < 2 repetitions cannot tell a flaky
+ * The pure noise rule of the evidence report. Fail closed: k < 2 repetitions cannot tell a flaky
  * scenario from a stable one, so a clean-looking run proves nothing and the report must say not recommended. Otherwise any
  * flaky scenario in either split forces the same. Only a run with k >= 2 and no flaky scenario is left unforced, and even
  * then the status stays `not_evaluated`.
@@ -46,11 +46,10 @@ export function noiseCheck(input: NoiseCheckInput): NoiseCheck {
 export type NoiseReasonCode = "flaky_scenario" | "noise_unverified";
 
 /**
- * The reason code that names why the check forces not_recommended (M3d-D13). Advisory and recorded only: the M3b2
+ * The reason code that names why the check forces not_recommended. Advisory and recorded only: the M3b2
  * classifier is the only producer of outcome reason codes (cross-plan X-15). A flaky scenario maps to `flaky_scenario`
- * (J4), the W code M3b2 defines; k < 2 maps to `noise_unverified`, the W code M3d2 Task 6 appends (reserved, no v0.1
- * producer). Neither is in W_REASON_CODES on main yet (src/work/w-events.ts), so this module only returns the string and
- * imports nothing from src/work. One downgrade never has two codes. Null when nothing is forced.
+ * (J4); k < 2 maps to `noise_unverified`, which is reserved and has no producer in v0.1. This module only returns the
+ * string and imports nothing from src/work. One downgrade never has two codes. Null when nothing is forced.
  */
 export function noiseReasonCode(check: NoiseCheck): NoiseReasonCode | null {
   if (check.reason === "k_below_2") return "noise_unverified";

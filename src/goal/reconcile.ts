@@ -45,7 +45,7 @@ export interface ReconcilerInput {
   open_items: { work_id: string; title: string; state: WorkState; affected_paths: string[] }[];
   outcomes: { open: number; done: number; failed: number; vetoed: number; cancelled: number };
   /**
-   * How the last 10 finished or parked items ended, as four counts (M3d-D14). Counts only: no title, id, path or risk
+   * How the last 10 finished or parked items ended, as four counts. Counts only: no title, id, path or risk
    * of any item leaves, so this is as safe as `outcomes`. Computed from verified W events, never from item files.
    */
   recent_outcomes: RecentOutcomes;
@@ -119,7 +119,7 @@ export function buildReconcilerInput(args: {
   /**
    * Items one W edge behind the ledger (`verifiedItems(...).repairable`). They are not in `items`, but the
    * ledger says they are open, so they hold a WIP slot: leaving them out would let a crash free a slot that
-   * is really taken (M3b1-D5). Only the count is needed; the model never sees them.
+   * is really taken. Only the count is needed; the model never sees them.
    */
   repairableOpen?: number;
   /** `recentOutcomes(...)` of the same ledger read. Required, so no caller can forget the field. */
@@ -326,7 +326,7 @@ export async function reconcileGoal(ctx: ReconcileContext): Promise<ReconcileSta
   const inputText = `${JSON.stringify(input, null, 2)}\n`;
   writePrivateFile(join(reconcileDir, `${tickId}.input.json`), inputText);
 
-  // The checks above read a snapshot; a feedback release (M3d-D8) may take the last disclosure unit before this write.
+  // The checks above read a snapshot; a feedback release may take the last disclosure unit before this write.
   // So both pools are folded again under the ledger lock and written together or not at all: no round is spent
   // without the model call it pays for. This is the only place a round is spent (D18).
   let lost: "rounds_exhausted" | "disclosure_exhausted" | null = null;

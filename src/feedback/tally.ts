@@ -30,7 +30,7 @@ function parseOne(item: unknown, index: number): ScenarioResult {
  * Validates an untrusted array into the closed input. Exactly the three keys, booleans, a linkable DecisionClass, flaky
  * implies !passed. Any extra key (a scenario id, an input, an expected output) is refused with FeedbackError("invalid_input"),
  * so a caller that passes a whole scenario fails here instead of leaking through. Quantitative classes are refused too: they
- * are not linkable to CLI scenarios in v0.1 (M3-D17).
+ * are not linkable to CLI scenarios in v0.1.
  */
 export function parseScenarioResults(value: unknown): ScenarioResult[] {
   if (!Array.isArray(value)) throw new FeedbackError("invalid_input", "scenario results must be an array");
@@ -40,7 +40,7 @@ export function parseScenarioResults(value: unknown): ScenarioResult[] {
 /**
  * Category of a scenario from the classes its decisions link: the first linked class in DECISION_CLASSES order that is
  * neither "interface" nor quantitative; else "interface" if linked; else "other". "interface" is mandatory and most scenarios
- * link it, so letting it win would put nearly everything on one line (M3d-D3).
+ * link it, so letting it win would put nearly everything on one line.
  */
 export function categoryOf(linkedClasses: readonly DecisionClass[]): DecisionClass {
   for (const cls of DECISION_CLASSES) {

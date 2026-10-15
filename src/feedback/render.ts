@@ -3,7 +3,7 @@ import { FeedbackError } from "./types.js";
 import type { ReleasedCategory } from "./types.js";
 
 /**
- * The implementer-facing feedback text (spec §5.7, §5.8; M3d-D15). A fixed template over validated enums and integers:
+ * The implementer-facing feedback text (spec §5.7, §5.8). A fixed template over validated enums and integers:
  * the only variable parts are a class name from DECISION_CLASSES, a whole percent and a scenario count. A new kind of
  * line needs an edit to the patterns below and to the E2-W-b test, so the allowlist cannot grow by accident.
  */
@@ -51,7 +51,8 @@ export function renderFeedback(categories: readonly ReleasedCategory[]): string 
 /**
  * True iff the text is exactly the header, one or more category lines, and the footer, joined by "\n" with no trailing
  * newline. Used by releaseFeedback as a self-check and by the tests; it accepts nothing renderFeedback cannot produce
- * except an unsorted or repeated category, which the renderer itself refuses.
+ * except an unsorted or repeated category, which the renderer itself refuses: the order and uniqueness of categories are
+ * not checked here.
  */
 export function isAllowlistedFeedback(text: string): boolean {
   if (typeof text !== "string") return false;

@@ -7,7 +7,7 @@ import { FeedbackError, type ReleasedCategory } from "./types.js";
 /**
  * Ledger events of the feedback channel (spec §4.4 step 4, §5.7). They are the only persistent state of the
  * Ladder, of the per-work-item exposure count and of the test split: nothing is cached, every reader folds the
- * verified ledger, so a restart cannot change a count (M3d-D6, D10, D11). Payloads are ids, digests, commit
+ * verified ledger, so a restart cannot change a count. Payloads are ids, digests, commit
  * shas, enum members and counts; a scenario id or text has no field to ride in.
  */
 
@@ -51,7 +51,7 @@ export type FeedbackEvent =
         flaky: number;
       };
     }
-  // consumed_test_digest null: a J3 act with no test run consumed yet; it only restarts the exposure count (M3d-D10).
+  // consumed_test_digest null: a J3 act with no test run consumed yet; it only restarts the exposure count.
   | {
       type: "feedback.test_reseal_authorized";
       payload: Scope & { consumed_test_digest: string | null; basis: "J3" | "J6" };
@@ -122,7 +122,7 @@ export function feedbackEvent(event: FeedbackEvent, actor: string): NewEvent {
 
 /**
  * Every feedback event of one goal, in ledger order, each fully re-checked (actor, schema, per-event rules).
- * Scoped like budgetStateFromEvents (M3d-D9): an event of another goal, an unknown `feedback.*` type name, or a
+ * Scoped like budgetStateFromEvents: an event of another goal, an unknown `feedback.*` type name, or a
  * payload whose goal_id is not a string equal to `goalId` belongs to nobody here and is skipped, so one goal's
  * bad event cannot stop every goal's feedback on a ledger that has no repair path. A bad event of THIS goal
  * throws `invalid_event`: skipping it would silently reset the Ladder or the exposure count.
@@ -151,7 +151,7 @@ export interface LadderState {
 }
 
 /**
- * The Ladder of one (goal, train set digest), folded from the verified ledger (M3d-D4, D6; spec §5.7). Nothing
+ * The Ladder of one (goal, train set digest), folded from the verified ledger (spec §5.7). Nothing
  * is cached, so a restart or a new work item cannot reset it. The fold re-derives every claim a release event
  * makes instead of trusting it, because a forged event could raise or lower the baseline:
  * - round == previous round + 1;
@@ -210,7 +210,7 @@ export function ladderStateFromEvents(events: readonly LedgerEvent[], goalId: st
 }
 
 /**
- * Per-scenario exposure (spec 437, limit 20) as the ledger sees it (M3d-D10): the number of releases that
+ * Per-scenario exposure (spec 437, limit 20) as the ledger sees it: the number of releases that
  * showed a new score (disclosure_units 1) for (goal, work item), over EVERY train digest of the item, counted
  * since the latest J3 reseal authorization for it. Every train scenario contributes to every release, so one
  * count covers them all. It is not keyed by digest: a digest changes whenever any scenario is added, retired or
@@ -229,15 +229,15 @@ export function exposureUnitsOf(events: readonly LedgerEvent[], goalId: string, 
 }
 
 /**
- * The shape of M3c's `ExposureCount` (`src/scenario/gate2.ts`: `({split, digest}) => number`), written structurally so this
- * file needs no M3c import; a wider `split` parameter is assignable to M3c's narrower one. M3c-D9 dropped `reserveExposure`
- * and `scenario.exposed`: GATE-2's `exposure_exhausted` calls the function supplied here (M3d-D10).
+ * The shape of the `ExposureCount` of `src/scenario/gate2.ts` (`({split, digest}) => number`), written structurally so this
+ * file needs no import from it; a wider `split` parameter is assignable to its narrower one. There is no `reserveExposure`
+ * or `scenario.exposed`: GATE-2's `exposure_exhausted` calls the function supplied here.
  */
 export type ExposureCountFn = (key: { split: string; digest: string }) => number;
 
 /**
  * The `ExposureCount` M3d supplies to M3c GATE-2: the (goal, work item) count of `exposureUnitsOf`, returned for ANY split
- * and digest key (the count is not keyed by digest, M3d-D10). A snapshot of the events passed in; the caller builds a new
+ * and digest key (the count is not keyed by digest). A snapshot of the events passed in; the caller builds a new
  * function after the ledger changes.
  */
 export function exposureCountFor(events: readonly LedgerEvent[], goalId: string, workId: string): ExposureCountFn {

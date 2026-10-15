@@ -6,7 +6,7 @@ function requireCount(value: number, what: string): void {
 }
 
 /**
- * floor(100 * pass / total), for rendering and the evidence only: no decision uses it (M3d-D4). The arithmetic stays in
+ * floor(100 * pass / total), for rendering and the evidence only: no decision uses it. The arithmetic stays in
  * exact integers, so a quotient just below a whole percent can never round up.
  */
 export function scorePct(pass: number, total: number): number {
@@ -39,11 +39,11 @@ export interface BestEntry {
 export type LadderBest = ReadonlyMap<DecisionClass, BestEntry>;
 
 /**
- * One decision per merged category, in input order (spec §5.7, M3-D9). No best yet: release the actual score as `first`.
+ * One decision per merged category, in input order (spec §5.7). No best yet: release the actual score as `first`.
  * A gain that meets the margin: release it as `new`. Anything else, including a lower score, repeats the best released
  * pass count, so the implementer never sees a decrease and learns nothing from noise below the margin. Every entry carries
  * `pass`, which only the host ledger keeps (the renderer prints the percent and n), so the fold can re-check the ladder
- * exactly. A best taken over a different n is refused: ratios over different scenario sets are not comparable (M3d-D6).
+ * exactly. A best taken over a different n is refused: ratios over different scenario sets are not comparable.
  */
 export function decideRelease(best: LadderBest, merged: readonly CategoryTally[]): ReleasedCategory[] {
   return merged.map((actual): ReleasedCategory => {
