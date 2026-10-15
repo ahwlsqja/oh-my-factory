@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { registerCleanup } from "../core/cleanup-registry.js";
 
 export interface ProcessOptions {
   cwd: string;
@@ -18,7 +19,8 @@ export type ProcessResult =
 
 /** Process-group leader pids of the commands that are running now. */
 const live = new Set<number>();
-let handlersInstalled = false;
+let exitHookInstalled = false;
+let unregister: (() => void) | undefined;
 
 /**
  * SIGKILLs the whole group of `pid` (a negative pid addresses the group). ESRCH means the group is already
@@ -37,42 +39,26 @@ function killAll(): void {
   for (const pid of live) killGroup(pid);
 }
 
-function onSigint(): void {
-  onSignal("SIGINT");
-}
-
-function onSigterm(): void {
-  onSignal("SIGTERM");
-}
-
 function onExit(): void {
   killAll();
 }
 
 /**
- * A detached group is not in the terminal's foreground group, so Ctrl-C never reaches it. Kill every live
- * group, take our handlers off so the signal has its default effect again, and re-raise it: the process
- * still ends with the signal status instead of exit 0.
+ * A detached group is not in the terminal's foreground group, so Ctrl-C never reaches it. The group killer is registered
+ * with the shared cleanup registry as a `first` entry, so on SIGINT or SIGTERM it kills every live group before
+ * any directory cleanup runs; then the registry takes its handlers off and re-raises the signal, so the process still
+ * ends with the signal status instead of exit 0. The exit hook is the net for a normal exit.
  */
-function onSignal(signal: NodeJS.Signals): void {
-  killAll();
-  removeHandlers();
-  process.kill(process.pid, signal);
-}
-
 function installHandlers(): void {
-  if (handlersInstalled) return;
-  handlersInstalled = true;
-  process.on("SIGINT", onSigint);
-  process.on("SIGTERM", onSigterm);
+  // Every run re-registers: the registry takes its signal handlers off after a signal, and a process that survives the
+  // re-raise (another listener caught it) gets them back only on a registration. The previous entry is dropped first so
+  // the registry never holds more than one. The entry is never removed after a run, so it stays for the life of the
+  // process; the exit hook stays too, and killAll is idempotent.
+  unregister?.();
+  unregister = registerCleanup(killAll, { first: true });
+  if (exitHookInstalled) return;
+  exitHookInstalled = true;
   process.on("exit", onExit);
-}
-
-function removeHandlers(): void {
-  handlersInstalled = false;
-  process.off("SIGINT", onSigint);
-  process.off("SIGTERM", onSigterm);
-  process.off("exit", onExit);
 }
 
 /** Number of process groups this module is running right now. A test seam: it is 0 after every command has settled. */

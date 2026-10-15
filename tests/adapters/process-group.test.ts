@@ -83,7 +83,26 @@ const [distUrl, pidFile, mode] = process.argv.slice(2);
 const { runProcessGroup, liveGroupCount } = await import(distUrl);
 const opts = { cwd: process.cwd(), env: process.env, timeoutMs: 120000, maxOutputBytes: 1024 };
 const counts = () => ({ sigint: process.listenerCount("SIGINT"), sigterm: process.listenerCount("SIGTERM"), exit: process.listenerCount("exit") });
-if (mode === "hang") {
+if (mode === "survive") {
+  // A second listener lets the process live through the re-raised signal; the next command must re-arm the handlers.
+  process.on("SIGTERM", () => {});
+  const { existsSync } = await import("node:fs");
+  const ready = async (f) => { while (!existsSync(f)) await new Promise((r) => setTimeout(r, 20)); await new Promise((r) => setTimeout(r, 100)); };
+  void runProcessGroup(["sh", "-c", ${JSON.stringify(BACKGROUND_THEN_HANG)}, "sh", pidFile + ".a"], opts);
+  await ready(pidFile + ".a");
+  process.kill(process.pid, "SIGTERM");
+  await new Promise((r) => setTimeout(r, 200));
+  void runProcessGroup(["sh", "-c", ${JSON.stringify(BACKGROUND_THEN_HANG)}, "sh", pidFile + ".b"], opts);
+  await ready(pidFile + ".b");
+  process.kill(process.pid, "SIGTERM");
+  await new Promise((r) => setTimeout(r, 300));
+  // Read before exiting: the exit hook would kill the group too and hide a missing signal handler.
+  const { readFileSync } = await import("node:fs");
+  const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  const sleepB = Number(readFileSync(pidFile + ".b", "utf8").trim().split(" ")[1]);
+  console.log(JSON.stringify({ sleepBAlive: alive(sleepB) }));
+  process.exit(0);
+} else if (mode === "hang") {
   void runProcessGroup(["sh", "-c", ${JSON.stringify(BACKGROUND_THEN_HANG)}, "sh", pidFile], opts);
 } else {
   const before = counts();
@@ -125,5 +144,15 @@ describe("runProcessGroup signal cleanup", () => {
     expect(await exited).toEqual({ code: null, signal });
     expect(await waitDead(shell as number)).toBe(true);
     expect(await waitDead(background as number)).toBe(true);
+  });
+
+  it("a second signal still kills the group of a later command when the process survived the first", async () => {
+    const pidFile = join(makeTempDir(), "pids");
+    const result = spawnSync(process.execPath, [childScript(), DIST_URL, pidFile, "survive"], { encoding: "utf8", cwd: makeTempDir(), timeout: 15_000 });
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({ sleepBAlive: false });
+    const [shellA, sleepA] = await waitForPids(pidFile + ".a");
+    const [shellB, sleepB] = await waitForPids(pidFile + ".b");
+    for (const pid of [shellA, sleepA, shellB, sleepB]) expect(await waitDead(pid as number)).toBe(true);
   });
 });

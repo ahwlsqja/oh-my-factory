@@ -30,7 +30,7 @@ OMF itself is Apache-2.0 (`LICENSE`).
 | Project | License | Form in OMF | What OMF takes |
 |---|---|---|---|
 | danshapiro/kilroy | MIT, copyright 2026 StrongDM, Inc. | adapted design: claim lock staleness and ownership checks (`src/core/lock.ts`) and signature normalization (`src/goal/signatures.ts`); idea: repeated-failure breaker, visit caps, preflight report, parity matrix | claim lock: same decision structure as Kilroy's `runOwnershipMatchesLiveProcess`, independent TypeScript implementation; signature normalization: lowercase, hex runs to the placeholder `<hex>`. Notice: [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) |
-| addyosmani/factory, factory-demo | MIT, copyright 2026 Addy Osmani | idea | gates line, run records, handoff, timing records |
+| addyosmani/factory, factory-demo | MIT, copyright 2026 Addy Osmani | idea | gates line, run records, handoff, timing records, prove-test, "MISCONFIGURED beats RED" |
 | point-labs-dev/arc | README says MIT; no LICENSE file and no copyright holder | idea | empty-means-fail, per-node execution cap |
 | Yeachan-Heo/oh-my-claudecode, oh-my-codex | MIT, copyright Yeachan Heo | idea | plugin layout, loop guards, settings isolation |
 | code-yeongyu/oh-my-openagent | Sustainable Use License 1.0 (not open source) | concept only | progress-signature dedupe. Nothing is read for reuse; no code is copied and none may be |

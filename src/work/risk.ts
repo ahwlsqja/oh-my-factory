@@ -37,6 +37,11 @@ export const DEFAULT_HIGH_RISK: ReadonlyArray<{ rule: RiskRule; globs: readonly 
   },
 ];
 
+const testRule = DEFAULT_HIGH_RISK.find((entry) => entry.rule === "test");
+if (testRule === undefined) throw new Error("DEFAULT_HIGH_RISK has no test rule");
+/** The globs of the `test` rule: the one definition of a test file shared by `classifyRisk`, `proveTest` and the audit. */
+export const TEST_GLOBS: readonly string[] = testRule.globs;
+
 export interface RiskInput {
   /** Literal repo-relative files or directories the candidate says it will touch. */
   declaredPaths: readonly string[];
@@ -100,4 +105,68 @@ export function classifyRisk(input: RiskInput): RiskAssessment {
   }
   const sorted = [...found].sort();
   return { class: sorted.length > 0 ? "high" : "normal", rules: sorted, paths: [...paths].sort() };
+}
+
+/**
+ * The risk of paths that are known to be literal, such as the paths of a real git diff. Unlike `classifyRisk`, a glob character
+ * in the path is just a character (`app/posts/[id]/page.tsx`, `.github/workflows/build[1].yml`): every rule matcher runs on the
+ * path string itself. Only a control character, a backslash or an empty path cannot be judged. Every path that raised the class
+ * is listed in `paths`, unclassifiable ones included. Declarations keep using `classifyRisk`.
+ */
+export function classifyLiteralPaths(input: { paths: readonly string[]; watchedGlobs: readonly string[]; extraGlobs: readonly string[] }): RiskAssessment {
+  const rules: Array<{ rule: RiskRule; matches: (path: string) => boolean }> = [
+    ...DEFAULT_HIGH_RISK.map(({ rule, globs }) => ({ rule, matches: picomatch([...globs], MATCH_OPTIONS) })),
+  ];
+  if (input.watchedGlobs.length > 0) rules.push({ rule: "watched-path", matches: picomatch([...input.watchedGlobs], MATCH_OPTIONS) });
+  if (input.extraGlobs.length > 0) rules.push({ rule: "extra", matches: picomatch([...input.extraGlobs], MATCH_OPTIONS) });
+
+  const found = new Set<RiskRule>();
+  const paths = new Set<string>();
+  for (const raw of input.paths) {
+    const path = normalizePath(raw);
+    if (path === "" || raw.includes("\\") || CONTROL_CHARS.test(raw)) {
+      found.add("unclassifiable");
+      paths.add(raw);
+      continue;
+    }
+    for (const { rule, matches } of rules) {
+      if (matches(path)) {
+        found.add(rule);
+        paths.add(path);
+      }
+    }
+  }
+  const sorted = [...found].sort();
+  return { class: sorted.length > 0 ? "high" : "normal", rules: sorted, paths: [...paths].sort() };
+}
+
+const testMatcher = picomatch([...TEST_GLOBS], MATCH_OPTIONS);
+
+/**
+ * True when `path` matches a `test` glob (case-insensitive, dot paths included, like `classifyRisk`) or equals an `explicit`
+ * entry or lies below it as a directory. `explicit` is a list of literal repo-relative paths, anchored at the root; a glob in
+ * it is a literal name. Never a guessed glob: a test directory outside `TEST_GLOBS` counts only when the caller lists it.
+ */
+export function isTestPath(path: string, explicit: readonly string[] = []): boolean {
+  const normalized = normalizePath(path);
+  if (normalized === "") return false;
+  if (testMatcher(normalized)) return true;
+  const lower = normalized.toLowerCase();
+  return explicit.some((entry) => {
+    const wanted = normalizePath(entry).toLowerCase();
+    return wanted !== "" && (lower === wanted || lower.startsWith(`${wanted}/`));
+  });
+}
+
+/**
+ * The risk of a candidate after the audit recomputed it from the real diff: high if either assessment is high,
+ * and the rules and paths are the sorted union. It never returns a class lower than `declared`, and it does not rewrite the
+ * item's stored risk; the effective class lives in the audit record and the ledger event.
+ */
+export function raiseRisk(declared: RiskAssessment, recomputed: RiskAssessment): RiskAssessment {
+  return {
+    class: declared.class === "high" || recomputed.class === "high" ? "high" : "normal",
+    rules: [...new Set([...declared.rules, ...recomputed.rules])].sort(),
+    paths: [...new Set([...declared.paths, ...recomputed.paths])].sort(),
+  };
 }
