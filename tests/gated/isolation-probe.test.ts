@@ -129,7 +129,7 @@ describeGated("G-real-isolation-probe", () => {
       );
       // An earlier assertion failure stays the reported error; cleanup problems surface only on an otherwise passing run.
       if (failure === undefined) {
-        if (cleanup.length > 0) throw cleanup[0];
+        expect(cleanup).toEqual([]);
         expect(left.status).toBe(0);
         expect(left.stdout.trim()).toBe("");
       }
