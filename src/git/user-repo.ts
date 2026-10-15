@@ -1,8 +1,9 @@
-import { lstatSync, realpathSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
+import { assertOutsideAgentHomes, assertOutsideRepo } from "../core/paths.js";
 import { TarError, type TarEntry, tarOfEntries } from "../container/tar-dir.js";
 import { type GitTarget, HostGitError, runHostGit } from "./hardened.js";
-import { type TreeEntryInfo, readBlobs, treeEntries, treeSha } from "./ops.js";
+import { type TreeEntryInfo, bundleVerify, readBlobs, treeEntries, treeSha, unbundle } from "./ops.js";
 
 /**
  * The user's own repository, reached only through the hardened host git (spec §5.4, §7; M3-D15). Everything here is read-only: it
@@ -175,4 +176,127 @@ export async function exportBase(input: {
     if (tar.length > maxBytes) throw new UserRepoError("export_too_large");
     return { tar, base_tree_sha: tree, tracked_paths: entries.map((entry) => entry.path) };
   });
+}
+
+/** The full ref an item's candidate is published under. The name is not validated here: `publishBranch` asks git. */
+export function branchRef(workId: string): string {
+  return `refs/heads/omf/${workId}`;
+}
+
+const ZERO_SHA = "0".repeat(40);
+const PUBLISH_REF = "refs/omf/publish";
+
+/** What a failed git call means for a publish: a driver or include in the repository's own config, or any other refusal. */
+function publishFailure(error: unknown): Error {
+  if (error instanceof HostGitError) {
+    return new UserRepoError(error.code === "gitdir_invalid" ? "repo_has_drivers" : "ref_update_failed");
+  }
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+/** `git check-ref-format` for the full ref, asked of the quarantine (it needs no repository, and the user's is not touched). */
+async function refNameIsValid(quarantine: GitTarget, ref: string): Promise<boolean> {
+  try {
+    await runHostGit(quarantine, ["check-ref-format", ref]);
+    return true;
+  } catch (error) {
+    if (error instanceof HostGitError && error.code === "git_failed") return false;
+    throw error;
+  }
+}
+
+function missing(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "ENOENT" || code === "ENOTDIR";
+}
+
+/**
+ * True when the main work tree or any linked work tree has `ref` checked out. Moving a checked-out branch with `update-ref`
+ * leaves that work tree's index and files behind its HEAD, which looks like uncommitted changes to the person using it.
+ * Reads `.git/HEAD` and `.git/worktrees/<name>/HEAD` as text; no git process, nothing written.
+ */
+function isCheckedOut(gitDir: string, ref: string): boolean {
+  const heads = [join(gitDir, "HEAD")];
+  const linked = join(gitDir, "worktrees");
+  try {
+    for (const name of readdirSync(linked)) heads.push(join(linked, name, "HEAD"));
+  } catch (error) {
+    if (!missing(error)) throw error;
+  }
+  return heads.some((file) => {
+    try {
+      return readFileSync(file, "utf8").trim() === `ref: ${ref}`;
+    } catch (error) {
+      if (missing(error)) return false;
+      throw error;
+    }
+  });
+}
+
+/** The sha `ref` holds in the repository, or null when it does not exist (an exact name: a longer ref under it does not count). */
+async function refValue(target: GitTarget, ref: string): Promise<string | null> {
+  const { stdout } = await runHostGit(target, ["for-each-ref", "--format=%(objectname) %(refname)", ref]);
+  for (const line of stdout.toString("utf8").split("\n")) {
+    const [sha, name] = line.split(" ");
+    if (name === ref && sha !== undefined) return sha;
+  }
+  return null;
+}
+
+/**
+ * Publishes `head` as `refs/heads/omf/<work-id>` in the user's repository and touches nothing else there (spec §5.4, §7, §11
+ * rule 1). The candidate is already in the quarantine, so no transport is used. Order:
+ *
+ * 1. the full ref name must be a valid one (asked of the quarantine);
+ * 2. refuse `ref_checked_out` when the main or any linked work tree has the ref checked out;
+ * 3. read the ref's current value and refuse `ref_not_ours` unless it is absent or one of `knownHeads` (the heads this item
+ *    published, or recorded an intent to publish, so a crash between the update and its record does not strand the next
+ *    round). Steps 1 to 3 run before any object is written to the user's repository;
+ * 4. in the quarantine: `update-ref refs/omf/publish <head>` (a bundle needs a ref; a bare sha makes an empty bundle),
+ *    `bundle create`, `bundle verify`, all inside a private directory under `scratchDir` that is removed afterwards;
+ * 5. in the user's repository: `unbundle` (objects only, no ref), then `update-ref <ref> <head> <old>` with the reflog switched
+ *    off for that call, so no file appears under `logs/`. The old value (all zeros when absent) makes the update a compare-and-swap:
+ *    a branch that appeared or moved since step 3 fails the update and is left as the other writer made it.
+ *
+ * Hooks, fsmonitor and attribute programs are off for every call (`HARDENED_GIT_CONFIG`). No other ref, config, hook or index is
+ * read or written. A repository whose own config defines a driver or an include is `repo_has_drivers`.
+ */
+export async function publishBranch(input: {
+  repo: string;
+  quarantine: GitTarget;
+  workId: string;
+  head: string;
+  knownHeads: readonly string[];
+  scratchDir: string;
+}): Promise<void> {
+  if (!/^[0-9a-f]{40}$/.test(input.head)) throw new Error("head must be a 40-hex commit sha");
+  const ref = branchRef(input.workId);
+  const user = userRepoTarget(input.repo);
+  assertOutsideAgentHomes(input.scratchDir);
+  assertOutsideRepo(input.scratchDir, input.repo);
+
+  let old: string | null;
+  try {
+    if (!(await refNameIsValid(input.quarantine, ref))) throw new UserRepoError("ref_update_failed");
+    if (isCheckedOut(user.gitDir, ref)) throw new UserRepoError("ref_checked_out");
+    old = await refValue(user, ref);
+  } catch (error) {
+    throw publishFailure(error);
+  }
+  if (old !== null && !input.knownHeads.includes(old)) throw new UserRepoError("ref_not_ours");
+
+  mkdirSync(input.scratchDir, { recursive: true, mode: 0o700 });
+  const work = mkdtempSync(join(input.scratchDir, "publish-"));
+  try {
+    await runHostGit(input.quarantine, ["update-ref", PUBLISH_REF, input.head]);
+    const bundleFile = join(work, "publish.bundle");
+    await runHostGit(input.quarantine, ["bundle", "create", bundleFile, PUBLISH_REF]);
+    if (!(await bundleVerify(input.quarantine, bundleFile))) throw new UserRepoError("ref_update_failed");
+    await unbundle(user, bundleFile);
+    await runHostGit(user, ["-c", "core.logAllRefUpdates=false", "update-ref", ref, input.head, old ?? ZERO_SHA]);
+  } catch (error) {
+    throw publishFailure(error);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
 }
