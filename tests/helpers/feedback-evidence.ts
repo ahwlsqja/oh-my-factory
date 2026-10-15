@@ -1,12 +1,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { LedgerEvent } from "../../src/core/ledger.js";
-import type { TestResult } from "../../src/feedback/test-run.js";
+import type { NoiseCheck } from "../../src/feedback/noise.js";
+import { evidenceSealedTest, noiseCheckField, type TestResult } from "../../src/feedback/test-run.js";
 import type { TrainCounts } from "../../src/feedback/tally.js";
 import { classifyOutcome, emptyEvidenceInputs } from "../../src/work/classify.js";
 import { EVIDENCE_JSON, EVIDENCE_MD, buildEvidence, writeEvidence } from "../../src/work/evidence.js";
 import { GateBoard } from "../../src/work/gates.js";
-import { NOT_RUN, STATION_IDS, type StationId, type StationStatus } from "../../src/work/line-types.js";
+import { STATION_IDS, type StationId, type StationStatus } from "../../src/work/line-types.js";
 import { foldWorkBudget } from "../../src/work/w-budget.js";
 import { makeTempDir } from "./tmp.js";
 
@@ -17,6 +18,8 @@ export interface FeedbackEvidenceInput {
   events: readonly LedgerEvent[];
   train: TrainCounts;
   test: TestResult | null;
+  /** The M3d noise check, or null while none was computed. */
+  noise?: NoiseCheck | null;
   now: Date;
 }
 
@@ -26,8 +29,9 @@ export function feedbackEvidenceFiles(input: FeedbackEvidenceInput): { json: str
   const inputs = emptyEvidenceInputs();
   inputs.sealed = {
     train: input.train,
-    test: input.test === null ? NOT_RUN : { pass: input.test.pass, total: input.test.total },
+    test: evidenceSealedTest(input.test === null ? "not yet run" : input.test),
   };
+  inputs.noise_check = noiseCheckField(input.noise ?? null);
   const board = new GateBoard();
   const classification = classifyOutcome({
     stop: { kind: "none" },

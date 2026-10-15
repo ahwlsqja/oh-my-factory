@@ -115,6 +115,7 @@ export function runFeedbackPipeline(): FeedbackPipelineRun {
     events,
     train: counts,
     test: { pass: 6, total: 8, flaky: 1 },
+    noise: noiseCheck({ k: 3, flaky_train: counts.flaky, flaky_test: 1 }),
     now: new Date("2026-10-14T10:00:00.000Z"),
   });
 
