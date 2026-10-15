@@ -1,3 +1,10 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { canonicalize } from "../core/canonical-json.js";
+import { writePrivateFileAtomic } from "../core/private-fs.js";
+import { validate } from "../core/schema.js";
+import { auditCompletedEvent, auditPayloadOf } from "../gate/events.js";
+import { RUN_ID_PATTERN } from "../work/w-events.js";
 import type { LedgerEvent, NewEvent } from "../core/ledger.js";
 import type { JudgeConfigDecl } from "../decision/types.js";
 import type { ProveTestResult } from "../gate/prove-test.js";
@@ -130,4 +137,129 @@ export interface RunScope {
   goal_id: string;
   work_id: string;
   run_id: string;
+}
+
+/** `<itemDir>/runs/<run_id>/audit.json`: a view of the run's `audit.completed` event. */
+export function auditPath(itemDir: string, runId: string): string {
+  return join(itemDir, "runs", runId, "audit.json");
+}
+
+function writeAuditFile(itemDir: string, runId: string, report: WorkAudit): void {
+  writePrivateFileAtomic(auditPath(itemDir, runId), `${JSON.stringify(report, null, 2)}\n`);
+}
+
+/**
+ * Ledger event first, then the atomic host file (the M2b/M3b1 order). A crash between the two leaves an event and
+ * no file, which `loadAudit` reads as absent and `repairAudit` heals. An invalid report throws before the event, so
+ * the ledger never holds an audit that the schema refuses.
+ */
+export function recordAudit(sink: RecordSink, scope: RunScope, itemDir: string, report: WorkAudit): void {
+  const check = validate("work-audit.schema.json", report);
+  if (!check.ok) throw new Error(`invalid audit report: ${check.errors}`);
+  const event = auditCompletedEvent(scope, report);
+  sink.append(event);
+  writeAuditFile(itemDir, scope.run_id, report);
+}
+
+const SCOPE_KEYS: readonly string[] = ["goal_id", "work_id", "run_id"];
+
+function withoutScope(payload: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(payload).filter(([key]) => !SCOPE_KEYS.includes(key)));
+}
+
+/**
+ * The closed fields the ledger vouches for: the payload of the run's valid `audit.completed` events written by
+ * `omf`. Events by another actor and events that fail the schema are not evidence. Two valid events that
+ * disagree make the audit untrustworthy (null), so a second, differing event can never replace the first.
+ */
+function authoritativePayload(events: readonly LedgerEvent[], runId: string): Record<string, unknown> | null {
+  let found: Record<string, unknown> | null = null;
+  for (const event of events) {
+    if (event.type !== "audit.completed" || event.actor !== "omf" || event.payload.run_id !== runId) continue;
+    if (!validate("gate-event.schema.json", { type: event.type, payload: event.payload }).ok) continue;
+    const fields = withoutScope(event.payload);
+    if (found !== null && canonicalize(found) !== canonicalize(fields)) return null;
+    found = fields;
+  }
+  return found;
+}
+
+function readAuditFile(itemDir: string, runId: string): WorkAudit | null {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(auditPath(itemDir, runId), "utf8"));
+    return validate("work-audit.schema.json", parsed).ok ? (parsed as WorkAudit) : null;
+  } catch {
+    return null; // missing or unparseable: the view is gone, and the event stays the authority
+  }
+}
+
+/**
+ * The run's audit, or null. `audit.json` is accepted only when every closed field equals the `audit.completed`
+ * event (canary status and total, judge_config_touched, judge_files_checked, tests_edited_count, prove status and
+ * reason, risk class and the rest of `auditPayloadOf`). GATE-3 reads the audit through this function or straight
+ * from the event payload, never from the raw file. Only the closed fields are authenticated: the path lists in the
+ * file are display data, and evidence rendering escapes them.
+ */
+export function loadAudit(itemDir: string, runId: string, events: readonly LedgerEvent[]): WorkAudit | null {
+  if (!RUN_ID_PATTERN.test(runId)) return null;
+  const authority = authoritativePayload(events, runId);
+  if (authority === null) return null;
+  const report = readAuditFile(itemDir, runId);
+  if (report === null) return null;
+  return canonicalize(auditPayloadOf(report)) === canonicalize(authority) ? report : null;
+}
+
+/**
+ * Heals a crash between the event and the file. `rerun` repeats `runAudit` and returns null when its inputs (the
+ * surfaces, the quarantine shas) no longer exist. The new report is written only when it equals the event on every
+ * closed field. This function never appends: a second, differing `audit.completed` event for one run is not
+ * possible, and a rerun that disagrees leaves the audit reading as absent (`not_run` downstream).
+ */
+export async function repairAudit(
+  itemDir: string,
+  runId: string,
+  events: readonly LedgerEvent[],
+  rerun: () => Promise<WorkAudit | null>,
+): Promise<WorkAudit | null> {
+  const existing = loadAudit(itemDir, runId, events);
+  if (existing !== null) return existing;
+  const authority = authoritativePayload(events, runId);
+  if (authority === null) return null; // no event: nothing to repair, the caller records a fresh audit
+  let report: WorkAudit | null;
+  try {
+    report = await rerun();
+  } catch {
+    return null; // the inputs are gone
+  }
+  if (report === null || !validate("work-audit.schema.json", report).ok) return null;
+  if (canonicalize(auditPayloadOf(report)) !== canonicalize(authority)) return null;
+  writeAuditFile(itemDir, runId, report);
+  return report;
+}
+
+/** The `AuditInputs` of the M3b2 classifier (structurally; `"not run"` is its `NOT_RUN`). */
+export interface AuditClassifierInputs {
+  canary_hits: number | "not run";
+  tests_edited: boolean | "not run";
+  prove_test: "pass" | "fail" | "not run";
+  judge_config_touched: boolean | "not run";
+}
+
+/**
+ * Feeds the classifier from `auditSignals`, so the two cannot disagree. A part nobody produced is `"not run"`:
+ * a missing audit, an unscanned canary surface, a prove-test that was not run or misconfigured, and a
+ * judge config that named no file all stop a run short of `success`.
+ */
+export function auditInputsOf(report: WorkAudit | null): AuditClassifierInputs {
+  if (report === null) {
+    return { canary_hits: "not run", tests_edited: "not run", prove_test: "not run", judge_config_touched: "not run" };
+  }
+  const signals = auditSignals(report);
+  const proveUnrun = signals.unverified.includes("prove_test_not_run") || signals.unverified.includes("prove_test_misconfigured");
+  return {
+    canary_hits: signals.unverified.includes("canary_not_scanned") ? "not run" : report.canary.total,
+    tests_edited: signals.flawed.includes("test_edited"),
+    prove_test: signals.flawed.includes("prove_test_failed") ? "fail" : proveUnrun ? "not run" : "pass",
+    judge_config_touched: report.judge_files_checked === 0 ? "not run" : signals.judge_config_touched,
+  };
 }
