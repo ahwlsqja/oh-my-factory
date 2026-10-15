@@ -105,6 +105,20 @@ describe("read-only operations", () => {
     expect(await ops.treePaths(fx.quarantine, fx.head)).not.toContain("docs/old.md");
   });
 });
+describe("commit messages are read as raw bytes", () => {
+  it("finds a canary in a commit whose encoding header would make `git log` re-encode the message", async () => {
+    const canary = "OMF-CANARY-9f3a";
+    const tree = gitIn(fx.gitDir, "rev-parse", `${fx.head}^{tree}`).trim();
+    const body = `tree ${tree}\nparent ${fx.head}\nauthor t <t@example.invalid> 1700000000 +0000\ncommitter t <t@example.invalid> 1700000000 +0000\nencoding UTF-16\n\nmsg ${canary}\n`;
+    const sha = execFileSync("git", ["--git-dir", fx.gitDir, "hash-object", "-t", "commit", "-w", "--stdin"], { input: body, encoding: "utf8" }).trim();
+    const viaLog = execFileSync("git", ["--git-dir", fx.gitDir, "log", "--format=%B", `${fx.head}..${sha}`], { encoding: "utf8" });
+    expect(viaLog).not.toContain(canary); // the trap: log re-encodes per the header
+    const messages = await ops.commitMessages(fx.quarantine, fx.head, sha);
+    expect(messages).toContain(canary);
+    expect(messages.endsWith("\0")).toBe(true);
+  });
+});
+
 describe("materialising and checking a tree", () => {
   it("exportTree writes tracked files only and keeps symlinks as symlinks", async () => {
     const dest = realTempDir("omf-export-");

@@ -165,12 +165,31 @@ export async function unifiedDiff(target: GitTarget, base: string, head: string)
   return git(target, ["diff", "--binary", "--full-index", "--no-renames", "--no-ext-diff", "--no-textconv", base, head]);
 }
 
-/** Every commit message in `base..head`, each followed by a NUL, for the canary scan. */
+/**
+ * Every commit message in `base..head`, each followed by a NUL, for the canary scan. The message bytes are read from the
+ * raw commit objects with `cat-file --batch`: `git log --format=%B` re-encodes a message per the commit's own `encoding`
+ * header, so a hostile commit could hide a canary from it.
+ */
 export async function commitMessages(target: GitTarget, base: string, head: string): Promise<string> {
   requireSha("base", base);
   requireSha("head", head);
-  const out = await git(target, ["log", "--format=%B%x00", `${base}..${head}`]);
-  return out.toString("utf8");
+  const listed = (await git(target, ["rev-list", `${base}..${head}`])).toString("utf8").split("\n").filter((line) => line.length > 0);
+  if (listed.length === 0) return "";
+  const raw = await git(target, ["cat-file", "--batch"], { input: `${listed.join("\n")}\n` });
+  const parts: string[] = [];
+  let offset = 0;
+  while (offset < raw.length) {
+    const eol = raw.indexOf(0x0a, offset);
+    if (eol < 0) throw new Error("unexpected git cat-file output");
+    const header = raw.subarray(offset, eol).toString("utf8").split(" ");
+    const size = Number(header[2]);
+    if (header[1] !== "commit" || !Number.isInteger(size) || size < 0) throw new Error("unexpected git cat-file output");
+    const object = raw.subarray(eol + 1, eol + 1 + size);
+    const blank = object.indexOf("\n\n");
+    parts.push(`${blank < 0 ? "" : object.subarray(blank + 2).toString("utf8")}\0`);
+    offset = eol + 1 + size + 1;
+  }
+  return parts.join("");
 }
 
 /** Every path in the tree of `sha` (files, symlinks and gitlinks), as git stores them. */
