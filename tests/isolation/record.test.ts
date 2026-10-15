@@ -1,0 +1,225 @@
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { describe, expect, it } from "vitest";
+import type { RecordSink, RunScope } from "../../src/audit/work-audit.js";
+import { Ledger } from "../../src/core/ledger.js";
+import { isolationMeasuredEvent } from "../../src/gate/events.js";
+import { hostStage } from "../../src/isolation/evaluate.js";
+import { isolationPath, loadRunIsolation, recordStageMeasurement } from "../../src/isolation/record.js";
+import {
+  ISOLATION_LEVELS,
+  ISOLATION_STAGES,
+  VIOLATION_CODES,
+  type IsolationLevel,
+  type IsolationStage,
+  type StageMeasurement,
+  type ViolationCode,
+} from "../../src/isolation/types.js";
+import { makeTempDir } from "../helpers/tmp.js";
+
+const AT = new Date("2026-10-14T09:15:00Z");
+const GOAL = "g-fast";
+const WORK = "w-0123456789ab";
+const RUN = "r-20261014T091500Z-ab12";
+const RUN2 = "r-20261014T101500Z-cd34";
+const A = "a".repeat(64);
+const B = "b".repeat(64);
+const C = "c".repeat(64);
+const SET = "5".repeat(64);
+
+const scope = (runId: string = RUN): RunScope => ({ goal_id: GOAL, work_id: WORK, run_id: runId });
+
+/** A container measurement without real facts: only the fields the record and the loader read matter here. */
+function m(stage: IsolationStage, level: IsolationLevel, sha: string): StageMeasurement {
+  const violations: ViolationCode[] = level === "L2" ? [] : ["privileged"];
+  return { ...hostStage(stage, AT), mode: "container", level, violations, facts_sha256: sha };
+}
+
+function setup(): { ledger: Ledger; itemDir: string } {
+  const dir = makeTempDir("omf-iso-");
+  return { ledger: new Ledger(dir, () => AT), itemDir: join(dir, "items", WORK) };
+}
+
+/** The item's seal event, then the run's first W event. Returns the seal's ledger seq. */
+function sealAndStart(ledger: Ledger, runId: string = RUN): number {
+  const seal = ledger.append({ actor: "omf", type: "seal.completed", payload: { work_id: WORK, round: 1, set_sha256: SET } });
+  ledger.append({ actor: "omf", type: "work.started", payload: { goal_id: GOAL, work_id: WORK, run_id: runId, from: "ready" } });
+  return seal.seq;
+}
+
+describe("isolationMeasuredEvent", () => {
+  it("carries ids, closed codes and hashes only", () => {
+    const measurement = { ...m("sut", "L1", A), secret: "/Users/x/vault" } as StageMeasurement;
+    const event = isolationMeasuredEvent(scope(), measurement, null);
+    expect(event.actor).toBe("omf");
+    expect(event.type).toBe("isolation.measured");
+    expect(Object.keys(event.payload).sort()).toEqual([
+      "author_scope", "facts_sha256", "goal_id", "level", "mode", "run_id", "stage", "violations", "work_id",
+    ]);
+    expect(event.payload).toMatchObject({ stage: "sut", mode: "container", level: "L1", violations: ["privileged"], author_scope: null });
+    expect(JSON.stringify(event)).not.toContain("/Users/x/vault");
+  });
+
+  it("needs author_scope for the author stage and refuses it for every other stage", () => {
+    expect(() => isolationMeasuredEvent(scope(), m("author", "L2", A), null)).toThrow(/needs author_scope/);
+    expect(() => isolationMeasuredEvent(scope(), m("sut", "L2", A), { seal_seq: 1, facts_sha256: SET })).toThrow(
+      /belongs to the author stage only/,
+    );
+    expect(isolationMeasuredEvent(scope(), m("author", "L2", A), { seal_seq: 3, facts_sha256: SET }).payload.author_scope).toEqual({
+      seal_seq: 3,
+      facts_sha256: SET,
+    });
+  });
+
+  it("refuses a malformed id before anything is written", () => {
+    expect(() => isolationMeasuredEvent({ ...scope(), goal_id: "G 1" }, m("sut", "L2", A), null)).toThrow(
+      /invalid isolation.measured event/,
+    );
+  });
+
+  it("uses the same closed lists as the TypeScript types", () => {
+    const schema = JSON.parse(readFileSync(new URL("../../schemas/gate-event.schema.json", import.meta.url), "utf8")) as {
+      $defs: { isolation_measured_payload: { properties: Record<string, { enum?: string[]; items?: { enum: string[] } }> } };
+    };
+    const props = schema.$defs.isolation_measured_payload.properties;
+    expect(props.stage?.enum).toEqual([...ISOLATION_STAGES]);
+    expect(props.level?.enum).toEqual([...ISOLATION_LEVELS]);
+    expect(props.mode?.enum).toEqual(["container", "host"]);
+    expect(props.violations?.items?.enum).toEqual([...VIOLATION_CODES]);
+  });
+});
+
+describe("recordStageMeasurement", () => {
+  it("appends the event first, then a private view that grows by one entry per call", () => {
+    const { ledger, itemDir } = setup();
+    const path = isolationPath(itemDir, RUN);
+    const order: string[] = [];
+    const sink: RecordSink = {
+      appendWith(build) {
+        order.push(existsSync(path) ? "file-present" : "no-file");
+        return ledger.appendWith(build);
+      },
+    };
+    recordStageMeasurement(sink, scope(), itemDir, m("sut", "L2", A));
+    recordStageMeasurement(sink, scope(), itemDir, m("sut", "L1", B));
+    expect(order).toEqual(["no-file", "file-present"]);
+    const view = JSON.parse(readFileSync(path, "utf8")) as {
+      schema_version: number; run_id: string; level: string; stages: Record<string, { facts_sha256: string }[]>;
+    };
+    expect(view.schema_version).toBe(1);
+    expect(view.run_id).toBe(RUN);
+    expect(view.stages.sut?.map((x) => x.facts_sha256)).toEqual([A, B]);
+    expect(view.stages.harness).toEqual([]);
+    expect(view.level).toBe("unmeasured");
+    expect(ledger.readVerified().filter((e) => e.type === "isolation.measured")).toHaveLength(2);
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(statSync(dirname(path)).mode & 0o777).toBe(0o700);
+    expect(readdirSync(dirname(path))).toEqual(["isolation.json"]);
+  });
+
+  it("writes no file when the ledger refuses the event", () => {
+    const { itemDir } = setup();
+    const sink: RecordSink = {
+      appendWith: () => {
+        throw new Error("ledger down");
+      },
+    };
+    expect(() => recordStageMeasurement(sink, scope(), itemDir, m("sut", "L2", A))).toThrow("ledger down");
+    expect(existsSync(isolationPath(itemDir, RUN))).toBe(false);
+  });
+});
+
+describe("loadRunIsolation: the ledger is the authority", () => {
+  it("reads unmeasured everywhere when there are no events, whatever the file claims", () => {
+    const { ledger, itemDir } = setup();
+    const path = isolationPath(itemDir, RUN);
+    mkdirSync(dirname(path), { recursive: true });
+    const forged = Object.fromEntries(ISOLATION_STAGES.map((stage) => [stage, [m(stage, "L2", A)]]));
+    writeFileSync(path, JSON.stringify({ schema_version: 1, run_id: RUN, stages: forged, level: "L2" }));
+    const result = loadRunIsolation(itemDir, scope(), ledger.readVerified());
+    expect(Object.values(result.stages)).toEqual([null, null, null, null]);
+    expect(result.level).toBe("unmeasured");
+    expect(result.complete).toBe(false);
+  });
+
+  it("is L2 only with all four stages measured, and a later L1 round lowers it", () => {
+    const { ledger, itemDir } = setup();
+    const seq = sealAndStart(ledger);
+    recordStageMeasurement(ledger, scope(), itemDir, m("author", "L2", A), { seal_seq: seq, facts_sha256: SET });
+    for (const stage of ["implementer", "sut", "harness"] as const) recordStageMeasurement(ledger, scope(), itemDir, m(stage, "L2", B));
+    const healthy = loadRunIsolation(itemDir, scope(), ledger.readVerified());
+    expect(healthy.level).toBe("L2");
+    expect(healthy.complete).toBe(true);
+    recordStageMeasurement(ledger, scope(), itemDir, m("harness", "L1", C));
+    expect(loadRunIsolation(itemDir, scope(), ledger.readVerified()).level).toBe("L1");
+  });
+
+  it("keeps the minimum when a hand edit restores an earlier L2 after a later L1 event", () => {
+    const { ledger, itemDir } = setup();
+    recordStageMeasurement(ledger, scope(), itemDir, m("sut", "L2", A));
+    recordStageMeasurement(ledger, scope(), itemDir, m("sut", "L1", B));
+    const restored = { schema_version: 1, run_id: RUN, stages: { author: [], implementer: [], sut: [m("sut", "L2", A)], harness: [] }, level: "unmeasured" };
+    writeFileSync(isolationPath(itemDir, RUN), JSON.stringify(restored));
+    const sut = loadRunIsolation(itemDir, scope(), ledger.readVerified()).stages.sut;
+    expect(sut).toMatchObject({ level: "L1", measurements: 2, facts_sha256s: [A, B] });
+  });
+
+  it("does not lose measurements the events prove when the file is corrupt or missing", () => {
+    const { ledger, itemDir } = setup();
+    recordStageMeasurement(ledger, scope(), itemDir, m("sut", "L2", A));
+    writeFileSync(isolationPath(itemDir, RUN), "{not json");
+    const result = loadRunIsolation(itemDir, scope(), ledger.readVerified());
+    expect(result.stages.sut).toMatchObject({ level: "L2", measurements: 1 });
+    expect(result.level).toBe("unmeasured");
+  });
+
+  it("ignores events by another actor, schema-invalid events and events of another run", () => {
+    const { ledger, itemDir } = setup();
+    recordStageMeasurement(ledger, scope(), itemDir, m("sut", "L2", A));
+    const human = { ...isolationMeasuredEvent(scope(), m("harness", "L2", B), null), actor: "human:dev" };
+    ledger.append(human);
+    const good = isolationMeasuredEvent(scope(), m("implementer", "L2", B), null);
+    ledger.append({ actor: "omf", type: "isolation.measured", payload: { ...good.payload, level: "L9" } });
+    recordStageMeasurement(ledger, scope(RUN2), itemDir, m("sut", "L1", C));
+    const result = loadRunIsolation(itemDir, scope(), ledger.readVerified());
+    expect(result.stages.harness).toBeNull();
+    expect(result.stages.implementer).toBeNull();
+    expect(result.stages.sut).toMatchObject({ level: "L2", measurements: 1 });
+  });
+
+  it("ignores an event of the same run id that names another goal or work item", () => {
+    const { ledger, itemDir } = setup();
+    recordStageMeasurement(ledger, { ...scope(), work_id: "w-ffffffffffff" }, itemDir, m("sut", "L2", A));
+    recordStageMeasurement(ledger, { ...scope(), goal_id: "g-other" }, itemDir, m("harness", "L2", B));
+    const result = loadRunIsolation(itemDir, scope(), ledger.readVerified());
+    expect(result.stages.sut).toBeNull();
+    expect(result.stages.harness).toBeNull();
+  });
+
+  it("resolves the author stage through the seal, so a resumed run with a new run id still has it", () => {
+    const { ledger, itemDir } = setup();
+    const seq = sealAndStart(ledger);
+    recordStageMeasurement(ledger, scope(), itemDir, m("author", "L2", A), { seal_seq: seq, facts_sha256: SET });
+    ledger.append({ actor: "omf", type: "work.resumed", payload: { goal_id: GOAL, work_id: WORK, run_id: RUN2 } });
+    const resumed = loadRunIsolation(itemDir, scope(RUN2), ledger.readVerified());
+    expect(resumed.stages.author).toMatchObject({ level: "L2", measurements: 1 });
+    expect(resumed.level).toBe("unmeasured");
+  });
+
+  it("leaves the author unmeasured when its scope does not match the item's latest seal", () => {
+    const wrongFacts = setup();
+    const seq1 = sealAndStart(wrongFacts.ledger);
+    recordStageMeasurement(wrongFacts.ledger, scope(), wrongFacts.itemDir, m("author", "L2", A), { seal_seq: seq1, facts_sha256: B });
+    expect(loadRunIsolation(wrongFacts.itemDir, scope(), wrongFacts.ledger.readVerified()).stages.author).toBeNull();
+
+    const resealed = setup();
+    const seq2 = sealAndStart(resealed.ledger);
+    recordStageMeasurement(resealed.ledger, scope(), resealed.itemDir, m("author", "L2", A), { seal_seq: seq2, facts_sha256: SET });
+    resealed.ledger.append({ actor: "omf", type: "seal.completed", payload: { work_id: WORK, round: 2, set_sha256: B } });
+    expect(loadRunIsolation(resealed.itemDir, scope(), resealed.ledger.readVerified()).stages.author).toBeNull();
+
+    const noSeal = setup();
+    recordStageMeasurement(noSeal.ledger, scope(), noSeal.itemDir, m("author", "L2", A), { seal_seq: 1, facts_sha256: SET });
+    expect(loadRunIsolation(noSeal.itemDir, scope(), noSeal.ledger.readVerified()).stages.author).toBeNull();
+  });
+});
