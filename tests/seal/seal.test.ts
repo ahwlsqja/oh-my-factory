@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { gate1ForItem } from "../../src/decision/gate1-item.js";
 import { acquireLock, releaseLock } from "../../src/core/lock.js";
 import { SymlinkRefusedError } from "../../src/core/safe-fs.js";
 import { runSealStage, sealLockFile } from "../../src/seal/seal.js";
@@ -17,6 +18,8 @@ import {
   startWork,
   stored,
 } from "../helpers/seal-fixture.js";
+import { addOpen } from "../helpers/decision-fixture.js";
+import { deferredEvent } from "../helpers/decision.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
 const record = (): string => makeTempDir("omf-rec-");
@@ -137,6 +140,28 @@ describe("runSealStage: no set is stored", () => {
     startWork(without);
     expect(await runSealStage(depsFor(without, countingSession()))).toEqual({ status: "refused", reason: "implementation_started" });
     expect(sealEvents(without)).toEqual([]);
+  });
+
+  it("blocked_gate1 carries the reasons gate1ForItem gives for the same ledger", async () => {
+    const s = sealFixture("open");
+    const expected = gate1ForItem(s.f.fx.location, s.f.item, s.f.fx.ledger.readVerified(), s.now).result;
+    if (expected.status === "pass") throw new Error("the open fixture should not pass GATE-1");
+    expect(await runSealStage(depsFor(s, countingSession()))).toEqual({ status: "blocked_gate1", reasons: expected.reasons });
+  });
+
+  it("a started item is reused even when GATE-1 no longer passes (an expired deferral), and the author is not called", async () => {
+    const s = sealFixture();
+    addOpen(s.f, "d-persist");
+    s.f.fx.ledger.append(deferredEvent("d-persist", { scope: s.f.scope, expires_at: "2026-10-15T00:00:00.000Z" }));
+    const first = stored(await runSealStage(depsFor(s, commandAuthor("from_feedback", record()))));
+    startWork(s);
+    const before = s.f.fx.ledger.readVerified().length;
+    const session = countingSession();
+    const later = new Date("2026-10-20T00:00:00.000Z");
+    const result = await runSealStage(depsFor(s, session, { now: () => later }));
+    expect(result).toMatchObject({ status: "reused", seal: { seal_id: first.seal_id } });
+    expect(session.calls).toHaveLength(0);
+    expect(s.f.fx.ledger.readVerified()).toHaveLength(before);
   });
 
   it("refuses with seal_in_progress while another run holds the seal lock", async () => {

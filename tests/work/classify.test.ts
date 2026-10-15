@@ -137,6 +137,26 @@ const ROWS: Row[] = [
     outcome: "blocked", exhausted: false, reason_code: "j2_open", recommendation: "human_needed", rule: "gate1_open", action: "park",
   },
   {
+    name: "3b GATE-2 failed with a stop at J2",
+    input: base({ stop: { kind: "gate", gate: "GATE-2", verdict: "fail", reasons: ["gate1_not_passing"], stop: "J2" } }),
+    outcome: "blocked", exhausted: false, reason_code: "j2_open", recommendation: "human_needed", rule: "gate2_stop", action: "park",
+  },
+  {
+    name: "3b GATE-2 failed with a stop at J3",
+    input: base({ stop: { kind: "gate", gate: "GATE-2", verdict: "fail", reasons: ["exposure_exhausted"], stop: "J3" } }),
+    outcome: "blocked", exhausted: false, reason_code: "scenarios_need_review", recommendation: "human_needed", rule: "gate2_stop", action: "park",
+  },
+  {
+    name: "3b GATE-2 failed with a stop at J7",
+    input: base({ stop: { kind: "gate", gate: "GATE-2", verdict: "fail", reasons: ["ledger_anomaly"], stop: "J7" } }),
+    outcome: "blocked", exhausted: false, reason_code: "gate_blocked", recommendation: "human_needed", rule: "gate2_stop", action: "park",
+  },
+  {
+    name: "2 GATE-2 not_run stays row 2 even with a stop on it",
+    input: base({ stop: { kind: "gate", gate: "GATE-2", verdict: "not_run", reasons: ["gate_error"], stop: "J7" } }),
+    outcome: "blocked", exhausted: false, reason_code: "gate_not_run", recommendation: "human_needed", rule: "gate_not_run", action: "park",
+  },
+  {
     name: "4a GATE-3 failed with an audit flag after an implementation",
     input: base({ stop: { kind: "gate", gate: "GATE-3", verdict: "fail", reasons: ["canary_hit"] }, inputs: flaggedAudit() }),
     outcome: "flawed", exhausted: false, reason_code: "audit_flag", recommendation: "not_recommended", rule: "gate3_flawed", action: "submit",

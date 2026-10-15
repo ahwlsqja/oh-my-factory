@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 // for M3b2. It must stay complete and honest: every entry present, every file it names real.
 const ROOT = new URL("../../", import.meta.url);
 const text = (): string => readFileSync(new URL("docs/m3c-spec-deviations.md", ROOT), "utf8");
-const ids = Array.from({ length: 10 }, (_, i) => `V${i + 1}`);
+const ids = Array.from({ length: 11 }, (_, i) => `V${i + 1}`);
 
 describe("M3c spec deviations", () => {
   it.each(ids)("records deviation %s", (id) => {
