@@ -1,6 +1,6 @@
 {
   "name": "oh-my-factory",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A goal-driven software factory for Claude Code and Codex CLI: humans decide, agents implement, and a hash-chained ledger records it",
   "author": "ahwlsqja",
   "repository": {
@@ -27,6 +27,7 @@
   "files": [
     "dist",
     "schemas",
+    "fixtures",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
     "README.md"

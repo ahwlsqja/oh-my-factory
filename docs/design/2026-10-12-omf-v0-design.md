@@ -679,7 +679,7 @@ against processes that cannot write to `~/.omf`, not against someone who can. In
 (E3) survive restarts but not a truncated ledger. Keeping agents away from host state is the job of
 isolation (§7). The project is identified by the real path of the checkout's main working tree, so
 moving or renaming the checkout starts a new project with fresh state and fresh budgets. OMF keeps
-its directories at 0700 and its files at 0600, but it follows symlinks planted inside `~/.omf`.
+its directories at 0700 and its files at 0600, and it refuses to follow symlinks planted inside `~/.omf`: every entry point (project lookup, `omf init`, `omf doctor`, `omf ledger verify`, the `decide` writes and the line) stops with the offending path. A writer that swaps a path between the check and the open is not detected.
 
 **Trackers.** Each artifact has exactly one source of truth. This follows the playbook's
 legacy-coexistence rule: the repo is the source, a legacy system is the source, or the two are
