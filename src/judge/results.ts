@@ -1,3 +1,5 @@
+import { join } from "node:path";
+import { writePrivateFileAtomic } from "../core/private-fs.js";
 import type { DecisionState } from "../decision/types.js";
 import { categoryOf } from "../feedback/tally.js";
 import type { ScenarioResult } from "../feedback/types.js";
@@ -65,4 +67,38 @@ export function roundFacts(verdict: RoundVerdict): JudgeRoundFacts {
     sut_base_digest: verdict.sut_base_digest,
     harness_base_digest: verdict.harness_base_digest,
   };
+}
+
+/**
+ * Writes the host-only view of one judged split, `runs/<run_id>/judge-<round>-<phase>.json`: the per-scenario tallies by
+ * scenario ref, with no text and no id. Private to the host (mode 0600, written atomically); nothing the implementer reads
+ * is built from it.
+ */
+export function writeTallyView(
+  itemDir: string,
+  input: {
+    runId: string;
+    round: number;
+    phase: "train" | "test";
+    candidateSha: string;
+    tallies: readonly ScenarioTally[];
+  },
+): void {
+  const tallies = input.tallies.map((t) => ({
+    scenario_ref: t.scenario_ref,
+    kind: t.kind,
+    verdict: t.verdict,
+    outcomes: t.outcomes,
+  }));
+  const view = {
+    schema_version: 1,
+    round: input.round,
+    phase: input.phase,
+    candidate_sha: input.candidateSha,
+    tallies,
+  };
+  writePrivateFileAtomic(
+    join(itemDir, "runs", input.runId, `judge-${input.round}-${input.phase}.json`),
+    `${JSON.stringify(view, null, 2)}\n`,
+  );
 }

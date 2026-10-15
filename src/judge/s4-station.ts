@@ -5,7 +5,6 @@ import type { OwnedLabels } from "../container/spec.js";
 import { canonicalize, sha256Hex } from "../core/canonical-json.js";
 import { readConfig } from "../core/config.js";
 import { Ledger } from "../core/ledger.js";
-import { writePrivateFileAtomic } from "../core/private-fs.js";
 import { INTERFACE_DECISION_ID } from "../decision/types.js";
 import { trainCounts } from "../feedback/tally.js";
 import { locationEnv } from "../vault/line-guard.js";
@@ -14,7 +13,7 @@ import type { Station, StationResult } from "../work/sequencer.js";
 import type { ReasonCode } from "../work/w-events.js";
 import { releaseHeld } from "./engine.js";
 import { judgeRoundEvent } from "./events.js";
-import { harnessSetOf, roundFacts, toScenarioResults } from "./results.js";
+import { harnessSetOf, roundFacts, toScenarioResults, writeTallyView } from "./results.js";
 import type { RoundHolder, RoundLease } from "./round-state.js";
 import { JudgeRoundError } from "./round.js";
 import type { RoundVerdict } from "./round.js";
@@ -132,17 +131,13 @@ export function s4Station(deps: ResolvedDeps, holder: RoundHolder): Station {
       const counts = trainCounts(toScenarioResults(verdict.tallies));
       const scope = { goal_id: ctx.goalId, work_id: ctx.workId, run_id: ctx.runId, round: ctx.round };
       ledger.append(judgeRoundEvent(scope, roundFacts(verdict)));
-      const tallies = verdict.tallies.map((t) => ({
-        scenario_ref: t.scenario_ref,
-        kind: t.kind,
-        verdict: t.verdict,
-        outcomes: t.outcomes,
-      }));
-      const view = { schema_version: 1, round: ctx.round, phase: "train", candidate_sha: candidate.head, tallies };
-      writePrivateFileAtomic(
-        join(ctx.item.dir, "runs", ctx.runId, `judge-${ctx.round}-train.json`),
-        `${JSON.stringify(view, null, 2)}\n`,
-      );
+      writeTallyView(ctx.item.dir, {
+        runId: ctx.runId,
+        round: ctx.round,
+        phase: "train",
+        candidateSha: candidate.head,
+        tallies: verdict.tallies,
+      });
       ctx.inputs.sealed.train = counts;
       holder.begin({
         round: ctx.round,

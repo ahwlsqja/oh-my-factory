@@ -1,3 +1,5 @@
+import { readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { NotGoldenError } from "../../src/container/measure.js";
 import { budgetState } from "../../src/core/budget.js";
@@ -38,6 +40,35 @@ describe("S6 station, guards", () => {
 });
 
 describe("S6 station, the test split", () => {
+  it("keeps the per-scenario outcomes of the test split in a host-only view, shaped like the train view", async () => {
+    const l = setupLine();
+    const spy = judgeSpy(l, ["pass", "pass", "pass", "flaky"]);
+    const ctx = contextOf(l);
+
+    await stationOf(l, roundState(), spy.judge, slot()).run(ctx);
+
+    const file = join(ctx.item.dir, "runs", ctx.runId, "judge-1-test.json");
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+    const text = readFileSync(file, "utf8");
+    const view = JSON.parse(text);
+    expect(Object.keys(view)).toEqual(["schema_version", "round", "phase", "candidate_sha", "tallies"]);
+    expect(view).toMatchObject({ schema_version: 1, round: 1, phase: "test", candidate_sha: CANDIDATE });
+    expect(view.tallies).toHaveLength(4);
+    expect(Object.keys(view.tallies[0]).sort()).toEqual(["kind", "outcomes", "scenario_ref", "verdict"]);
+    expect(view.tallies.map((t: { verdict: string }) => t.verdict)).toEqual(["pass", "pass", "pass", "flaky"]);
+    expect(view.tallies.map((t: { scenario_ref: string }) => t.scenario_ref)).toEqual(TEST.map((x) => x.scenario_ref));
+  });
+
+  it("writes no test view when the recorded result is reused", async () => {
+    const l = setupLine();
+    const spy = judgeSpy(l);
+    const station = stationOf(l, roundState(), spy.judge, slot());
+    await station.run(contextOf(l));
+    const second = contextOf(l, undefined, 2);
+    await station.run(second);
+    expect(() => statSync(join(second.item.dir, "runs", second.runId, "judge-2-test.json"))).toThrow();
+  });
+
   it("consumes the split before the run, records the result and reuses it for the same commit", async () => {
     const l = setupLine();
     const spy = judgeSpy(l, ["pass", "pass", "pass", "flaky"]);
@@ -68,7 +99,7 @@ describe("S6 station, the test split", () => {
     });
     // no scenario handle reaches the ledger
     expect(JSON.stringify(l.events())).not.toContain(TEST[0]?.scenario_ref);
-    // a flaky test scenario is not a pass (M3f-D14)
+    // a flaky test scenario is not a pass
     expect(first.inputs.sealed.test).toEqual({ pass: 3, total: 4 });
     expect(first.inputs.noise_check).toBe("not_evaluated");
 

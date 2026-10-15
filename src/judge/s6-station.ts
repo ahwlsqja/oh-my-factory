@@ -19,7 +19,7 @@ import { FeedbackError } from "../feedback/types.js";
 import type { Station, StationContext, StationResult } from "../work/sequencer.js";
 import type { ReasonCode } from "../work/w-events.js";
 import { judgeRoundEvent } from "./events.js";
-import { roundFacts, toScenarioResults } from "./results.js";
+import { roundFacts, toScenarioResults, writeTallyView } from "./results.js";
 import type { RoundScenario, RoundVerdict } from "./round.js";
 import type { FeedbackSlot, RoundState } from "./state.js";
 
@@ -149,6 +149,13 @@ async function testSplit(
         roundFacts(verdict),
       ),
     );
+    writeTallyView(ctx.item.dir, {
+      runId: ctx.runId,
+      round: ctx.round,
+      phase: "test",
+      candidateSha: state.candidate_sha,
+      tallies: verdict.tallies,
+    });
     state.test = verdict;
     // `pass` counts scenarios that passed in every repetition, so a flaky test scenario leaves pass < total.
     result = { pass: verdict.counts.pass, total: verdict.counts.total, flaky: verdict.counts.flaky };
