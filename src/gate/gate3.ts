@@ -42,7 +42,11 @@ export type Gate3Condition = (typeof GATE3_CONDITIONS)[number];
 export const GATE3_ROUTES = ["none", "J6", "J7"] as const;
 export type Gate3Route = (typeof GATE3_ROUTES)[number];
 
-/** `failed` always lists every condition found; `route` is J7 when any isolation condition is present, else J6, else none. */
+/**
+ * `failed` always lists every condition found; `route` is J7 when any isolation condition is present, else J6, else none.
+ * `route` is advisory: it is recorded in `gate3.evaluated`, and the line's J act comes from the outcome classifier,
+ * not from this field.
+ */
 export interface Gate3Result {
   passed: boolean;
   failed: Gate3Condition[];
