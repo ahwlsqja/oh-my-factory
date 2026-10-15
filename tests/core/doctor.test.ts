@@ -101,6 +101,8 @@ describe("runDoctor", () => {
     ]);
     expect(byMessage["claude not found on PATH"]?.needed_by).toEqual(["the implementer", "the sealing author"]);
     for (const warning of report.warning_details) expect(warning.fix).toMatch(/\S/);
+    // The host runner is offered together with its cost.
+    expect(byMessage["docker not found on PATH"]?.fix).toContain("--runner host, without isolation");
   });
 
   it("reports an unreachable docker daemon as a warning that names the stages needing it", () => {
@@ -113,6 +115,8 @@ describe("runDoctor", () => {
     expect(report.problems).toEqual([]);
     expect(report.warnings).toEqual(["docker daemon is not reachable"]);
     expect(report.warning_details[0]?.fix).toContain("docker info");
+    expect(report.warning_details[0]?.fix).toContain("colima start");
+    expect(report.warning_details[0]?.fix).toContain("--runner host, without isolation");
     expect(report.warning_details[0]?.needed_by).toEqual(["container judging", "metric runs in a container"]);
   });
 

@@ -242,7 +242,7 @@ function buildReport(
   if (!docker.found) {
     warn(
       "docker not found on PATH",
-      "install Docker to run metrics and judging in a container; metrics can use --runner host meanwhile",
+      "install Docker for container stages; metrics can run on the host with --runner host, without isolation",
       NEEDED_BY.docker,
     );
   }
@@ -261,7 +261,7 @@ function buildReport(
   if (docker.found && !daemon) {
     warn(
       "docker daemon is not reachable",
-      "start Docker (for example Docker Desktop) and check it with: docker info",
+      "start Docker (Docker Desktop, or colima start) for container stages and check it with: docker info; metrics can run on the host with --runner host, without isolation",
       NEEDED_BY.docker,
     );
   }
