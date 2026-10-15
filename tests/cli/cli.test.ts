@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { appendFileSync, chmodSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -77,9 +78,35 @@ describe("omf CLI", () => {
     const home = makeTempDir("omf-home-");
     omf(["init"], repo, home);
     const out = omf(["doctor", "--json"], repo, home);
-    const report = JSON.parse(out.stdout) as { schema_version: number; isolation: { measured: string } };
+    const report = JSON.parse(out.stdout) as {
+      schema_version: number;
+      isolation: { measured: string; note: string; advisory: boolean };
+    };
     expect(report.schema_version).toBe(1);
-    expect(report.isolation.measured).toBe("unmeasured");
+    expect(report.isolation).toMatchObject({ measured: "unmeasurable", advisory: true });
+    expect(report.isolation.note).toContain("judge.docker_context is not set");
+    expect(report.isolation.note).toContain("not enforced");
+  });
+
+  it("doctor --json reports a daemon that is down with the exact `docker info` failure of the shim", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    omf(["init"], repo, home);
+    const image = `registry.example/omf-base@sha256:${"a".repeat(64)}`;
+    appendFileSync(
+      join(projectDir(repo, { HOME: home }), "config.toml"),
+      `\n[judge]\ndocker_context = "colima-omf-m3f"\nsut_base_image = "${image}"\n`,
+    );
+    // The global shim is the only docker on the test PATH. The probe runs `docker --context <name> info --format ...`.
+    const asked = spawnSync("docker", ["--context", "colima-omf-m3f", "info", "--format", "{{.ServerVersion}}"], {
+      encoding: "utf8",
+    });
+    const expected = asked.stderr.trim();
+    expect(expected).not.toBe(""); // empty means the shim must skip a leading `--context <name>` before it reads the verb
+    const report = JSON.parse(omf(["doctor", "--json"], repo, home).stdout) as {
+      isolation: { measured: string; failure: string | null };
+    };
+    expect(report.isolation).toMatchObject({ measured: "unmeasurable", failure: expected });
   });
 });
 

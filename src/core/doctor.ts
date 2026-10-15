@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import type { IsolationLevel, MeasuredLevel } from "../isolation/types.js";
 import { sealedProblem } from "../vault/pokayoke.js";
+import { ConfigError, type OmfConfig, readConfig } from "./config.js";
 import { TORN_TAIL_WARNING, type VerifyResult } from "./ledger.js";
 import {
   GitNotFoundError,
@@ -36,8 +37,21 @@ export interface AdvisoryIsolation {
   failure: string | null;
 }
 
-/** Synchronous like `runDoctor`. M3f supplies the real probe; the default says nothing was measured. */
-export type IsolationProbe = (env: NodeJS.ProcessEnv, tools: PreflightReport["tools"]) => AdvisoryIsolation;
+/**
+ * What a probe may look at: the initialized project and its config. `null` when the repository has no initialized project or
+ * its config.toml cannot be read (the probe then says it cannot measure; doctor adds no problem for it).
+ */
+export interface ProbeProject {
+  location: ProjectLocation;
+  config: OmfConfig;
+}
+
+/** Synchronous like `runDoctor`. The CLI passes the container probe (`container/doctor-probe.ts`); the default says nothing was measured. */
+export type IsolationProbe = (
+  env: NodeJS.ProcessEnv,
+  tools: PreflightReport["tools"],
+  project: ProbeProject | null,
+) => AdvisoryIsolation;
 
 export const unmeasuredProbe: IsolationProbe = () => ({
   declared: "L2",
@@ -82,11 +96,12 @@ function safeIsolation(
   probeIsolation: IsolationProbe,
   env: NodeJS.ProcessEnv,
   tools: PreflightReport["tools"],
+  project: ProbeProject | null,
 ): AdvisoryIsolation {
   try {
-    return probeIsolation(env, tools);
+    return probeIsolation(env, tools, project);
   } catch (error) {
-    const base = unmeasuredProbe(env, tools);
+    const base = unmeasuredProbe(env, tools, project);
     return { ...base, measured: "unmeasurable", failure: error instanceof Error ? error.message : String(error) };
   }
 }
@@ -293,6 +308,7 @@ function buildReport(
   let initialized = false;
   let ledgerResult: VerifyResult | null = null;
   let treeClean = true;
+  let project: ProbeProject | null = null;
   if (toplevel !== null) {
     let location: ProjectLocation | null = null;
     try {
@@ -327,6 +343,13 @@ function buildReport(
             "notice",
           );
         }
+        if (status.initialized) {
+          try {
+            project = { location, config: readConfig(location.dir) };
+          } catch (err) {
+            if (!(err instanceof ConfigError)) throw err;
+          }
+        }
         // Poka-yoke (spec §11 rule 4): vault material in the repository or a worktree is a problem to fix before any run.
         if (status.initialized) {
           const vaultProblem = sealedProblem(location, env);
@@ -353,7 +376,7 @@ function buildReport(
     tools: reported,
     repo: { is_git_repo: toplevel !== null, toplevel },
     project: { initialized, dir, ledger: ledgerResult },
-    isolation: safeIsolation(probeIsolation, env, reported),
+    isolation: safeIsolation(probeIsolation, env, reported, project),
     ok: problemList.length === 0,
     problems: problemList.map((finding) => finding.message),
     warnings: warningList.map((finding) => finding.message),

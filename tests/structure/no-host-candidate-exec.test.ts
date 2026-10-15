@@ -43,6 +43,8 @@ const MAY_SPAWN: readonly string[] = [
   "scenario/fixtures.ts",
   // Runs the seal author command, which is not candidate code; the author is a host stub and is reported as unmeasured.
   "seal/session.ts",
+  // The synchronous twin of the Docker CLI adapter, for the doctor probe only; it spawns the `docker` program and nothing else.
+  "container/docker-sync.ts",
 ];
 
 const NO_SPAWN_DIRS = ["gate", "audit", "isolation"];
