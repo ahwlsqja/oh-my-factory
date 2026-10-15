@@ -2,12 +2,7 @@ import { execFileSync } from "node:child_process";
 import { createDockerRuntime } from "../../src/container/docker-cli.js";
 import { type PinnedImage, pinnedImage } from "../../src/container/image-ref.js";
 import type { ContainerRuntime } from "../../src/container/runtime.js";
-import type { OwnedLabels } from "../../src/container/spec.js";
-import { buildSutImage } from "../../src/container/sut-build.js";
 import { CONFIG_DEFAULTS, type JudgeConfig } from "../../src/core/config.js";
-import type { GitTarget } from "../../src/git/hardened.js";
-import { ensureHarnessImage } from "../../src/judge/harness-context.js";
-import type { ImageLease } from "../../src/judge/round.js";
 import { type GatedContext, gatedPath } from "./helpers.js";
 
 export const GATED_LABELS = { work_id: "w-0123456789ab", run_id: "r-20261015T090000Z-ab12", round: 1 };
@@ -67,47 +62,4 @@ export function ownedLeftovers(ctx: GatedContext): string[] {
       (line) => !line.startsWith("image omf-harness:"),
     ),
   ];
-}
-
-const BUILD_TIMEOUT_MS = 600_000;
-
-/**
- * Builds the two images one round runs on, the way the S4 station will: the cached harness image (keyed by its context hash)
- * and a per-round SUT image from the quarantine commit. The SUT uses the gated base image and the harness a Node image.
- */
-export async function buildRoundImages(input: {
-  runtime: ContainerRuntime;
-  base: PinnedImage;
-  harnessBase: PinnedImage;
-  build: readonly string[];
-  quarantine: GitTarget;
-  sha: string;
-  labels: OwnedLabels;
-  contextRoot: string;
-}): Promise<ImageLease> {
-  const harness = await ensureHarnessImage({
-    runtime: input.runtime,
-    base: input.harnessBase,
-    labels: { ...input.labels, role: "harness" },
-    contextRoot: input.contextRoot,
-    timeoutMs: BUILD_TIMEOUT_MS,
-  });
-  const sut = await buildSutImage({
-    runtime: input.runtime,
-    quarantine: input.quarantine,
-    sha: input.sha,
-    base: input.base,
-    build: input.build,
-    labels: input.labels,
-    contextRoot: input.contextRoot,
-    timeoutMs: BUILD_TIMEOUT_MS,
-  });
-  return {
-    sut,
-    harness: harness.image,
-    harness_context_sha256: harness.context_sha256,
-    sut_base: input.base,
-    harness_base: input.harnessBase,
-    labels: input.labels,
-  };
 }

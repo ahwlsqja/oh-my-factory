@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { Ledger } from "../../src/core/ledger.js";
-import { type RoundScenario, runJudgeRound } from "../../src/judge/round.js";
+import { buildRoundImages, type RoundScenario, runJudgeRound } from "../../src/judge/round.js";
 import { disposeImages, trackRuntime } from "../../src/judge/state.js";
 import { gitFixture } from "../helpers/git-fixture.js";
 import { realTempDir } from "../helpers/ops-fixture.js";
@@ -9,7 +9,6 @@ import { describeGated } from "./helpers.js";
 import {
   GATED_LABELS,
   GATED_SCOPE,
-  buildRoundImages,
   gatedBaseImage,
   gatedHarnessImage,
   gatedJudgeConfig,
@@ -35,6 +34,8 @@ const SCENARIOS: RoundScenario[] = [
   },
 ];
 
+const RUN = ["sh", "/work/app.sh"];
+
 describeGated("G-two-container-roundtrip", (ctx) => {
   it("judges a correct candidate as pass and a wrong one as fail, measures every container L2, and leaves only the cached harness image", async () => {
     const base = gatedBaseImage(ctx);
@@ -49,11 +50,9 @@ describeGated("G-two-container-roundtrip", (ctx) => {
       const labels = { ...GATED_LABELS, role: "sut" as const, round };
       const images = await buildRoundImages({
         runtime,
-        base,
-        harnessBase,
-        build: ["true"],
-        quarantine: fx.quarantine,
-        sha,
+        config,
+        contract: { build: ["true"], run: RUN },
+        candidate: { quarantine: fx.quarantine, sha },
         labels,
         contextRoot: join(dir, "ctx"),
       });
@@ -66,7 +65,7 @@ describeGated("G-two-container-roundtrip", (ctx) => {
           scenarios: SCENARIOS,
           phase: "train",
           candidate_sha: sha,
-          run: ["sh", "/work/app.sh"],
+          run: RUN,
           stageRoot: join(dir, "judge"),
           forbidden: [dir],
           round,
