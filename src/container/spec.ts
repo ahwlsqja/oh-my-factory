@@ -18,6 +18,35 @@ export const SANDBOX_USER = "65532:65532";
 export const IDLE_ENTRYPOINT = "sleep";
 export const IDLE_ARGS: readonly string[] = ["2147483647"];
 
+/**
+ * The only environment variable names an exec may inherit from the OMF process, and only through a `SecretHandle`:
+ * the value is read by the docker client from its own environment and never appears in an argv or a create-time
+ * setting. A name outside this set can never be passed on.
+ */
+export const SECRET_ENV_NAMES = ["ANTHROPIC_API_KEY"] as const;
+export type SecretEnvName = (typeof SECRET_ENV_NAMES)[number];
+
+/**
+ * Closed set of credential-shaped variable names. An implementer image that declares any of them (or any name of
+ * `SECRET_ENV_NAMES`) is never allowed by the golden: the owner builds the image, and a key baked into it would
+ * reach every container made from it. A credential under a name outside this set is not recognised by name.
+ */
+export const CREDENTIAL_SHAPED_ENV_NAMES: readonly string[] = [
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_AUTH_TOKEN",
+  "CLAUDE_CODE_OAUTH_TOKEN",
+  "OPENAI_API_KEY",
+  "CODEX_HOME",
+  "GITHUB_TOKEN",
+  "GH_TOKEN",
+  "NPM_TOKEN",
+  "HF_TOKEN",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_SESSION_TOKEN",
+  "GOOGLE_APPLICATION_CREDENTIALS",
+];
+
 /** A local, immutable image id (`sha256:` and 64 hex), as `docker image inspect` reports it. */
 export type ImageId = string & { readonly __imageId: true };
 
