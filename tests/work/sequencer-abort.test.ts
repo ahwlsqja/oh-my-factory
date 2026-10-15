@@ -159,6 +159,22 @@ describe("runLine: a call that throws mid-run ends as aborted run_error and take
     expect(f.trail()).toEqual(["work.limits_set"]); // no work.spend
     expect(readFileSync(claimFile(f.itemDir), "utf8")).toContain("stolen");
   });
+
+  it.each([[1.5], [-1], [Number.MAX_SAFE_INTEGER + 1]])("an invalid spend amount %s aborts even when the station swallows it", async (amount) => {
+    const f = setupLine();
+    const hiding: StationBody = (ctx) => {
+      try {
+        ctx.recordSpend(amount);
+      } catch {
+        // a station that hides the failure and carries on
+      }
+      return OK;
+    };
+    const result = await f.go({ stations: stationsOf([], { S2: hiding }), gates: passGates([]) });
+
+    expect(result).toMatchObject({ kind: "aborted", reason: "run_error", wcode: "malformed", at: "S2" });
+    expect(f.trail()).toEqual(["work.limits_set"]); // the spend is neither recorded nor carried on past
+  });
 });
 
 describe("runLine: progress markers", () => {

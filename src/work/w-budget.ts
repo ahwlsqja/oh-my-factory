@@ -169,7 +169,7 @@ export type BudgetStation = (typeof PROGRESS_STATIONS)[number];
 /** Validates at the writer, like `wEvent`: a malformed id or amount fails here and never reaches the ledger. */
 function budgetEvent(actor: string, type: WorkBudgetEventType, payload: Record<string, unknown>): NewEvent {
   const check = validate(SCHEMA, { type, payload });
-  if (!check.ok) throw new Error(`invalid ${type} event: ${check.errors}`);
+  if (!check.ok) throw new WorkBudgetError("malformed", `invalid ${type} event: ${check.errors}`);
   return { actor, type, payload };
 }
 
