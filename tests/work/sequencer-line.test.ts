@@ -98,6 +98,35 @@ describe("runLine, straight line (8a)", () => {
     expect(result.evidence.gates.per_gate["GATE-2"]).toBe("not_run");
   });
 
+  it("guards before every station: a canary planted by S3 stops the line blocked gate_blocked before S4 runs", async () => {
+    const fx = setupLine();
+    const seen: string[] = [];
+    const plant = station("S3", () => {
+      seen.push("S3");
+      plantCanary(fx.fx.repo);
+      return { kind: "ok" };
+    });
+
+    const result = finished(await runLine(fx.options({ stations: cleanStations({ override: { S3: plant }, trace: seen }), gates: passGates(seen) })));
+
+    expect(seen).toEqual(["S1", "S2", "GATE-2", "S3"]);
+    expect(result).toMatchObject({ outcome: "blocked", reason_code: "gate_blocked" });
+    expect(result.evidence.stations["S4"]).toBe("blocked");
+    expect(result.handoff).not.toBeNull();
+  });
+
+  it("a station error that is not a guard refusal stays a station error", async () => {
+    const fx = setupLine();
+    const boom = station("S1", () => {
+      throw new Error(PLANTED);
+    });
+
+    const result = finished(await runLine(fx.options({ stations: cleanStations({ override: { S1: boom } }), gates: passGates() })));
+
+    expect(result.evidence.stations["S1"]).toBe("error");
+    expect(result.reason_code).not.toBe("gate_blocked");
+  });
+
   it("merges gates over the defaults and records only the replaced one as injected", async () => {
     const fx = setupLine();
 
