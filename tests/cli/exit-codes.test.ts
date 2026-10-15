@@ -47,33 +47,32 @@ function run(place: Place, args: string[]): number {
 }
 
 // [command, no git repository, git repository not initialized, initialized project with nothing else created]
-// "m3" rows are commands of the goal loop; their values are pinned as they are today and carried over to the
-// exit code and --json error contract work for those commands.
-const COMMANDS: Array<[string[], number, number, number, "own" | "m3"]> = [
+// "pinned" rows are commands of the goal loop; their values are pinned as they are today.
+const COMMANDS: Array<[string[], number, number, number, "own" | "pinned"]> = [
   [["init"], 2, 0, 0, "own"],
   [["doctor"], 1, 1, 0, "own"],
   [["ledger", "verify"], 2, 2, 0, "own"],
-  [["goal", "new", "g1"], 2, 2, 2, "m3"],
-  [["goal", "audit", "g1"], 2, 2, 1, "m3"],
-  [["goal", "approve", "g1"], 2, 2, 2, "m3"],
-  [["goal", "measure", "g1"], 2, 2, 2, "m3"],
-  [["goal", "status", "g1"], 2, 2, 2, "m3"],
-  [["goal", "resume", "g1"], 2, 2, 2, "m3"],
-  [["goal", "cancel", "g1"], 2, 2, 2, "m3"],
-  [["goal", "tick", "g1"], 2, 2, 2, "m3"],
-  [["metric", "propose", "m1", "--unit", "ms", "--", "echo", "1"], 2, 2, 2, "m3"],
-  [["decide", "add", "w1"], 1, 1, 1, "m3"],
-  [["decide", "lint", "w1"], 2, 2, 2, "m3"],
-  [["decide", "show", "w1"], 2, 2, 2, "m3"],
-  [["decide", "resolve", "w1", "d1"], 1, 1, 1, "m3"],
-  [["decide", "defer", "w1", "d1"], 1, 1, 1, "m3"],
-  [["work", "list", "g1"], 2, 2, 2, "m3"],
-  [["work", "show", "w1"], 2, 2, 2, "m3"],
-  [["work", "approve", "w1"], 2, 2, 2, "m3"],
-  [["veto", "w1"], 2, 2, 2, "m3"],
-  [["budget", "show", "g1"], 2, 2, 2, "m3"],
-  [["budget", "declare", "g1", "usd", "5"], 2, 2, 2, "m3"],
-  [["budget", "raise", "w1", "--rounds", "4"], 2, 2, 2, "m3"],
+  [["goal", "new", "g1"], 2, 2, 2, "pinned"],
+  [["goal", "audit", "g1"], 2, 2, 1, "pinned"],
+  [["goal", "approve", "g1"], 2, 2, 2, "pinned"],
+  [["goal", "measure", "g1"], 2, 2, 2, "pinned"],
+  [["goal", "status", "g1"], 2, 2, 2, "pinned"],
+  [["goal", "resume", "g1"], 2, 2, 2, "pinned"],
+  [["goal", "cancel", "g1"], 2, 2, 2, "pinned"],
+  [["goal", "tick", "g1"], 2, 2, 2, "pinned"],
+  [["metric", "propose", "m1", "--unit", "ms", "--", "echo", "1"], 2, 2, 2, "pinned"],
+  [["decide", "add", "w1"], 1, 1, 1, "pinned"],
+  [["decide", "lint", "w1"], 2, 2, 2, "pinned"],
+  [["decide", "show", "w1"], 2, 2, 2, "pinned"],
+  [["decide", "resolve", "w1", "d1"], 1, 1, 1, "pinned"],
+  [["decide", "defer", "w1", "d1"], 1, 1, 1, "pinned"],
+  [["work", "list", "g1"], 2, 2, 2, "pinned"],
+  [["work", "show", "w1"], 2, 2, 2, "pinned"],
+  [["work", "approve", "w1"], 2, 2, 2, "pinned"],
+  [["veto", "w1"], 2, 2, 2, "pinned"],
+  [["budget", "show", "g1"], 2, 2, 2, "pinned"],
+  [["budget", "declare", "g1", "usd", "5"], 2, 2, 2, "pinned"],
+  [["budget", "raise", "w1", "--rounds", "4"], 2, 2, 2, "pinned"],
 ];
 
 describe("exit codes of every command", () => {
