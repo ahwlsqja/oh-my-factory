@@ -3,6 +3,9 @@
 //
 //   npm run test:gated                          start the profile, run every gated suite, stop the profile
 //   npm run test:gated -- --only G-<suite>      run one suite (vitest -t)
+//   OMF_IMPLEMENTER_API_KEY=<dedicated, spend-limited key> npm run test:gated -- --only G-<suite>
+//                                               for a suite that calls a real model: the key is passed to the
+//                                               test process under that name only, never ANTHROPIC_API_KEY
 //   npm run test:gated -- --record              also append one record per fully passed suite to
 //                                               docs/evidence/gated-runs.json (clean working tree only)
 //
@@ -77,7 +80,7 @@ export function dockerConfigFor(dir, host) {
   return dir;
 }
 
-/** The whole environment of the test process. No HOME, no API key; the only caller variables passed are TMPDIR, the fixture switch and the two gated image digests. */
+/** The whole environment of the test process. No HOME and never ANTHROPIC_API_KEY; the only caller variables passed are TMPDIR, the fixture switch, the two gated image digests and the dedicated implementer key. */
 export function gatedEnv(env, dockerConfig, omfHome) {
   const out = {
     PATH: env.PATH ?? "",
@@ -86,7 +89,13 @@ export function gatedEnv(env, dockerConfig, omfHome) {
     OMF_GATED_CONTEXT: CONTEXT,
     OMF_HOME: omfHome,
   };
-  for (const name of ["TMPDIR", "OMF_CAPTURE_FIXTURES", "OMF_GATED_BASE_IMAGE", "OMF_GATED_HARNESS_IMAGE"]) {
+  for (const name of [
+    "TMPDIR",
+    "OMF_CAPTURE_FIXTURES",
+    "OMF_GATED_BASE_IMAGE",
+    "OMF_GATED_HARNESS_IMAGE",
+    "OMF_IMPLEMENTER_API_KEY",
+  ]) {
     if (env[name] !== undefined) out[name] = env[name];
   }
   return out;

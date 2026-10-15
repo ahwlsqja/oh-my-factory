@@ -64,12 +64,40 @@ export interface JudgeConfig {
   state_tmpfs_mb: number;
 }
 
+/**
+ * The implementer container (Claude Code, one session per round). `image` is a digest reference or a local image
+ * id (`sha256:` and 64 hex digits): a locally built image has an id but no registry digest, and both are immutable.
+ * `null` means "not configured", and a run that needs the implementer stops with a closed reason instead of
+ * guessing. The Docker context is `judge.docker_context`: one context serves every container. There is no key,
+ * token or credential field anywhere in this table; the vendor key comes from the environment of the one command
+ * that runs it and is never stored. The tmpfs sizes are per mount and together are charged to `memory_mb`.
+ */
+export interface ImplementerConfig {
+  image: string | null;
+  /** One session. */
+  timeout_ms: number;
+  memory_mb: number;
+  cpus: number;
+  pids_limit: number;
+  /** `/tmp`. */
+  tmp_tmpfs_mb: number;
+  /** `/work`: the checked-out tree and the container's own repository. */
+  work_tmpfs_mb: number;
+  /** `/agent`: the vendor client's home. */
+  agent_tmpfs_mb: number;
+  /** Cap of the session log. A verbose stream for a long session is large, hence 64 MiB. */
+  max_log_bytes: number;
+  /** Cap of the workspace capture and of the history scan. A cap hit is incomplete, and incomplete fails closed. */
+  max_workspace_bytes: number;
+}
+
 export interface OmfConfig {
   isolation: { declared: "L2" };
   roles: Record<RoleName, { vendor: Vendor; model?: string; effort?: string }>;
   reconciler: ReconcilerConfig;
   w: WConfig;
   judge: JudgeConfig;
+  implementer: ImplementerConfig;
 }
 
 export class ConfigError extends Error {}
@@ -113,6 +141,18 @@ export const CONFIG_DEFAULTS: OmfConfig = {
     work_tmpfs_mb: 256,
     state_tmpfs_mb: 16,
   },
+  implementer: {
+    image: null,
+    timeout_ms: 1_800_000,
+    memory_mb: 2048,
+    cpus: 2,
+    pids_limit: 512,
+    tmp_tmpfs_mb: 256,
+    work_tmpfs_mb: 1024,
+    agent_tmpfs_mb: 256,
+    max_log_bytes: 64 * 1024 * 1024,
+    max_workspace_bytes: 256 * 1024 * 1024,
+  },
 };
 
 interface RawConfig {
@@ -121,7 +161,11 @@ interface RawConfig {
   reconciler?: Partial<ReconcilerConfig>;
   w?: Partial<WConfig>;
   judge?: Partial<JudgeConfig>;
+  implementer?: Partial<ImplementerConfig>;
 }
+
+/** `sha256:` and 64 lowercase hex digits, as `docker image inspect` reports a local image id. */
+const LOCAL_IMAGE_ID = /^sha256:[0-9a-f]{64}$/;
 
 /**
  * tmpfs is charged to the container's memory, so a role whose mounts add up to more than `memory_mb` could be
@@ -139,6 +183,16 @@ function requireTmpfsFits(judge: JudgeConfig): void {
         `judge tmpfs sizes of the ${role} container (${total} MiB) exceed judge.memory_mb (${judge.memory_mb})`,
       );
     }
+  }
+}
+
+/** The same rule as the judge, for the implementer's three mounts. */
+function requireImplementerTmpfsFits(implementer: ImplementerConfig): void {
+  const total = implementer.tmp_tmpfs_mb + implementer.work_tmpfs_mb + implementer.agent_tmpfs_mb;
+  if (total > implementer.memory_mb) {
+    throw new ConfigError(
+      `implementer tmpfs sizes (${total} MiB) exceed implementer.memory_mb (${implementer.memory_mb})`,
+    );
   }
 }
 
@@ -178,6 +232,17 @@ export function parseConfig(text: string): OmfConfig {
       throw new ConfigError(`judge.${key} must be pinned by digest`);
     }
   }
+  // Same reason as the judge images: a tag can be re-pointed under a run. A local image id is as immutable as a digest.
+  const implementerImage = table(root, "implementer")?.image;
+  if (
+    typeof implementerImage === "string" &&
+    !isDigestPinned(implementerImage) &&
+    !LOCAL_IMAGE_ID.test(implementerImage)
+  ) {
+    throw new ConfigError(
+      "implementer.image must be pinned by digest or be a local image id (sha256: and 64 hex digits)",
+    );
+  }
   const checked = validate("config.schema.json", root);
   if (!checked.ok) throw new ConfigError(`config.toml is invalid: ${checked.errors}`);
 
@@ -191,12 +256,15 @@ export function parseConfig(text: string): OmfConfig {
   }
   const judge: JudgeConfig = { ...CONFIG_DEFAULTS.judge, ...raw.judge };
   requireTmpfsFits(judge);
+  const implementer: ImplementerConfig = { ...CONFIG_DEFAULTS.implementer, ...raw.implementer };
+  requireImplementerTmpfsFits(implementer);
   return {
     isolation: { ...CONFIG_DEFAULTS.isolation, ...raw.isolation },
     roles,
     reconciler,
     w: { ...CONFIG_DEFAULTS.w, ...raw.w },
     judge,
+    implementer,
   };
 }
 

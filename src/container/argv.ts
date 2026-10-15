@@ -6,9 +6,12 @@ import {
   ContainerSpecError,
   IDLE_ARGS,
   IDLE_ENTRYPOINT,
+  IMPLEMENTER_FIXED_ENV,
   type ImageId,
   type OwnedLabels,
   SANDBOX_USER,
+  SECRET_ENV_NAMES,
+  type SecretEnvName,
   type TmpfsSpec,
   assertContext,
   assertImageRef,
@@ -52,6 +55,10 @@ function tmpfsOption(tmpfs: TmpfsSpec): string {
   return `${tmpfs.destination}:rw,size=${tmpfs.size_mb}m,nosuid,nodev${tmpfs.exec ? ",exec" : ""}${tmpfs.owned ? `,uid=${owner}` : ""}`;
 }
 
+/**
+ * Every role gets the same hardening flags. The implementer differs in exactly two values: it is the only role on a network
+ * (`bridge`, so the vendor CLI can reach its API; spec §7 L2) and it carries the fixed environment of `IMPLEMENTER_FIXED_ENV`.
+ */
 export function createArgv(spec: ContainerSpec, context: string | null): string[] {
   assertSpec(spec);
   const { limits } = spec;
@@ -64,7 +71,7 @@ export function createArgv(spec: ContainerSpec, context: string | null): string[
     "never",
     ...labelArgs(spec.labels),
     "--network",
-    "none",
+    spec.labels.role === "implementer" ? "bridge" : "none",
     "--cap-drop",
     "ALL",
     "--security-opt",
@@ -82,6 +89,9 @@ export function createArgv(spec: ContainerSpec, context: string | null): string[
     "1",
     "--env",
     "LC_ALL=C",
+    ...(spec.labels.role === "implementer"
+      ? IMPLEMENTER_FIXED_ENV.flatMap(([name, value]) => ["--env", `${name}=${value}`])
+      : []),
     ...spec.tmpfs.flatMap((tmpfs) => ["--tmpfs", tmpfsOption(tmpfs)]),
     "--entrypoint",
     IDLE_ENTRYPOINT,
@@ -105,6 +115,8 @@ export interface ExecArgvSpec {
   argv: readonly string[];
   workdir?: string;
   env?: Readonly<Record<string, string>>;
+  /** Emitted as `--env <NAME>` with no value; the docker client takes the value from its own environment. */
+  secret?: SecretEnvName;
   /** True adds `-i`; the bytes themselves travel on the process stdin, never in argv. */
   stdin: boolean;
 }
@@ -122,8 +134,15 @@ export function execArgv(name: string, exec: ExecArgvSpec, context: string | nul
     flags.push("--workdir", exec.workdir);
   }
   for (const [key, value] of Object.entries(exec.env ?? {})) {
-    if (!ENV_NAME_RE.test(key) || value.includes("\0")) throw new ContainerSpecError("invalid_exec");
+    // A secret in `env` would put its value in argv; the only way to give an exec a secret is `secret`, by name.
+    if (!ENV_NAME_RE.test(key) || (SECRET_ENV_NAMES as readonly string[]).includes(key) || value.includes("\0")) {
+      throw new ContainerSpecError("invalid_exec");
+    }
     flags.push("--env", `${key}=${value}`);
+  }
+  if (exec.secret !== undefined) {
+    if (!(SECRET_ENV_NAMES as readonly string[]).includes(exec.secret)) throw new ContainerSpecError("invalid_exec");
+    flags.push("--env", exec.secret);
   }
   return [...contextArgs(context), "exec", ...flags, name, ...exec.argv];
 }

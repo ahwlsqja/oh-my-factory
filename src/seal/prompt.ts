@@ -60,7 +60,7 @@ const INPUT_KEYS: readonly string[] = [
 ];
 
 /** The YAML block at the top of `intent.md`: goal id, work id, fingerprint, rationale and affected paths. The author sees none of it. */
-const FRONT_MATTER = /^---\n[\s\S]*?\n---\n/;
+export const FRONT_MATTER = /^---\n[\s\S]*?\n---\n/;
 
 /**
  * Builds the inputs from the item and the folded state (spec §5.3). In this order:

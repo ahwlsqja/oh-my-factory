@@ -6,12 +6,12 @@ import { type PinnedImage, pinnedImage } from "../../src/container/image-ref.js"
 import type { MeasureDeps } from "../../src/container/measure.js";
 import type { ContainerRuntime, ImageInfo } from "../../src/container/runtime.js";
 import type { ContainerRole, ContainerSpec } from "../../src/container/spec.js";
-import { CONFIG_DEFAULTS } from "../../src/core/config.js";
 import { Ledger } from "../../src/core/ledger.js";
 import type { StageGolden } from "../../src/isolation/evaluate.js";
 import { loadRunIsolation } from "../../src/isolation/record.js";
 import type { ViolationCode } from "../../src/isolation/types.js";
 import { FakeDocker } from "./fake-docker.js";
+import { limitsFor } from "./container-fixture.js";
 import { addImage } from "./fake-docker-core.mjs";
 import { makeTempDir } from "./tmp.js";
 
@@ -54,9 +54,15 @@ export function verbOf(argv: readonly string[]): string {
 const exited = (stdout: string): ProcessResult => ({ kind: "exited", status: 0, signal: null, stdout, stderr: "" });
 
 /** Records every argv, answers the probe exec itself, and edits the container's inspect document. */
-export function tampered(run: DockerRunner, tamper: Tamper, seen: string[][]): DockerRunner {
+export function tampered(
+  run: DockerRunner,
+  tamper: Tamper,
+  seen: string[][],
+  envSeen?: Array<Readonly<Record<string, string>> | undefined>,
+): DockerRunner {
   return async (argv, options) => {
     seen.push([...argv]);
+    envSeen?.push(options.env);
     const verb = verbOf(argv);
     if (verb === "exec" && tamper.probe !== undefined) {
       return typeof tamper.probe === "string" ? exited(tamper.probe) : tamper.probe;
@@ -77,6 +83,8 @@ export interface MeasureFixture {
   deps: MeasureDeps;
   itemDir: string;
   seen: string[][];
+  /** The extra client environment of each call in seen (undefined for a call that had none). */
+  envs: Array<Readonly<Record<string, string>> | undefined>;
   /** Container lifecycle verbs only, in call order. */
   lifecycle(): string[];
   spec(role: ContainerRole, serial?: number): ContainerSpec;
@@ -87,14 +95,18 @@ export interface MeasureFixture {
 
 const LIFECYCLE = new Set(["create", "inspect", "start", "exec", "rm"]);
 
-export async function measureFixture(tamper: Tamper = {}): Promise<MeasureFixture> {
+export async function measureFixture(
+  tamper: Tamper = {},
+  options: { imageEnv?: string[] } = {},
+): Promise<MeasureFixture> {
   const fake = new FakeDocker();
-  // The fake core's default image env is PATH only, so the base reads env_names ["PATH"].
-  addImage(fake.state, BASE);
+  // The fake core's default image env is PATH only, so the base reads env_names ["PATH"]; `imageEnv` models an owner-built image.
+  addImage(fake.state, BASE, options.imageEnv === undefined ? {} : { env: options.imageEnv });
   const seen: string[][] = [];
+  const envs: Array<Readonly<Record<string, string>> | undefined> = [];
   const runtime: ContainerRuntime = createDockerRuntime({
     context: CONTEXT,
-    run: tampered(fake.run, { probe: CLEAN_PROBE, ...tamper }, seen),
+    run: tampered(fake.run, { probe: CLEAN_PROBE, ...tamper }, seen, envs),
   });
   const image: ImageInfo = await runtime.ensureImage(BASE);
   const dir = makeTempDir("omf-measure-");
@@ -105,6 +117,7 @@ export async function measureFixture(tamper: Tamper = {}): Promise<MeasureFixtur
     deps: { runtime, sink: ledger, scope, itemDir, now: () => AT },
     itemDir,
     seen,
+    envs,
     lifecycle: () => seen.map(verbOf).filter((verb) => LIFECYCLE.has(verb)),
     spec: (role, serial = 1) =>
       containerSpecFor({
@@ -112,7 +125,7 @@ export async function measureFixture(tamper: Tamper = {}): Promise<MeasureFixtur
         image: BASE,
         labels: { work_id: WORK, run_id: RUN, round: 1 },
         serial,
-        judge: CONFIG_DEFAULTS.judge,
+        limits: limitsFor(role),
       }),
     golden: (role) => goldenFor({ role, image, forbidden: FORBIDDEN }),
     isolationEvents: () => ledger.readVerified().filter((event) => event.type === "isolation.measured"),
@@ -169,7 +182,12 @@ export const DEVIATIONS: readonly Deviation[] = [
 
 /** A `docker inspect` document of a golden container of `role`, written from the golden values and not from any argv. */
 export function goldenInspectDoc(role: ContainerRole): InspectDoc {
-  const destinations = { sut: ["/tmp", "/scratch"], harness: ["/tmp", "/state"], workcopy: ["/tmp", "/work"] }[role];
+  const destinations = {
+    sut: ["/tmp", "/scratch"],
+    harness: ["/tmp", "/state"],
+    workcopy: ["/tmp", "/work"],
+    implementer: ["/tmp", "/work", "/agent"],
+  }[role];
   return {
     Id: "c0ffee".padEnd(64, "0"),
     Config: { Image: BASE, User: "65532:65532", Env: ["PATH=/usr/bin", "LC_ALL=C"] },
@@ -185,7 +203,7 @@ export function goldenInspectDoc(role: ContainerRole): InspectDoc {
       Privileged: false,
       CapAdd: null,
       CapDrop: ["ALL"],
-      NetworkMode: "none",
+      NetworkMode: role === "implementer" ? "bridge" : "none",
       PidMode: "",
       ReadonlyRootfs: true,
       SecurityOpt: ["no-new-privileges"],

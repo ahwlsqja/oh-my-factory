@@ -13,7 +13,7 @@ import {
 } from "./argv.js";
 import { dockerEnv, endpointKind, resolveDockerConfig } from "./docker-cli.js";
 import type { ContainerHandle, ExecSpec, ImageInfo } from "./runtime.js";
-import type { ContainerSpec, ImageId } from "./spec.js";
+import { type ContainerSpec, ContainerSpecError, type ImageId } from "./spec.js";
 
 /**
  * The synchronous twin of the async runtime, for `omf doctor` only (its report is synchronous). Same argv builders, same
@@ -158,6 +158,8 @@ export function createDockerRuntimeSync(options: DockerSyncOptions): ContainerRu
       succeed(startArgv(handle.name, requireLocal()));
     },
     execSync(handle, spec) {
+      // The synchronous twin never carries a key; refusing is safer than dropping it without a word.
+      if (spec.secret !== undefined) throw new ContainerSpecError("invalid_exec");
       const result = run(
         execArgv(
           handle.name,

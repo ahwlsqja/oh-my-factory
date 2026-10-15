@@ -46,6 +46,18 @@ describe("S5 audit station", () => {
     expect(existsSync(auditPath(ctx.item.dir, RUN_ID, 1))).toBe(true);
   });
 
+  it("takes the item's own context files as the projections, and a root spec.md as an ordinary file", async () => {
+    const fx = await s5Fixture({
+      head: (workId) => ({
+        [`.omf/${workId}/spec.md`]: "x\n",
+        [`.omf/${workId}/intent.md`]: "x\n",
+        "spec.md": "y\n",
+      }),
+    });
+    expect(await fx.station.run(fx.ctx())).toMatchObject({ kind: "ok" });
+    expect(fx.events("audit.completed")[0]?.payload.projections_touched).toBe(2);
+  });
+
   it("reads the diff from the quarantine and the released feedback from the slot", async () => {
     const fx = await s5Fixture({ diffCanary: 0 });
     // The worktree surface is clean text: the only way to see this canary on a diff is the quarantine commit.

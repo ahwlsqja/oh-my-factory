@@ -123,6 +123,16 @@ describe("arguments and environment", () => {
     expect(env.OMF_API_TOKEN).toBeUndefined();
   });
 
+  it("passes the dedicated implementer key through and never ANTHROPIC_API_KEY", () => {
+    const env = script.gatedEnv(
+      { PATH: "/bin", ANTHROPIC_API_KEY: "reconciler-key", OMF_IMPLEMENTER_API_KEY: "planted-implementer-key" },
+      "/tmp/cfg",
+      "/tmp/omf-home",
+    );
+    expect(env.OMF_IMPLEMENTER_API_KEY).toBe("planted-implementer-key");
+    expect(env).not.toHaveProperty("ANTHROPIC_API_KEY");
+  });
+
   it("gives the test process only a short list of variables, never HOME or a key", () => {
     const env = script.gatedEnv(
       { PATH: "/bin", HOME: "/home/dev", ANTHROPIC_API_KEY: "k", OMF_HOME: "/home/dev/.omf", TMPDIR: "/tmp/x" },

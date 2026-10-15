@@ -317,7 +317,7 @@ export async function runJudgeRound(input: JudgeRoundInput): Promise<RoundVerdic
   let serial = 0;
   const create = async (role: "sut" | "harness", image: ImageInfo) => {
     serial += 1;
-    const spec = containerSpecFor({ role, image: image.id, labels, serial, judge: config });
+    const spec = containerSpecFor({ role, image: image.id, labels, serial, limits: { kind: "judge", judge: config } });
     return createMeasured(measure, spec, goldenFor({ role, image, forbidden: input.forbidden }));
   };
   try {

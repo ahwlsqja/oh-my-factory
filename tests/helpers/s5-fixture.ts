@@ -33,8 +33,8 @@ export interface S5Options {
   gate?: "pass" | "fail" | "error";
   /** Index into the vault's canaries; that canary is written into the head commit, so it is on the diff surface. */
   diffCanary?: number;
-  /** Extra files the head commit adds. */
-  head?: Record<string, string>;
+  /** Extra files the head commit adds; a function receives the item's work id, for paths that name it. */
+  head?: Record<string, string> | ((workId: string) => Record<string, string>);
   explicit?: readonly string[];
 }
 
@@ -73,7 +73,7 @@ export async function s5Fixture(options: S5Options = {}): Promise<S5Fixture> {
     {
       "src/calc.mjs": `${FIXED}${note}`,
       "tests/calc.test.mjs": testFile("assert.equal(add(1, 2), 3);"),
-      ...options.head,
+      ...(typeof options.head === "function" ? options.head(f.workId) : options.head),
     },
   );
   const released: string[] = [];

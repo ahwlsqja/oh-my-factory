@@ -225,6 +225,141 @@ export async function treePaths(target: GitTarget, sha: string): Promise<string[
     .filter((path) => path.length > 0);
 }
 
+/** One commit of a chain: its sha and its parents' shas (none for a root, two or more for a merge). */
+export interface ChainEntry {
+  sha: string;
+  parents: string[];
+}
+
+/** One tracked path: `mode` is the six-digit octal text (100644, 100755, 120000 symlink, 160000 gitlink with `type` "commit"). */
+export interface TreeEntryInfo {
+  mode: string;
+  type: "blob" | "commit";
+  sha: string;
+  path: string;
+}
+
+/** A path as `<rev>:<path>` and `cat-file --batch` read it: no empty, `.` or `..` segment, no newline or NUL, not absolute. */
+function requireTreePath(path: string): void {
+  const bad = path === "" || path.startsWith("/") || path.includes("\0") || path.includes("\n");
+  if (bad || path.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
+    throw new Error("path must be a plain path inside the tree");
+  }
+}
+
+/** The tree id of a commit, null when `sha` has none (missing, or a blob). */
+export async function treeSha(target: GitTarget, sha: string): Promise<string | null> {
+  requireSha("sha", sha);
+  try {
+    return (await git(target, ["rev-parse", "--verify", "--quiet", `${sha}^{tree}`])).toString("utf8").trim();
+  } catch (error) {
+    if (exitedWith(error) !== null) return null;
+    throw error;
+  }
+}
+
+/** The object id at `path` of commit `sha`, null when absent. A directory gives its tree id, so compare against a blob id you computed. */
+export async function blobId(target: GitTarget, sha: string, path: string): Promise<string | null> {
+  requireSha("sha", sha);
+  requireTreePath(path);
+  try {
+    return (await git(target, ["rev-parse", "--verify", "--quiet", `${sha}:${path}`])).toString("utf8").trim();
+  } catch (error) {
+    if (exitedWith(error) !== null) return null;
+    throw error;
+  }
+}
+
+/**
+ * The raw bytes of the blob at `path`, through `cat-file --batch` so no filter or conversion applies. Null when the path is absent or
+ * is not a blob. A blob over `maxBytes` throws `HostGitError` `output_limit`: an oversized file, never a missing one.
+ */
+export async function readBlob(target: GitTarget, sha: string, path: string, maxBytes: number): Promise<Buffer | null> {
+  requireSha("sha", sha);
+  requireTreePath(path);
+  const raw = await git(target, ["cat-file", "--batch"], { input: `${sha}:${path}\n`, maxOutputBytes: maxBytes + 256 });
+  const eol = raw.indexOf(0x0a);
+  if (eol < 0) throw new Error("unexpected git cat-file output");
+  const header = raw.subarray(0, eol).toString("utf8");
+  if (header.endsWith(" missing")) return null;
+  const [, type, length] = header.split(" ");
+  const size = Number(length);
+  if (!Number.isInteger(size) || size < 0) throw new Error("unexpected git cat-file output");
+  if (type !== "blob") return null;
+  if (size > maxBytes) throw new HostGitError("output_limit");
+  return Buffer.from(raw.subarray(eol + 1, eol + 1 + size));
+}
+
+/** The history of `head`, oldest first (`rev-list --parents --topo-order --reverse`). A history longer than `limit` throws. */
+export async function commitChain(target: GitTarget, head: string, limit = 2000): Promise<ChainEntry[]> {
+  requireSha("head", head);
+  if (!Number.isInteger(limit) || limit < 1) throw new Error("limit must be a positive integer");
+  const args = ["rev-list", "--parents", "--topo-order", "--reverse", `--max-count=${limit + 1}`, head];
+  const chain = (await git(target, args))
+    .toString("utf8")
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const [sha = "", ...parents] = line.split(" ");
+      return { sha, parents };
+    });
+  if (chain.length > limit) throw new Error(`the commit chain is longer than ${limit}`);
+  return chain;
+}
+
+const TREE_RECORD = /^(\d{6}) (blob|commit) ([0-9a-f]{40})\t([\s\S]+)$/;
+
+/** Every path of the tree of `sha` with mode, type and id (`ls-tree -r -z --full-tree`), as strict UTF-8 like `treePaths`. */
+export async function treeEntries(target: GitTarget, sha: string): Promise<TreeEntryInfo[]> {
+  requireSha("sha", sha);
+  const out = await git(target, ["ls-tree", "-r", "-z", "--full-tree", sha]);
+  const entries: TreeEntryInfo[] = [];
+  for (const record of decodeUtf8Strict(out).split("\0")) {
+    if (record === "") continue;
+    const match = TREE_RECORD.exec(record);
+    if (match === null) throw new Error("unexpected `git ls-tree` output");
+    const [, mode = "", type = "", id = "", path = ""] = match;
+    entries.push({ mode, type: type === "commit" ? "commit" : "blob", sha: id, path });
+  }
+  return entries;
+}
+
+/**
+ * The bytes of each distinct blob of `shas` from one `cat-file --batch`. Content over `maxTotalBytes` throws `HostGitError`
+ * `output_limit` (declared sizes are checked as well as the output cap), a missing object or a non-blob throws, an empty list
+ * returns an empty map without starting git.
+ */
+export async function readBlobs(
+  target: GitTarget,
+  shas: readonly string[],
+  maxTotalBytes: number,
+): Promise<Map<string, Buffer>> {
+  const unique = [...new Set(shas)];
+  for (const sha of unique) requireSha("blob", sha);
+  const blobs = new Map<string, Buffer>();
+  if (unique.length === 0) return blobs;
+  const raw = await git(target, ["cat-file", "--batch"], {
+    input: `${unique.join("\n")}\n`,
+    maxOutputBytes: maxTotalBytes + 100 * unique.length,
+  });
+  let offset = 0;
+  let total = 0;
+  for (const sha of unique) {
+    const eol = raw.indexOf(0x0a, offset);
+    if (eol < 0) throw new Error("unexpected git cat-file output");
+    const [id, type, length] = raw.subarray(offset, eol).toString("utf8").split(" ");
+    const size = Number(length);
+    if (id !== sha || type !== "blob" || !Number.isInteger(size) || size < 0) {
+      throw new Error("unexpected git cat-file output");
+    }
+    total += size;
+    if (total > maxTotalBytes) throw new HostGitError("output_limit");
+    blobs.set(sha, Buffer.from(raw.subarray(eol + 1, eol + 1 + size)));
+    offset = eol + 1 + size + 1;
+  }
+  return blobs;
+}
+
 function requireAbsolute(label: string, path: string): void {
   if (!isAbsolute(path)) throw new Error(`${label} must be an absolute path`);
 }
@@ -415,5 +550,120 @@ export async function fsckStrict(target: GitTarget): Promise<boolean> {
   } catch (error) {
     if (error instanceof HostGitError && (error.code === "git_failed" || error.code === "output_limit")) return false;
     throw error;
+  }
+}
+
+/**
+ * The sha behind a bundle's header, only when the header lists exactly one ref and that ref is named `HEAD`. The
+ * container's script bundles `HEAD` and nothing else; a bundle with branches, tags or a second head was not made by that
+ * script, and its ref names are never trusted, so every other shape (and a file git cannot read) is null. No object is read.
+ */
+export async function bundleHeadSha(target: GitTarget, bundleFile: string): Promise<string | null> {
+  requireAbsolute("bundle file", bundleFile);
+  let listing: Buffer;
+  try {
+    listing = await git(target, ["bundle", "list-heads", bundleFile], { maxOutputBytes: SMALL_OUTPUT_BYTES });
+  } catch (error) {
+    if (error instanceof HostGitError && (error.code === "git_failed" || error.code === "output_limit")) return null;
+    throw error;
+  }
+  const lines = listing
+    .toString("utf8")
+    .split("\n")
+    .filter((line) => line.length > 0);
+  if (lines.length !== 1) return null;
+  return /^([0-9a-f]{40}) HEAD$/.exec(lines[0] ?? "")?.[1] ?? null;
+}
+
+export interface ReachableObject {
+  sha: string;
+  type: "commit" | "tree" | "blob";
+}
+
+/**
+ * Every commit, tree and blob reachable from `head`, once each (`rev-list --objects`, then `cat-file --batch-check` for the
+ * type). A gitlink is not followed: its object is not in the repository. More than `limit` objects throws
+ * `HostGitError("output_limit")`, the same code as git's own output cap, so a caller treats both as "too large to scan".
+ */
+export async function reachableObjects(target: GitTarget, head: string, limit: number): Promise<ReachableObject[]> {
+  requireSha("head", head);
+  if (!Number.isInteger(limit) || limit < 1) throw new Error("limit must be a positive integer");
+  const listing = await git(target, ["rev-list", "--objects", head]);
+  const shas = listing
+    .toString("utf8")
+    .split("\n")
+    .map((line) => line.split(" ", 1)[0] ?? "")
+    .filter((sha) => sha.length > 0);
+  if (shas.length > limit) throw new HostGitError("output_limit");
+  if (shas.length === 0) return [];
+  const typed = await git(target, ["cat-file", "--batch-check=%(objectname) %(objecttype)"], {
+    input: `${shas.join("\n")}\n`,
+  });
+  const lines = typed
+    .toString("utf8")
+    .split("\n")
+    .filter((line) => line.length > 0);
+  if (lines.length !== shas.length) throw new HostGitError("git_failed");
+  return lines.map((line, index) => {
+    const [sha, type] = line.split(" ");
+    if (sha === undefined || sha !== shas[index] || (type !== "commit" && type !== "tree" && type !== "blob")) {
+      throw new HostGitError("git_failed");
+    }
+    return { sha, type };
+  });
+}
+
+export interface BatchObject {
+  sha: string;
+  type: string;
+  bytes: Buffer;
+}
+
+const BATCH_OBJECTS = 256;
+const BATCH_HEADER_BYTES = 128;
+
+/**
+ * The raw bytes of each object, in the order asked, read with `cat-file --batch` on stdin: no checkout, no textconv, no
+ * filter. 256 objects per git call keeps memory bounded; the total of object sizes over `maxTotalBytes` throws
+ * `HostGitError("output_limit")`. An object that is missing, or output that does not parse, throws `HostGitError("git_failed")`:
+ * a safety scan that cannot read an object has not scanned it, and the caller must not call that clean.
+ */
+export async function* readObjectsBatch(
+  target: GitTarget,
+  shas: readonly string[],
+  maxTotalBytes: number,
+): AsyncGenerator<BatchObject> {
+  for (const sha of shas) requireSha("object", sha);
+  if (!Number.isInteger(maxTotalBytes) || maxTotalBytes < 0) {
+    throw new Error("maxTotalBytes must be a non-negative integer");
+  }
+  let total = 0;
+  for (let from = 0; from < shas.length; from += BATCH_OBJECTS) {
+    const chunk = shas.slice(from, from + BATCH_OBJECTS);
+    const raw = await git(target, ["cat-file", "--batch"], {
+      input: `${chunk.join("\n")}\n`,
+      maxOutputBytes: Math.max(0, maxTotalBytes - total) + chunk.length * BATCH_HEADER_BYTES,
+    });
+    let offset = 0;
+    for (const sha of chunk) {
+      const eol = raw.indexOf(0x0a, offset);
+      if (eol < 0) throw new HostGitError("git_failed");
+      const [name, type, length] = raw.subarray(offset, eol).toString("utf8").split(" ");
+      const size = Number(length);
+      if (
+        name !== sha ||
+        type === undefined ||
+        type === "missing" ||
+        !Number.isInteger(size) ||
+        size < 0 ||
+        eol + 1 + size > raw.length
+      ) {
+        throw new HostGitError("git_failed");
+      }
+      total += size;
+      if (total > maxTotalBytes) throw new HostGitError("output_limit");
+      yield { sha, type, bytes: raw.subarray(eol + 1, eol + 1 + size) };
+      offset = eol + 1 + size + 1;
+    }
   }
 }

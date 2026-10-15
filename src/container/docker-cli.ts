@@ -24,12 +24,20 @@ import {
   type ImageInfo,
   type OwnedResource,
   RuntimeError,
+  type SecretHandle,
 } from "./runtime.js";
-import { isImageId } from "./spec.js";
+import { ContainerSpecError, isImageId } from "./spec.js";
 
 export type DockerRunner = (
   argv: readonly string[],
-  options: { stdin?: string | Buffer; timeoutMs: number; maxOutputBytes: number; tailOnly?: boolean },
+  options: {
+    stdin?: string | Buffer;
+    timeoutMs: number;
+    maxOutputBytes: number;
+    tailOnly?: boolean;
+    /** Added to the client's environment for this one child only (a secret exec); the base environment stays PATH and DOCKER_CONFIG. */
+    env?: Readonly<Record<string, string>>;
+  },
 ) => Promise<ProcessResult>;
 
 export interface DockerRuntimeOptions {
@@ -79,6 +87,15 @@ function failureText(result: ProcessResult): string {
     case "error":
       return result.message.slice(0, FAILURE_CAP);
   }
+}
+
+/** The value for one exec. A value the docker client could not carry faithfully is refused before any process starts. */
+function secretValue(secret: SecretHandle): string {
+  const value = secret.reveal();
+  if (value === "" || value.includes("\0") || value.includes("\n") || value.includes("\r")) {
+    throw new ContainerSpecError("invalid_exec");
+  }
+  return value;
 }
 
 function parseJson(text: string): unknown {
@@ -141,7 +158,13 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
   const callerEnv = options.env ?? process.env;
   const env = dockerEnv(callerEnv, options.dockerConfig ?? resolveDockerConfig(callerEnv));
   const run: DockerRunner =
-    options.run ?? ((argv, limits) => runProcessGroup(["docker", ...argv], { cwd: tmpdir(), env, ...limits }));
+    options.run ??
+    ((argv, { env: extra, ...limits }) =>
+      runProcessGroup(["docker", ...argv], {
+        cwd: tmpdir(),
+        env: extra === undefined ? env : { ...env, ...extra },
+        ...limits,
+      }));
   const runSync =
     options.runSync ??
     ((argv: readonly string[]) => {
@@ -260,6 +283,11 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
 
     async exec(handle, spec) {
       const name = await requireLocal();
+      const { secret } = spec;
+      // Candidate code runs in every other role, and it can read whatever its container is given: only the
+      // implementer, which is measured for that, ever receives a key.
+      if (secret !== undefined && handle.role !== "implementer") throw new ContainerSpecError("invalid_exec");
+      // The argv is built (and `spec.env` and the secret name validated) before the value is read.
       const argv = execArgv(
         handle.name,
         {
@@ -267,11 +295,13 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
           stdin: spec.stdin !== undefined,
           ...(spec.workdir === undefined ? {} : { workdir: spec.workdir }),
           ...(spec.env === undefined ? {} : { env: spec.env }),
+          ...(secret === undefined ? {} : { secret: secret.name }),
         },
         name,
       );
       return run(argv, {
         ...(spec.stdin === undefined ? {} : { stdin: spec.stdin }),
+        ...(secret === undefined ? {} : { env: { [secret.name]: secretValue(secret) } }),
         timeoutMs: spec.timeoutMs,
         maxOutputBytes: spec.maxOutputBytes,
       });

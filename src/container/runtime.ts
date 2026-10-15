@@ -1,6 +1,6 @@
 import type { ProcessResult } from "../adapters/process-group.js";
 import type { PinnedImage } from "./image-ref.js";
-import type { ContainerRole, ContainerSpec, ImageId, OwnedLabels } from "./spec.js";
+import type { ContainerRole, ContainerSpec, ImageId, OwnedLabels, SecretEnvName } from "./spec.js";
 
 export interface EndpointInfo {
   kind: "unix" | "tcp" | "ssh" | "other";
@@ -30,11 +30,23 @@ export interface OwnedResource {
   run_id: string;
 }
 
+/**
+ * The container layer's view of a secret. The value is reachable only through `reveal()`, which the docker adapter
+ * calls once, for the one child process that needs it; the handle itself prints as a mask, so a log line, a thrown
+ * message or a serialized spec cannot carry the value.
+ */
+export interface SecretHandle {
+  readonly name: SecretEnvName;
+  reveal(): string;
+}
+
 export interface ExecSpec {
   argv: readonly string[];
   stdin?: string | Buffer;
   workdir?: string;
   env?: Readonly<Record<string, string>>;
+  /** Passed as a name-only `--env`; the docker client reads the value from its own environment for this one call. `env` refuses secret names. */
+  secret?: SecretHandle;
   timeoutMs: number;
   maxOutputBytes: number;
 }

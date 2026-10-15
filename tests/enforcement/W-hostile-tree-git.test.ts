@@ -95,6 +95,29 @@ describe("W-hostile-tree-git", () => {
     seen.push((await call("unifiedDiff", () => ops.unifiedDiff(quarantine, base, head))).toString("latin1"));
     seen.push(await call("commitMessages", () => ops.commitMessages(quarantine, base, head)));
     seen.push((await call("treePaths", () => ops.treePaths(quarantine, head))).join("\n"));
+    const listed = await call("treeEntries", () => ops.treeEntries(quarantine, head));
+    seen.push(JSON.stringify(listed));
+    seen.push((await call("treeSha", () => ops.treeSha(quarantine, head))) ?? "");
+    seen.push((await call("blobId", () => ops.blobId(quarantine, head, "src/a.ts"))) ?? "");
+    const blob = await call("readBlob", () => ops.readBlob(quarantine, head, "src/a.ts", 4096));
+    seen.push((blob ?? Buffer.alloc(0)).toString("latin1"));
+    seen.push(JSON.stringify(await call("commitChain", () => ops.commitChain(quarantine, head))));
+    const shas = listed.map((entry) => entry.sha);
+    const blobs = await call("readBlobs", () => ops.readBlobs(quarantine, shas, 1024 * 1024));
+    seen.push([...blobs.values()].map((bytes) => bytes.toString("latin1")).join("\n"));
+    const headBundle = join(root, "hostile-head.bundle");
+    gitIn(work, "bundle", "create", headBundle, "HEAD");
+    expect(await call("bundleHeadSha", () => ops.bundleHeadSha(quarantine, headBundle))).toBe(head);
+    const reachable = await call("reachableObjects", () => ops.reachableObjects(quarantine, head, 10_000));
+    seen.push(JSON.stringify(reachable));
+    const batch = await call("readObjectsBatch", async () => {
+      const texts: string[] = [];
+      const shas = reachable.map((entry) => entry.sha);
+      for await (const item of ops.readObjectsBatch(quarantine, shas, 1024 * 1024))
+        texts.push(item.bytes.toString("latin1"));
+      return texts;
+    });
+    seen.push(batch.join("\n"));
     const tarFile = join(root, "head.tar");
     await call("archiveTar", () => ops.archiveTar(quarantine, head, tarFile));
     seen.push(spawnSync("tar", ["-tf", tarFile], { encoding: "utf8" }).stdout);

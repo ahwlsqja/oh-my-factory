@@ -23,6 +23,7 @@ import { type GateRunResult, runGates } from "../gate/run-gates.js";
 import { auditGoal } from "../goal/audit.js";
 import { type GitTarget, HostGitError } from "../git/hardened.js";
 import { commitMessages, unifiedDiff } from "../git/ops.js";
+import { projectionPathsFor } from "../implementer/context-files.js";
 import { loadRunIsolation } from "../isolation/record.js";
 import { ScenarioStatusError, foldSeals, markScenarioStatus } from "../scenario/events.js";
 import { locationEnv } from "../vault/line-guard.js";
@@ -57,7 +58,6 @@ export interface S5Deps {
   steps?: Partial<{ runGates: typeof runGates; proveTest: typeof proveTest; runAudit: typeof runAudit }>;
 }
 
-const PROJECTION_PATHS: readonly string[] = ["spec.md", "intent.md"];
 /** Built here from the quarantine and the slot, so a candidate cannot pass off its own copy of them. */
 const OWN_SURFACES: readonly SurfaceKind[] = ["diff", "commit_messages", "feedback"];
 
@@ -212,7 +212,7 @@ export function s5Station(deps: S5Deps): Station {
           extraGlobs: EXTRA_HIGH_RISK_GLOBS,
           judge,
           explicitTestPaths: explicit,
-          projectionPaths: PROJECTION_PATHS,
+          projectionPaths: projectionPathsFor(ctx.workId),
           canaries: [...new Set([...listed.index.map((entry) => entry.canary), ...listed.unverified_canaries])].sort(),
           surfaces,
           proveTest: prove,

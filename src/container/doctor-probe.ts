@@ -98,7 +98,7 @@ export function containerIsolationProbe(options: ProbeOptions = {}): IsolationPr
       image: pinnedImage(judge.sut_base_image),
       labels: { work_id: PROBE_WORK_ID, run_id: (options.runId ?? (() => freshRunId(clock())))(), round: 0 },
       serial: 1,
-      judge,
+      limits: { kind: "judge", judge },
     });
     const golden = goldenFor({ role: "sut", image, forbidden: forbiddenPaths(project.location, env) });
     const result = measureThrowawaySync({ runtime, now: clock }, spec, golden);

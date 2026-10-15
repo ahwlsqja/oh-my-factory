@@ -218,7 +218,7 @@ function inspectDoc(state, container, hooks) {
   return doc;
 }
 
-function exec(state, args, stdin, hooks) {
+function exec(state, args, stdin, hooks, clientEnv) {
   const parsed = parseFlags(args, EXEC);
   if (parsed.error) return fail(parsed.error, 125);
   const [name, ...argv] = parsed.rest;
@@ -226,7 +226,16 @@ function exec(state, args, stdin, hooks) {
   if (container === undefined) return fail(`Error response from daemon: No such container: ${name}`);
   if (!container.running) return fail(`Error response from daemon: container ${name} is not running`);
   if (argv.length === 0) return fail("fake: exec needs a command", 125);
-  const env = Object.fromEntries(valuesOf(parsed, "--env").map((pair) => splitPair(pair, "=")));
+  // Docker resolves a name-only `--env NAME` from the client's own environment and drops it when unset.
+  const env = {};
+  for (const pair of valuesOf(parsed, "--env")) {
+    if (pair.includes("=")) {
+      const [key, value] = splitPair(pair, "=");
+      env[key] = value;
+    } else if (Object.hasOwn(clientEnv, pair)) {
+      env[pair] = clientEnv[pair];
+    }
+  }
   const call = { name, argv, stdin, workdir: valuesOf(parsed, "--workdir").at(-1) ?? null, env };
   return hooks.exec ? hooks.exec(call) : out();
 }
@@ -234,8 +243,9 @@ function exec(state, args, stdin, hooks) {
 /**
  * Runs one docker command line (the argv after the program name). `stdin` is a Buffer, a string or null; `hooks.exec`
  * answers `docker exec` (default: exit 0, no output) and `hooks.inspect` may edit a container's inspect document.
+ * `clientEnv` is the docker client's environment, read only for a name-only `--env`.
  */
-export function handle(state, argv, stdin = null, hooks = {}) {
+export function handle(state, argv, stdin = null, hooks = {}, clientEnv = {}) {
   const input = stdin === null ? null : Buffer.from(stdin);
   const args = [...argv];
   let context = null;
@@ -322,7 +332,7 @@ export function handle(state, argv, stdin = null, hooks = {}) {
         : out(`${JSON.stringify([imageDoc(image)])}\n`);
     }
     case "exec":
-      return exec(state, rest, input, hooks);
+      return exec(state, rest, input, hooks, clientEnv);
     case "rm": {
       const parsed = parseFlags(rest, REMOVE);
       if (parsed.error) return fail(parsed.error, 125);

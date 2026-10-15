@@ -12,7 +12,7 @@ judge (`docs/container-judge.md`) supplies a container-backed one.
 | Hardened host git | `src/git/hardened.ts` | Git is always addressed with an explicit `--git-dir`; a `.git`, hook, config or symlink written by a container is data, never configuration. |
 | Gate line | `src/gate/gate-line.ts` | `OMF_GATES: fast=pass full=pass deep=skip`. A required gate that is skipped, empty, absent, duplicated or unknown makes the line `MISCONFIGURED`; an empty gate (zero rules) is not a pass. |
 | prove-test | `src/gate/prove-test.ts` | Reverts the non-test part of the diff in a throwaway copy and expects the tests to fail. A test that passes without the fix is `FAILED`. |
-| Audit | `src/audit/work-audit.ts` | Tests edited, judge config touched, `spec.md` or `intent.md` diffs, canary hits on implementer-side surfaces, and a risk recompute that can only raise. |
+| Audit | `src/audit/work-audit.ts` | Tests edited, judge config touched, edits to this work item's projections, `.omf/<work-id>/spec.md` and `.omf/<work-id>/intent.md` (a repository's own root `spec.md` is an ordinary file and does not count), canary hits on implementer-side surfaces, and a risk recompute that can only raise. |
 | Isolation types | `src/isolation/types.ts` | Per stage (`author`, `implementer`, `sut`, `harness`) measurements. The stage level is the minimum over its measurements and the run level is the minimum over the stages, with `unmeasured` lowest. |
 | GATE-3 | `src/gate/gate3.ts` | A pure function over what was measured. |
 | GATE-3 adapter | `src/gate/gate3-gate.ts` | Registered in `defaultGates()`. Reads the round's gate run, audit, judge and isolation events from the ledger and the item directory, nothing else. |

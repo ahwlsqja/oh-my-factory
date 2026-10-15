@@ -360,3 +360,111 @@ describe("bundle import without a transport", () => {
     expect(stderr).toContain("transport 'file' not allowed");
   });
 });
+
+describe("tree, blob and chain reads", () => {
+  it("treeSha and blobId resolve shas and plain paths, are null for what is absent, and refuse a path that is not plain", async () => {
+    expect(await ops.treeSha(fx.quarantine, fx.head)).toBe(gitIn(fx.work, "rev-parse", "HEAD^{tree}").trim());
+    expect(await ops.treeSha(fx.quarantine, "0".repeat(40))).toBeNull();
+    await expect(ops.treeSha(fx.quarantine, "main")).rejects.toThrow("sha must be a 40-hex commit sha");
+    expect(await ops.blobId(fx.quarantine, fx.base, "src/a.ts")).toBe(
+      gitIn(fx.work, "rev-parse", `${fx.base}:src/a.ts`).trim(),
+    );
+    expect(await ops.blobId(fx.quarantine, fx.base, "src/nope.ts")).toBeNull();
+    for (const bad of ["", "../a", "./src/a.ts", "src//a.ts", "/src/a.ts", "a\nb"]) {
+      await expect(ops.blobId(fx.quarantine, fx.base, bad), JSON.stringify(bad)).rejects.toThrow(
+        "path must be a plain path inside the tree",
+      );
+    }
+  });
+
+  it("readBlob returns raw bytes, null for a missing path or a directory, and refuses a blob over the cap", async () => {
+    expect(await ops.readBlob(fx.quarantine, fx.base, "latin1.txt", 1024)).toEqual(Buffer.from("café 1\n", "latin1"));
+    expect(await ops.readBlob(fx.quarantine, fx.base, "src/nope.ts", 1024)).toBeNull();
+    expect(await ops.readBlob(fx.quarantine, fx.base, "src", 1024)).toBeNull();
+    expect(await ops.readBlob(fx.quarantine, fx.base, "bin.dat", 200)).toHaveLength(200);
+    expect(await codeOf(ops.readBlob(fx.quarantine, fx.base, "bin.dat", 100))).toBe("output_limit");
+  });
+
+  it("commitChain lists a history oldest first with parents and refuses one longer than the limit", async () => {
+    expect(await ops.commitChain(fx.quarantine, fx.head)).toEqual([
+      { sha: fx.base, parents: [] },
+      { sha: fx.head, parents: [fx.base] },
+    ]);
+    await expect(ops.commitChain(fx.quarantine, fx.head, 1)).rejects.toThrow("longer than 1");
+  });
+
+  it("treeEntries lists every path with mode and type, and readBlobs reads each distinct blob once and fails closed", async () => {
+    const entries = await ops.treeEntries(fx.quarantine, fx.head);
+    const byPath = new Map(entries.map((entry) => [entry.path, entry]));
+    expect(byPath.get("l.txt")).toMatchObject({ mode: "120000", type: "blob" });
+    expect(byPath.get("run.sh")).toMatchObject({ mode: "100755", type: "blob" });
+    expect(byPath.get("*")?.mode).toBe("100644");
+
+    const shas = entries.map((entry) => entry.sha);
+    const blobs = await ops.readBlobs(fx.quarantine, shas, 1024 * 1024);
+    expect(blobs.get(byPath.get("l.txt")?.sha ?? "")?.toString("utf8")).toBe("src/a.ts");
+    expect(blobs.size).toBe(new Set(shas).size);
+    expect(await codeOf(ops.readBlobs(fx.quarantine, shas, 10))).toBe("output_limit");
+    const unexpected = "unexpected git cat-file output";
+    await expect(ops.readBlobs(fx.quarantine, ["0".repeat(40)], 1024)).rejects.toThrow(unexpected);
+    await expect(ops.readBlobs(fx.quarantine, [fx.head], 1024)).rejects.toThrow(unexpected);
+    expect((await ops.readBlobs(fx.quarantine, [], 10)).size).toBe(0);
+  });
+});
+
+describe("bundle heads and reachable objects (candidate import)", () => {
+  it("bundleHeadSha names the commit of a bundle whose only ref is HEAD and returns null for every other shape", async () => {
+    const dir = realTempDir("omf-headsha-");
+    const make = (name: string, ...refs: string[]): string => {
+      const file = join(dir, `${name}.bundle`);
+      gitIn(fx.work, "bundle", "create", file, ...refs);
+      return file;
+    };
+    const junk = join(dir, "junk.bundle");
+    writeFileSync(junk, "not a bundle\n");
+    const quarantine = makeEmptyQuarantine();
+    expect(await ops.bundleHeadSha(quarantine, make("head", "HEAD"))).toBe(fx.head);
+    expect(await ops.bundleHeadSha(quarantine, make("named", "main"))).toBeNull();
+    expect(await ops.bundleHeadSha(quarantine, make("both", "HEAD", "main"))).toBeNull();
+    expect(await ops.bundleHeadSha(quarantine, junk)).toBeNull();
+    await expect(ops.bundleHeadSha(quarantine, "head.bundle")).rejects.toThrow("bundle file must be an absolute path");
+  });
+
+  it("reachableObjects lists every commit, tree and blob reachable from the head, once, and stops at the limit", async () => {
+    const objects = await ops.reachableObjects(fx.quarantine, fx.head, 10_000);
+    const expected = gitIn(fx.work, "rev-list", "--objects", fx.head)
+      .split("\n")
+      .filter((line) => line.length > 0)
+      .map((line) => line.split(" ")[0]);
+    expect(objects.map((object) => object.sha).sort()).toEqual([...expected].sort());
+    const blob = gitIn(fx.work, "rev-parse", `${fx.head}:src/a.ts`).trim();
+    expect(objects.find((object) => object.sha === fx.head)?.type).toBe("commit");
+    expect(objects.find((object) => object.sha === blob)?.type).toBe("blob");
+    expect(objects.some((object) => object.type === "tree")).toBe(true);
+    expect(await codeOf(ops.reachableObjects(fx.quarantine, fx.head, 3))).toBe("output_limit");
+  });
+
+  it("readObjectsBatch yields the raw bytes of each object in order and stops at the byte cap", async () => {
+    const blob = gitIn(fx.work, "rev-parse", `${fx.head}:src/a.ts`).trim();
+    const seen: Array<{ sha: string; type: string; text: string }> = [];
+    for await (const object of ops.readObjectsBatch(fx.quarantine, [fx.head, blob], 1024 * 1024)) {
+      seen.push({ sha: object.sha, type: object.type, text: object.bytes.toString("utf8") });
+    }
+    expect(seen.map((object) => [object.sha, object.type])).toEqual([
+      [fx.head, "commit"],
+      [blob, "blob"],
+    ]);
+    expect(seen[0]?.text).toContain("head: edit src");
+    expect(seen[1]?.text).toBe("export const a = 2;\n");
+
+    const read = async (shas: string[], cap: number): Promise<number> => {
+      let bytes = 0;
+      for await (const object of ops.readObjectsBatch(fx.quarantine, shas, cap)) bytes += object.bytes.length;
+      return bytes;
+    };
+    expect(await codeOf(read([blob], 5))).toBe("output_limit");
+    expect(await codeOf(read([fx.head], 5))).toBe("output_limit");
+    expect(await codeOf(read(["0".repeat(40)], 1024))).toBe("git_failed");
+    await expect(read(["main"], 1024)).rejects.toThrow("object must be a 40-hex commit sha");
+  });
+});

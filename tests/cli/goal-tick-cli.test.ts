@@ -25,6 +25,20 @@ function expectQuiet(...results: { stdout: string; stderr: string }[]): void {
   }
 }
 
+describe("omf goal tick: a codex implementer in the config", () => {
+  it("still ticks, because the config accepts it and only the implementer station refuses", () => {
+    const fx = setupLoopGoal();
+    const file = join(fx.location.dir, "config.toml");
+    const text = readFileSync(file, "utf8");
+    const swapped = text.replace('implementer = { vendor = "claude" }', 'implementer = { vendor = "codex" }');
+    expect(swapped).not.toBe(text);
+    writeFileSync(file, swapped);
+    const result = tick(fx);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toMatch(/^goal g-fast: tick t-\S+ continue \(dispatched\)$/m);
+  });
+});
+
 describe("omf goal tick: output and exit codes", () => {
   it("dispatches, prints ids and veto commands but no values or titles, warns about the host runner, exits 0", () => {
     const fx = setupLoopGoal();
