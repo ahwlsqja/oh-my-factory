@@ -110,9 +110,10 @@ or **designed** and not built yet.
 - **Holdout, not homework.** *Designed.* Acceptance scenarios are sealed, written by the other
   vendor, and never shown to the implementer.
 - **Isolation is measured, not declared.** *Partly built.* The per-stage measurement types, the stage
-  evaluator and GATE-3 exist and are tested without a container. The line does not call GATE-3 yet: it
-  still reads as a placeholder, so until the container stations are wired in, every full run stops at GATE-3 as
-  not run. A level measured on a real container is not enforced yet; `omf doctor` reports it as advisory: without a
+  evaluator and GATE-3 exist and are tested without a container. The line runs GATE-3, which reads only the
+  ledger; no station records a judge verdict or a container measurement yet, so until the container stations
+  are wired in, every full run stops at GATE-3 as unmeasured. A level measured on a real container is not
+  enforced yet; `omf doctor` reports it as advisory: without a
   `[judge]` section it says `unmeasurable` ("judge.docker_context is not set, so no container runtime is used"), and
   with one it measures a throwaway container and reports L2 or L1 (`docs/isolation-and-gates.md`).
 - **Empty means fail.** *Partly built.* The line skeleton (`E7a`), GATE-2 (`E7b`) and the gate line, the

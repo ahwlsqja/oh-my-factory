@@ -1,8 +1,11 @@
 import type { RoundScope, WorkAudit } from "../audit/work-audit.js";
-import type { NewEvent } from "../core/ledger.js";
+import { canonicalize } from "../core/canonical-json.js";
+import type { LedgerEvent, NewEvent } from "../core/ledger.js";
 import { validate } from "../core/schema.js";
+import type { GateName } from "../decision/types.js";
 import type { StageMeasurement } from "../isolation/types.js";
 import type { RiskClass, RiskRule } from "../work/types.js";
+import type { GateLineVerdict } from "./gate-line.js";
 import type { ProveReason, ProveStatus } from "./prove-test.js";
 import type { GateRunResult } from "./run-gates.js";
 import type { Gate3Result } from "./gate3.js";
@@ -135,4 +138,39 @@ export function gate3EvaluatedEvent(scope: RoundScope, result: Gate3Result): New
   const check = validate("gate-event.schema.json", { type: "gate3.evaluated", payload });
   if (!check.ok) throw new Error(`invalid gate3.evaluated event: ${check.errors}`);
   return { actor: "omf", type: "gate3.evaluated", payload };
+}
+
+interface GatesEvaluatedPayload {
+  line: string;
+  status: GateLineVerdict["status"];
+  failing: GateName[];
+  misconfigured: GateName[];
+  reasons: GateLineVerdict["reasons"];
+}
+
+/**
+ * The gate verdict of one round from the ledger alone: the schema-valid `gates.evaluated` events of actor `omf` for this
+ * run and round. None is null (GATE-3 reads no gate run); two that disagree are null too, so a later event never replaces
+ * the first.
+ */
+export function gatesVerdictFromEvents(
+  events: readonly LedgerEvent[],
+  scope: RoundScope,
+): Pick<GateRunResult, "verdict"> | null {
+  let found: Record<string, unknown> | null = null;
+  for (const event of events) {
+    if (event.type !== "gates.evaluated" || event.actor !== "omf") continue;
+    const p = event.payload;
+    if (p.goal_id !== scope.goal_id || p.work_id !== scope.work_id) continue;
+    if (p.run_id !== scope.run_id || p.round !== scope.round) continue;
+    if (!validate("gate-event.schema.json", { type: event.type, payload: p }).ok) continue;
+    if (found !== null && canonicalize(found) !== canonicalize(p)) return null;
+    found = p;
+  }
+  if (found === null) return null;
+  const payload = found as unknown as GatesEvaluatedPayload;
+  const { status, line } = payload;
+  const failing = [...payload.failing];
+  const misconfigured = [...payload.misconfigured];
+  return { verdict: { status, line, failing, misconfigured, reasons: [...payload.reasons] } };
 }

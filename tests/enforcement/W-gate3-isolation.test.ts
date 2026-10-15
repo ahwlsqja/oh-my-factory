@@ -8,6 +8,8 @@ import { isolationPath, loadRunIsolation, recordStageMeasurement } from "../../s
 import { ISOLATION_STAGES, type IsolationLevel, type IsolationStage, runIsolation } from "../../src/isolation/types.js";
 import { ALL_L2, RUN, SCOPE, healthyParts, isolationFor, measurement } from "../helpers/gate3-parts.js";
 import { makeTempDir } from "../helpers/tmp.js";
+import { gate3Gate } from "../../src/gate/gate3-gate.js";
+import { arrangeHealthy, setupGate3 } from "../helpers/gate3-line.js";
 
 // Spec §5.0 (GATE-3) and §7 (J7): the run's isolation level is the minimum over its stages, a stage nobody
 // measured is `unmeasured` (the lowest), and nothing but the ledger events decides it: not the declared level, not
@@ -111,5 +113,17 @@ describe("W-gate3-unmeasured-is-lowest", () => {
     // @ts-expect-error GATE-3 reads a RunIsolation built from ledger events, not an advisory preflight claim
     const wrong = () => measuredFrom(healthyParts({ isolation: preflight }));
     void wrong;
+  });
+});
+
+describe("W-gate3-isolation through the registered gate", () => {
+  it("sut and harness alone are unmeasured; with author and implementer events a test appends (a seam) it passes", async () => {
+    const two = setupGate3();
+    arrangeHealthy(two, { levels: { sut: "L2", harness: "L2" } });
+    const failed = await gate3Gate().evaluate(two.ctx());
+    expect(failed).toEqual({ gate: "GATE-3", verdict: "fail", reasons: ["isolation_unmeasured"] });
+    const four = setupGate3();
+    arrangeHealthy(four); // the test appends the author and implementer events; no station measures them yet
+    expect(await gate3Gate().evaluate(four.ctx())).toEqual({ gate: "GATE-3", verdict: "pass", reasons: [] });
   });
 });

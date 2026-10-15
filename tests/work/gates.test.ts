@@ -249,16 +249,18 @@ describe("default gates", () => {
     }
   });
 
-  it("registers GATE-1 and GATE-2 real and GATE-3 unimplemented, each under its own id", async () => {
+  it("registers the real GATE-1, GATE-2 and GATE-3, each under its own id", async () => {
     const gates = defaultGates();
     expect(Object.keys(gates).sort()).toEqual(["GATE-1", "GATE-2", "GATE-3"]);
     for (const [key, gate] of Object.entries(gates)) expect(gate.id).toBe(key);
     // GATE-2 is the real gate, not the placeholder: it does not answer not_implemented (the real one needs a real item, so it is only registered here).
     expect(gates["GATE-2"].evaluate.toString()).not.toBe(unimplementedGate("GATE-2").evaluate.toString());
+    // GATE-3 is the real gate too. A context with no item or location cannot be read: a gate error, never a pass.
+    expect(gates["GATE-3"].evaluate.toString()).not.toBe(unimplementedGate("GATE-3").evaluate.toString());
     expect(await gates["GATE-3"].evaluate(bareContext())).toEqual({
       gate: "GATE-3",
       verdict: "not_run",
-      reasons: ["not_implemented"],
+      reasons: ["gate_error"],
     });
   });
 
