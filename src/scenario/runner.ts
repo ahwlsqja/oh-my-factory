@@ -22,11 +22,11 @@ export interface StepLimits {
 export const DEFAULT_STEP_LIMITS: StepLimits = { timeoutMs: 5000, maxOutputBytes: 1024 * 1024 };
 
 /**
- * Port between the judge and whatever runs the thing under test (M3c-D5). It returns an observation for one
+ * Port between the judge and whatever runs the thing under test. It returns an observation for one
  * step and never sees an expectation, so the host fixture adapter, the M3f container judge and a laptop run
  * are all judged by the same `evaluateExpect`.
  *
- * Step-state model (M3c-D19), identical for every adapter: the steps of ONE scenario share one scratch
+ * Step-state model, identical for every adapter: the steps of ONE scenario share one scratch
  * directory (cwd, HOME, TMPDIR and any file a step writes); every scenario starts in a fresh, empty one.
  */
 export interface ScenarioRunner {
@@ -43,7 +43,7 @@ export interface ScenarioSession {
   close(): Promise<void>;
 }
 
-/** `scenario_ref` is the only scenario handle that may reach the ledger (M3c-D10). */
+/** `scenario_ref` is the only scenario handle that may reach the ledger. */
 export type ScenarioRun = { scenario_ref: string; outcome: "pass" | "fail" | "error"; steps_passed: number; steps_total: number };
 
 /**

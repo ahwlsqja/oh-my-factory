@@ -6,7 +6,7 @@ import { foldSeals } from "./events.js";
 import { type Gate2Context, type Gate2Result, type Gate2Route, gate2EventFor, runGate2, sealFeedbackFor } from "./gate2.js";
 import type { SealFeedback } from "./types.js";
 
-/** The routes that end the line (M3c-D21); `back_to_S2` is the only one that loops. */
+/** The routes that end the line; `back_to_S2` is the only one that loops. */
 export type StopRoute = Exclude<Gate2Route, "back_to_S2">;
 export type Gate2Verdict = "pass" | "fail" | "not_run";
 /** The reason a throw that is not a guard refusal leaves behind. Matches `^[a-z0-9_]+$`, the shape M3b2 requires of gate reasons. */
@@ -23,7 +23,7 @@ export interface Gate2Outcome {
   reasons: string[];
   next: "continue" | "back_to_S2" | "stop";
   stop_route: StopRoute | null;
-  /** Decision ids and plain counts only (M3c-D12); null unless the route is back_to_S2. */
+  /** Decision ids and plain counts only; null unless the route is back_to_S2. */
   feedback: SealFeedback | null;
   /** Resolved quantitative decision ids: never run, never success (M3-D17). */
   not_run: string[];
@@ -50,7 +50,7 @@ export interface Gate2StepContext extends Gate2Context {
 
 /**
  * One GATE-2 evaluation as the line runs it: `runGate2` (reads and probes, appends nothing), then exactly one
- * `gate2.evaluated` (M3c-D7). A throw (a guard refusal, a damaged install, a runner that may not run) is
+ * `gate2.evaluated`. A throw (a guard refusal, a damaged install, a runner that may not run) is
  * `not_run`, stops at J7 and appends nothing, because nothing was evaluated. Its reason is the guard's closed code
  * for a guard refusal and `gate_error` for anything else. The event's digests are read
  * inside the append, from the same ledger the event joins. The line is the only writer during a pass.

@@ -5,7 +5,7 @@ import { realProjectDir, stateRoot } from "../core/safe-fs.js";
 import { CANARY_SEARCH } from "../scenario/types.js";
 
 /**
- * Poka-yoke (M3c rule 4, spec §8): OMF refuses to run while sealed material sits where the implementer can
+ * Poka-yoke (spec §11 rule 4, §8): OMF refuses to run while sealed material sits where the implementer can
  * read it, in the repository or in an OMF worktree. The scan is a plain recursive lstat walk. It runs no git
  * command (a worktree may be hostile, and M3e's hardened git does not exist yet) and never follows a symlink.
  *
@@ -49,7 +49,7 @@ export interface ScanOptions {
   knownCanaries?: ReadonlySet<string>;
 }
 
-/** A canary-shaped string found in a worktree. Data, not a refusal (M3c-D13): `known` = it is one of this vault's canaries. */
+/** A canary-shaped string found in a worktree. Data, not a refusal: `known` = it is one of this vault's canaries. */
 export interface CanaryHit {
   worktree: string;
   path: string;
@@ -207,7 +207,7 @@ function scanScope(scope: { repo: string | null; worktrees: readonly string[] },
 /**
  * Findings (these refuse):
  *  - an entry named vault/scenarios or vault/metrics (not descended into); goal.lock.json or m-<id>.lock.json
- *    (`metric_lock`); claim.lock, item.lock, approve.lock, seal.lock (the seal stage's lock, Task 10), ledger.lock, ledger.jsonl (`ledger_or_lock_file`);
+ *    (`metric_lock`); claim.lock, item.lock, approve.lock, seal.lock (the seal stage's lock), ledger.lock, ledger.jsonl (`ledger_or_lock_file`);
  *  - repository scope only: a regular file of at most maxFileBytes containing a canary (`canary`);
  *  - a symlink into the state root: always in the repository; in a worktree only when it also leaves that worktree;
  *  - ELOOP or any other read error, and more than maxEntries entries (`scan_incomplete`).
@@ -236,7 +236,7 @@ interface WorktreeLayout {
 }
 
 /**
- * The project's worktrees, read with lstat. T1's state-tree guard skips worktrees/ (links inside a working
+ * The project's worktrees, read with lstat. The state-tree guard skips worktrees/ (links inside a working
  * tree are normal), so a link standing in for a worktree, or for worktrees/ itself, is caught here.
  */
 function worktreeLayout(location: ProjectLocation, env: NodeJS.ProcessEnv): WorktreeLayout {
@@ -280,7 +280,7 @@ function fullScan(location: ProjectLocation, env: NodeJS.ProcessEnv): ScanResult
 /**
  * Throws PokaYokeError when the repository or an OMF worktree holds sealed material or could not be scanned
  * completely. Canary hits in worktrees are data and never throw. Called by runSealStage, runGate2, the decide
- * actions and (T11) the sequencer before every station.
+ * actions and the sequencer before every station.
  */
 export function assertNoSealedInRepo(location: ProjectLocation, env: NodeJS.ProcessEnv = process.env): void {
   const { findings } = fullScan(location, env);

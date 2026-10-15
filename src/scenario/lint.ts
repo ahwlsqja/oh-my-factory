@@ -9,7 +9,7 @@ import { isCanaryKind, scenarioRef } from "./types.js";
 import type { AuthorStamp, Expect, ScenarioStep, StoredScenario } from "./types.js";
 
 /**
- * Host-side lint of one sealed scenario set (spec §5.3, M3c-D8, M3c-D17, M3c-D19). Pure: the caller reads the vault and the
+ * Host-side lint of one sealed scenario set (spec §5.3). Pure: the caller reads the vault and the
  * ledger and passes the result in, so the same function judges a fresh seal, a re-read set and a test double.
  */
 
@@ -28,7 +28,7 @@ export type ScenarioProblemCode =
   | "canary_satisfiable"
   | "contradiction";
 
-/** `scenario_ref` and `decision_id` only; never the text that triggered the problem (M3c-D10, so a list of these is ledger-safe). */
+/** `scenario_ref` and `decision_id` only; never the text that triggered the problem (so a list of these is ledger-safe). */
 export interface ScenarioProblem {
   code: ScenarioProblemCode;
   scenario_ref: string | null;
@@ -151,7 +151,7 @@ interface Demand {
   exact: string | null;
 }
 
-/** sha256 of every {argv, stdin} from step 0 through step `upTo`: the state a step runs in is the sequence that led to it (M3c-D19). */
+/** sha256 of every {argv, stdin} from step 0 through step `upTo`: the state a step runs in is the sequence that led to it. */
 function prefixKey(steps: readonly ScenarioStep[], upTo: number): string {
   return sha256Hex(canonicalize(steps.slice(0, upTo + 1).map((step) => ({ argv: step.invoke.argv, stdin: step.invoke.stdin }))));
 }

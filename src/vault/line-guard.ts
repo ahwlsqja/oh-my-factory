@@ -13,8 +13,8 @@ export function locationEnv(location: ProjectLocation): NodeJS.ProcessEnv {
 }
 
 /**
- * The guard run at line entry, before every station and in the `decide` write actions (M3c rule 4, spec §8,
- * M3c-D13, D15): no symlink below the project state, and no sealed material in the repository or an OMF
+ * The guard run at line entry, before every station and in the `decide` write actions (spec §11 rule 4, §8): no symlink below the
+ * project state, and no sealed material in the repository or an OMF
  * worktree. Throws `SymlinkRefusedError`, `UnsafePathError` or `PokaYokeError`.
  */
 export function assertLineSafe(location: ProjectLocation, env: NodeJS.ProcessEnv = locationEnv(location)): void {

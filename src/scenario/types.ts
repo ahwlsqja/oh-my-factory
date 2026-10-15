@@ -14,7 +14,7 @@ export type ScenarioSplit = (typeof SCENARIO_SPLITS)[number];
 export const SCENARIO_STATUSES = ["active", "retired", "contaminated"] as const;
 export type ScenarioStatus = (typeof SCENARIO_STATUSES)[number];
 
-/** Releases of one split digest after which GATE-2 refuses the set (M3c-D9). M3d counts, M3c only compares. */
+/** Releases of one split digest after which GATE-2 refuses the set. M3d counts, M3c only compares. */
 export const EXPOSURE_LIMIT = 20;
 export const MAX_SCENARIOS_PER_SET = 100;
 export const MAX_STEPS = 12;
@@ -31,7 +31,7 @@ export interface CliInvoke {
   stdin: string;
 }
 export type JsonScalar = string | number | boolean | null;
-/** Typed on purpose (M3c-D4): the spec shows a bare string, which cannot say exact from pattern. */
+/** Typed on purpose: the spec shows a bare string, which cannot say exact from pattern. */
 export type StdoutMatch = { kind: "exact"; text: string } | { kind: "anchored"; pattern: string };
 /** At least one of exit_code, stdout_matches and json_path is non-null (schema and lint `expect_empty`). `note` is assertion text; OMF prefixes the canary. */
 export interface Expect {
@@ -62,7 +62,7 @@ export type RefusalCode =
   | "fixture_outside_dir";
 
 /**
- * What one step did, as the runner saw it. The adapter never sees the expectation (M3c-D5), so the same
+ * What one step did, as the runner saw it. The adapter never sees the expectation, so the same
  * evaluateExpect judges a host fixture, a harness container and a laptop run.
  */
 export type StepObservation =
@@ -74,7 +74,7 @@ export type StepObservation =
   | { outcome: "refused"; code: RefusalCode };
 
 export type AuthorFailureCode = "timeout" | "spawn_failed" | "nonzero_exit" | "no_output" | "output_limit" | "misconfigured";
-/** Ids and plain counts only (M3c-D12); no scenario id, ref or text can be expressed in this type. */
+/** Ids and plain counts only; no scenario id, ref or text can be expressed in this type. */
 export interface SealFeedback {
   unlinked_decision_ids: readonly string[];
   weak: number;
@@ -84,7 +84,7 @@ export interface SealFeedback {
 
 /**
  * What a stored scenario file holds. No status and no exposure count: the effective status is the
- * ledger's (default "active") and the limit is EXPOSURE_LIMIT (M3c-D9), so editing a file can neither
+ * ledger's (default "active") and the limit is EXPOSURE_LIMIT, so editing a file can neither
  * loosen a check nor retire a scenario. The whole file is covered by set_sha256.
  */
 export interface StoredScenario {
@@ -100,7 +100,7 @@ export interface StoredScenario {
   canary: string;
 }
 
-/** First 16 hex of sha256(scenario_id): the only scenario handle that reaches the ledger (M3c-D10). */
+/** First 16 hex of sha256(scenario_id): the only scenario handle that reaches the ledger. */
 export function scenarioRef(scenarioId: string): string {
   return sha256Hex(scenarioId).slice(0, 16);
 }

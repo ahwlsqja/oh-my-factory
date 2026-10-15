@@ -45,7 +45,7 @@ export interface SealDeps {
 }
 
 export type SealStageResult =
-  // "stored", not "sealed": a host stub author is unmeasured (M3c-D11).
+  // "stored", not "sealed": a host stub author is unmeasured.
   | { status: "stored"; round: number; seal_id: string; set_sha256: string; counts: SealCounts; author: AuthorStamp }
   // work.started exists and the author preceded it: the latest seal stands (a restart after a killed run).
   | { status: "reused"; seal: SealRecord }

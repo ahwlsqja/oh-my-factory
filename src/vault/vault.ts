@@ -20,7 +20,7 @@ import type { ScenarioSplit, ScenarioStatus, StoredScenario } from "../scenario/
 
 /**
  * The Scenario Vault: sealed scenario sets under `<project>/vault/scenarios/<work_id>/<seal_id>/<scenario_id>.yaml`, outside
- * the repository, 0700 directories and 0600 files (spec §8, M3c-D1). The files are the data and the ledger is the authority:
+ * the repository, 0700 directories and 0600 files (spec §8). The files are the data and the ledger is the authority:
  * `seal.completed` pins a set by `set_sha256` and GATE-2 recomputes it from what is read here.
  *
  * Every read and write goes through `core/safe-fs.ts`, which refuses a symlink below the real state root. Limit, as there: an
@@ -50,7 +50,7 @@ export interface Vault {
   readonly dir: string;
 }
 
-/** The set directory is named by `seal_id`, so concurrent or repeated seals never collide (M3c-D1). */
+/** The set directory is named by `seal_id`, so concurrent or repeated seals never collide. */
 export interface SetRef {
   work_id: string;
   seal_id: string;
@@ -86,7 +86,7 @@ export function setSha256(scenarios: readonly StoredScenario[]): string {
 }
 
 /**
- * The per-split digest M3d keys its release ladder on (M3c-D9): the stored scenarios of one split whose effective status is
+ * The per-split digest M3d keys its release ladder on: the stored scenarios of one split whose effective status is
  * active. Retiring or contaminating a scenario (a ledger event) or editing one changes it; another split's change does not.
  */
 export function splitDigest(
@@ -101,7 +101,7 @@ export function splitDigest(
 }
 
 /**
- * Files first, ledger second (M3c-D1). Validates every scenario before touching the disk, creates the set directory with a plain
+ * Files first, ledger second. Validates every scenario before touching the disk, creates the set directory with a plain
  * `mkdir` so an existing name (a set, or a link planted there) is `set_exists`, then writes each `<scenario_id>.yaml` exclusively.
  * A crash leaves an orphan directory that no event names; nothing is swept.
  */

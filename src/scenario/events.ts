@@ -6,7 +6,7 @@ import type { AuthorFailureCode, AuthorStamp, ScenarioStatus, SealFeedback, Stor
 
 /**
  * Ledger events of the Scenario Vault (M3c): `seal.*`, `scenario.status_changed` and `gate2.evaluated`. Every payload is
- * codes, counts, digests, decision ids and 16-hex `scenario_ref`s (M3c-D10), closed by `additionalProperties: false` in
+ * codes, counts, digests, decision ids and 16-hex `scenario_ref`s, closed by `additionalProperties: false` in
  * `scenario.schema.json`. A scenario's text, id, canary, argv and stdin can never reach the ledger through here.
  */
 
@@ -14,11 +14,11 @@ const SCHEMA = "scenario.schema.json";
 
 /**
  * The event M3b1 writes when the implementation starts. Referenced by its string, so this module builds on nothing M3b adds
- * (M3c-D14); a test in the line integration task checks that it is a member of M3b1's `W_EVENT_TYPES` (src/work/w-events.ts); M3b1 exports no separate constant for it.
+ *; a test in the line integration task checks that it is a member of M3b1's `W_EVENT_TYPES` (src/work/w-events.ts); M3b1 exports no separate constant for it.
  */
 export const WORK_STARTED_EVENT = "work.started";
 
-/** `seal-<16 hex>` names the set directory, so two seals of one item never share a path (M3c-D1). */
+/** `seal-<16 hex>` names the set directory, so two seals of one item never share a path. */
 export const SEAL_ID_PATTERN = /^seal-[0-9a-f]{16}$/;
 
 export type SealFailureCode = AuthorFailureCode | "no_valid_scenarios" | "write_failed";
@@ -48,7 +48,7 @@ export interface SealRecord {
 
 /**
  * `anomalies` counts omf-actor `seal.*` events of this item that failed validation, named an unknown type or repeated a seal id.
- * They are never silently dropped (M3c-D20): GATE-2 fails on any. `records` is every valid `seal.completed` in ledger order.
+ * They are never silently dropped: GATE-2 fails on any. `records` is every valid `seal.completed` in ledger order.
  */
 export interface SealFold {
   latest: SealRecord | null;
@@ -163,7 +163,7 @@ export function scenarioStatusChangedEvent(scope: DecisionScope, input: Scenario
   });
 }
 
-/** What GATE-2's thin adapter appends; `gate2EventFor` (T8) maps a `Gate2Result` onto this input. */
+/** What GATE-2's thin adapter appends; `gate2EventFor` maps a `Gate2Result` onto this input. */
 export function gate2EvaluatedEvent(scope: DecisionScope, input: Gate2EventInput): NewEvent {
   return build(scope, "gate2.evaluated", "ev_gate2_evaluated", {
     round: input.round,
@@ -246,7 +246,7 @@ export function foldSeals(events: readonly LedgerEvent[], scope: DecisionScope):
   return { latest: records.at(-1) ?? null, completed: records.length, failed, anomalies, records };
 }
 
-/** Rounds follow completed seals only: a failed seal consumes none. T10 recounts this inside `appendWith`. */
+/** Rounds follow completed seals only: a failed seal consumes none. The seal stage recounts this inside `appendWith`. */
 export function nextSealRound(events: readonly LedgerEvent[], scope: DecisionScope): number {
   return foldSeals(events, scope).completed + 1;
 }
@@ -261,7 +261,7 @@ interface StatusPayload {
 /**
  * `scenarioRef -> status` for one set, from `scenario.status_changed` only; absent means `active`. The first valid move of a
  * scenario stands. A later omf move of the same scenario, an invalid omf `scenario.*` event or an unknown `scenario.*` type is
- * an anomaly (M3c-D20). Events of other seals, scopes and actors are skipped.
+ * an anomaly. Events of other seals, scopes and actors are skipped.
  */
 export function foldStatuses(
   events: readonly LedgerEvent[],

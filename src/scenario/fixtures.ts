@@ -16,7 +16,7 @@ export interface FixtureEntry {
 }
 
 /**
- * The only programs the host adapter will ever execute (spec §5.3, M3c-D6). Committed constants, not a hash
+ * The only programs the host adapter will ever execute (spec §5.3). Committed constants, not a hash
  * computed at install time: a hash recomputed from the shipped file would follow an edit of that file. A drift
  * test recomputes these from fixtures/, so changing a fixture or adding one is a reviewed change to this list.
  */
@@ -107,9 +107,9 @@ function refusedSession(code: RefusalCode): ScenarioSession {
 }
 
 /**
- * The only host adapter (M3c-D6). Each step spawns `[process.execPath, "--input-type=module", "-e", <verified
+ * The only host adapter. Each step spawns `[process.execPath, "--input-type=module", "-e", <verified
  * source>, "--", ...step.argv]` with cwd = the scenario's scratch directory, shared by all steps of the
- * scenario (M3c-D19), env = { LC_ALL: "C", HOME: scratch, TMPDIR: scratch } only, stdin = step.stdin and the
+ * scenario, env = { LC_ALL: "C", HOME: scratch, TMPDIR: scratch } only, stdin = step.stdin and the
  * step limits. The program is always the node binary and the verified bytes; no element of a scenario is ever
  * the program, and the source is passed rather than re-read, so there is no gap between the hash check and the
  * execution. A candidate target is refused without a spawn: running candidate code is the M3f container's job.

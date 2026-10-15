@@ -16,7 +16,7 @@ import type {
   StoredScenario,
 } from "./types.js";
 
-/** Identity comes from OMF, never from the author (M3c-D2); tests inject fixed ids. */
+/** Identity comes from OMF, never from the author; tests inject fixed ids. */
 export interface Ids {
   scenarioId(): string;
   canary(): string;
@@ -47,7 +47,7 @@ export const INTAKE_REJECTION_CODES = [
 ] as const;
 export type IntakeRejectionCode = (typeof INTAKE_REJECTION_CODES)[number];
 
-/** Keys the author may write but OMF owns: dropped and counted in `ignored_fields` (M3c-D2). */
+/** Keys the author may write but OMF owns: dropped and counted in `ignored_fields`. */
 export const OMF_OWNED_KEYS = ["schema_version", "scenario_id", "work_id", "author", "canary", "exposure", "status"] as const;
 
 export interface IntakeContext {
@@ -58,7 +58,7 @@ export interface IntakeContext {
 
 export interface IntakeResult {
   stored: StoredScenario[];
-  /** Counts only; no text of a rejected document is kept (M3c-D10). */
+  /** Counts only; no text of a rejected document is kept. */
   rejected: Record<IntakeRejectionCode, number>;
   /** Documents seen. */
   authored: number;
@@ -134,7 +134,7 @@ function classify(doc: AuthoredScenario): IntakeRejectionCode | Body {
 }
 
 /**
- * Adds everything OMF owns. The canary goes in the header and in front of every note (M3c-D3), never in `invoke`. The result is
+ * Adds everything OMF owns. The canary goes in the header and in front of every note, never in `invoke`. The result is
  * validated again: a failure here is OMF's own bug (a bad `Ids` or context), so it throws instead of dropping the scenario quietly.
  */
 function stamp(body: Body, ctx: IntakeContext): StoredScenario {
@@ -163,7 +163,7 @@ function stamp(body: Body, ctx: IntakeContext): StoredScenario {
  * `output` is the author's stdout: a multi-document YAML stream of at most MAX_AUTHOR_OUTPUT_BYTES, each document at most
  * MAX_SCENARIO_BYTES, at most MAX_SCENARIOS_PER_SET kept (the rest are counted as `too_many` without being examined). Every
  * document gets exactly one outcome: stored, or one rejection code. Identity is drawn from `ctx.ids` only for scenarios that
- * survive. The input is never echoed in a count or an error (M3c-D10).
+ * survive. The input is never echoed in a count or an error.
  */
 export function intakeAuthored(output: string, ctx: IntakeContext): IntakeResult {
   const result: IntakeResult = {

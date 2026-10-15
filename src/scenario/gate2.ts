@@ -23,8 +23,8 @@ import { EXPOSURE_LIMIT, SCENARIO_SPLITS, isCanaryKind, scenarioRef } from "./ty
 import type { RefusalCode, ScenarioSplit, ScenarioStatus, SealFeedback, StepObservation, StoredScenario } from "./types.js";
 
 /**
- * GATE-2, the pure part (spec §5.3; M3c-D7). A sealed scenario set is a judge only if it is not empty, has both splits, fails
- * the null implementations, carries at least one contradiction canary (owner decision O-2), does not contradict itself, and links every resolved non-quantitative decision. Everything here is
+ * GATE-2, the pure part (spec §5.3). A sealed scenario set is a judge only if it is not empty, has both splits, fails
+ * the null implementations, carries at least one contradiction canary (a standing rule of this design), does not contradict itself, and links every resolved non-quantitative decision. Everything here is
  * a function of its arguments: reading the vault, the ledger and the probes is `runGate2`'s job, so this file can be tested with
  * plain values and a thin adapter can append `gate2EventFor`'s output without a second opinion.
  */
@@ -51,7 +51,7 @@ export const GATE2_REASON_CODES = [
 ] as const;
 export type Gate2ReasonCode = (typeof GATE2_REASON_CODES)[number];
 
-/** Counts, split names, decision ids and refusal codes only: never a scenario id, a canary or any scenario text (M3c-D10). */
+/** Counts, split names, decision ids and refusal codes only: never a scenario id, a canary or any scenario text. */
 export interface Gate2Reason {
   code: Gate2ReasonCode;
   count?: number;
@@ -63,7 +63,7 @@ export interface Gate2Reason {
 export type Gate2Route = "J2" | "J3" | "J7" | "back_to_S2";
 
 /**
- * Where each reason sends the item (M3c-D21). J2: GATE-1 no longer passes. J3 (a person looks at the judge): the ledger or the
+ * Where each reason sends the item. J2: GATE-1 no longer passes. J3 (a person looks at the judge): the ledger or the
  * sealed set was touched, or the judge is broken or gamed. J7 (damaged install or environment): a probe could not run. back_to_S2:
  * only author-quality faults (`canary_missing` is one: the author did not write a canary), so a reseal never reruns the author for an environment fault, and a deleted vault file is never
  * answered by a silent reseal. A `Record` over the code union, so a new code cannot be added without choosing its route.
@@ -134,7 +134,7 @@ export type Gate2Result =
   | { status: "pass"; not_run: string[]; aggregate: ScenarioAggregate } // not_run: resolved quantitative decision ids (M3-D17); never success
   | { status: "fail"; route: Gate2Route; reasons: Gate2Reason[]; not_run: string[]; aggregate: ScenarioAggregate | null };
 
-/** M3d supplies this (releases per split digest from its feedback.* events). M3c never counts exposure itself (M3c-D9). */
+/** M3d supplies this (releases per split digest from its feedback.* events). M3c never counts exposure itself. */
 export type ExposureCount = (key: { split: ScenarioSplit; digest: string }) => number;
 
 export interface ProbeRun {
@@ -267,7 +267,7 @@ export function evaluateGate2(input: Gate2Input): Gate2Result {
     for (const split of SCENARIO_SPLITS) {
       if (aggregate.behavior[split] === 0) reasons.push({ code: "split_missing", split });
     }
-    // Owner decision O-2: every set carries at least one active contradiction canary, so GATE-3's contradiction check is never vacuous.
+    // Standing rule: every set carries at least one active contradiction canary, so GATE-3's contradiction check is never vacuous.
     if (aggregate.contradiction_canary.train + aggregate.contradiction_canary.test === 0) reasons.push({ code: "canary_missing" });
     const invalid = input.problems.filter((problem) => problem.code !== "contradiction").length;
     if (invalid > 0) reasons.push({ code: "scenario_invalid", count: invalid });
@@ -304,10 +304,10 @@ export function evaluateGate2(input: Gate2Input): Gate2Result {
 const MAX_EVENT_DECISION_IDS = 100;
 
 /**
- * The `gate2.evaluated` event for one evaluation (M3c-D10: codes, counts, digests and decision ids only). Pure; the Task 11 adapter
+ * The `gate2.evaluated` event for one evaluation (codes, counts, digests and decision ids only). Pure; the GATE-2 adapter
  * appends it. `digests` come from the caller because a missing seal has none: `seal_id` and `set_sha256` are then null and the counts
  * are zero. A reason code listed twice (one `split_missing` per split) is written once. The payload is validated against
- * `ev_gate2_evaluated` before it is returned and the function throws on a mismatch, like every Task 5 builder: a reason code or
+ * `ev_gate2_evaluated` before it is returned and the function throws on a mismatch, like every event builder: a reason code or
  * route that drifts from the schema enum must never reach `Ledger.append`, which checks only the event envelope.
  */
 export function gate2EventFor(
@@ -341,10 +341,10 @@ export function gate2EventFor(
 }
 
 /**
- * What the next seal prompt may contain after a failed GATE-2 (M3c-D12): the unlinked decision ids and plain counts, nothing that
+ * What the next seal prompt may contain after a failed GATE-2: the unlinked decision ids and plain counts, nothing that
  * names a scenario. null for a pass and for J2, J3 and J7, which a reseal cannot fix and must not rerun the author for.
  * `canary_missing`, like `split_missing`, has no field here: the closed `SealFeedback` shape stays as it is, and the fixed seal
- * instructions (Task 10) already ask for at least one canary per set.
+ * instructions already ask for at least one canary per set.
  */
 export function sealFeedbackFor(result: Gate2Result): SealFeedback | null {
   if (result.status !== "fail" || result.route !== "back_to_S2") return null;
@@ -360,7 +360,7 @@ export function sealFeedbackFor(result: Gate2Result): SealFeedback | null {
 /** How many probe runs are in flight at once: each is one scenario session and one node process. */
 const PROBE_CONCURRENCY = 8;
 
-/** The runner is the only thing that may execute anything here, and only OMF's own fixtures (M3c-D5, M3c-D6). */
+/** The runner is the only thing that may execute anything here, and only OMF's own fixtures. */
 function assertFixtureRunner(runner: ScenarioRunner): void {
   if (runner.executes !== "omf_fixture") {
     throw new Error(`GATE-2 probes run only on an omf_fixture runner (got ${runner.executes})`);
@@ -436,7 +436,7 @@ async function probeOnce(runner: ScenarioRunner, id: FixtureId, scenario: Stored
 }
 
 /**
- * Runs the active scenarios against OMF's own fixtures (spec §5.0 GATE-2, M3c-D17): every scenario against null-error
+ * Runs the active scenarios against OMF's own fixtures (spec §5.0 GATE-2): every scenario against null-error
  * and null-empty, a canary also against echo-everything. A behavior scenario that either null passes asserts too
  * little; a canary that anything passes means the judge is broken or gamed. The matching is `runScenario`'s, not the
  * adapter's, so a double and the real host adapter are judged the same way. Arrays keep the order of `active`.
@@ -474,12 +474,12 @@ export interface Gate2Context {
 }
 
 /**
- * All the I/O of GATE-2 (M3c-D7): guards, one verified ledger read, the folds, GATE-1 under `ctx.now`, the vault set,
- * lint, the probes, then the pure judge. It appends nothing; T11's adapter appends `gate2EventFor` and routes.
+ * All the I/O of GATE-2: guards, one verified ledger read, the folds, GATE-1 under `ctx.now`, the vault set,
+ * lint, the probes, then the pure judge. It appends nothing; the GATE-2 adapter appends `gate2EventFor` and routes.
  *
  * - The guards come first: a symlink in state or sealed material in the repository throws before anything is read
- *   or run (rule 4, M3c-D15). A corrupt ledger throws too; the adapter turns a throw into `not_run`.
- * - GATE-1 is the same four-call snapshot `decide lint` takes (M3c-D14); T11 swaps it for M3b2's `gate1ForItem`.
+ *   or run (spec §11 rule 4). A corrupt ledger throws too; the adapter turns a throw into `not_run`.
+ * - GATE-1 is the same four-call snapshot `decide lint` takes; a later change swaps it for M3b2's `gate1ForItem`.
  * - The set is probed only when its digest matches `seal.completed`: a tampered set is not run, it is reported.
  * - Exposure is asked per split digest and only when the set is readable; a missing set has nothing to count.
  */

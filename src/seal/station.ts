@@ -9,7 +9,7 @@ import { type SealDeps, type SealStageResult, runSealStage } from "./seal.js";
 export type S2StationDeps = Omit<SealDeps, "preflight"> & { env?: NodeJS.ProcessEnv };
 
 /**
- * What the line does after S2 (M3c-D21): `gate2` when a seal stands (stored now, or reused after a killed
+ * What the line does after S2: `gate2` when a seal stands (stored now, or reused after a killed
  * run), `retry_s2` for an author-quality failure (the sequencer's visit cap bounds the loop), `stop` with the
  * route that owns the cause: J2 GATE-1 moved, J3 a person must act, J7 the environment is at fault.
  */
@@ -49,7 +49,7 @@ function stepOf(stage: SealStageResult): S2Next {
 }
 
 /**
- * The S2 station over `runSealStage`, guarded the way every station is (M3c rule 4, spec §8): the state-tree check
+ * The S2 station over `runSealStage`, guarded the way every station is (spec §11 rule 4, §8): the state-tree check
  * and the poka-yoke run first, with an environment taken from the location. A guard refusal is a J7 stop with
  * a closed code and no stage run; any other error is rethrown.
  */

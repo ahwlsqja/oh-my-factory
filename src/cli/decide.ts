@@ -67,7 +67,7 @@ function loadConsistentItem(location: ProjectLocation, workId: string): WorkItem
  * Decisions must not change while a run holds the claim either (M3a design A12). Plain errors: exit 2.
  */
 export function requireDecidableItem(location: ProjectLocation, workId: string): WorkItem {
-  // Rule 4: a write while sealed material sits in the repository or an OMF worktree is refused before it
+  // Spec §11 rule 4: a write while sealed material sits in the repository or an OMF worktree is refused before it
   // reads or appends anything. Every decide write goes through this function.
   assertLineSafe(location);
   const item = loadConsistentItem(location, workId);

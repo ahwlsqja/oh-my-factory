@@ -9,7 +9,7 @@ import { lintCandidate } from "../work/seed-lint.js";
 import type { WorkItem } from "../work/types.js";
 
 /**
- * The closed set of things an author may see (M3c-D12): no plan field, no code field, no diff field, no path field.
+ * The closed set of things an author may see: no plan field, no code field, no diff field, no path field.
  * Adding a field here is a change to what the author can know, so `buildSealPrompt` also refuses any other own key
  * at run time, in case a widened object reaches it through a cast.
  */
@@ -113,7 +113,7 @@ function idLines(ids: readonly string[]): string[] {
   return ids.length === 0 ? ["(none)"] : ids.map((id) => `- ${id}`);
 }
 
-/** Ids and counts only (M3c-D12): anything else in a feedback object would carry scenario content into the next prompt. */
+/** Ids and counts only: anything else in a feedback object would carry scenario content into the next prompt. */
 function feedbackLines(feedback: SealFeedback): string[] {
   const counts = [feedback.weak, feedback.contradictions, feedback.invalid];
   if (!feedback.unlinked_decision_ids.every((id) => DECISION_ID_PATTERN.test(id)) || !counts.every((n) => Number.isInteger(n) && n >= 0)) {

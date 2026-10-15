@@ -168,7 +168,7 @@ export function beginRun(options: BeginRunOptions): WRun {
   const now = options.now ?? ((): Date => new Date());
   const mint = options.newRunId ?? newRunId;
   const { location, workId } = options;
-  // Rule 4: M3b1's run entry refuses while sealed material sits in the repository or an OMF worktree,
+  // Spec §11 rule 4: M3b1's run entry refuses while sealed material sits in the repository or an OMF worktree,
   // before it reads, claims or appends anything.
   assertLineSafe(location);
   const ctx: WContext = {

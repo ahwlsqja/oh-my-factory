@@ -57,7 +57,7 @@ function authorEnv(config: CommandAuthorConfig, scratch: string, realEnv: NodeJS
 
 /**
  * An author that is a host process: the prompt goes on stdin, stdout is the output, there is no shell. It is labelled
- * `host_command` (M3c-D11): it is not sealed from anything the OS user can reach, and the stage result says `stored`,
+ * `host_command`: it is not sealed from anything the OS user can reach, and the stage result says `stored`,
  * not `sealed`. One scratch directory per run is cwd and HOME, and is removed in `finally`.
  */
 export function createCommandAuthor(config: CommandAuthorConfig, realEnv: NodeJS.ProcessEnv = process.env): AgentSession {

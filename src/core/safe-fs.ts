@@ -17,7 +17,7 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { type ProjectLocation, omfHome } from "./paths.js";
 
 /**
- * Host-state symlink hardening (spec §8, design M3c-D15). OMF state lives in a directory a person owns, but
+ * Host-state symlink hardening (spec §8). OMF state lives in a directory a person owns, but
  * a link planted below it redirects every later write (a lock, a vault file, `preflight.json`) to
  * somewhere else. The guard is an lstat walk of every component plus `O_NOFOLLOW` on the last one.
  *
