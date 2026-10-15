@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OMF feedback events (M3d, spec §4.4 step 4, §5.7)",
+  "description": "Validates { type, payload } of a feedback.* ledger event. Every string is an id, a digest, a commit sha or a member of a closed list, and every number is a count, so no scenario text, id or expected output can enter. The id definitions are copies of work-event.schema.json (a test pins the copy). Cross-field rules (pass <= n, score_pct == floor(100 * pass / n), pass <= total, flaky <= total - pass) cannot be stated here; src/feedback/events.ts checks them in the writer and in every fold.",
+  "$defs": {
+    "goal_id": { "type": "string", "pattern": "^g-[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },
+    "work_id": { "type": "string", "pattern": "^w-[0-9a-f]{12}$" },
+    "run_id": { "type": "string", "pattern": "^r-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}$" },
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "commit_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "category": {
+      "type": "string",
+      "enum": [
+        "interface",
+        "compatibility",
+        "latency",
+        "throughput",
+        "memory",
+        "durability",
+        "queue_bound",
+        "data_model",
+        "error_semantics",
+        "security",
+        "other"
+      ]
+    },
+    "score_kind": { "type": "string", "enum": ["first", "new", "repeat"] },
+    "released_category": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["category", "n", "pass", "score_pct", "kind"],
+      "properties": {
+        "category": { "$ref": "#/$defs/category" },
+        "n": { "type": "integer", "minimum": 1 },
+        "pass": { "type": "integer", "minimum": 0 },
+        "score_pct": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "kind": { "$ref": "#/$defs/score_kind" }
+      }
+    },
+    "released_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "run_id", "train_digest", "round", "categories", "disclosure_units"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "train_digest": { "$ref": "#/$defs/digest" },
+        "round": { "type": "integer", "minimum": 1 },
+        "categories": { "type": "array", "minItems": 1, "maxItems": 11, "items": { "$ref": "#/$defs/released_category" } },
+        "disclosure_units": { "type": "integer", "enum": [0, 1] }
+      }
+    },
+    "test_run_consumed_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "run_id", "test_digest", "candidate_sha", "test_total"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "test_digest": { "$ref": "#/$defs/digest" },
+        "candidate_sha": { "$ref": "#/$defs/commit_sha" },
+        "test_total": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "test_run_completed_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "run_id", "test_digest", "candidate_sha", "pass", "total", "flaky"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "test_digest": { "$ref": "#/$defs/digest" },
+        "candidate_sha": { "$ref": "#/$defs/commit_sha" },
+        "pass": { "type": "integer", "minimum": 0 },
+        "total": { "type": "integer", "minimum": 1 },
+        "flaky": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "test_reseal_authorized_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "consumed_test_digest", "basis"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "consumed_test_digest": { "anyOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "basis": { "type": "string", "enum": ["J3", "J6"] }
+      }
+    }
+  },
+  "oneOf": [
+    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "feedback.released" }, "payload": { "$ref": "#/$defs/released_payload" } } },
+    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "feedback.test_run_consumed" }, "payload": { "$ref": "#/$defs/test_run_consumed_payload" } } },
+    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "feedback.test_run_completed" }, "payload": { "$ref": "#/$defs/test_run_completed_payload" } } },
+    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "feedback.test_reseal_authorized" }, "payload": { "$ref": "#/$defs/test_reseal_authorized_payload" } } }
+  ]
+}

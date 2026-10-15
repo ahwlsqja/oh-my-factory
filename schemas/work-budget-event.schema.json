@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OMF work budget events (M3b2, spec §5.0 GATE-4)",
+  "description": "Validates { type, payload } of a per-item budget ledger event. Every string is an id, a station id, an enum member or a digest, so nothing a model wrote and no metric text can enter.",
+  "$defs": {
+    "goal_id": { "type": "string", "pattern": "^g-[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },
+    "work_id": { "type": "string", "pattern": "^w-[0-9a-f]{12}$" },
+    "run_id": { "type": "string", "pattern": "^r-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}$" },
+    "station": { "enum": ["S1", "S2", "S3", "S4", "S5", "S6", "S7"] },
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "count": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "limits_set_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "run_id", "max_rounds", "max_model_micro_usd"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "max_rounds": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "max_model_micro_usd": { "$ref": "#/$defs/count" }
+      }
+    },
+    "limit_raised_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "kind", "amount"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "kind": { "enum": ["rounds", "model_micro_usd"] },
+        "amount": { "$ref": "#/$defs/count" }
+      }
+    },
+    "round_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "run_id", "round", "prev_signature"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "round": { "$ref": "#/$defs/count" },
+        "prev_signature": { "anyOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] }
+      }
+    },
+    "spend_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "run_id", "station", "micro_usd"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "station": { "$ref": "#/$defs/station" },
+        "micro_usd": { "anyOf": [{ "type": "integer", "minimum": 0, "maximum": 9007199254740991 }, { "type": "null" }] }
+      }
+    }
+  },
+  "oneOf": [
+    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "work.limits_set" }, "payload": { "$ref": "#/$defs/limits_set_payload" } } },
+    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "work.limit_raised" }, "payload": { "$ref": "#/$defs/limit_raised_payload" } } },
+    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "work.round" }, "payload": { "$ref": "#/$defs/round_payload" } } },
+    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "work.spend" }, "payload": { "$ref": "#/$defs/spend_payload" } } }
+  ]
+}
