@@ -4,7 +4,6 @@ import { createMeasured, type MeasureDeps, NotGoldenError } from "../container/m
 import type { ContainerRuntime, ImageInfo } from "../container/runtime.js";
 import type { OwnedLabels } from "../container/spec.js";
 import { buildSutImage } from "../container/sut-build.js";
-import { registerCleanup } from "../core/cleanup-registry.js";
 import type { JudgeConfig } from "../core/config.js";
 import type { DecisionClass, InterfaceContract } from "../decision/types.js";
 import type { GitTarget } from "../git/hardened.js";
@@ -13,6 +12,7 @@ import type { ScenarioSplit, StoredKind } from "../scenario/types.js";
 import { ensureHarnessImage } from "./harness-context.js";
 import { createHarnessClient, type HarnessSet, type HarnessVerdict } from "./harness-protocol.js";
 import { createContainerScenarioRunner } from "./relay.js";
+import { trackRuntime } from "./state.js";
 
 /** The lease's SUT image is removed by `disposeImages`, which lives with the line's other cleanup. */
 export { disposeImages } from "./state.js";
@@ -298,19 +298,19 @@ export interface JudgeRoundInput {
  * success, on any failure and, through the shared cleanup registry, on SIGINT and SIGTERM.
  */
 export async function runJudgeRound(input: JudgeRoundInput): Promise<RoundVerdict> {
-  const { runtime, config, images, scenarios } = input;
+  const { config, images, scenarios } = input;
   if (scenarios.length === 0) throw new JudgeRoundError("no_scenarios");
   assertSet(scenarios);
   const labels: OwnedLabels = { ...images.labels, round: input.round };
   const limits: StepLimits = { timeoutMs: config.step_timeout_ms, maxOutputBytes: MAX_OUTPUT_BYTES };
-  const live = new Set<string>();
-  const unregister = registerCleanup(() => runtime.removeAllSync([...live]));
+  // Every container goes through the tracked runtime, so the one shared cleanup covers a signal and the `finally` below.
+  const runtime = trackRuntime(input.runtime);
+  const measure: MeasureDeps = { ...input.measure, runtime };
   let serial = 0;
   const create = async (role: "sut" | "harness", image: ImageInfo) => {
     serial += 1;
     const spec = containerSpecFor({ role, image: image.id, labels, serial, judge: config });
-    live.add(spec.name); // before the create: a signal in the middle of it still removes the name
-    return createMeasured(input.measure, spec, goldenFor({ role, image, forbidden: input.forbidden }));
+    return createMeasured(measure, spec, goldenFor({ role, image, forbidden: input.forbidden }));
   };
   try {
     const harness = await create("harness", images.harness);
@@ -325,7 +325,6 @@ export async function runJudgeRound(input: JudgeRoundInput): Promise<RoundVerdic
           handle: sut.handle,
           release: async () => {
             await runtime.remove(sut.handle);
-            live.delete(sut.handle.name);
           },
         };
       },
@@ -336,7 +335,6 @@ export async function runJudgeRound(input: JudgeRoundInput): Promise<RoundVerdic
     }
     crossCheck(await client.verdict(), expected);
     await runtime.remove(harness.handle);
-    live.delete(harness.handle.name);
     const verdict = summarize(
       { scenarios, phase: input.phase, k: config.k, candidate_sha: input.candidate_sha, images },
       expected,
@@ -347,7 +345,6 @@ export async function runJudgeRound(input: JudgeRoundInput): Promise<RoundVerdic
     if (error instanceof JudgeRoundError || error instanceof NotGoldenError) throw error;
     throw new JudgeRoundError("round_error", { cause: error });
   } finally {
-    if (live.size > 0) runtime.removeAllSync([...live]);
-    unregister();
+    runtime.close();
   }
 }

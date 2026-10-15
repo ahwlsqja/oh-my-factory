@@ -32,4 +32,24 @@ describe("W-judge-cleanup-on-kill", () => {
     expect(created).toHaveLength(2);
     expect([...removed].sort()).toEqual([...created].sort());
   });
+
+  it("SIGTERM in the middle of a real judge round removes the harness and the SUT container", async () => {
+    const dir = realTempDir("omf-kill-round-");
+    const log = join(dir, "log");
+    const marker = join(dir, "ready");
+    const child = spawn(process.execPath, [CHILD, "round", log, marker, join(dir, "judge")], {
+      stdio: ["ignore", "ignore", "inherit"],
+    });
+    const ended = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+      child.once("exit", (code, signal) => resolve({ code, signal }));
+    });
+    await waitForPids(marker, 15_000); // the candidate's first step is running inside a SUT container
+    child.kill("SIGTERM");
+    expect(await ended).toEqual({ code: null, signal: "SIGTERM" });
+    const lines = readFileSync(log, "utf8").trim().split("\n");
+    const created = lines.filter((line) => line.startsWith("create ")).map((line) => line.slice("create ".length));
+    const removed = lines.filter((line) => line.startsWith("remove ")).map((line) => line.slice("remove ".length));
+    expect(created.map((name) => name.split("-")[1]).sort()).toEqual(["harness", "sut"]);
+    expect([...removed].sort()).toEqual([...created].sort());
+  });
 });
