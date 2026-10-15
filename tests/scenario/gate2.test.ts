@@ -3,12 +3,13 @@ import {
   GATE2_REASON_CODES,
   GATE2_ROUTE_OF,
   evaluateGate2,
+  runGate2,
   runGate2Probes,
   gate2EventFor,
   scenarioAggregate,
   sealFeedbackFor,
 } from "../../src/scenario/gate2.js";
-import type { Gate2Result } from "../../src/scenario/gate2.js";
+import type { Gate2Result, ScenarioAggregate } from "../../src/scenario/gate2.js";
 import { validateDef } from "../../src/core/schema.js";
 import { SCOPE } from "../helpers/decision.js";
 import type { Gate2Input, Gate2ReasonCode, Gate2Route } from "../../src/scenario/gate2.js";
@@ -481,5 +482,59 @@ describe("runGate2Probes", () => {
     expect(refused.null_error[0]).toMatchObject({ outcome: "error", refusal: "fixture_hash_mismatch" });
     const broken = await runGate2Probes(fakeFixtureRunner({ failOpen: true }).runner, scenarios);
     expect(broken.null_error[0]).toEqual({ scenario_ref: refs[0], outcome: "error" });
+  });
+});
+
+import { join } from "node:path";
+import { symlinkSync } from "node:fs";
+import { SymlinkRefusedError } from "../../src/core/safe-fs.js";
+import { splitDigest } from "../../src/vault/vault.js";
+import { sealedCtx, seedSealedItem } from "../helpers/scenario-fixture.js";
+
+describe("runGate2", () => {
+  it("passes a strong sealed set, lists the quantitative decision as not_run, appends nothing and samples counts only", async () => {
+    const s = seedSealedItem(DEFAULT_SPECS, { latency: true });
+    const before = s.f.fx.ledger.readVerified().length;
+    const seen: ScenarioAggregate[] = [];
+    const result = await runGate2(sealedCtx(s, { sample: (aggregate) => seen.push(aggregate) }));
+    expect(result.status).toBe("pass");
+    expect(result.status === "pass" ? result.not_run : null).toEqual(["d-latency"]);
+    expect(s.f.fx.ledger.readVerified()).toHaveLength(before);
+    expect(seen).toEqual([
+      { total: 3, active: 3, retired: 0, contaminated: 0, behavior: { train: 1, test: 1 }, contradiction_canary: { train: 1, test: 0 } },
+    ]);
+    const text = JSON.stringify(seen);
+    for (const scenario of s.scenarios) {
+      expect(text).not.toContain(scenario.scenario_id);
+      expect(text).not.toContain(scenario.canary);
+    }
+  });
+
+  it("runs the guards before it reads or probes anything", async () => {
+    const s = seedSealedItem();
+    const fake = fakeFixtureRunner();
+    const before = s.f.fx.ledger.readVerified().length;
+    await expect(
+      runGate2(sealedCtx(s, { runner: fake.runner, preflight: () => { throw new Error("guard first"); } })),
+    ).rejects.toThrow("guard first");
+    symlinkSync(s.f.fx.repo, join(s.f.fx.location.dir, "stray-link"));
+    await expect(runGate2(sealedCtx(s, { runner: fake.runner }))).rejects.toBeInstanceOf(SymlinkRefusedError);
+    expect(fake.opened, "no scenario was run").toHaveLength(0);
+    expect(s.f.fx.ledger.readVerified()).toHaveLength(before);
+  });
+
+  it("refuses a runner that executes candidate code", async () => {
+    const s = seedSealedItem();
+    await expect(runGate2(sealedCtx(s, { runner: fakeFixtureRunner({ executes: "candidate" }).runner }))).rejects.toThrow("omf_fixture");
+  });
+
+  it("asks the exposure count for the digest of each split", async () => {
+    const s = seedSealedItem();
+    const asked: { split: string; digest: string }[] = [];
+    await runGate2(sealedCtx(s, { exposureCount: (key) => { asked.push(key); return 0; } }));
+    expect(asked).toEqual([
+      { split: "train", digest: splitDigest(s.scenarios, new Map(), "train") },
+      { split: "test", digest: splitDigest(s.scenarios, new Map(), "test") },
+    ]);
   });
 });

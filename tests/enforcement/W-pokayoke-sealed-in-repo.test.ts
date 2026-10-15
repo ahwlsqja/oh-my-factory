@@ -5,7 +5,9 @@ import { describe, expect, it } from "vitest";
 import { runDoctor } from "../../src/core/doctor.js";
 import { resolveProject } from "../../src/core/paths.js";
 import { initProject } from "../../src/core/project.js";
+import { runGate2 } from "../../src/scenario/gate2.js";
 import { PokaYokeError, assertNoSealedInRepo, scanWorktreeCanaries } from "../../src/vault/pokayoke.js";
+import { type SealedItem, fakeFixtureRunner, plant, sealedCtx, seedSealedItem } from "../helpers/scenario-fixture.js";
 import { commitAll, makeGitRepo, makeTempDir } from "../helpers/tmp.js";
 
 /** M3c rule 4 (spec §8): sealed material inside the repository or an OMF worktree stops the run. */
@@ -115,5 +117,20 @@ describe("W-pokayoke-sealed-in-repo", () => {
     expect(caught).toBeInstanceOf(PokaYokeError);
     expect((caught as PokaYokeError).findings.every((finding) => finding.kind === "scan_incomplete")).toBe(true);
     expect(doctorSealed(f)).toHaveLength(1);
+  });
+});
+
+describe("W-pokayoke-sealed-in-repo: GATE-2 refuses before it does anything", () => {
+  it.each([
+    ["a scenario file inside the repository", (s: SealedItem) => plant(join(s.f.fx.repo, "vault", "scenarios", "w.yaml"), "x\n")],
+    ["a canary string in a repository file", (s: SealedItem) => plant(join(s.f.fx.repo, "notes.txt"), `see ${s.scenarios[0]?.canary}\n`)],
+  ])("%s", async (_name, arrange) => {
+    const s = seedSealedItem();
+    arrange(s);
+    const fake = fakeFixtureRunner();
+    const before = s.f.fx.ledger.readVerified().length;
+    await expect(runGate2(sealedCtx(s, { runner: fake.runner }))).rejects.toBeInstanceOf(PokaYokeError);
+    expect(fake.opened, "no scenario was run").toHaveLength(0);
+    expect(s.f.fx.ledger.readVerified(), "nothing was appended").toHaveLength(before);
   });
 });

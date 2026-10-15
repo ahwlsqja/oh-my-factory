@@ -1,16 +1,26 @@
+import { Ledger } from "../core/ledger.js";
 import type { NewEvent } from "../core/ledger.js";
+import type { ProjectLocation } from "../core/paths.js";
+import { assertStateTreeClean } from "../core/safe-fs.js";
 import { validateDef } from "../core/schema.js";
+import { evaluateGate1, intentQuestionIds } from "../decision/gate1.js";
 import type { Gate1Result } from "../decision/gate1.js";
+import { loadLeakContext } from "../decision/leak-lint.js";
 import { scenarioLinkCoverage } from "../decision/lint.js";
+import { decisionsDigest, foldDecisions } from "../decision/state.js";
 import type { DecisionScope, DecisionState } from "../decision/types.js";
-import type { ScenarioSetRead } from "../vault/vault.js";
+import { assertNoSealedInRepo } from "../vault/pokayoke.js";
+import { readScenarioSet, splitDigest } from "../vault/vault.js";
+import type { ScenarioSetRead, Vault } from "../vault/vault.js";
+import type { WorkItem } from "../work/types.js";
+import { authorPrecedesStart, effectiveScenarios, foldSeals, foldStatuses } from "./events.js";
 import type { AuthorOrder, EffectiveScenario, SealRecord } from "./events.js";
-import { contradictions, vaultDecisionLinks } from "./lint.js";
+import { contradictions, lintScenarioSet, vaultDecisionLinks } from "./lint.js";
 import type { ScenarioProblem } from "./lint.js";
 import { runScenario } from "./runner.js";
 import type { FixtureId, ScenarioRunner, StepLimits } from "./runner.js";
 import { EXPOSURE_LIMIT, SCENARIO_SPLITS, isCanaryKind, scenarioRef } from "./types.js";
-import type { RefusalCode, ScenarioSplit, SealFeedback, StoredScenario } from "./types.js";
+import type { RefusalCode, ScenarioSplit, ScenarioStatus, SealFeedback, StoredScenario } from "./types.js";
 
 /**
  * GATE-2, the pure part (spec §5.3; M3c-D7). A sealed scenario set is a judge only if it is not empty, has both splits, fails
@@ -431,4 +441,91 @@ export async function runGate2Probes(runner: ScenarioRunner, active: readonly St
     else probes.echo.push(run);
   }
   return probes;
+}
+
+export interface Gate2Context {
+  location: ProjectLocation;
+  item: WorkItem;
+  now: Date;
+  runner: ScenarioRunner;
+  vault: Vault;
+  limits?: StepLimits;
+  env?: NodeJS.ProcessEnv;
+  sample?: J3SamplingHook;
+  exposureCount?: ExposureCount;
+  /** Default: the state-tree guard, then the poka-yoke. Runs before the ledger is read. */
+  preflight?: () => void;
+}
+
+/**
+ * All the I/O of GATE-2 (M3c-D7): guards, one verified ledger read, the folds, GATE-1 under `ctx.now`, the vault set,
+ * lint, the probes, then the pure judge. It appends nothing; T11's adapter appends `gate2EventFor` and routes.
+ *
+ * - The guards come first: a symlink in state or sealed material in the repository throws before anything is read
+ *   or run (rule 4, M3c-D15). A corrupt ledger throws too; the adapter turns a throw into `not_run`.
+ * - GATE-1 is the same four-call snapshot `decide lint` takes (M3c-D14); T11 swaps it for M3b2's `gate1ForItem`.
+ * - The set is probed only when its digest matches `seal.completed`: a tampered set is not run, it is reported.
+ * - Exposure is asked per split digest and only when the set is readable; a missing set has nothing to count.
+ */
+export async function runGate2(ctx: Gate2Context): Promise<Gate2Result> {
+  const env = ctx.env ?? process.env;
+  (ctx.preflight ??
+    (() => {
+      assertStateTreeClean(ctx.location, env);
+      assertNoSealedInRepo(ctx.location, env);
+    }))();
+  assertFixtureRunner(ctx.runner);
+
+  const events = new Ledger(ctx.location.dir).readVerified();
+  const scope: DecisionScope = { goal_id: ctx.item.front.goal_id, work_id: ctx.item.front.work_id };
+  const leak = loadLeakContext(ctx.location.dir, scope.goal_id, events);
+  const state = foldDecisions(events, scope);
+  const gate1 = evaluateGate1(state, ctx.now, {
+    leak,
+    intentQuestionIds: intentQuestionIds(ctx.item.intent.candidate.open_questions.length),
+  });
+
+  const seals = foldSeals(events, scope);
+  const seal = seals.latest;
+  const order = authorPrecedesStart(events, scope);
+  const folded =
+    seal === null
+      ? { statuses: new Map<string, ScenarioStatus>(), anomalies: 0 }
+      : foldStatuses(events, scope, seal.seal_id);
+  const set = seal === null ? null : readScenarioSet(ctx.vault, { work_id: scope.work_id, seal_id: seal.seal_id });
+  const readable = set !== null && set.ok ? set : null;
+  const effective = readable === null ? [] : effectiveScenarios(readable.scenarios, folded.statuses);
+  const problems =
+    readable === null || seal === null
+      ? []
+      : lintScenarioSet({ scenarios: effective, state, workId: scope.work_id, sealedAuthor: seal.author });
+
+  const trusted = readable !== null && seal !== null && readable.set_sha256 === seal.set_sha256;
+  const active = effective.filter((entry) => entry.status === "active").map((entry) => entry.scenario);
+  const probes = trusted ? await runGate2Probes(ctx.runner, active, ctx.limits) : null;
+
+  const count = ctx.exposureCount ?? (() => 0);
+  const exposure =
+    readable === null
+      ? { train: 0, test: 0 }
+      : {
+          train: count({ split: "train", digest: splitDigest(readable.scenarios, folded.statuses, "train") }),
+          test: count({ split: "test", digest: splitDigest(readable.scenarios, folded.statuses, "test") }),
+        };
+
+  const result = evaluateGate2({
+    gate1,
+    state,
+    decisionsDigest: decisionsDigest(state),
+    seal,
+    order,
+    anomalies: seals.anomalies + folded.anomalies,
+    set,
+    effective,
+    problems,
+    probes,
+    exposure,
+  });
+  if (result.aggregate !== null) ctx.sample?.(result.aggregate);
+  return result;
 }
