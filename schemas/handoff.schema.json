@@ -112,7 +112,9 @@
         "test_run_incomplete",
         "test_reseal_required",
         "noise_unverified",
-        "scenarios_exhausted"
+        "scenarios_exhausted",
+        "gates_failed",
+        "disclosure_unavailable"
       ]
     },
     "risk": {
