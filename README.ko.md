@@ -106,15 +106,14 @@ OMF 는 루프 두 개를 돌립니다.
 - **작업보다 목표.** *일부 구현됨.* 작업은 측정값과 목표값의 차이에서 나옵니다. 목표, 잠금, 측정, 목표 루프는 지금 되고, 작업 항목을 실제로 수행하는 검증 라인이 다음입니다.
 - **숙제가 아니라 홀드아웃.** *설계됨.* 인수 시나리오는 봉인되고, 다른 벤더가 쓰며, 구현자에게
   보이지 않습니다.
-- **격리는 선언이 아니라 측정.** *일부 구현됨.* 단계별 측정 타입, 단계 평가기, GATE-3 가 컨테이너 없이
-  시험됩니다. 라인은 GATE-3 를 실행하며 원장만 읽습니다. 다만 아직 어떤 단계도 심판 판정이나 컨테이너
-  측정을 기록하지 않으므로, 컨테이너 단계가 연결되기 전까지 모든 full 실행은 GATE-3 에서 미측정으로
-  멈춥니다. 실제 컨테이너에서 잰 수준은 아직 강제되지
-  않으며 `omf doctor` 는 이를 참고용으로만 보고합니다. `[judge]` 가 없으면 `unmeasurable`
-  ("judge.docker_context is not set, so no container runtime is used") 이라 하고, 있으면 임시 컨테이너 하나를 재서
-  L2 또는 L1 로 보고합니다 (`docs/isolation-and-gates.md`).
+- **격리는 선언이 아니라 측정.** *일부 구현됨.* 판정기는 후보를 SUT 와 하네스 두 일회용 컨테이너(네트워크 없음,
+  `docker.sock` 없음, 보관소 내용 없음)에서 돌리고, 후보 코드가 돌기 전에 컨테이너마다 `docker inspect` 로
+  측정합니다. GATE-3 는 그 측정을 원장에서 읽습니다. 지금 시험되는 것은 가짜 Docker 를 쓴 오프라인 형태뿐입니다.
+  실제 컨테이너에서 잰 수준은 `docs/evidence/gated-runs.json` 에 통과한 실행이 기록되기 전까지 강제되지 않으며,
+  구현자·작성자 컨테이너가 아직 없어서 실제 라인은 GATE-3 에서 `isolation_unmeasured` 로 멈춥니다
+  ([`docs/container-judge.md`](docs/container-judge.md)).
 - **비어 있으면 실패.** *일부 구현됨.* 라인 뼈대 (`E7a`), GATE-2 (`E7b`), 게이트 줄·감사·GATE-3 (`E7c`) 는
-  없는 측정을 통과가 아니라 실패로 읽습니다. 심판의 판정 파일 쪽은 컨테이너 실행기와 함께 옵니다.
+  없는 측정을 통과가 아니라 실패로 읽습니다. 심판의 판정(`E7d`)도 같습니다. 판정이 없거나 형식이 틀리거나 다른 라운드의 것이면 라운드가 끝나며 통과로 읽지 않습니다.
 - **자동 머지도 자동 배포도 없음.** *설계됨.* 후보는 사람이 내보낼 때까지 로컬 `omf/*` 브랜치에
   머뭅니다.
 
@@ -123,7 +122,7 @@ OMF 는 루프 두 개를 돌립니다.
 | 명령 | 하는 일 |
 |---|---|
 | `omf init` | 현재 저장소의 호스트 상태를 `~/.omf` 아래에 만듭니다. 저장소와 에이전트 CLI 설정에는 아무것도 쓰지 않습니다. |
-| `omf doctor [--json] [--strict]` | git, Docker, Claude Code, Codex, 저장소, 원장을 점검하고 `preflight.json` 을 씁니다. 에이전트 CLI 는 쓰고 버리는 임시 홈에서 실행합니다. Docker 가 없거나 실행 중이 아니거나 에이전트 CLI 가 없으면 필요한 단계를 밝힌 경고로 보고하고, 문제와 경고마다 한 줄 조치(`fix`)가 붙습니다. `--strict` 는 도구 누락 경고를 문제로 봅니다(원장 꼬리 손상은 경고로 남습니다). |
+| `omf doctor [--json] [--strict]` | git, Docker, Claude Code, Codex, 저장소, 원장을 점검하고 `preflight.json` 을 씁니다. 에이전트 CLI 는 쓰고 버리는 임시 홈에서 실행합니다. Docker 가 없거나 실행 중이 아니거나 에이전트 CLI 가 없으면 필요한 단계를 밝힌 경고로 보고하고, 문제와 경고마다 한 줄 조치(`fix`)가 붙습니다. `--strict` 는 도구 누락 경고를 문제로 봅니다(원장 꼬리 손상은 경고로 남습니다). 설정의 `[judge]` 에 이미지와 Docker 컨텍스트가 있으면 격리 수준을 쓰고 버리는 컨테이너로 참고용 점검하고, 없으면 이유와 함께 `unmeasurable` 로 보고합니다. |
 | `omf ledger verify [--json]` | 원장의 해시 체인을 확인합니다. 원장이 손상됐으면 stderr 둘째 줄에 경로, 줄 번호, 다음 행동이 나오고 `--json` 은 같은 내용을 필드로 냅니다. `--json` 의 오류는 모두 `{ "ok": false, "error": { "code": "...", "message": "..." } }` 형태입니다(code: `not_initialized`, `ledger_corrupt`, `not_a_git_repository`, `git_not_found`, `unsupported_repository`, `symlink_refused`, `cannot_run`). 키는 snake_case 입니다. `omf init` 전에는 종료 코드 2 입니다. |
 | `omf goal new <id>` | 템플릿으로 호스트 상태에 `goal.md` 를 만듭니다. |
 | `omf metric propose <id> --unit <u> -- <command>` | 지표를 제안합니다. 값을 출력하는 명령, 단위, 바뀌면 체제 변경(regime change)이 되는 경로를 적습니다. |
@@ -152,7 +151,9 @@ OMF 는 루프 두 개를 돌립니다.
 
 시나리오 보관소와 GATE-2 는 라이브러리 코드로만 있고 아직 명령은 없습니다. GATE-1 을 통과하면 작성 세션이 시나리오를 쓰고, OMF 가 도장을 찍어 저장소 밖 보관소(`vault/scenarios/<work-id>/<seal-id>/`)에 두며, GATE-2 는 비었거나, 한쪽 분할이 없거나, 아무것도 하지 않는 프로그램을 통과시키거나, 모순 카나리가 하나도 없거나(`canary_missing`), 닫힌 결정이 연결되지 않은 세트를 거부합니다. 지금 작성자는 호스트의 스텁 프로세스라서 작성 단계는 측정되지 않은 것으로 보고하고, 봉인은 강제되지 않습니다. [`docs/m3c-spec-deviations.md`](docs/m3c-spec-deviations.md) 를 보십시오.
 
-아직 만들지 않은 것: 컨테이너 실행기와 판정기, 증거 보고서, `omf ship`, 목표 달성 확인(`omf goal sign`), 실행 도중 사람에게 입력을 요청하는 흐름. 모두 [설계 문서](docs/ko/design/2026-10-12-omf-v0-design.md)에
+판정 스테이션은 아직 명령 없이 라이브러리 코드로만 있습니다. S4 는 저장된 train 분할과 모순 카나리를 일회용 컨테이너 두 개에서 k 번 판정하고, S5 는 게이트와 prove-test 를 컨테이너 작업 사본에서 돌려 감사하며, S6 은 test 분할을 한 번만 씁니다. 모두 가짜 Docker 로 오프라인 시험되고, 실제 컨테이너 실행은 따로 두며 기록되기 전까지 강제되지 않습니다. [`docs/container-judge.md`](docs/container-judge.md) 를 보십시오.
+
+아직 만들지 않은 것: 구현자·작성자 컨테이너, 라인을 돌리는 명령(`omf run`), 증거 보고서, `omf ship`, 목표 달성 확인(`omf goal sign`), 실행 도중 사람에게 입력을 요청하는 흐름. 모두 [설계 문서](docs/ko/design/2026-10-12-omf-v0-design.md)에
 적혀 있습니다.
 
 ## 빠른 시작
