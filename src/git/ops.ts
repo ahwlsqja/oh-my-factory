@@ -552,3 +552,118 @@ export async function fsckStrict(target: GitTarget): Promise<boolean> {
     throw error;
   }
 }
+
+/**
+ * The sha behind a bundle's header, only when the header lists exactly one ref and that ref is named `HEAD`. The
+ * container's script bundles `HEAD` and nothing else; a bundle with branches, tags or a second head was not made by that
+ * script, and its ref names are never trusted, so every other shape (and a file git cannot read) is null. No object is read.
+ */
+export async function bundleHeadSha(target: GitTarget, bundleFile: string): Promise<string | null> {
+  requireAbsolute("bundle file", bundleFile);
+  let listing: Buffer;
+  try {
+    listing = await git(target, ["bundle", "list-heads", bundleFile], { maxOutputBytes: SMALL_OUTPUT_BYTES });
+  } catch (error) {
+    if (error instanceof HostGitError && (error.code === "git_failed" || error.code === "output_limit")) return null;
+    throw error;
+  }
+  const lines = listing
+    .toString("utf8")
+    .split("\n")
+    .filter((line) => line.length > 0);
+  if (lines.length !== 1) return null;
+  return /^([0-9a-f]{40}) HEAD$/.exec(lines[0] ?? "")?.[1] ?? null;
+}
+
+export interface ReachableObject {
+  sha: string;
+  type: "commit" | "tree" | "blob";
+}
+
+/**
+ * Every commit, tree and blob reachable from `head`, once each (`rev-list --objects`, then `cat-file --batch-check` for the
+ * type). A gitlink is not followed: its object is not in the repository. More than `limit` objects throws
+ * `HostGitError("output_limit")`, the same code as git's own output cap, so a caller treats both as "too large to scan".
+ */
+export async function reachableObjects(target: GitTarget, head: string, limit: number): Promise<ReachableObject[]> {
+  requireSha("head", head);
+  if (!Number.isInteger(limit) || limit < 1) throw new Error("limit must be a positive integer");
+  const listing = await git(target, ["rev-list", "--objects", head]);
+  const shas = listing
+    .toString("utf8")
+    .split("\n")
+    .map((line) => line.split(" ", 1)[0] ?? "")
+    .filter((sha) => sha.length > 0);
+  if (shas.length > limit) throw new HostGitError("output_limit");
+  if (shas.length === 0) return [];
+  const typed = await git(target, ["cat-file", "--batch-check=%(objectname) %(objecttype)"], {
+    input: `${shas.join("\n")}\n`,
+  });
+  const lines = typed
+    .toString("utf8")
+    .split("\n")
+    .filter((line) => line.length > 0);
+  if (lines.length !== shas.length) throw new HostGitError("git_failed");
+  return lines.map((line, index) => {
+    const [sha, type] = line.split(" ");
+    if (sha === undefined || sha !== shas[index] || (type !== "commit" && type !== "tree" && type !== "blob")) {
+      throw new HostGitError("git_failed");
+    }
+    return { sha, type };
+  });
+}
+
+export interface BatchObject {
+  sha: string;
+  type: string;
+  bytes: Buffer;
+}
+
+const BATCH_OBJECTS = 256;
+const BATCH_HEADER_BYTES = 128;
+
+/**
+ * The raw bytes of each object, in the order asked, read with `cat-file --batch` on stdin: no checkout, no textconv, no
+ * filter. 256 objects per git call keeps memory bounded; the total of object sizes over `maxTotalBytes` throws
+ * `HostGitError("output_limit")`. An object that is missing, or output that does not parse, throws `HostGitError("git_failed")`:
+ * a safety scan that cannot read an object has not scanned it, and the caller must not call that clean.
+ */
+export async function* readObjectsBatch(
+  target: GitTarget,
+  shas: readonly string[],
+  maxTotalBytes: number,
+): AsyncGenerator<BatchObject> {
+  for (const sha of shas) requireSha("object", sha);
+  if (!Number.isInteger(maxTotalBytes) || maxTotalBytes < 0) {
+    throw new Error("maxTotalBytes must be a non-negative integer");
+  }
+  let total = 0;
+  for (let from = 0; from < shas.length; from += BATCH_OBJECTS) {
+    const chunk = shas.slice(from, from + BATCH_OBJECTS);
+    const raw = await git(target, ["cat-file", "--batch"], {
+      input: `${chunk.join("\n")}\n`,
+      maxOutputBytes: Math.max(0, maxTotalBytes - total) + chunk.length * BATCH_HEADER_BYTES,
+    });
+    let offset = 0;
+    for (const sha of chunk) {
+      const eol = raw.indexOf(0x0a, offset);
+      if (eol < 0) throw new HostGitError("git_failed");
+      const [name, type, length] = raw.subarray(offset, eol).toString("utf8").split(" ");
+      const size = Number(length);
+      if (
+        name !== sha ||
+        type === undefined ||
+        type === "missing" ||
+        !Number.isInteger(size) ||
+        size < 0 ||
+        eol + 1 + size > raw.length
+      ) {
+        throw new HostGitError("git_failed");
+      }
+      total += size;
+      if (total > maxTotalBytes) throw new HostGitError("output_limit");
+      yield { sha, type, bytes: raw.subarray(eol + 1, eol + 1 + size) };
+      offset = eol + 1 + size + 1;
+    }
+  }
+}

@@ -105,6 +105,19 @@ describe("W-hostile-tree-git", () => {
     const shas = listed.map((entry) => entry.sha);
     const blobs = await call("readBlobs", () => ops.readBlobs(quarantine, shas, 1024 * 1024));
     seen.push([...blobs.values()].map((bytes) => bytes.toString("latin1")).join("\n"));
+    const headBundle = join(root, "hostile-head.bundle");
+    gitIn(work, "bundle", "create", headBundle, "HEAD");
+    expect(await call("bundleHeadSha", () => ops.bundleHeadSha(quarantine, headBundle))).toBe(head);
+    const reachable = await call("reachableObjects", () => ops.reachableObjects(quarantine, head, 10_000));
+    seen.push(JSON.stringify(reachable));
+    const batch = await call("readObjectsBatch", async () => {
+      const texts: string[] = [];
+      const shas = reachable.map((entry) => entry.sha);
+      for await (const item of ops.readObjectsBatch(quarantine, shas, 1024 * 1024))
+        texts.push(item.bytes.toString("latin1"));
+      return texts;
+    });
+    seen.push(batch.join("\n"));
     const tarFile = join(root, "head.tar");
     await call("archiveTar", () => ops.archiveTar(quarantine, head, tarFile));
     seen.push(spawnSync("tar", ["-tf", tarFile], { encoding: "utf8" }).stdout);
