@@ -45,6 +45,8 @@ export interface ExecSpec {
   stdin?: string | Buffer;
   workdir?: string;
   env?: Readonly<Record<string, string>>;
+  /** Passed as a name-only `--env`; the docker client reads the value from its own environment for this one call. `env` refuses secret names. */
+  secret?: SecretHandle;
   timeoutMs: number;
   maxOutputBytes: number;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createArgv } from "../../src/container/argv.js";
+import { createArgv, execArgv } from "../../src/container/argv.js";
 import { containerSpecFor } from "../../src/container/golden.js";
 import { type PinnedImage, pinnedImage } from "../../src/container/image-ref.js";
 import {
@@ -137,5 +137,17 @@ describe("the implementer create argv", () => {
       codeOf(() => containerSpecFor({ role: "sut", image, labels, serial: 1, limits: limitsFor("implementer") })),
     ).toBe("invalid_limits");
     expect(codeOf(() => roleTmpfs("implementer", judge))).toBe("invalid_limits");
+  });
+});
+
+describe("the implementer exec argv", () => {
+  it("is pinned byte for byte; the secret is a name-only flag and nothing else is added", () => {
+    const secret = { argv: ["claude", "-p"], workdir: "/work", stdin: true, secret: "ANTHROPIC_API_KEY" } as const;
+    expect(execArgv(NAME, secret, "colima-omf-m3f").join(" ")).toBe(
+      `--context colima-omf-m3f exec -i --workdir /work --env ANTHROPIC_API_KEY ${NAME} claude -p`,
+    );
+    expect(
+      execArgv(NAME, { argv: ["git", "status"], workdir: "/work", stdin: false }, "colima-omf-m3f").join(" "),
+    ).toBe(`--context colima-omf-m3f exec --workdir /work ${NAME} git status`);
   });
 });

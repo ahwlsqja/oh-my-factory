@@ -10,6 +10,8 @@ import {
   type ImageId,
   type OwnedLabels,
   SANDBOX_USER,
+  SECRET_ENV_NAMES,
+  type SecretEnvName,
   type TmpfsSpec,
   assertContext,
   assertImageRef,
@@ -113,6 +115,8 @@ export interface ExecArgvSpec {
   argv: readonly string[];
   workdir?: string;
   env?: Readonly<Record<string, string>>;
+  /** Emitted as `--env <NAME>` with no value; the docker client takes the value from its own environment. */
+  secret?: SecretEnvName;
   /** True adds `-i`; the bytes themselves travel on the process stdin, never in argv. */
   stdin: boolean;
 }
@@ -130,8 +134,15 @@ export function execArgv(name: string, exec: ExecArgvSpec, context: string | nul
     flags.push("--workdir", exec.workdir);
   }
   for (const [key, value] of Object.entries(exec.env ?? {})) {
-    if (!ENV_NAME_RE.test(key) || value.includes("\0")) throw new ContainerSpecError("invalid_exec");
+    // A secret in `env` would put its value in argv; the only way to give an exec a secret is `secret`, by name.
+    if (!ENV_NAME_RE.test(key) || (SECRET_ENV_NAMES as readonly string[]).includes(key) || value.includes("\0")) {
+      throw new ContainerSpecError("invalid_exec");
+    }
     flags.push("--env", `${key}=${value}`);
+  }
+  if (exec.secret !== undefined) {
+    if (!(SECRET_ENV_NAMES as readonly string[]).includes(exec.secret)) throw new ContainerSpecError("invalid_exec");
+    flags.push("--env", exec.secret);
   }
   return [...contextArgs(context), "exec", ...flags, name, ...exec.argv];
 }

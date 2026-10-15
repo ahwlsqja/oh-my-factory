@@ -1,9 +1,11 @@
 import { pinnedImage } from "../../src/container/image-ref.js";
+import type { SecretHandle } from "../../src/container/runtime.js";
 import {
   type ContainerRole,
   type ContainerSpec,
   type OwnedLabels,
   type RoleLimits,
+  type SecretEnvName,
   containerName,
   roleLimits,
   roleTmpfs,
@@ -54,4 +56,12 @@ export function specFor(role: ContainerRole, serial = 1, round = 1): ContainerSp
     tmpfs: roleTmpfs(role, limits),
     limits: roleLimits(role, limits),
   };
+}
+
+/** A fake value shaped like a vendor key. No test uses a real one. */
+export const TEST_SECRET = "sk-ant-test-0123456789abcdefghij";
+
+/** The container layer's view of a secret, without `Credential`: a name and a value read once at exec time. */
+export function secretHandle(value: string = TEST_SECRET, name: SecretEnvName = "ANTHROPIC_API_KEY"): SecretHandle {
+  return { name, reveal: () => value };
 }

@@ -9,7 +9,12 @@ import { makeTempDir } from "./tmp.js";
 /** Structurally the `DockerRunner` of src/container/docker-cli.ts. */
 export type FakeRunner = (
   argv: readonly string[],
-  options: { stdin?: string | Buffer; timeoutMs: number; maxOutputBytes: number },
+  options: {
+    stdin?: string | Buffer;
+    timeoutMs: number;
+    maxOutputBytes: number;
+    env?: Readonly<Record<string, string>>;
+  },
 ) => Promise<ProcessResult>;
 
 /** The verbs that build, pull, create, start or run something: what an offline test must see none of when a guard refuses. */
@@ -59,7 +64,7 @@ export class FakeDocker {
       this.state.calls.push({ argv: [...argv], context: null, stdin_b64: null });
       return answer;
     }
-    const result = handle(this.state, argv, options.stdin ?? null, this.hooks);
+    const result = handle(this.state, argv, options.stdin ?? null, this.hooks, options.env ?? {});
     return { kind: "exited", status: result.status, signal: null, stdout: result.stdout, stderr: result.stderr };
   };
 

@@ -16,7 +16,7 @@ if (argv.includes("exec") && argv.includes("-i")) {
   }
 }
 
-const result = handle(state, argv, stdin);
+const result = handle(state, argv, stdin, {}, process.env);
 // What the client saw: a test asserts it was started with PATH and DOCKER_CONFIG and nothing else.
 // macOS adds __CF_USER_TEXT_ENCODING to some processes on its own; it is not a variable the caller passed.
 const call = state.calls.at(-1);

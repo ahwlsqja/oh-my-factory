@@ -57,4 +57,5 @@ export function handle(
   argv: readonly string[],
   stdin?: string | Uint8Array | null,
   hooks?: FakeHooks,
+  clientEnv?: Readonly<Record<string, string | undefined>>,
 ): FakeResult;
