@@ -75,6 +75,8 @@ function verifyEvents(events: LedgerEvent[]): VerifyResult {
   let prev = GENESIS_HASH;
   for (const [index, event] of events.entries()) {
     const seq = index + 1;
+    // A missing field must read as a sentence, never as "seq is undefined".
+    if (typeof event.seq !== "number") return { ok: false, seq, reason: `line ${seq} has no seq` };
     if (event.seq !== seq) return { ok: false, seq, reason: `seq is ${event.seq}` };
     if (event.prev_hash !== prev) return { ok: false, seq, reason: "prev_hash mismatch" };
     const { hash, ...body } = event;

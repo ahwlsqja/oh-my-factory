@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { type IsolationProbe, runDoctor } from "../../src/core/doctor.js";
+import { type IsolationProbe, runDoctor, runDoctorParallel } from "../../src/core/doctor.js";
 import { TORN_TAIL_WARNING } from "../../src/core/ledger.js";
 import { projectDir } from "../../src/core/paths.js";
 import { initProject } from "../../src/core/project.js";
@@ -79,7 +79,48 @@ describe("runDoctor", () => {
     expect(JSON.parse(readFileSync(join(projectDir, "preflight.json"), "utf8"))).toEqual(report);
   });
 
-  it("reports missing vendor CLIs and an unreachable docker daemon", () => {
+  it("warns, with the stage that needs the tool, when docker and the agent CLIs are missing", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const bin = makeTempDir("omf-bin-");
+    withGit(bin);
+    const e = env(home, bin);
+    initProject(repo, e);
+    const report = runDoctor(repo, e);
+    expect(report.ok).toBe(true);
+    expect(report.problems).toEqual([]);
+    expect(report.warnings).toEqual([
+      "docker not found on PATH",
+      "claude not found on PATH",
+      "codex not found on PATH",
+    ]);
+    const byMessage = Object.fromEntries(report.warning_details.map((w) => [w.message, w]));
+    expect(byMessage["docker not found on PATH"]?.needed_by).toEqual([
+      "container judging",
+      "metric runs in a container",
+    ]);
+    expect(byMessage["claude not found on PATH"]?.needed_by).toEqual(["the implementer", "the sealing author"]);
+    for (const warning of report.warning_details) expect(warning.fix).toMatch(/\S/);
+    // The host runner is offered together with its cost.
+    expect(byMessage["docker not found on PATH"]?.fix).toContain("--runner host, without isolation");
+  });
+
+  it("reports an unreachable docker daemon as a warning that names the stages needing it", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const e = env(home, stubBin({ dockerDaemon: false }));
+    initProject(repo, e);
+    const report = runDoctor(repo, e);
+    expect(report.ok).toBe(true);
+    expect(report.problems).toEqual([]);
+    expect(report.warnings).toEqual(["docker daemon is not reachable"]);
+    expect(report.warning_details[0]?.fix).toContain("docker info");
+    expect(report.warning_details[0]?.fix).toContain("colima start");
+    expect(report.warning_details[0]?.fix).toContain("--runner host, without isolation");
+    expect(report.warning_details[0]?.needed_by).toEqual(["container judging", "metric runs in a container"]);
+  });
+
+  it("--strict promotes the missing-tool warnings to problems", () => {
     const repo = makeGitRepo();
     const home = makeTempDir("omf-home-");
     const bin = makeTempDir("omf-bin-");
@@ -89,12 +130,115 @@ describe("runDoctor", () => {
     withGit(bin);
     const e = env(home, bin);
     initProject(repo, e);
-    const report = runDoctor(repo, e);
+    const report = runDoctor(repo, e, undefined, undefined, { strict: true });
     expect(report.ok).toBe(false);
+    expect(report.strict).toBe(true);
+    expect(report.warnings).toEqual([]);
     expect(report.problems).toEqual(
       expect.arrayContaining(["claude not found on PATH", "codex not found on PATH", "docker daemon is not reachable"]),
     );
   });
+
+  it("--strict lists the problems in the order doctor always listed them: tools, then the project", () => {
+    const home = makeTempDir("omf-home-");
+    const bin = makeTempDir("omf-bin-");
+    const docker = join(bin, "docker");
+    writeFileSync(docker, '#!/bin/sh\nif [ "$1" = "info" ]; then exit 1; else echo "Docker version 29.0.0"; fi\n');
+    chmodSync(docker, 0o755);
+    withGit(bin);
+    // Docker installed but stopped, no agent CLIs, outside any repository, so a project problem follows the tool ones.
+    const stopped = runDoctor(makeTempDir(), env(home, bin), undefined, undefined, { strict: true });
+    expect(stopped.problems).toEqual([
+      "claude not found on PATH",
+      "codex not found on PATH",
+      "docker daemon is not reachable",
+      "not inside a git repository",
+    ]);
+    // No docker binary at all: it comes first, before the agent CLIs.
+    const bare = makeTempDir("omf-bin-");
+    withGit(bare);
+    const missing = runDoctor(makeTempDir(), env(home, bare), undefined, undefined, { strict: true });
+    expect(missing.problems).toEqual([
+      "docker not found on PATH",
+      "claude not found on PATH",
+      "codex not found on PATH",
+      "not inside a git repository",
+    ]);
+    expect(missing.problem_details.map((p) => p.message)).toEqual(missing.problems);
+  });
+
+  it("--strict leaves a torn tail a warning and keeps the exit status ok", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const e = env(home, stubBin({ dockerDaemon: true }));
+    const dir = projectDir(repo, e);
+    initProject(repo, e);
+    appendFileSync(join(dir, "ledger.jsonl"), '{"schema_version":1,"se');
+    const report = runDoctor(repo, e, undefined, undefined, { strict: true });
+    expect(report.warnings).toContain(TORN_TAIL_WARNING);
+    expect(report.problems).not.toContain(TORN_TAIL_WARNING);
+    expect(report.ok).toBe(true);
+  });
+
+  it("a missing git is still a problem, and every problem has a fix line", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const report = runDoctor(repo, env(home, makeTempDir("omf-emptybin-")));
+    expect(report.ok).toBe(false);
+    expect(report.problems).toContain("git not found on PATH");
+    expect(report.problem_details.map((p) => p.message)).toEqual(report.problems);
+    for (const problem of report.problem_details) expect(problem.fix).toMatch(/\S/);
+  });
+
+  it("the parallel probes give the same report as the sequential ones", async () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const e = env(home, stubBin({ dockerDaemon: true }));
+    initProject(repo, e);
+    const fixed = () => new Date(0);
+    const sequential = runDoctor(repo, e, fixed);
+    const parallel = await runDoctorParallel(repo, e, fixed);
+    expect(parallel).toEqual(sequential);
+  });
+
+  it("runs the slow probes at the same time", async () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const bin = stubBin({ dockerDaemon: true });
+    // Three probes that each take 1 s: one after another they need at least 3 s, together about 1 s.
+    for (const name of ["claude", "codex"]) {
+      writeFileSync(join(bin, name), `#!/bin/sh\n/bin/sleep 1\necho "${name} 1.0"\n`);
+      chmodSync(join(bin, name), 0o755);
+    }
+    writeFileSync(
+      join(bin, "docker"),
+      '#!/bin/sh\nif [ "$1" = "info" ]; then /bin/sleep 1; echo 29.0.0; else echo "Docker version 29.0.0"; fi\n',
+    );
+    const e = env(home, bin);
+    const started = Date.now();
+    const report = await runDoctorParallel(repo, e);
+    const elapsed = Date.now() - started;
+    expect(report.tools.claude.found && report.tools.codex.found && report.tools.docker.daemon).toBe(true);
+    expect(elapsed).toBeLessThan(2500);
+    // The same stubs probed one after another cannot be faster than their sum, which proves the bound above is not trivial.
+    const sequentialStarted = Date.now();
+    runDoctor(repo, e);
+    expect(Date.now() - sequentialStarted).toBeGreaterThanOrEqual(3000);
+  }, 20_000);
+
+  it("a probe that hangs is cut off and counts as not found", async () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const bin = stubBin({ dockerDaemon: true });
+    const claude = join(bin, "claude");
+    writeFileSync(claude, "#!/bin/sh\nexec /bin/sleep 30\n");
+    chmodSync(claude, 0o755);
+    const started = Date.now();
+    const report = await runDoctorParallel(repo, env(home, bin));
+    expect(Date.now() - started).toBeLessThan(15_000);
+    expect(report.tools.claude.found).toBe(false);
+    expect(report.warnings).toContain("claude not found on PATH");
+  }, 20_000);
 
   it("reports an uninitialized project without writing anything", () => {
     const repo = makeGitRepo();
@@ -146,6 +290,7 @@ describe("runDoctor", () => {
     writeFileSync(join(projectDir, "ledger.jsonl"), "{not json\n");
     const report = runDoctor(repo, e);
     expect(report.problems).toContain("ledger corrupt at seq 1: unparseable line");
+    expect(report.problem_details[0]?.fix).toContain("omf ledger verify --json");
   });
 
   it("reports when not inside a git repository", () => {

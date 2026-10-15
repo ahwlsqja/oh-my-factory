@@ -39,9 +39,9 @@ describe("omf CLI", () => {
     expect(verify.stdout).toMatch(/^ok: 1 event, head [0-9a-f]{64}\n$/);
   });
 
-  it("ledger verify fails before init", () => {
+  it("ledger verify cannot run before init (exit 2, like goal audit and work list)", () => {
     const out = omf(["ledger", "verify"], makeGitRepo(), makeTempDir("omf-home-"));
-    expect(out.code).toBe(1);
+    expect(out.code).toBe(2);
     expect(out.stderr).toContain("project not initialized; run omf init");
   });
 
@@ -84,13 +84,13 @@ describe("omf CLI", () => {
 });
 
 describe("omf ledger verify on a ledger that holds no project.initialized", () => {
-  it("exits 1 with 'project not initialized' when the initialized ledger was emptied", () => {
+  it("exits 2 with 'project not initialized' when the initialized ledger was emptied", () => {
     const repo = makeGitRepo();
     const home = makeTempDir("omf-home-");
     omf(["init"], repo, home);
     writeFileSync(join(projectDir(repo, { HOME: home }), "ledger.jsonl"), "");
     const out = omf(["ledger", "verify"], repo, home);
-    expect(out.code).toBe(1);
+    expect(out.code).toBe(2);
     expect(out.stderr).toContain("project not initialized; run omf init");
   });
 });
