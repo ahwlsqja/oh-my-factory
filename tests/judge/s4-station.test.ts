@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { releaseHeld } from "../../src/judge/engine.js";
@@ -84,8 +84,20 @@ describe("S4", () => {
       },
     });
     recordW(r.s.f.fx.ledger, "work.started", r.s.f.item, { run_id: earlier });
+    mkdirSync(join(r.s.f.item.dir, "runs", earlier), { recursive: true });
     await r.station.run(r.ctx());
     expect(r.runtime.removed).toEqual([`container:omf-sut-${earlier}-1-3`, `image:omf-sut:${earlier}-1`]);
+  });
+
+  it("removes the host staging directories an earlier, killed run left, ", async () => {
+    const earlier = "r-20261013T000000Z-0001";
+    const r = s4Rig();
+    const judge = join(r.s.f.item.dir, "runs", earlier, "judge");
+    mkdirSync(join(judge, "wc-1-1", "tree"), { recursive: true });
+    writeFileSync(join(judge, "wc-1-1", "tree", "x"), "x");
+    mkdirSync(join(judge, "1-train", "ctx-sut"), { recursive: true });
+    await r.station.run(r.ctx());
+    expect(existsSync(judge)).toBe(false);
   });
 });
 

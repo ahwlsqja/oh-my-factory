@@ -145,7 +145,10 @@ export function runtimeDouble(options: RuntimeOptions = {}): RuntimeDouble {
     context: options.context === undefined ? "colima-omf-m3f" : options.context,
     endpoint: async () => ({ kind: options.local === false ? "tcp" : "unix", local: options.local !== false }),
     info: async () => options.info ?? { ok: true, server_version: "29.0.0" },
-    listOwned: async (filter) => (filter.run_id === null ? [] : [...(options.owned?.[filter.run_id] ?? [])]),
+    listOwned: async (filter) =>
+      filter.run_id === null
+        ? Object.values(options.owned ?? {}).flatMap((list) => [...list])
+        : [...(options.owned?.[filter.run_id] ?? [])],
     remove: async (handle) => {
       removed.push(`container:${handle.name}`);
     },

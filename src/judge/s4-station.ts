@@ -1,12 +1,10 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { NotGoldenError } from "../container/measure.js";
-import type { ContainerRuntime } from "../container/runtime.js";
-import { assertName, type ImageId, type OwnedLabels } from "../container/spec.js";
+import type { OwnedLabels } from "../container/spec.js";
 import { canonicalize, sha256Hex } from "../core/canonical-json.js";
 import { readConfig } from "../core/config.js";
 import { Ledger } from "../core/ledger.js";
-import type { LedgerEvent } from "../core/ledger.js";
 import { writePrivateFileAtomic } from "../core/private-fs.js";
 import { INTERFACE_DECISION_ID } from "../decision/types.js";
 import { trainCounts } from "../feedback/tally.js";
@@ -22,6 +20,7 @@ import { JudgeRoundError } from "./round.js";
 import type { RoundVerdict } from "./round.js";
 import { loadStandingSet } from "./standing-set.js";
 import type { ResolvedDeps } from "./stations.js";
+import { sweepOrphans } from "./state.js";
 
 const blocked = (reason_code: ReasonCode): StationResult => ({ kind: "blocked", reason_code });
 
@@ -36,45 +35,6 @@ function stopFor(err: unknown): ReasonCode {
   if (err instanceof JudgeRoundError && (err.code === "set_invalid" || err.code === "no_scenarios"))
     return "gate_blocked";
   return "infra_failure";
-}
-
-const CONTAINER_NAME = /^omf-(sut|harness|workcopy)-/;
-
-/**
- * Removes what earlier runs of this item left on the daemon (a SIGKILL runs no cleanup). The runs that belong to the item
- * are the ones its ledger names in `work.started` and `work.resumed`; the claim this run holds makes them orphans. Only
- * per-round SUT images (`omf-sut:`) are removed: the cached harness image is reused across runs by its context hash. An owned
- * container whose name is off the full pattern is left in place, as `sweepOrphans` does.
- */
-export async function sweepEarlierRuns(
-  runtime: ContainerRuntime,
-  events: readonly LedgerEvent[],
-  workId: string,
-  currentRunId: string,
-): Promise<void> {
-  const earlier = new Set<string>();
-  for (const event of events) {
-    if (event.type !== "work.started" && event.type !== "work.resumed") continue;
-    const { work_id, run_id } = event.payload;
-    if (work_id === workId && typeof run_id === "string" && run_id !== currentRunId) earlier.add(run_id);
-  }
-  for (const run_id of [...earlier].sort()) {
-    for (const resource of await runtime.listOwned({ run_id })) {
-      if (resource.kind === "container") {
-        const role = CONTAINER_NAME.exec(resource.name)?.[1];
-        if (role !== "sut" && role !== "harness" && role !== "workcopy") continue;
-        // The runtime refuses a name off the full pattern; one such resource must not stop the sweep or the round.
-        try {
-          assertName(resource.name);
-        } catch {
-          continue;
-        }
-        await runtime.remove({ name: resource.name, id: resource.name, role });
-      } else if (resource.name.startsWith("omf-sut:")) {
-        await runtime.removeImage(resource.name as ImageId);
-      }
-    }
-  }
 }
 
 /**
@@ -130,7 +90,7 @@ export function s4Station(deps: ResolvedDeps, holder: RoundHolder): Station {
         const info = await runtime.info();
         if (!info.ok || !(await runtime.endpoint()).local) return blocked("infra_failure");
         await releaseHeld(runtime, engine, holder);
-        await sweepEarlierRuns(runtime, events, ctx.workId, ctx.runId);
+        await sweepOrphans({ runtime, itemDir: ctx.item.dir, currentRunId: ctx.runId });
         mkdirSync(contextRoot, { recursive: true, mode: 0o700 });
         const lease = await engine.buildRoundImages({
           runtime,
