@@ -1,8 +1,17 @@
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import type { ProcessResult } from "../adapters/process-group.js";
-import { createArgv, execArgv, inspectArgv, removeArgv, startArgv } from "./argv.js";
-import { dockerEnv, resolveDockerConfig } from "./docker-cli.js";
+import {
+  contextInspectArgv,
+  createArgv,
+  execArgv,
+  imageInspectArgv,
+  infoArgv,
+  inspectArgv,
+  removeArgv,
+  startArgv,
+} from "./argv.js";
+import { dockerEnv, endpointKind, resolveDockerConfig } from "./docker-cli.js";
 import type { ContainerHandle, ExecSpec, ImageInfo } from "./runtime.js";
 import type { ContainerSpec, ImageId } from "./spec.js";
 
@@ -26,7 +35,7 @@ export interface ContainerRuntimeSync {
 export type SyncRun = (argv: readonly string[]) => { status: number | null; stdout: string; stderr: string };
 
 export class SyncRuntimeError extends Error {
-  constructor(readonly code: "context_not_configured" | "docker_failed" | "bad_output") {
+  constructor(readonly code: "context_not_configured" | "endpoint_not_local" | "docker_failed" | "bad_output") {
     super(code);
     this.name = "SyncRuntimeError";
   }
@@ -74,26 +83,43 @@ export function createDockerRuntimeSync(options: DockerSyncOptions): ContainerRu
     return result.stdout;
   };
   let endpoint: ReturnType<ContainerRuntimeSync["endpointSync"]> | null = null;
+  const lookupEndpoint = (name: string): { kind: "unix" | "tcp" | "ssh" | "other"; local: boolean } => {
+    const text = succeed(contextInspectArgv(name));
+    let doc: unknown;
+    try {
+      doc = JSON.parse(text);
+    } catch {
+      throw new SyncRuntimeError("bad_output");
+    }
+    const first: unknown = Array.isArray(doc) ? doc[0] : undefined;
+    const host = (first as { Endpoints?: { docker?: { Host?: unknown } } } | null | undefined)?.Endpoints?.docker?.Host;
+    if (typeof host !== "string") throw new SyncRuntimeError("bad_output");
+    const kind = endpointKind(host);
+    return { kind, local: kind === "unix" };
+  };
+  /** Same rule as the async runtime: nothing is created, started or run on an endpoint that is not a local unix socket. */
+  const requireLocal = (): string => {
+    const name = need();
+    endpoint ??= lookupEndpoint(name);
+    if (!endpoint.local) throw new SyncRuntimeError("endpoint_not_local");
+    return name;
+  };
 
   return {
     context,
     infoSync() {
-      const result = run(["--context", need(), "info", "--format", "{{.ServerVersion}}"]);
+      const result = run(infoArgv(need()));
       if (result.status === 0 && result.stdout.trim() !== "") return { ok: true, server_version: result.stdout.trim() };
       const text =
         result.stderr.trim() || result.stdout.trim() || `docker info exited with status ${result.status ?? "none"}`;
       return { ok: false, failure: text.slice(0, MAX_FAILURE_CHARS) };
     },
     endpointSync() {
-      if (endpoint !== null) return endpoint;
-      const host = succeed(["context", "inspect", "--format", '{{(index .Endpoints "docker").Host}}', need()]).trim();
-      const scheme = ["unix", "tcp", "ssh"].find((name) => host.startsWith(`${name}://`));
-      const kind = scheme === "unix" || scheme === "tcp" || scheme === "ssh" ? scheme : "other";
-      endpoint = { kind, local: kind === "unix" };
+      endpoint ??= lookupEndpoint(need());
       return endpoint;
     },
     imageInfoSync(ref) {
-      const result = run(["--context", need(), "image", "inspect", ref]);
+      const result = run(imageInspectArgv(ref, need()));
       if (result.status !== 0) return null;
       let doc: unknown;
       try {
@@ -116,7 +142,7 @@ export function createDockerRuntimeSync(options: DockerSyncOptions): ContainerRu
       };
     },
     createSync(spec) {
-      const id = succeed(createArgv(spec, need())).trim();
+      const id = succeed(createArgv(spec, requireLocal())).trim();
       if (!CONTAINER_ID.test(id)) throw new SyncRuntimeError("bad_output");
       return { name: spec.name, id, role: spec.labels.role };
     },
@@ -129,7 +155,7 @@ export function createDockerRuntimeSync(options: DockerSyncOptions): ContainerRu
       }
     },
     startSync(handle) {
-      succeed(startArgv(handle.name, need()));
+      succeed(startArgv(handle.name, requireLocal()));
     },
     execSync(handle, spec) {
       const result = run(
@@ -141,7 +167,7 @@ export function createDockerRuntimeSync(options: DockerSyncOptions): ContainerRu
             ...(spec.workdir !== undefined ? { workdir: spec.workdir } : {}),
             ...(spec.env !== undefined ? { env: spec.env } : {}),
           },
-          need(),
+          requireLocal(),
         ),
       );
       if (result.status === null) return { kind: "error", code: null, message: result.stderr.slice(0, 200) };

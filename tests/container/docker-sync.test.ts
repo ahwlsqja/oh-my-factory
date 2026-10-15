@@ -1,7 +1,17 @@
 import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createArgv, execArgv, inspectArgv, removeArgv, startArgv } from "../../src/container/argv.js";
+import {
+  contextInspectArgv,
+  createArgv,
+  execArgv,
+  imageInspectArgv,
+  infoArgv,
+  inspectArgv,
+  removeArgv,
+  startArgv,
+} from "../../src/container/argv.js";
+import { ContainerSpecError } from "../../src/container/spec.js";
 import { type SyncRun, SyncRuntimeError, createDockerRuntimeSync } from "../../src/container/docker-sync.js";
 import { CONTEXT, measureFixture } from "../helpers/measure-fixture.js";
 import { makeTempDir } from "../helpers/tmp.js";
@@ -9,6 +19,11 @@ import { makeTempDir } from "../helpers/tmp.js";
 type Reply = { status: number | null; stdout: string; stderr: string };
 const ok = (stdout = ""): Reply => ({ status: 0, stdout, stderr: "" });
 const fail = (stderr: string): Reply => ({ status: 1, stdout: "", stderr });
+
+/** What `docker context inspect <name>` prints for a context whose docker endpoint is `host`. */
+const contextDoc = (host: string): Reply =>
+  ok(`${JSON.stringify([{ Name: "c", Endpoints: { docker: { Host: host } } }])}\n`);
+const LOCAL = contextDoc("unix:///Users/x/.colima/omf-m3f/docker.sock");
 
 /** A runner that answers from a queue and records every argv. */
 function scripted(...replies: Reply[]): { run: SyncRun; calls: string[][] } {
@@ -26,7 +41,7 @@ function scripted(...replies: Reply[]): { run: SyncRun; calls: string[][] } {
 describe("createDockerRuntimeSync", () => {
   it("builds every container argv with the same builders as the async runtime", async () => {
     const spec = (await measureFixture()).spec("sut");
-    const { run, calls } = scripted(ok("c0ffee0123456789\n"), ok('[{"Id":"x"}]'), ok(), ok("out"), ok());
+    const { run, calls } = scripted(LOCAL, ok("c0ffee0123456789\n"), ok('[{"Id":"x"}]'), ok(), ok("out"), ok());
     const runtime = createDockerRuntimeSync({ context: CONTEXT, run });
     const handle = runtime.createSync(spec);
     expect(handle).toEqual({ name: spec.name, id: "c0ffee0123456789", role: "sut" });
@@ -39,6 +54,7 @@ describe("createDockerRuntimeSync", () => {
     });
     runtime.removeSync(handle);
     expect(calls).toEqual([
+      contextInspectArgv(CONTEXT),
       createArgv(spec, CONTEXT),
       inspectArgv(spec.name, CONTEXT),
       startArgv(spec.name, CONTEXT),
@@ -68,7 +84,7 @@ describe("createDockerRuntimeSync", () => {
       ["npipe:////./pipe/docker", "other", false],
     ] as const;
     for (const [host, kind, local] of table) {
-      const { run, calls } = scripted(ok(`${host}\n`));
+      const { run, calls } = scripted(contextDoc(host));
       const runtime = createDockerRuntimeSync({ context: CONTEXT, run });
       expect(runtime.endpointSync()).toEqual({ kind, local });
       expect(runtime.endpointSync()).toEqual({ kind, local });
@@ -89,6 +105,39 @@ describe("createDockerRuntimeSync", () => {
       volumes: ["/data"],
     });
     expect(image(fail("No such image"))).toBeNull();
+  });
+
+  it("builds info, context inspect and image inspect argv with the shared builders and their checks", () => {
+    const { run, calls } = scripted(ok("29.0.1\n"), LOCAL, fail("No such image"));
+    const runtime = createDockerRuntimeSync({ context: CONTEXT, run });
+    runtime.infoSync();
+    runtime.endpointSync();
+    runtime.imageInfoSync("img@sha256:x");
+    expect(calls).toEqual([infoArgv(CONTEXT), contextInspectArgv(CONTEXT), imageInspectArgv("img@sha256:x", CONTEXT)]);
+    const bad = scripted(ok());
+    expect(() => createDockerRuntimeSync({ context: CONTEXT, run: bad.run }).imageInfoSync("--privileged")).toThrow(
+      ContainerSpecError,
+    );
+    expect(() => createDockerRuntimeSync({ context: "bad name; rm", run: bad.run }).endpointSync()).toThrow(
+      ContainerSpecError,
+    );
+    expect(bad.calls).toEqual([]);
+  });
+
+  it("refuses to create, start or exec on a non-local endpoint and never reaches the daemon", async () => {
+    const spec = (await measureFixture()).spec("sut");
+    const handle = { name: spec.name, id: "c0ffee0123456789", role: "sut" as const };
+    for (const host of ["tcp://10.0.0.5:2376", "ssh://ci@build", "npipe:////./pipe/docker"]) {
+      const { run, calls } = scripted(contextDoc(host));
+      const runtime = createDockerRuntimeSync({ context: CONTEXT, run });
+      const attempts = [
+        () => runtime.createSync(spec),
+        () => runtime.startSync(handle),
+        () => runtime.execSync(handle, { argv: ["true"], timeoutMs: 1000, maxOutputBytes: 100 }),
+      ];
+      for (const attempt of attempts) expect(attempt).toThrow(expect.objectContaining({ code: "endpoint_not_local" }));
+      expect(calls).toEqual([contextInspectArgv(CONTEXT)]);
+    }
   });
 
   it("gives the docker client PATH and DOCKER_CONFIG only, never HOME or a credential", () => {
