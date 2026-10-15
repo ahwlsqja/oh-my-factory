@@ -1,15 +1,21 @@
 import { goldenFor } from "../container/golden.js";
-import { digestOf, type PinnedImage } from "../container/image-ref.js";
+import { digestOf, ImageRefError, type PinnedImage, pinnedImage } from "../container/image-ref.js";
 import { createMeasured, type MeasureDeps, NotGoldenError } from "../container/measure.js";
 import type { ContainerRuntime, ImageInfo } from "../container/runtime.js";
 import { type ContainerSpec, containerName, type OwnedLabels, type TmpfsSpec } from "../container/spec.js";
+import { buildSutImage } from "../container/sut-build.js";
 import { registerCleanup } from "../core/cleanup-registry.js";
 import type { JudgeConfig } from "../core/config.js";
-import type { DecisionClass } from "../decision/types.js";
+import type { DecisionClass, InterfaceContract } from "../decision/types.js";
+import type { GitTarget } from "../git/hardened.js";
 import type { ScenarioRunner, StepLimits } from "../scenario/runner.js";
 import type { ScenarioSplit, StoredKind } from "../scenario/types.js";
+import { ensureHarnessImage } from "./harness-context.js";
 import { createHarnessClient, type HarnessSet, type HarnessVerdict } from "./harness-protocol.js";
 import { createContainerScenarioRunner } from "./relay.js";
+
+/** The lease's SUT image is removed by `disposeImages`, which lives with the line's other cleanup. */
+export { disposeImages } from "./state.js";
 
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 type Outcome = "pass" | "fail" | "error";
@@ -24,7 +30,7 @@ export interface RoundScenario {
   set: HarnessSet["scenarios"][number];
 }
 
-/** The images one round runs on. Built by the S4 station; this task only reads it. */
+/** The images one round runs on, built by `buildRoundImages`. */
 export interface ImageLease {
   sut: ImageInfo;
   harness: ImageInfo;
@@ -32,6 +38,58 @@ export interface ImageLease {
   sut_base: PinnedImage;
   harness_base: PinnedImage;
   labels: OwnedLabels;
+}
+
+/** A round's image builds run the candidate's declared build: the same ten minutes the work copy gives its build. */
+const IMAGE_BUILD_TIMEOUT_MS = 600_000;
+
+/** An unset base is refused like an empty reference; a tag is refused by `pinnedImage`. */
+function configuredBase(ref: string | null): PinnedImage {
+  if (ref === null) throw new ImageRefError("image_invalid");
+  return pinnedImage(ref);
+}
+
+/**
+ * Builds the two images a round runs on from the judge config's digest-pinned bases, both checked before anything is
+ * built. The harness image comes first and is reused when the image named by its full context hash exists; the SUT image
+ * is then built from the candidate commit in the quarantine. A failed SUT build therefore leaves only the cached harness
+ * image, and the SUT image is the one image the lease owns. `contract.run` is not baked in: the round hands it to the relay.
+ */
+export async function buildRoundImages(input: {
+  runtime: Pick<ContainerRuntime, "build" | "imageInfo">;
+  config: JudgeConfig;
+  contract: Pick<InterfaceContract, "build" | "run">;
+  candidate: { quarantine: GitTarget; sha: string };
+  labels: OwnedLabels;
+  contextRoot: string;
+}): Promise<ImageLease> {
+  const sutBase = configuredBase(input.config.sut_base_image);
+  const harnessBase = configuredBase(input.config.harness_base_image);
+  const harness = await ensureHarnessImage({
+    runtime: input.runtime,
+    base: harnessBase,
+    labels: { ...input.labels, role: "harness" },
+    contextRoot: input.contextRoot,
+    timeoutMs: IMAGE_BUILD_TIMEOUT_MS,
+  });
+  const sut = await buildSutImage({
+    runtime: input.runtime,
+    quarantine: input.candidate.quarantine,
+    sha: input.candidate.sha,
+    base: sutBase,
+    build: input.contract.build,
+    labels: { ...input.labels, role: "sut" },
+    contextRoot: input.contextRoot,
+    timeoutMs: IMAGE_BUILD_TIMEOUT_MS,
+  });
+  return {
+    sut,
+    harness: harness.image,
+    harness_context_sha256: harness.context_sha256,
+    sut_base: sutBase,
+    harness_base: harnessBase,
+    labels: input.labels,
+  };
 }
 
 export interface ScenarioTally {
