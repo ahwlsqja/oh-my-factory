@@ -293,7 +293,8 @@ export function authorizeTestReseal(
  * What M3b2's evidence calls `sealed.test`: { pass, total } or the word "not run", never anything else.
  * `consumed_incomplete` and `consumed_other_candidate` are real states on the host (the handoff and the
  * `blocked` outcomes use them), but they are not a result for this code, so the evidence reads them as not run.
- * A total of 0 is not a pass either (E7). `flaky` is dropped here: the evidence's noise_check carries flakiness.
+ * A total of 0 is not a pass either (E7). `flaky` is dropped here and nothing else carries test-split flakiness into the classifier: it reads
+ * flaky counts of the train split only. Known gap until the station that builds the evidence passes the test-split flakiness on.
  */
 export function evidenceSealedTest(field: SealedTestField): { pass: number; total: number } | "not run" {
   if (typeof field === "string") return "not run";
@@ -304,7 +305,8 @@ export function evidenceSealedTest(field: SealedTestField): { pass: number; tota
 /**
  * What the evidence calls `noise_check`: `ok | within_variance | not_evaluated | not run`. v0.1 never evaluates variance, so
  * every computed check is `not_evaluated`, k < 2 included (kept fail closed: the evidence lists it as an unverified area); no
- * check yet is `not run`. The classifier reads no noise reason code: flakiness arrives through the sealed counts.
+ * check yet is `not run`. The classifier reads no noise reason code. It sees flakiness only through the train counts of `sealed.train`;
+ * flakiness of the test split reaches it by no path today (known gap).
  */
 export function noiseCheckField(check: NoiseCheck | null): "not_evaluated" | "not run" {
   return check === null ? "not run" : "not_evaluated";
