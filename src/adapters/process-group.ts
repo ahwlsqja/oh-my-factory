@@ -45,16 +45,17 @@ function onExit(): void {
 
 /**
  * A detached group is not in the terminal's foreground group, so Ctrl-C never reaches it. The group killer is registered
- * once with the shared cleanup registry (M3e-D25): on SIGINT or SIGTERM it kills every live group, then the registry takes
- * its handlers off and re-raises the signal, so the process still ends with the signal status instead of exit 0. The
- * registration stays for the life of the process, like the handlers did; the exit hook is the net for a normal exit.
+ * with the shared cleanup registry (M3e-D25) as a `first` entry, so on SIGINT or SIGTERM it kills every live group before
+ * any directory cleanup runs; then the registry takes its handlers off and re-raises the signal, so the process still
+ * ends with the signal status instead of exit 0. The exit hook is the net for a normal exit.
  */
 function installHandlers(): void {
   // Every run re-registers: the registry takes its signal handlers off after a signal, and a process that survives the
   // re-raise (another listener caught it) gets them back only on a registration. The previous entry is dropped first so
-  // the registry never holds more than one. The exit hook stays for the life of the process; killAll is idempotent.
+  // the registry never holds more than one. The entry is never removed after a run, so it stays for the life of the
+  // process; the exit hook stays too, and killAll is idempotent.
   unregister?.();
-  unregister = registerCleanup(killAll);
+  unregister = registerCleanup(killAll, { first: true });
   if (exitHookInstalled) return;
   exitHookInstalled = true;
   process.on("exit", onExit);
