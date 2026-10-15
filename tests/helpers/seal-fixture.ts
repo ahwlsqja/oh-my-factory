@@ -4,9 +4,22 @@ import { fileURLToPath } from "node:url";
 import { runDecideResolve } from "../../src/cli/decide.js";
 import type { Ids } from "../../src/scenario/intake.js";
 import { type SealDeps, type SealStageResult, runSealStage } from "../../src/seal/seal.js";
-import { type AgentSession, type AuthorOutcome, type AuthorRequest, createCommandAuthor } from "../../src/seal/session.js";
+import {
+  type AgentSession,
+  type AuthorOutcome,
+  type AuthorRequest,
+  createCommandAuthor,
+} from "../../src/seal/session.js";
 import { type Vault, openVault } from "../../src/vault/vault.js";
-import { CONTRACT, type DecisionFixture, HUMAN, NOW, addInterface, closeInterface, setupDecisionItem } from "./decision-fixture.js";
+import {
+  CONTRACT,
+  type DecisionFixture,
+  HUMAN,
+  NOW,
+  addInterface,
+  closeInterface,
+  setupDecisionItem,
+} from "./decision-fixture.js";
 
 export const AUTHOR_STUB = fileURLToPath(new URL("./author-stub.mjs", import.meta.url));
 
@@ -40,13 +53,34 @@ export function sealFixture(contract: "cli" | "http" | "open" = "cli"): SealFixt
   if (contract === "cli") closeInterface(f);
   if (contract === "http") {
     addInterface(f);
-    runDecideResolve(f.fx.location, f.workId, "d-interface", { choice: "A web service", rationale: "Callers use HTTP.", rejected: [], interface: { ...CONTRACT, kind: "http" } }, HUMAN);
+    runDecideResolve(
+      f.fx.location,
+      f.workId,
+      "d-interface",
+      {
+        choice: "A web service",
+        rationale: "Callers use HTTP.",
+        rejected: [],
+        interface: { ...CONTRACT, kind: "http" },
+      },
+      HUMAN,
+    );
   }
   return { f, vault: openVault(f.fx.location, f.fx.env), ids: fixedIds(), now: NOW };
 }
 
 export function depsFor(s: SealFixture, session: AgentSession, extra: Partial<SealDeps> = {}): SealDeps {
-  return { location: s.f.fx.location, item: s.f.item, session, ledger: s.f.fx.ledger, vault: s.vault, now: () => s.now, ids: s.ids, env: s.f.fx.env, ...extra };
+  return {
+    location: s.f.fx.location,
+    item: s.f.item,
+    session,
+    ledger: s.f.fx.ledger,
+    vault: s.vault,
+    now: () => s.now,
+    ids: s.ids,
+    env: s.f.fx.env,
+    ...extra,
+  };
 }
 
 /** The command author over `author-stub.mjs <mode> <record> <args...>`. */
@@ -55,7 +89,9 @@ export function commandAuthor(mode: string, record: string, ...args: string[]): 
 }
 
 /** A session that records its calls and answers every one with `outcome`. */
-export function countingSession(outcome: AuthorOutcome = { ok: false, code: "spawn_failed", durationMs: 0 }): AgentSession & { calls: AuthorRequest[] } {
+export function countingSession(
+  outcome: AuthorOutcome = { ok: false, code: "spawn_failed", durationMs: 0 },
+): AgentSession & { calls: AuthorRequest[] } {
   const calls: AuthorRequest[] = [];
   return {
     id: "counting",
@@ -85,7 +121,12 @@ export function startWork(s: SealFixture): void {
 }
 
 /** One authored scenario document in the YAML the author writes. `extra` lines are appended at the top level. */
-export function authoredDoc(options: { split: "train" | "test"; refs?: string[]; argv?: string[]; extra?: string[] }): string {
+export function authoredDoc(options: {
+  split: "train" | "test";
+  refs?: string[];
+  argv?: string[];
+  extra?: string[];
+}): string {
   return [
     "decision_refs:",
     ...(options.refs ?? ["d-interface"]).map((ref) => `  - ${ref}`),
@@ -134,5 +175,11 @@ export async function probeSealRefusal(kind: "canary_in_repo" | "symlink_in_stat
   } catch (err) {
     error = err;
   }
-  return { error, calls: session.calls.length, eventsBefore, eventsAfter: s.f.fx.ledger.readVerified().length, vaultEntries: readdirSync(s.vault.dir) };
+  return {
+    error,
+    calls: session.calls.length,
+    eventsBefore,
+    eventsAfter: s.f.fx.ledger.readVerified().length,
+    vaultEntries: readdirSync(s.vault.dir),
+  };
 }

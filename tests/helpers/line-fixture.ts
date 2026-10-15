@@ -12,7 +12,15 @@ import { createCommandAuthor } from "../../src/seal/session.js";
 import { assertLineSafe } from "../../src/vault/line-guard.js";
 import { type Vault, openVault, setDir } from "../../src/vault/vault.js";
 import { newRunId, wEvent } from "../../src/work/w-events.js";
-import { type DecisionFixture, HUMAN, NOW, addOpen, closeInterface, resolveOpen, setupDecisionItem } from "./decision-fixture.js";
+import {
+  type DecisionFixture,
+  HUMAN,
+  NOW,
+  addOpen,
+  closeInterface,
+  resolveOpen,
+  setupDecisionItem,
+} from "./decision-fixture.js";
 
 const AUTHOR_STUB = fileURLToPath(new URL("./line-author-stub.mjs", import.meta.url));
 const PROMPT_END = "\n=====PROMPT-END=====\n";
@@ -50,7 +58,12 @@ export function setupLine(options: { decisions?: boolean } = {}): LineFixture {
     closeInterface(f);
     addOpen(f, "d-cache", "compatibility");
     resolveOpen(f, "d-cache");
-    runDecideAdd(f.fx.location, f.workId, { id: "d-latency", class: "latency", question: "How fast must a lookup be?" }, "omf");
+    runDecideAdd(
+      f.fx.location,
+      f.workId,
+      { id: "d-latency", class: "latency", question: "How fast must a lookup be?" },
+      "omf",
+    );
     runDecideResolve(
       f.fx.location,
       f.workId,
@@ -59,7 +72,14 @@ export function setupLine(options: { decisions?: boolean } = {}): LineFixture {
         choice: "Bounded lookup time",
         rationale: "Callers wait on it.",
         rejected: [],
-        response_measure: { metric: "cache lookup time", op: "<=", threshold: 40, unit: "ms", percentile: 95, window: null },
+        response_measure: {
+          metric: "cache lookup time",
+          op: "<=",
+          threshold: 40,
+          unit: "ms",
+          percentile: 95,
+          window: null,
+        },
       },
       HUMAN,
     );
@@ -134,7 +154,10 @@ export function sealDeps(l: LineFixture, yamlPath: string, feedback?: SealFeedba
   return {
     location: l.f.fx.location,
     item: l.f.item,
-    session: createCommandAuthor({ command: [process.execPath, AUTHOR_STUB, yamlPath, l.promptLog], timeoutMs: 20_000 }),
+    session: createCommandAuthor({
+      command: [process.execPath, AUTHOR_STUB, yamlPath, l.promptLog],
+      timeoutMs: 20_000,
+    }),
     ledger: l.f.fx.ledger,
     vault: l.vault,
     now: () => NOW,
@@ -145,7 +168,11 @@ export function sealDeps(l: LineFixture, yamlPath: string, feedback?: SealFeedba
 }
 
 /** `sealDeps` plus what a whole pass needs. Structurally a `LinePassDeps`. */
-export function passDeps(l: LineFixture, yamlPath: string, feedback?: SealFeedback): Omit<SealDeps, "preflight"> & { runner: ScenarioRunner; env: NodeJS.ProcessEnv } {
+export function passDeps(
+  l: LineFixture,
+  yamlPath: string,
+  feedback?: SealFeedback,
+): Omit<SealDeps, "preflight"> & { runner: ScenarioRunner; env: NodeJS.ProcessEnv } {
   return { ...sealDeps(l, yamlPath, feedback), runner: l.runner, env: l.f.fx.env };
 }
 
@@ -174,7 +201,9 @@ export function gate2Ctx(l: LineFixture): Gate2StepContext {
 /** The prompts the stub author received, in call order. Empty when it was never called. */
 export function prompts(l: LineFixture): string[] {
   if (!existsSync(l.promptLog)) return [];
-  return readFileSync(l.promptLog, "utf8").split(PROMPT_END).filter((p) => p.length > 0);
+  return readFileSync(l.promptLog, "utf8")
+    .split(PROMPT_END)
+    .filter((p) => p.length > 0);
 }
 
 /** A forged-free `work.started` as M3b1 writes it (actor `omf`), leaving item.md alone: the state of a run killed after its start. */

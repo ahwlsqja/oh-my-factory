@@ -68,7 +68,13 @@ describe("interrupted tick marker", () => {
     fx.ledger.append({
       actor: "omf",
       type: "goal.tick_started",
-      payload: { goal_id: GOAL, tick_id: "t-20261012T080000Z-dead", regime: 1, runner: "host", config_sha256: "0".repeat(64) },
+      payload: {
+        goal_id: GOAL,
+        tick_id: "t-20261012T080000Z-dead",
+        regime: 1,
+        runner: "host",
+        config_sha256: "0".repeat(64),
+      },
     });
     const first = await runTick(fx);
     expect(first.signatures).toContain(INTERRUPTED);

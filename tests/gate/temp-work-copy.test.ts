@@ -11,14 +11,19 @@ beforeAll(() => {
   fx = makeOpsFixture();
 });
 
-const factoryIn = (parent = realTempDir("omf-copies-")) => ({ parent, factory: new TempWorkCopyFactory({ parent, exec: (root) => fixtureTarget(root) }) });
+const factoryIn = (parent = realTempDir("omf-copies-")) => ({
+  parent,
+  factory: new TempWorkCopyFactory({ parent, exec: (root) => fixtureTarget(root) }),
+});
 const spec = () => ({ quarantine: fx.quarantine, sha: fx.head });
 
 describe("TempWorkCopyFactory", () => {
   it("refuses to construct without an exec, with a relative parent or inside an agent home", () => {
     const parent = realTempDir("omf-copies-");
     expect(() => new TempWorkCopyFactory({ parent } as never)).toThrow(/needs an exec/);
-    expect(() => new TempWorkCopyFactory({ parent: "relative", exec: (root) => fixtureTarget(root) })).toThrow(/absolute/);
+    expect(() => new TempWorkCopyFactory({ parent: "relative", exec: (root) => fixtureTarget(root) })).toThrow(
+      /absolute/,
+    );
   });
 
   it("makes a private copy that equals the head tree", async () => {
@@ -50,10 +55,13 @@ describe("TempWorkCopyFactory", () => {
   it("runs commands through the injected exec, in the copy", async () => {
     const { factory } = factoryIn();
     const copy = await factory.create(spec());
-    const result = await copy.run([process.execPath, "-e", "process.stdout.write(require('fs').readFileSync('src/a.ts', 'utf8'))"], {
-      timeoutMs: 20_000,
-      maxOutputBytes: 4096,
-    });
+    const result = await copy.run(
+      [process.execPath, "-e", "process.stdout.write(require('fs').readFileSync('src/a.ts', 'utf8'))"],
+      {
+        timeoutMs: 20_000,
+        maxOutputBytes: 4096,
+      },
+    );
     expect(result).toMatchObject({ kind: "exited", status: 0, stdout: "export const a = 2;\n" });
     await copy.dispose();
   });
@@ -92,12 +100,21 @@ describe("TempWorkCopyFactory", () => {
 describe("sweepOrphanCopies", () => {
   it("removes only the copy directories of dead pids", async () => {
     const parent = realTempDir("omf-sweep-");
-    for (const name of ["wc-4000000-aaaaaaaa", "wc-4000000-aaaaaaaa-s", `wc-${process.pid}-bbbbbbbb`, "other-dir", "wc-xyz-aaaaaaaa", "wc-4000000-short"]) {
+    for (const name of [
+      "wc-4000000-aaaaaaaa",
+      "wc-4000000-aaaaaaaa-s",
+      `wc-${process.pid}-bbbbbbbb`,
+      "other-dir",
+      "wc-xyz-aaaaaaaa",
+      "wc-4000000-short",
+    ]) {
       mkdirSync(join(parent, name));
     }
     const removed = await sweepOrphanCopies(parent, (pid) => pid === process.pid);
     expect(removed).toBe(2);
-    expect(readdirSync(parent).sort()).toEqual(["other-dir", `wc-${process.pid}-bbbbbbbb`, "wc-4000000-short", "wc-xyz-aaaaaaaa"].sort());
+    expect(readdirSync(parent).sort()).toEqual(
+      ["other-dir", `wc-${process.pid}-bbbbbbbb`, "wc-4000000-short", "wc-xyz-aaaaaaaa"].sort(),
+    );
   });
 
   it("returns 0 for a directory that does not exist", async () => {

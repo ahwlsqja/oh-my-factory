@@ -48,7 +48,11 @@ class Recording implements WorkCopyFactory {
   }
 }
 
-function setup(fx: GitFixture = calcFixture(), shape?: (index: number) => Partial<WorkCopy>, failAt: number | null = null) {
+function setup(
+  fx: GitFixture = calcFixture(),
+  shape?: (index: number) => Partial<WorkCopy>,
+  failAt: number | null = null,
+) {
   const parent = realTempDir("omf-prove-");
   const inner = new TempWorkCopyFactory({ parent, exec: (root) => fixtureTarget(root) });
   const copies = new Recording(inner, shape, failAt);
@@ -78,7 +82,13 @@ describe("proveTest verdicts", () => {
 
   it("FAILED: a test that passes without the fix", async () => {
     const { input } = setup(calcFixture("assert.equal(1, 1); void add;"));
-    expect(await proveTest(input)).toEqual({ status: "FAILED", reason: "test-passed-without-fix", test_exit: 0, non_test_paths: 1, test_paths: 1 });
+    expect(await proveTest(input)).toEqual({
+      status: "FAILED",
+      reason: "test-passed-without-fix",
+      test_exit: 0,
+      non_test_paths: 1,
+      test_paths: 1,
+    });
   });
 
   it("a build artifact written by the baseline cannot mask the revert, because the revert runs in a fresh copy", async () => {
@@ -118,21 +128,36 @@ describe("proveTest MISCONFIGURED reasons", () => {
   it("invalid-base-ref: an absent sha and a ref name are refused before any copy is made", async () => {
     for (const base of ["0".repeat(40), "main"]) {
       const { input, copies } = setup();
-      expect(await proveTest({ ...input, base })).toEqual({ status: "MISCONFIGURED", reason: "invalid-base-ref", test_exit: null, non_test_paths: 0, test_paths: 0 });
+      expect(await proveTest({ ...input, base })).toEqual({
+        status: "MISCONFIGURED",
+        reason: "invalid-base-ref",
+        test_exit: null,
+        non_test_paths: 0,
+        test_paths: 0,
+      });
       expect(copies.created).toBe(0);
     }
   });
 
   it("base-not-ancestor: base and head swapped", async () => {
     const { fx, input, copies } = setup();
-    expect(await proveTest({ ...input, base: fx.head, head: fx.base })).toMatchObject({ status: "MISCONFIGURED", reason: "base-not-ancestor" });
+    expect(await proveTest({ ...input, base: fx.head, head: fx.base })).toMatchObject({
+      status: "MISCONFIGURED",
+      reason: "base-not-ancestor",
+    });
     expect(copies.created).toBe(0);
   });
 
   it("no-non-test-change: a change that only touches tests", async () => {
     const fx = gitFixture({ "tests/a.test.mjs": "// 1\n" }, { "tests/a.test.mjs": "// 2\n" });
     const { input, copies } = setup(fx);
-    expect(await proveTest(input)).toEqual({ status: "MISCONFIGURED", reason: "no-non-test-change", test_exit: null, non_test_paths: 0, test_paths: 1 });
+    expect(await proveTest(input)).toEqual({
+      status: "MISCONFIGURED",
+      reason: "no-non-test-change",
+      test_exit: null,
+      non_test_paths: 0,
+      test_paths: 1,
+    });
     expect(copies.created).toBe(0);
   });
 
@@ -156,14 +181,22 @@ describe("proveTest MISCONFIGURED reasons", () => {
 
   it("test-command-unrunnable: a missing program, and a command that times out on the baseline", async () => {
     const missing = setup();
-    expect(await proveTest({ ...missing.input, testCommand: ["omf-no-such-program-xyz"] })).toMatchObject({ status: "MISCONFIGURED", reason: "test-command-unrunnable" });
+    expect(await proveTest({ ...missing.input, testCommand: ["omf-no-such-program-xyz"] })).toMatchObject({
+      status: "MISCONFIGURED",
+      reason: "test-command-unrunnable",
+    });
     const slow = setup();
     const hang = [process.execPath, "-e", "setInterval(() => {}, 1000)"];
-    expect(await proveTest({ ...slow.input, testCommand: hang, timeoutMs: 400 })).toMatchObject({ status: "MISCONFIGURED", reason: "test-command-unrunnable", test_exit: null });
+    expect(await proveTest({ ...slow.input, testCommand: hang, timeoutMs: 400 })).toMatchObject({
+      status: "MISCONFIGURED",
+      reason: "test-command-unrunnable",
+      test_exit: null,
+    });
   });
 
   it("test-command-unrunnable: a command that passes on the baseline and times out on the reverted copy", async () => {
-    const script = "const s=require('node:fs').readFileSync('src/calc.mjs','utf8');if(s.includes('a - b'))setInterval(()=>{},1000);else process.exit(0)";
+    const script =
+      "const s=require('node:fs').readFileSync('src/calc.mjs','utf8');if(s.includes('a - b'))setInterval(()=>{},1000);else process.exit(0)";
     const { input, copies } = setup();
     const result = await proveTest({ ...input, testCommand: [process.execPath, "-e", script], timeoutMs: 1500 });
     expect(result).toMatchObject({ status: "MISCONFIGURED", reason: "test-command-unrunnable", test_exit: null });
@@ -181,7 +214,10 @@ describe("proveTest MISCONFIGURED reasons", () => {
     const controller = new AbortController();
     controller.abort();
     const { input, copies } = setup();
-    expect(await proveTest({ ...input, signal: controller.signal })).toMatchObject({ status: "MISCONFIGURED", reason: "interrupted" });
+    expect(await proveTest({ ...input, signal: controller.signal })).toMatchObject({
+      status: "MISCONFIGURED",
+      reason: "interrupted",
+    });
     expect(copies.created).toBe(0);
   });
 });

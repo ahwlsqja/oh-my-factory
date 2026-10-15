@@ -134,15 +134,28 @@ function checkTarget(target: GitTarget, args: readonly string[]): void {
   const dir = lstatSync(target.gitDir, { throwIfNoEntry: false });
   const head = lstatSync(join(target.gitDir, "HEAD"), { throwIfNoEntry: false });
   const objects = lstatSync(join(target.gitDir, "objects"), { throwIfNoEntry: false });
-  if (dir === undefined || !dir.isDirectory() || head === undefined || !head.isFile() || objects === undefined || !objects.isDirectory()) {
+  if (
+    dir === undefined ||
+    !dir.isDirectory() ||
+    head === undefined ||
+    !head.isFile() ||
+    objects === undefined ||
+    !objects.isDirectory()
+  ) {
     throw new HostGitError("gitdir_invalid");
   }
   assertNoDrivers(target.gitDir);
   // The first argument that is not an option names the subcommand.
-  if (args.find((arg) => !arg.startsWith("-")) === "read-tree" && target.indexFile === undefined) throw new HostGitError("gitdir_invalid");
+  if (args.find((arg) => !arg.startsWith("-")) === "read-tree" && target.indexFile === undefined)
+    throw new HostGitError("gitdir_invalid");
 }
 
-function spawnGit(argv: readonly string[], env: NodeJS.ProcessEnv, cwd: string, options: HostGitOptions): Promise<{ stdout: Buffer; stderr: string }> {
+function spawnGit(
+  argv: readonly string[],
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+  options: HostGitOptions,
+): Promise<{ stdout: Buffer; stderr: string }> {
   const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   return new Promise((resolve, reject) => {
@@ -189,7 +202,11 @@ function spawnGit(argv: readonly string[], env: NodeJS.ProcessEnv, cwd: string, 
  * env = `hardenedGitEnv()` (which drops every GIT_* variable, `GIT_INDEX_FILE` included), THEN `GIT_INDEX_FILE=<indexFile>` when
  * the target has one. cwd defaults to the work tree, else the git dir, never the caller's directory.
  */
-export async function runHostGit(target: GitTarget, args: readonly string[], options: HostGitOptions = {}): Promise<{ stdout: Buffer; stderr: string }> {
+export async function runHostGit(
+  target: GitTarget,
+  args: readonly string[],
+  options: HostGitOptions = {},
+): Promise<{ stdout: Buffer; stderr: string }> {
   checkTarget(target, args);
   const argv = [
     ...HARDENED_GIT_CONFIG,
@@ -214,6 +231,11 @@ export async function createScratchGitDir(parent: string, repo?: string): Promis
   mkdirSync(parent, { recursive: true, mode: 0o700 });
   const holder = mkdtempSync(join(parent, "scratch-"));
   const gitDir = join(holder, "git");
-  await spawnGit([...HARDENED_GIT_CONFIG, "init", "--bare", "--quiet", "--template=", gitDir], hardenedGitEnv(), holder, {});
+  await spawnGit(
+    [...HARDENED_GIT_CONFIG, "init", "--bare", "--quiet", "--template=", gitDir],
+    hardenedGitEnv(),
+    holder,
+    {},
+  );
   return gitDir;
 }

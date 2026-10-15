@@ -84,7 +84,8 @@ function fromMountSpec(entry: unknown): MountFact {
   const source = own(entry, "Source");
   const readOnly = own(entry, "ReadOnly");
   if (source !== undefined && typeof source !== "string") throw new InspectParseError("HostConfig.Mounts[].Source");
-  if (readOnly !== undefined && typeof readOnly !== "boolean") throw new InspectParseError("HostConfig.Mounts[].ReadOnly");
+  if (readOnly !== undefined && typeof readOnly !== "boolean")
+    throw new InspectParseError("HostConfig.Mounts[].ReadOnly");
   return {
     type: mountType(text(entry, "Type", "HostConfig.Mounts[].Type")),
     source: source ?? "",

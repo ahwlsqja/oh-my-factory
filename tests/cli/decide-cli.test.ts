@@ -59,7 +59,11 @@ describe("requireDecidableItem", () => {
     const fx = fixture();
     expect(() => requireDecidableItem(fx.location, "w-ffffffffffff")).toThrow("unknown work item w-ffffffffffff");
 
-    const gated = createRecorded(fx.ledger, fx.store, makeNewItem({ title: "Update the CI workflow", risk: HIGH_RISK }));
+    const gated = createRecorded(
+      fx.ledger,
+      fx.store,
+      makeNewItem({ title: "Update the CI workflow", risk: HIGH_RISK }),
+    );
     expect(() => requireDecidableItem(fx.location, gated.front.work_id)).toThrow("is awaiting_approval");
     rewriteItem(gated, { state: "ready" }); // looks approved, the ledger never saw it
     expect(() => requireDecidableItem(fx.location, gated.front.work_id)).toThrow("approval_unrecorded");
@@ -164,7 +168,11 @@ describe("omf decide add and lint", () => {
 
     // A duplicate is a refusal: exit 1 with the DecisionError message, nothing appended.
     const events = new Ledger(fx.location.dir).readVerified().length;
-    const duplicate = omf(["decide", "add", fx.id, "--file", jsonFile(fx, "add.json", ADD_INTERFACE)], fx.repo, fx.home);
+    const duplicate = omf(
+      ["decide", "add", fx.id, "--file", jsonFile(fx, "add.json", ADD_INTERFACE)],
+      fx.repo,
+      fx.home,
+    );
     expect(duplicate.code).toBe(1);
     expect(duplicate.stderr).not.toBe("");
     expect(new Ledger(fx.location.dir).readVerified()).toHaveLength(events);
@@ -198,7 +206,11 @@ describe("omf decide add and lint", () => {
   it("keeps refusals (exit 1) apart from cannot-run (exit 2) and writes nothing in either case", () => {
     const fx = fixture();
     const before = new Ledger(fx.location.dir).readVerified().length;
-    const bad = omf(["decide", "add", fx.id, "--file", jsonFile(fx, "bad.json", { id: "d-interface", class: "interface" })], fx.repo, fx.home);
+    const bad = omf(
+      ["decide", "add", fx.id, "--file", jsonFile(fx, "bad.json", { id: "d-interface", class: "interface" })],
+      fx.repo,
+      fx.home,
+    );
     expect(bad.code).toBe(1);
     expect(bad.stderr).toContain("add_input");
     const missing = omf(["decide", "add", fx.id, "--file", join(fx.home, "nope.json")], fx.repo, fx.home);
@@ -210,7 +222,11 @@ describe("omf decide add and lint", () => {
 
     claimItem(fx.item.dir);
     try {
-      const claimed = omf(["decide", "add", fx.id, "--file", jsonFile(fx, "add.json", ADD_INTERFACE)], fx.repo, fx.home);
+      const claimed = omf(
+        ["decide", "add", fx.id, "--file", jsonFile(fx, "add.json", ADD_INTERFACE)],
+        fx.repo,
+        fx.home,
+      );
       expect(claimed.code).toBe(2);
       expect(claimed.stderr).toContain("claimed by a run");
     } finally {
@@ -278,7 +294,13 @@ describe("omf decide show", () => {
     fx.ledger.append({
       actor: "omf",
       type: "decision.added",
-      payload: { goal_id: "g-fast", work_id: fx.id, decision_id: "d-p95-latency", class: "other", question: "What about the cache?" },
+      payload: {
+        goal_id: "g-fast",
+        work_id: fx.id,
+        decision_id: "d-p95-latency",
+        class: "other",
+        question: "What about the cache?",
+      },
     });
     const text = omf(["decide", "show", fx.id], fx.repo, fx.home);
     expect(text.code, text.stderr).toBe(0);

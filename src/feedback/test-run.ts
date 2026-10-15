@@ -74,7 +74,8 @@ function foldTestRuns(events: readonly LedgerEvent[], goalId: string, workId: st
         const run = runs.find(
           (r) => r.test_digest === p.test_digest && r.run_id === p.run_id && r.candidate_sha === p.candidate_sha,
         );
-        if (run === undefined || run.status !== "consumed_incomplete") throw bad(seq, "completion without an open consumption");
+        if (run === undefined || run.status !== "consumed_incomplete")
+          throw bad(seq, "completion without an open consumption");
         if (p.total !== totals.get(p.test_digest)) throw bad(seq, "total differs from the consumed total");
         if (p.pass > p.total || p.flaky > p.total - p.pass) throw bad(seq, "counts out of range");
         run.status = "completed";
@@ -123,8 +124,10 @@ export type TestRunPlan =
 export function planTestRun(state: TestRunState, testDigest: string, candidateSha: string | null): TestRunPlan {
   const own = state.runs.find((r) => r.test_digest === testDigest);
   if (own !== undefined) {
-    if (own.status === "consumed_incomplete" || own.result === null) return { action: "blocked", reason: "test_run_incomplete" };
-    if (candidateSha !== null && own.candidate_sha === candidateSha) return { action: "use_recorded", result: own.result };
+    if (own.status === "consumed_incomplete" || own.result === null)
+      return { action: "blocked", reason: "test_run_incomplete" };
+    if (candidateSha !== null && own.candidate_sha === candidateSha)
+      return { action: "use_recorded", result: own.result };
     return { action: "needs_reseal" };
   }
   const latest = state.runs.at(-1);
@@ -230,11 +233,15 @@ export function completeTestRun(
         r.run_id === input.runId &&
         r.candidate_sha === input.candidateSha,
     );
-    if (open === undefined) throw new FeedbackError("no_open_test_run", "no open test-split consumption matches this run");
+    if (open === undefined)
+      throw new FeedbackError("no_open_test_run", "no open test-split consumption matches this run");
     const { pass, total, flaky } = input;
     const whole = [pass, total, flaky].every((n) => Number.isInteger(n) && n >= 0);
     if (!whole || total !== totals.get(input.testDigest) || pass > total || flaky > total - pass) {
-      throw new FeedbackError("invalid_input", "the counts must be whole, match the consumed total and fit pass + flaky <= total");
+      throw new FeedbackError(
+        "invalid_input",
+        "the counts must be whole, match the consumed total and fit pass + flaky <= total",
+      );
     }
     return feedbackEvent(
       {
@@ -270,7 +277,8 @@ export function authorizeTestReseal(
     const { state } = foldTestRuns(events, input.goalId, input.workId);
     const latest = state.runs.at(-1);
     if (latest === undefined) {
-      if (input.basis === "J6") throw new FeedbackError("nothing_to_reseal", "no test split was consumed yet; only J3 applies");
+      if (input.basis === "J6")
+        throw new FeedbackError("nothing_to_reseal", "no test split was consumed yet; only J3 applies");
     } else if (state.pending_authorization !== null) {
       throw new FeedbackError("already_authorized", "a reseal is already authorized and unused");
     }

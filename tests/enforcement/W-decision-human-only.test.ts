@@ -33,10 +33,47 @@ describe("W-decision-human-only", () => {
     for (const actor of ["omf", "agent:claude"]) {
       const before = readFileSync(f.fx.ledger.file, "utf8");
       const attempts: Array<[string, () => unknown]> = [
-        ["resolve", () => runDecideResolve(loc, f.workId, "d-cache", { choice: "Anything", rationale: "Because.", rejected: [] }, actor)],
-        ["defer", () => runDecideDefer(loc, f.workId, "d-cache", { owner: "x", reason: "Later.", revisit_trigger: "Never.", default: "Ship.", expires_at: "2099-01-01T00:00:00.000Z" }, actor, NOW)],
+        [
+          "resolve",
+          () =>
+            runDecideResolve(
+              loc,
+              f.workId,
+              "d-cache",
+              { choice: "Anything", rationale: "Because.", rejected: [] },
+              actor,
+            ),
+        ],
+        [
+          "defer",
+          () =>
+            runDecideDefer(
+              loc,
+              f.workId,
+              "d-cache",
+              {
+                owner: "x",
+                reason: "Later.",
+                revisit_trigger: "Never.",
+                default: "Ship.",
+                expires_at: "2099-01-01T00:00:00.000Z",
+              },
+              actor,
+              NOW,
+            ),
+        ],
         ["n/a", () => runDecideNa(loc, f.workId, "d-cache", { rationale: "Not needed." }, actor)],
-        ["resolve interface", () => runDecideResolve(loc, f.workId, "d-interface", { choice: "Anything", rationale: "Because.", rejected: [], interface: CONTRACT }, actor)],
+        [
+          "resolve interface",
+          () =>
+            runDecideResolve(
+              loc,
+              f.workId,
+              "d-interface",
+              { choice: "Anything", rationale: "Because.", rejected: [], interface: CONTRACT },
+              actor,
+            ),
+        ],
       ];
       for (const [name, attempt] of attempts) expect(errorCode(attempt), `${actor} ${name}`).toBe("not_human");
       expect(readFileSync(f.fx.ledger.file, "utf8"), `${actor} left the ledger as it was`).toBe(before);
@@ -52,7 +89,14 @@ describe("W-decision-human-only", () => {
       resolution: { choice: "Forged", rationale: "Closed by an agent.", rejected: [], by: "agent:claude", at },
     });
     forge(f, "omf", "decision.deferred", "d-d", {
-      deferral: { owner: "omf", reason: "later", revisit_trigger: "never", default: "ship", signed_by: "omf", expires_at: "2099-01-01T00:00:00.000Z" },
+      deferral: {
+        owner: "omf",
+        reason: "later",
+        revisit_trigger: "never",
+        default: "ship",
+        signed_by: "omf",
+        expires_at: "2099-01-01T00:00:00.000Z",
+      },
     });
     forge(f, "agent:claude", "decision.marked_na", "d-n", { rationale: "Closed by an agent.", by: "agent:claude", at });
 
@@ -61,7 +105,10 @@ describe("W-decision-human-only", () => {
     expect(state.anomalies.length).toBeGreaterThan(0);
     for (const id of ["d-r", "d-d", "d-n"]) {
       expect(findDecision(state, id)?.status, id).toBe("open");
-      expect(reasonsFor(gate, id).map((r) => r.code), id).toContain("required_open");
+      expect(
+        reasonsFor(gate, id).map((r) => r.code),
+        id,
+      ).toContain("required_open");
     }
   });
 
@@ -69,7 +116,13 @@ describe("W-decision-human-only", () => {
     const f = setupDecisionItem();
     addInterface(f);
     forge(f, "omf", "decision.resolved", "d-interface", {
-      resolution: { choice: "Forged", rationale: "Closed by omf.", rejected: [], by: "omf", at: "2026-10-14T00:00:00.000Z" },
+      resolution: {
+        choice: "Forged",
+        rationale: "Closed by omf.",
+        rejected: [],
+        by: "omf",
+        at: "2026-10-14T00:00:00.000Z",
+      },
       interface: CONTRACT,
     });
     const { state, gate } = reportAt(f, NOW);
@@ -81,9 +134,19 @@ describe("W-decision-human-only", () => {
     const f = setupDecisionItem();
     closeInterface(f);
     addOpen(f, "d-cache");
-    const resolution = writeJson(f, "resolution.json", { choice: "Keep it", rationale: "Callers rely on it.", rejected: [] });
+    const resolution = writeJson(f, "resolution.json", {
+      choice: "Keep it",
+      rationale: "Callers rely on it.",
+      rejected: [],
+    });
     const na = writeJson(f, "na.json", { rationale: "Not needed." });
-    const deferral = writeJson(f, "deferral.json", { owner: "dev", reason: "Later.", revisit_trigger: "After review.", default: "Keep it.", expires_at: "2099-01-01T00:00:00.000Z" });
+    const deferral = writeJson(f, "deferral.json", {
+      owner: "dev",
+      reason: "Later.",
+      revisit_trigger: "After review.",
+      default: "Keep it.",
+      expires_at: "2099-01-01T00:00:00.000Z",
+    });
     const commands = [
       ["resolve", f.workId, "d-cache", "--file", resolution],
       ["resolve", f.workId, "d-cache", "--na", "--file", na],

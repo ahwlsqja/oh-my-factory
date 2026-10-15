@@ -69,7 +69,10 @@ describe("verifyItemAgainstLedger", () => {
     const gated = createRecorded(ledger, store, makeNewItem({ risk: HIGH_RISK }));
     const downgraded = { ...gated.front.risk, class: "normal" as const };
     expect(verdict(ledger, gated, { risk: downgraded })).toEqual({ ok: false, reason: "risk_mismatch" });
-    expect(verdict(ledger, gated, { risk: downgraded, state: "ready" })).toEqual({ ok: false, reason: "risk_mismatch" });
+    expect(verdict(ledger, gated, { risk: downgraded, state: "ready" })).toEqual({
+      ok: false,
+      reason: "risk_mismatch",
+    });
   });
 
   it("catches vetoed and cancelled states the ledger never recorded", () => {
@@ -152,7 +155,11 @@ describe("verifyItemAgainstLedger: W clauses", () => {
     expect(verdict(ledger, resumed)).toEqual({ ok: false, reason: "w_trail_invalid" });
 
     const broken = createRecorded(ledger, store, makeNewItem({ title: "Drop the run id" }));
-    ledger.append({ actor: "omf", type: "work.started", payload: { goal_id: "g-fast", work_id: broken.front.work_id, from: "ready" } });
+    ledger.append({
+      actor: "omf",
+      type: "work.started",
+      payload: { goal_id: "g-fast", work_id: broken.front.work_id, from: "ready" },
+    });
     expect(verdict(ledger, broken)).toEqual({ ok: false, reason: "w_trail_invalid" });
   });
 
@@ -259,7 +266,10 @@ describe("verifyItemAgainstLedger: W clauses", () => {
     expect(verdict(ledger, gated, { state: "in_progress" })).toEqual({ ok: false, reason: "approval_unrecorded" });
     recordW(ledger, "work.started", gated);
     const downgraded = { ...gated.front.risk, class: "normal" as const };
-    expect(verdict(ledger, gated, { state: "in_progress", risk: downgraded })).toEqual({ ok: false, reason: "risk_mismatch" });
+    expect(verdict(ledger, gated, { state: "in_progress", risk: downgraded })).toEqual({
+      ok: false,
+      reason: "risk_mismatch",
+    });
   });
 });
 
@@ -274,9 +284,12 @@ describe("verifiedItems", () => {
     writeFileSync(`${junkDir}/item.md`, "not a work item");
 
     // The raw store trusts the files: it would hand the forged item to dispatch as ready.
-    expect(store.fetchWorkItemsByStates("g-fast", ["ready"]).map((item) => item.front.work_id).sort()).toEqual(
-      [good.front.work_id, gated.front.work_id].sort(),
-    );
+    expect(
+      store
+        .fetchWorkItemsByStates("g-fast", ["ready"])
+        .map((item) => item.front.work_id)
+        .sort(),
+    ).toEqual([good.front.work_id, gated.front.work_id].sort());
 
     const result = verifiedItems(store, ledger.readVerified(), "g-fast");
     expect(result.items.map((item) => item.front.work_id)).toEqual([good.front.work_id]);
@@ -328,7 +341,10 @@ describe("verifiedItems: repairable items", () => {
     const ahead = createRecorded(ledger, store, makeNewItem({ title: "Batch the file reads" }));
     // The crash: work.started reached the ledger, item.md still says ready.
     ledger.append(
-      wEvent({ type: "work.started", payload: { goal_id: "g-fast", work_id: behind.front.work_id, run_id: RUN_ID, from: "ready" } }),
+      wEvent({
+        type: "work.started",
+        payload: { goal_id: "g-fast", work_id: behind.front.work_id, run_id: RUN_ID, from: "ready" },
+      }),
     );
     // A hand edit: item.md claims awaiting_review and the ledger has no W event for it.
     rewriteItem(ahead, { state: "awaiting_review" });

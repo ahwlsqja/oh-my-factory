@@ -47,7 +47,12 @@ describe("runScenario", () => {
     const { runner, log } = scripted([exited(0), exited(0, "x\n")]);
     const limits = { timeoutMs: 1000, maxOutputBytes: 2048 };
     const run = await runScenario(runner, TARGET, scenario, limits);
-    expect(run).toEqual({ scenario_ref: scenarioRef(scenario.scenario_id), outcome: "pass", steps_passed: 2, steps_total: 2 });
+    expect(run).toEqual({
+      scenario_ref: scenarioRef(scenario.scenario_id),
+      outcome: "pass",
+      steps_passed: 2,
+      steps_total: 2,
+    });
     expect(log.opened).toBe(1);
     expect(log.closed).toBe(1);
     expect(log.steps).toEqual([

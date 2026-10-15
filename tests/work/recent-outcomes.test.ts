@@ -7,9 +7,14 @@ import { FIXTURE_RUN_ID, recordW } from "../helpers/work.js";
 const GOAL = "g-fast";
 const newLedger = (): Ledger => new Ledger(makeTempDir("omf-recent-"));
 /** The part of a work item that recordW needs. Ids are distinct and match the work-id pattern. */
-const item = (n: number, goalId: string = GOAL) => ({ front: { goal_id: goalId, work_id: `w-${n.toString(16).padStart(12, "0")}` } });
+const item = (n: number, goalId: string = GOAL) => ({
+  front: { goal_id: goalId, work_id: `w-${n.toString(16).padStart(12, "0")}` },
+});
 const idsOf = (...items: ReturnType<typeof item>[]): Set<string> => new Set(items.map((entry) => entry.front.work_id));
-const payloadOf = (entry: ReturnType<typeof item>): Record<string, unknown> => ({ ...entry.front, run_id: FIXTURE_RUN_ID });
+const payloadOf = (entry: ReturnType<typeof item>): Record<string, unknown> => ({
+  ...entry.front,
+  run_id: FIXTURE_RUN_ID,
+});
 
 describe("recentOutcomes", () => {
   it("counts each item once, by the outcome of its last state-bearing event", () => {
@@ -27,7 +32,12 @@ describe("recentOutcomes", () => {
     recordW(ledger, "work.failed", d);
     recordW(ledger, "work.parked", e);
     recordW(ledger, "work.parked", f, { outcome: "manual", reason_code: "manual_required" });
-    expect(recentOutcomes(ledger.readVerified(), GOAL, idsOf(a, b, c, d, e, f))).toEqual({ success: 1, flawed: 2, blocked: 2, manual: 1 });
+    expect(recentOutcomes(ledger.readVerified(), GOAL, idsOf(a, b, c, d, e, f))).toEqual({
+      success: 1,
+      flawed: 2,
+      blocked: 2,
+      manual: 1,
+    });
   });
 
   it("does not count an item that is running again", () => {
@@ -85,7 +95,12 @@ describe("recentOutcomes", () => {
     recordW(ledger, "work.submitted", unlisted);
     // The foreign item is listed on purpose: the goal filter must hold on its own.
     const listed = idsOf(kept, forged, invalid, foreign);
-    expect(recentOutcomes(ledger.readVerified(), GOAL, listed)).toEqual({ success: 0, flawed: 0, blocked: 1, manual: 0 });
+    expect(recentOutcomes(ledger.readVerified(), GOAL, listed)).toEqual({
+      success: 0,
+      flawed: 0,
+      blocked: 1,
+      manual: 0,
+    });
   });
 
   it("keeps the newest items by the seq of their last event, not by when they started", () => {

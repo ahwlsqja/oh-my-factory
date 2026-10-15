@@ -12,7 +12,16 @@ import type { Gate, GateVerdict } from "../../src/work/gates.js";
 import { LINE_ORDER, STATION_IDS, type StationId } from "../../src/work/line-types.js";
 import type { LineOptions } from "../../src/work/sequencer.js";
 import { newRunId, wEvent } from "../../src/work/w-events.js";
-import { OK, type LineFixture, type StationBody, fakeGate, finished, passGates, setupLine, stationsOf } from "../helpers/line.js";
+import {
+  OK,
+  type LineFixture,
+  type StationBody,
+  fakeGate,
+  finished,
+  passGates,
+  setupLine,
+  stationsOf,
+} from "../helpers/line.js";
 
 /** Another run's claim: same process, a different acquired_at, so the sequencer finds a claim that is not its own. */
 function stealClaim(f: LineFixture): void {
@@ -160,21 +169,24 @@ describe("runLine: a call that throws mid-run ends as aborted run_error and take
     expect(readFileSync(claimFile(f.itemDir), "utf8")).toContain("stolen");
   });
 
-  it.each([[1.5], [-1], [Number.MAX_SAFE_INTEGER + 1]])("an invalid spend amount %s aborts even when the station swallows it", async (amount) => {
-    const f = setupLine();
-    const hiding: StationBody = (ctx) => {
-      try {
-        ctx.recordSpend(amount);
-      } catch {
-        // a station that hides the failure and carries on
-      }
-      return OK;
-    };
-    const result = await f.go({ stations: stationsOf([], { S2: hiding }), gates: passGates([]) });
+  it.each([[1.5], [-1], [Number.MAX_SAFE_INTEGER + 1]])(
+    "an invalid spend amount %s aborts even when the station swallows it",
+    async (amount) => {
+      const f = setupLine();
+      const hiding: StationBody = (ctx) => {
+        try {
+          ctx.recordSpend(amount);
+        } catch {
+          // a station that hides the failure and carries on
+        }
+        return OK;
+      };
+      const result = await f.go({ stations: stationsOf([], { S2: hiding }), gates: passGates([]) });
 
-    expect(result).toMatchObject({ kind: "aborted", reason: "run_error", wcode: "malformed", at: "S2" });
-    expect(f.trail()).toEqual(["work.limits_set"]); // the spend is neither recorded nor carried on past
-  });
+      expect(result).toMatchObject({ kind: "aborted", reason: "run_error", wcode: "malformed", at: "S2" });
+      expect(f.trail()).toEqual(["work.limits_set"]); // the spend is neither recorded nor carried on past
+    },
+  );
 });
 
 describe("runLine: progress markers", () => {
@@ -236,7 +248,15 @@ describe("runLine: stage timing", () => {
         clock.advance(ms);
         return OK;
       };
-    const stations = stationsOf([], { S1: spend(100), S2: spend(200), S3: spend(300), S4: spend(400), S5: spend(500), S6: spend(600), S7: spend(700) });
+    const stations = stationsOf([], {
+      S1: spend(100),
+      S2: spend(200),
+      S3: spend(300),
+      S4: spend(400),
+      S5: spend(500),
+      S6: spend(600),
+      S7: spend(700),
+    });
     const result = finished(await f.go({ stations, gates: passGates([]), now: clock.now }));
 
     const once = (total_ms: number): { visits: number; total_ms: number } => ({ visits: 1, total_ms });
@@ -262,7 +282,9 @@ describe("runLine: stage timing", () => {
       clock.advance(50);
       return { kind: "blocked", reason_code: "infra_failure" };
     };
-    const result = finished(await f.go({ stations: stationsOf([], { S3: infra }), gates: passGates([]), now: clock.now }));
+    const result = finished(
+      await f.go({ stations: stationsOf([], { S3: infra }), gates: passGates([]), now: clock.now }),
+    );
 
     const times = result.evidence.self_metrics.stage_times;
     expect(times.S3).toEqual({ visits: 1, total_ms: 50 });
@@ -342,7 +364,12 @@ describe("runLine: the handoff for a killed predecessor", () => {
     const f = setupLine();
     // the ledger is one edge ahead of item.md, with a dead claim: the sweep at the start of beginRun reclaims and repairs
     const killed = newRunId(new Date(), () => "0000");
-    f.fx.ledger.append(wEvent({ type: "work.started", payload: { goal_id: f.fx.goalId, work_id: f.workId, run_id: killed, from: "ready" } }));
+    f.fx.ledger.append(
+      wEvent({
+        type: "work.started",
+        payload: { goal_id: f.fx.goalId, work_id: f.workId, run_id: killed, from: "ready" },
+      }),
+    );
     plantStaleClaim(f);
     const result = finished(await f.go({ gates: passGates([]) }));
 
@@ -379,7 +406,12 @@ describe("runLine: the handoff for a killed predecessor", () => {
         ran: [{ node: "S3", result: "entered" }],
         remaining: LINE_ORDER.slice(LINE_ORDER.indexOf("S3")),
       });
-      expect(f.events().filter((event) => event.type === "work.round").map((event) => event.payload.round)).toEqual([1, 2]);
+      expect(
+        f
+          .events()
+          .filter((event) => event.type === "work.round")
+          .map((event) => event.payload.round),
+      ).toEqual([1, 2]);
     } finally {
       child.kill("SIGKILL");
     }

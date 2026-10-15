@@ -41,7 +41,10 @@ const DEFAULT_MAX_TOTAL_BYTES = 256 * 1024 * 1024;
  * (compressed objects are a recorded limit; plaintext files, config, hooks and packed text are scanned). A NUL byte separates files so
  * a canary cannot match across two. Any cap hit, skipped oversize file, walk limit or read error sets `incomplete()`; nothing is silently dropped.
  */
-export function treeSurface(root: string, limits: Partial<TreeSurfaceLimits> = {}): AuditSurface & { symlinksSkipped(): number; incomplete(): boolean } {
+export function treeSurface(
+  root: string,
+  limits: Partial<TreeSurfaceLimits> = {},
+): AuditSurface & { symlinksSkipped(): number; incomplete(): boolean } {
   const maxFile = limits.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
   const maxTotal = limits.maxTotalBytes ?? DEFAULT_MAX_TOTAL_BYTES;
   let incomplete = false;
@@ -123,9 +126,14 @@ export class AuditError extends Error {
  * canaries are not detected. Hits are reported even when the scan is `not_run`: a canary that was seen is evidence whatever else
  * was missed.
  */
-export async function scanCanaries(canaries: readonly string[], surfaces: readonly AuditSurface[], required: readonly SurfaceKind[] = AUDIT_REQUIRED_SURFACES): Promise<CanaryScan> {
+export async function scanCanaries(
+  canaries: readonly string[],
+  surfaces: readonly AuditSurface[],
+  required: readonly SurfaceKind[] = AUDIT_REQUIRED_SURFACES,
+): Promise<CanaryScan> {
   if (canaries.some((canary) => canary.length < MIN_CANARY_LENGTH)) throw new AuditError();
-  if (canaries.length === 0) return { status: "not_run", surfaces_scanned: [], hits: [], total: 0, symlinks_skipped: 0, truncated: false };
+  if (canaries.length === 0)
+    return { status: "not_run", surfaces_scanned: [], hits: [], total: 0, symlinks_skipped: 0, truncated: false };
 
   const needles = canaries.map((canary) => Buffer.from(canary, "utf8"));
   const overlap = Math.max(...needles.map((needle) => needle.length)) - 1;
@@ -157,7 +165,10 @@ export async function scanCanaries(canaries: readonly string[], surfaces: readon
     else incomplete = true;
   }
 
-  const hits = SURFACE_KINDS.filter((kind) => (found.get(kind)?.size ?? 0) > 0).map((kind) => ({ surface: kind, count: found.get(kind)?.size ?? 0 }));
+  const hits = SURFACE_KINDS.filter((kind) => (found.get(kind)?.size ?? 0) > 0).map((kind) => ({
+    surface: kind,
+    count: found.get(kind)?.size ?? 0,
+  }));
   const allRequired = required.every((kind) => complete.has(kind));
   return {
     status: allRequired && !incomplete ? "scanned" : "not_run",

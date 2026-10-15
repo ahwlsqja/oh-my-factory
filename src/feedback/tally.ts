@@ -73,10 +73,17 @@ const rank = (cls: DecisionClass): number => DECISION_CLASSES.indexOf(cls);
  * overall total >= min, every output category has total >= min. Below that the caller must not release (releaseFeedback
  * withholds with too_few_scenarios); this function does not special-case it. Does not change its input.
  */
-export function mergeSmallCategories(tallies: readonly CategoryTally[], min: number = MIN_CATEGORY_SIZE): CategoryTally[] {
+export function mergeSmallCategories(
+  tallies: readonly CategoryTally[],
+  min: number = MIN_CATEGORY_SIZE,
+): CategoryTally[] {
   let largest: CategoryTally | undefined;
   for (const t of tallies) {
-    if (largest === undefined || t.total > largest.total || (t.total === largest.total && rank(t.category) < rank(largest.category))) {
+    if (
+      largest === undefined ||
+      t.total > largest.total ||
+      (t.total === largest.total && rank(t.category) < rank(largest.category))
+    ) {
       largest = t;
     }
   }

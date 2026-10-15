@@ -21,13 +21,16 @@ describe("feedbackEvidenceFiles", () => {
     expect(files.md.trim().length).toBeGreaterThan(0);
   });
 
-  it("says \"not run\" for a test split that was not run", () => {
+  it('says "not run" for a test split that was not run', () => {
     const doc = JSON.parse(feedbackEvidenceFiles({ ...BASE, test: null }).json) as { sealed: { test: unknown } };
     expect(doc.sealed.test).toBe("not run");
   });
 
   it("reads a zero-total test split as not run and fills noise_check through the adapter", () => {
-    const run = (noise: ReturnType<typeof noiseCheck> | null, total: number): { sealed: { test: unknown }; noise_check: unknown } =>
+    const run = (
+      noise: ReturnType<typeof noiseCheck> | null,
+      total: number,
+    ): { sealed: { test: unknown }; noise_check: unknown } =>
       JSON.parse(feedbackEvidenceFiles({ ...BASE, test: { pass: 0, total, flaky: 0 }, noise }).json);
     expect(run(null, 0).sealed.test).toBe("not run");
     expect(run(null, 0).noise_check).toBe("not run");

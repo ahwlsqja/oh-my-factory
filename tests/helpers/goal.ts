@@ -6,7 +6,14 @@ import { type ProjectLocation, resolveProject } from "../../src/core/paths.js";
 import { writePrivateFile } from "../../src/core/private-fs.js";
 import { initProject } from "../../src/core/project.js";
 import { bandsFile } from "../../src/goal/bands.js";
-import { createGoal, goalTemplate, readGoal, referencedMetrics, semanticHash, semanticOf } from "../../src/goal/goal-file.js";
+import {
+  createGoal,
+  goalTemplate,
+  readGoal,
+  referencedMetrics,
+  semanticHash,
+  semanticOf,
+} from "../../src/goal/goal-file.js";
 import { headCommit } from "../../src/goal/git.js";
 import { goalLockFile, lockGoal } from "../../src/goal/goal-lock.js";
 import { definitionOf, metricSha256, proposeMetric, readProposal, writeLock } from "../../src/goal/metrics.js";
@@ -73,7 +80,11 @@ export function setupGoal(options: { guardrails?: string[] } = {}): GoalFixture 
  * Writes `goals/<goal>/bands/<metric>.yaml` with one 3 sigma tier and returns its path. A test edits the
  * returned file to change the bands after approval.
  */
-export function writeBands(fx: GoalFixture, metricId: string, action: "log" | "diagnose" | "propose" = "propose"): string {
+export function writeBands(
+  fx: GoalFixture,
+  metricId: string,
+  action: "log" | "diagnose" | "propose" = "propose",
+): string {
   const file = bandsFile(fx.location.dir, "g-fast", metricId);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(
@@ -104,7 +115,11 @@ export function approveLegacy(fx: GoalFixture): void {
       sha256,
       regime: 1,
     });
-    fx.ledger.append({ actor: "human:dev", type: "metric.locked", payload: { goal_id: "g-fast", metric_id: id, sha256, regime: 1 } });
+    fx.ledger.append({
+      actor: "human:dev",
+      type: "metric.locked",
+      payload: { goal_id: "g-fast", metric_id: id, sha256, regime: 1 },
+    });
   }
   const semantic = semanticOf(goal.front);
   const semantic_sha256 = semanticHash(semantic);
@@ -151,7 +166,11 @@ export const TICK = "t-20261012T090000Z-0001";
  * A candidate that passes schema, scope and seed lint for the fixture goal: no digits, no metric names.
  * The title and paths decide its fingerprint, so tests make candidates distinct by title.
  */
-export function makeCandidate(title: string, paths: string[], overrides: Partial<IntentCandidate> = {}): IntentCandidate {
+export function makeCandidate(
+  title: string,
+  paths: string[],
+  overrides: Partial<IntentCandidate> = {},
+): IntentCandidate {
   return {
     title,
     problem: "The render path does extra work on every request.",

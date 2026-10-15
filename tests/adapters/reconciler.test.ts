@@ -122,7 +122,11 @@ describe("extractModelJson", () => {
   });
 
   it("reads a claude envelope whose result is fenced JSON", () => {
-    const stdout = JSON.stringify({ type: "result", is_error: false, result: `\`\`\`json\n${JSON.stringify(body)}\n\`\`\`` });
+    const stdout = JSON.stringify({
+      type: "result",
+      is_error: false,
+      result: `\`\`\`json\n${JSON.stringify(body)}\n\`\`\``,
+    });
     expect(extractModelJson("claude", stdout)).toEqual(body);
   });
 
@@ -159,7 +163,14 @@ describe("extractModelJson", () => {
 
 describe("usedTools", () => {
   it("accepts a single-turn envelope", () => {
-    expect(usedTools({ type: "result", num_turns: 1, permission_denials: [], usage: { server_tool_use: { web_search_requests: 0 } } })).toBe(false);
+    expect(
+      usedTools({
+        type: "result",
+        num_turns: 1,
+        permission_denials: [],
+        usage: { server_tool_use: { web_search_requests: 0 } },
+      }),
+    ).toBe(false);
     expect(usedTools({ type: "result" })).toBe(false);
   });
 

@@ -5,7 +5,13 @@ import { GATE_RULES_MARKER, gateValueOf, runGates } from "../../src/gate/run-gat
 import { fixtureTarget } from "../helpers/fixture-target.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
-const exited = (stdout = "", status: number | null = 0, signal: NodeJS.Signals | null = null): CommandResult => ({ kind: "exited", status, signal, stdout, stderr: "" });
+const exited = (stdout = "", status: number | null = 0, signal: NodeJS.Signals | null = null): CommandResult => ({
+  kind: "exited",
+  status,
+  signal,
+  stdout,
+  stderr: "",
+});
 
 describe("gateValueOf", () => {
   const ROWS: Array<[string, CommandResult, string, number | null]> = [
@@ -83,7 +89,11 @@ describe("runGates", () => {
     const run = await runGates(declared(["fast", "full"], { full: null, deep: [] }), target);
     expect(calls.map((c) => c.gate)).toEqual(["fast"]);
     expect(run.values).toEqual({ fast: "pass", full: "skip", deep: "skip" });
-    expect(run.verdict).toMatchObject({ status: "MISCONFIGURED", misconfigured: ["full"], reasons: ["required_skipped"] });
+    expect(run.verdict).toMatchObject({
+      status: "MISCONFIGURED",
+      misconfigured: ["full"],
+      reasons: ["required_skipped"],
+    });
     expect(run.details[1]).toEqual({ gate: "full", value: "skip", exit: null, outcome: "not_declared", rules: null });
   });
 
@@ -91,12 +101,22 @@ describe("runGates", () => {
     const thrown = await runGates(declared(["fast"]), scripted(() => new Error("no container")).target);
     expect(thrown.values.fast).toBe("skip");
     expect(thrown.verdict.status).toBe("MISCONFIGURED");
-    const errored = await runGates(declared(["fast"]), scripted(() => ({ kind: "error", code: null, message: "x" })).target);
+    const errored = await runGates(
+      declared(["fast"]),
+      scripted(() => ({ kind: "error", code: null, message: "x" })).target,
+    );
     expect(errored.details[0]).toMatchObject({ value: "skip", outcome: "error" });
   });
 
   it("reads a timeout and an output limit as fail, not skip", async () => {
-    const run = await runGates(declared(["fast", "full"]), scripted((gate) => (gate === "fast" ? { kind: "timeout", stdout: "", stderr: "" } : { kind: "output_limit", stdout: "", stderr: "" })).target);
+    const run = await runGates(
+      declared(["fast", "full"]),
+      scripted((gate) =>
+        gate === "fast"
+          ? { kind: "timeout", stdout: "", stderr: "" }
+          : { kind: "output_limit", stdout: "", stderr: "" },
+      ).target,
+    );
     expect(run.values).toMatchObject({ fast: "fail", full: "fail" });
     expect(run.details.map((d) => d.outcome).slice(0, 2)).toEqual(["timeout", "output_limit"]);
   });
@@ -104,12 +124,22 @@ describe("runGates", () => {
   it("empty means fail: zero rules on a required gate is MISCONFIGURED", async () => {
     const run = await runGates(declared(["fast"]), scripted(() => exited("OMF_GATE_RULES: 0\n")).target);
     expect(run.values.fast).toBe("empty");
-    expect(run.verdict).toMatchObject({ status: "MISCONFIGURED", misconfigured: ["fast"], reasons: ["required_empty"] });
+    expect(run.verdict).toMatchObject({
+      status: "MISCONFIGURED",
+      misconfigured: ["fast"],
+      reasons: ["required_empty"],
+    });
     expect(run.details[0]?.rules).toBe(0);
   });
 
   it("keeps stdout and stderr out of the result", async () => {
-    const result: CommandResult = { kind: "exited", status: 1, signal: null, stdout: "SECRET-STDOUT-9f2e", stderr: "SECRET-STDERR-9f2e" };
+    const result: CommandResult = {
+      kind: "exited",
+      status: 1,
+      signal: null,
+      stdout: "SECRET-STDOUT-9f2e",
+      stderr: "SECRET-STDERR-9f2e",
+    };
     const run = await runGates(declared(["fast"]), scripted(() => result).target);
     expect(JSON.stringify(run)).not.toContain("SECRET-");
   });
@@ -118,7 +148,12 @@ describe("runGates", () => {
     const dir = makeTempDir("omf-gates-");
     const node = process.execPath;
     const run = await runGates(
-      { fast: [node, "-e", "process.exit(0)"], full: [node, "-e", "console.log('OMF_GATE_RULES: 4')"], deep: [node, "-e", "process.exit(2)"], required: ["fast", "full"] },
+      {
+        fast: [node, "-e", "process.exit(0)"],
+        full: [node, "-e", "console.log('OMF_GATE_RULES: 4')"],
+        deep: [node, "-e", "process.exit(2)"],
+        required: ["fast", "full"],
+      },
       fixtureTarget(dir),
       { timeoutMs: 20_000 },
     );

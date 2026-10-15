@@ -63,7 +63,9 @@ describe("approvalScreen", () => {
     const fx = setupGoal();
     const { expected } = approvalScreen(fx.location, "g-fast");
     writeBands(fx, "m-errors");
-    expect(() => approveGoal(fx.location, "g-fast", "human:dev", undefined, expected)).toThrow(/changed after it was shown/);
+    expect(() => approveGoal(fx.location, "g-fast", "human:dev", undefined, expected)).toThrow(
+      /changed after it was shown/,
+    );
   });
 
   it("names an edited bands file as a reason for approving again", () => {
@@ -86,12 +88,21 @@ describe("approvalScreen", () => {
     const fx = setupGoal();
     writeFileSync(
       fx.goalFile,
-      readFileSync(fx.goalFile, "utf8").replace('title: "Say what this goal is in a few words"', 'title: "fast\\x1b[2Jdone"'),
+      readFileSync(fx.goalFile, "utf8").replace(
+        'title: "Say what this goal is in a few words"',
+        'title: "fast\\x1b[2Jdone"',
+      ),
     );
     proposeMetric(
       new Ledger(fx.location.dir),
       fx.location.dir,
-      { metric_id: "m-p95", command: ["sh", "bench/p95.sh", "\u202eevil"], unit: "ms", watched_paths: ["bench/p95.sh"], image: null },
+      {
+        metric_id: "m-p95",
+        command: ["sh", "bench/p95.sh", "\u202eevil"],
+        unit: "ms",
+        watched_paths: ["bench/p95.sh"],
+        image: null,
+      },
       "human:dev",
     );
     const text = approvalScreen(fx.location, "g-fast").lines.join("\n");

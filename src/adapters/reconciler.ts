@@ -203,9 +203,7 @@ class ProcessReconciler implements Reconciler {
     const scratch = mkdtempSync(join(tmpdir(), "omf-reconcile-"));
     try {
       if (isClaude) mkdirSync(join(scratch, "claude-config"), { mode: 0o700 });
-      const argv = isClaude
-        ? ["claude", ...buildClaudeArgs(this.config)]
-        : [...(this.config.command ?? [])];
+      const argv = isClaude ? ["claude", ...buildClaudeArgs(this.config)] : [...(this.config.command ?? [])];
       const result = await runProcessGroup(argv, {
         cwd: scratch,
         env: reconcilerEnv(this.config, scratch, this.realEnv),
@@ -248,7 +246,14 @@ export function createReconciler(
     if (config.command === null || config.command.length === 0) {
       throw new ConfigError('[reconciler] kind "command" needs a non-empty command');
     }
-    return new ProcessReconciler(`command:${config.command.slice(0, 2).map((part) => basename(part)).join("+")}`, config, realEnv);
+    return new ProcessReconciler(
+      `command:${config.command
+        .slice(0, 2)
+        .map((part) => basename(part))
+        .join("+")}`,
+      config,
+      realEnv,
+    );
   }
   return new ProcessReconciler("claude", config, realEnv);
 }

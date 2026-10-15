@@ -47,7 +47,7 @@ describe("canonicalize", () => {
   });
 
   it("sorts non-ASCII keys by UTF-16 code unit", () => {
-    expect(canonicalize({ "é": 1, z: 2, a: 3 })).toBe('{"a":3,"z":2,"é":1}');
+    expect(canonicalize({ é: 1, z: 2, a: 3 })).toBe('{"a":3,"z":2,"é":1}');
   });
 
   it("round-trips through JSON.parse(JSON.stringify(...))", () => {

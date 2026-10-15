@@ -33,7 +33,16 @@ try {
 `;
 
 const BEGIN_A = { goalId: GOAL, workId: WORK, runId: RUN_1, testDigest: DIGEST_A, candidateSha: SHA_1, testTotal: 10 };
-const COMPLETE_A = { goalId: GOAL, workId: WORK, runId: RUN_1, testDigest: DIGEST_A, candidateSha: SHA_1, pass: 8, total: 10, flaky: 0 };
+const COMPLETE_A = {
+  goalId: GOAL,
+  workId: WORK,
+  runId: RUN_1,
+  testDigest: DIGEST_A,
+  candidateSha: SHA_1,
+  pass: 8,
+  total: 10,
+  flaky: 0,
+};
 
 // Spec §5.5 to §5.8, M3d-D11: the sealed test split is consumed once per work item and test digest, as a ledger fact.
 // Known limits (spec §8): truncating the end of the ledger is not detected, and a person who can write ~/.omf can forge
@@ -43,7 +52,16 @@ describe("W-test-split-once", () => {
     const dir = makeTempDir("omf-w-split-once-");
     const runs = await Promise.all(
       [1, 2, 3, 4].map((i) =>
-        runChild(CHILD, [TEST_RUN_MODULE, LEDGER_MODULE, dir, GOAL, WORK, `r-20261014T09150${i}Z-ab12`, DIGEST_A, SHA_1]),
+        runChild(CHILD, [
+          TEST_RUN_MODULE,
+          LEDGER_MODULE,
+          dir,
+          GOAL,
+          WORK,
+          `r-20261014T09150${i}Z-ab12`,
+          DIGEST_A,
+          SHA_1,
+        ]),
       ),
     );
     expect(runs.map((r) => r.code).sort()).toEqual([0, 3, 3, 3]);
@@ -59,7 +77,10 @@ describe("W-test-split-once", () => {
 
     const restarted = new Ledger(ledger.dir);
     const state = stateOf(restarted);
-    expect(planTestRun(state, DIGEST_A, SHA_1)).toEqual({ action: "use_recorded", result: { pass: 8, total: 10, flaky: 0 } });
+    expect(planTestRun(state, DIGEST_A, SHA_1)).toEqual({
+      action: "use_recorded",
+      result: { pass: 8, total: 10, flaky: 0 },
+    });
     expect(planTestRun(state, DIGEST_A, SHA_2)).toEqual({ action: "needs_reseal" });
     expect(sealedTestField(state, DIGEST_A, SHA_2)).toBe("consumed_other_candidate");
     // Nothing runs the consumed split again: not for the same commit, not for another one, not from a restarted process.
@@ -80,7 +101,11 @@ describe("W-test-run-incomplete-blocked", () => {
     const block = testRunBlock(plan);
     expect(block).toEqual({ outcome: "blocked", reason_code: "test_run_incomplete" });
     if (block === null) throw new Error("expected a block");
-    expect(dispositionOf({ ...block, exhausted: false })).toEqual({ action: "park", item_state: "unchanged", counts_toward_stop_if: false });
+    expect(dispositionOf({ ...block, exhausted: false })).toEqual({
+      action: "park",
+      item_state: "unchanged",
+      counts_toward_stop_if: false,
+    });
     expect(feedbackEntryCheck(ledger.readVerified(), GOAL, WORK, DIGEST_A, SHA_1)).toEqual({
       status: "blocked",
       reason_code: "test_run_incomplete",
@@ -89,8 +114,12 @@ describe("W-test-run-incomplete-blocked", () => {
 
     // No path around the person: the same digest, a fresh digest, and an authorization by omf all fail.
     expect(codeOf(() => beginTestRun(ledger, { ...BEGIN_A, runId: RUN_2 }))).toBe("test_already_consumed");
-    expect(codeOf(() => beginTestRun(ledger, { ...BEGIN_A, runId: RUN_2, testDigest: DIGEST_B }))).toBe("reseal_not_authorized");
-    expect(codeOf(() => authorizeTestReseal(ledger, { goalId: GOAL, workId: WORK, basis: "J6" }, "omf"))).toBe("forbidden");
+    expect(codeOf(() => beginTestRun(ledger, { ...BEGIN_A, runId: RUN_2, testDigest: DIGEST_B }))).toBe(
+      "reseal_not_authorized",
+    );
+    expect(codeOf(() => authorizeTestReseal(ledger, { goalId: GOAL, workId: WORK, basis: "J6" }, "omf"))).toBe(
+      "forbidden",
+    );
 
     authorizeTestReseal(ledger, { goalId: GOAL, workId: WORK, basis: "J6" }, "human:dev");
     expect(feedbackEntryCheck(ledger.readVerified(), GOAL, WORK, DIGEST_B, SHA_1)).toEqual({ status: "proceed" });

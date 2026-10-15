@@ -11,7 +11,11 @@ import { HIGH_RISK, T0, T1, makeNewItem } from "./work.js";
 export function runStateStoreContract(name: string, makeStore: () => StateStore): void {
   describe(`StateStore contract: ${name}`, () => {
     const ready = makeNewItem({ title: "Cache the render path" });
-    const gated = makeNewItem({ title: "Update the CI workflow", paths: [".github/workflows/ci.yml"], risk: HIGH_RISK });
+    const gated = makeNewItem({
+      title: "Update the CI workflow",
+      paths: [".github/workflows/ci.yml"],
+      risk: HIGH_RISK,
+    });
     const readyId = workIdOf(ready.fingerprint);
     const gatedId = workIdOf(gated.fingerprint);
 
@@ -48,7 +52,10 @@ export function runStateStoreContract(name: string, makeStore: () => StateStore)
       const store = makeStore();
       store.createWorkItem(ready, T0);
       store.createWorkItem(gated, T0);
-      expect(store.fetchWorkItemsByIds([gatedId, readyId]).map((item) => item.front.work_id)).toEqual([gatedId, readyId]);
+      expect(store.fetchWorkItemsByIds([gatedId, readyId]).map((item) => item.front.work_id)).toEqual([
+        gatedId,
+        readyId,
+      ]);
       expect(() => store.fetchWorkItemsByIds([readyId, "w-ffffffffffff"])).toThrow(WorkItemError);
     });
 
@@ -152,7 +159,9 @@ export function runStateStoreContract(name: string, makeStore: () => StateStore)
         const store = makeStore();
         const submitted = fresh(store, "Item that is submitted");
         const failed = fresh(store, "Item that fails");
-        expect(() => store.submitWorkItemForReview(submitted, T1)).toThrow(/only in_progress items can become awaiting_review/);
+        expect(() => store.submitWorkItemForReview(submitted, T1)).toThrow(
+          /only in_progress items can become awaiting_review/,
+        );
         expect(() => store.failWorkItem(failed, T1)).toThrow(/only in_progress items can become failed/);
 
         store.startWorkItem(submitted, T1);
@@ -204,12 +213,16 @@ export function runStateStoreContract(name: string, makeStore: () => StateStore)
         // awaiting_review -> failed is a legal TRANSITIONS edge but not a W edge.
         expect(() => store.repairWorkItem(toReview, "failed", T2)).toThrow(/only in_progress items can become failed/);
         // sideways, backward and terminal sources.
-        expect(() => store.repairWorkItem(toRunning, "in_progress", T2)).toThrow(/only ready items can become in_progress/);
+        expect(() => store.repairWorkItem(toRunning, "in_progress", T2)).toThrow(
+          /only ready items can become in_progress/,
+        );
         expect(() => store.repairWorkItem(toFailed, "in_progress", T2)).toThrow(WorkItemError);
         expect(() => store.repairWorkItem(toReview, "in_progress", T2)).toThrow(WorkItemError);
         // skipping an edge: ready -> awaiting_review.
         const skipped = fresh(store, "Item that must not skip");
-        expect(() => store.repairWorkItem(skipped, "awaiting_review", T2)).toThrow(/only in_progress items can become awaiting_review/);
+        expect(() => store.repairWorkItem(skipped, "awaiting_review", T2)).toThrow(
+          /only in_progress items can become awaiting_review/,
+        );
         // targets that are not W edges at all.
         for (const target of ["done", "vetoed", "cancelled", "ready", "awaiting_approval"]) {
           expect(() => store.repairWorkItem(skipped, target as RepairTarget, T2)).toThrow(/not a W edge/);
@@ -222,7 +235,9 @@ export function runStateStoreContract(name: string, makeStore: () => StateStore)
       it("takes a progress marker only in in_progress and replaces the region each time", () => {
         const store = makeStore();
         store.createWorkItem(ready, T0);
-        expect(() => store.setProgressMarker(readyId, "S3 working", T1)).toThrow(/only in_progress items take a progress marker/);
+        expect(() => store.setProgressMarker(readyId, "S3 working", T1)).toThrow(
+          /only in_progress items take a progress marker/,
+        );
         store.startWorkItem(readyId, T1);
         const first = store.setProgressMarker(readyId, "S3 working", T2);
         expect(first.progress).toBe("S3 working\n");
@@ -230,7 +245,9 @@ export function runStateStoreContract(name: string, makeStore: () => StateStore)
         expect(store.setProgressMarker(readyId, "S4 handed_off", T2).progress).toBe("S4 handed_off\n");
         expect(store.fetchWorkItemsByIds([readyId])[0]?.progress).toBe("S4 handed_off\n");
         store.submitWorkItemForReview(readyId, T2);
-        expect(() => store.setProgressMarker(readyId, "S5 working", T2)).toThrow(/only in_progress items take a progress marker/);
+        expect(() => store.setProgressMarker(readyId, "S5 working", T2)).toThrow(
+          /only in_progress items take a progress marker/,
+        );
       });
 
       it("refuses a progress marker outside the closed grammar", () => {
@@ -291,7 +308,13 @@ export function runStateStoreContract(name: string, makeStore: () => StateStore)
         const surface: string[] = [];
         for (const key in store) surface.push(key);
         expect(surface.filter((key) => /complete|done|ship|finish|setState|update/i.test(key))).toEqual([]);
-        for (const verb of ["startWorkItem", "submitWorkItemForReview", "failWorkItem", "repairWorkItem", "setProgressMarker"]) {
+        for (const verb of [
+          "startWorkItem",
+          "submitWorkItemForReview",
+          "failWorkItem",
+          "repairWorkItem",
+          "setProgressMarker",
+        ]) {
           expect(surface, verb).toContain(verb);
         }
         // The only parametrised verb, repair, refuses a done target (see the repair case above).

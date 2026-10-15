@@ -67,7 +67,10 @@ export function recordProblems(record: DecisionRecord, ctx: LeakContext): LintPr
   }
 
   if (record.status === "resolved") {
-    if (isQuantitative(record.class) && (record.response_measure === null || !Number.isFinite(record.response_measure.threshold))) {
+    if (
+      isQuantitative(record.class) &&
+      (record.response_measure === null || !Number.isFinite(record.response_measure.threshold))
+    ) {
       problems.push({ code: "measure_missing", decision_id: id });
     }
     if (record.class === "interface" && record.interface === null) {

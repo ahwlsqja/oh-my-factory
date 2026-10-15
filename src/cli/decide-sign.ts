@@ -51,7 +51,9 @@ function measureLines(measure: ResponseMeasure | null): string[] {
   if (measure === null) return [];
   const percentile = measure.percentile === null ? "" : ` at p${measure.percentile}`;
   const window = measure.window === null ? "" : ` over ${safeText(measure.window)}`;
-  return [`measure: ${safeText(measure.metric)} ${measure.op} ${measure.threshold} ${safeText(measure.unit)}${percentile}${window}`];
+  return [
+    `measure: ${safeText(measure.metric)} ${measure.op} ${measure.threshold} ${safeText(measure.unit)}${percentile}${window}`,
+  ];
 }
 
 /** The commands the factory will run for this item, as argv arrays: a person signs exactly these. */
@@ -147,7 +149,8 @@ export function readSignAction(verb: SignVerb, file: string): SignAction {
     throw new DecisionError("invalid_input", `${file} is not valid JSON`);
   }
   const checked = validateDef("decision.schema.json", INPUT_DEF[verb], data);
-  if (!checked.ok) throw new DecisionError("invalid_input", `${file} is not a valid ${INPUT_NOUN[verb]}: ${checked.errors}`);
+  if (!checked.ok)
+    throw new DecisionError("invalid_input", `${file} is not a valid ${INPUT_NOUN[verb]}: ${checked.errors}`);
   return { verb, input: data } as SignAction;
 }
 
@@ -164,7 +167,10 @@ export function openDecision(location: ProjectLocation, item: WorkItem, decision
     const hint = decisionId.startsWith(INTENT_QUESTION_ID_PREFIX)
       ? "; the intent's open questions are recorded by the first omf decide write, so run omf decide add first"
       : "";
-    throw new DecisionError("unknown_decision", `decision ${decisionId} not found in work item ${item.front.work_id}${hint}`);
+    throw new DecisionError(
+      "unknown_decision",
+      `decision ${decisionId} not found in work item ${item.front.work_id}${hint}`,
+    );
   }
   if (record.status === "resolved" || record.status === "na") {
     throw new DecisionError("already_closed", `decision ${decisionId} is already ${record.status}; v0.1 has no reopen`);
@@ -172,7 +178,11 @@ export function openDecision(location: ProjectLocation, item: WorkItem, decision
   return record;
 }
 
-const TERMINAL_ACTION: Record<SignVerb, string> = { resolve: "decision resolve", defer: "decision defer", na: "decision n/a" };
+const TERMINAL_ACTION: Record<SignVerb, string> = {
+  resolve: "decision resolve",
+  defer: "decision defer",
+  na: "decision n/a",
+};
 const NOT_DONE: Record<SignVerb, string> = {
   resolve: "nothing was resolved",
   defer: "nothing was deferred",
@@ -243,9 +253,14 @@ export function registerDecideSigningCommands(program: Command): void {
     .command("resolve")
     .argument("<work_id>")
     .argument("<decision_id>")
-    .requiredOption("--file <resolution.json>", "the resolution: choice, rationale, rejected, and a measure or interface where the class needs one")
-    .option("--na", "mark the decision not applicable instead; the file holds {\"rationale\": \"...\"} only")
-    .description("resolve a design decision as a person (needs an interactive terminal; retype <work_id>/<decision_id>)")
+    .requiredOption(
+      "--file <resolution.json>",
+      "the resolution: choice, rationale, rejected, and a measure or interface where the class needs one",
+    )
+    .option("--na", 'mark the decision not applicable instead; the file holds {"rationale": "..."} only')
+    .description(
+      "resolve a design decision as a person (needs an interactive terminal; retype <work_id>/<decision_id>)",
+    )
     .action((workId: string, decisionId: string, options: { file: string; na?: boolean }) =>
       refusing(() => signFromTerminal(options.na === true ? "na" : "resolve", workId, decisionId, options.file)),
     );
@@ -254,8 +269,13 @@ export function registerDecideSigningCommands(program: Command): void {
     .command("defer")
     .argument("<work_id>")
     .argument("<decision_id>")
-    .requiredOption("--file <deferral.json>", "the deferral: owner, reason, revisit_trigger, default, expires_at (OMF sets signed_by)")
-    .description("defer a design decision with a signed default and an expiry (needs an interactive terminal; retype <work_id>/<decision_id>)")
+    .requiredOption(
+      "--file <deferral.json>",
+      "the deferral: owner, reason, revisit_trigger, default, expires_at (OMF sets signed_by)",
+    )
+    .description(
+      "defer a design decision with a signed default and an expiry (needs an interactive terminal; retype <work_id>/<decision_id>)",
+    )
     .action((workId: string, decisionId: string, options: { file: string }) =>
       refusing(() => signFromTerminal("defer", workId, decisionId, options.file)),
     );

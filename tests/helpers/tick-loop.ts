@@ -47,7 +47,11 @@ export function setPlan(fx: Pick<LoopFixture, "stubDir">, plan: StubPlan): void 
 /** How many times the scripted model was called. */
 export function stubCalls(fx: Pick<LoopFixture, "stubDir">): number {
   const file = join(fx.stubDir, "calls");
-  return existsSync(file) ? readFileSync(file, "utf8").split("\n").filter((line) => line !== "").length : 0;
+  return existsSync(file)
+    ? readFileSync(file, "utf8")
+        .split("\n")
+        .filter((line) => line !== "").length
+    : 0;
 }
 
 /** Changes what `bench/p95.sh` prints. The value file is not a watched path, so this is not a regime change. */
@@ -81,7 +85,10 @@ export function setupLoopGoal(options: { stub?: boolean } = {}): LoopFixture {
   setPlan({ stubDir }, { mode: "ok", count: 1 });
   if (useStub) {
     const argv = JSON.stringify([process.execPath, STUB, stubDir]);
-    appendFileSync(join(fx.location.dir, "config.toml"), `\n[reconciler]\nkind = "command"\ncommand = ${argv}\ntimeout_ms = 20000\n`);
+    appendFileSync(
+      join(fx.location.dir, "config.toml"),
+      `\n[reconciler]\nkind = "command"\ncommand = ${argv}\ntimeout_ms = 20000\n`,
+    );
   }
   const config = readConfig(fx.location.dir);
   const reconciler = createReconciler(fx.location.dir, config.reconciler, useStub ? process.env : {});

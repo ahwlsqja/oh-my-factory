@@ -51,42 +51,169 @@ type Row = [label: string, input: Gate4Input, reasons: Gate4Reason[], severity: 
 
 const ROWS: Row[] = [
   ["a healthy state passes", input(), [], "none"],
-  ["limits never recorded", input({ budget: budget({ limits: null, effective: null }) }), ["limits_missing"], "integrity"],
-  ["one ledger anomaly", input({ budget: budget({ anomalies: [{ code: "round_gap", seq: 7 }] }) }), ["ledger_anomaly"], "integrity"],
-  ["the third visit of a node in a round passes", input({ visits: { in_round: 3, total: 3, entering: "S4" } }), [], "none"],
-  ["the fourth visit of a node in a round", input({ visits: { in_round: 4, total: 4, entering: "S4" } }), ["visit_cap"], "hard"],
-  ["total 20 passes at 20 x 1 round", input({ budget: budget(withLimits(1, 5_000_000)), visits: { in_round: 1, total: 20, entering: "S5" } }), [], "none"],
-  ["total 21 fails at 20 x 1 round", input({ budget: budget(withLimits(1, 5_000_000)), visits: { in_round: 1, total: 21, entering: "S5" } }), ["total_visit_cap"], "hard"],
+  [
+    "limits never recorded",
+    input({ budget: budget({ limits: null, effective: null }) }),
+    ["limits_missing"],
+    "integrity",
+  ],
+  [
+    "one ledger anomaly",
+    input({ budget: budget({ anomalies: [{ code: "round_gap", seq: 7 }] }) }),
+    ["ledger_anomaly"],
+    "integrity",
+  ],
+  [
+    "the third visit of a node in a round passes",
+    input({ visits: { in_round: 3, total: 3, entering: "S4" } }),
+    [],
+    "none",
+  ],
+  [
+    "the fourth visit of a node in a round",
+    input({ visits: { in_round: 4, total: 4, entering: "S4" } }),
+    ["visit_cap"],
+    "hard",
+  ],
+  [
+    "total 20 passes at 20 x 1 round",
+    input({ budget: budget(withLimits(1, 5_000_000)), visits: { in_round: 1, total: 20, entering: "S5" } }),
+    [],
+    "none",
+  ],
+  [
+    "total 21 fails at 20 x 1 round",
+    input({ budget: budget(withLimits(1, 5_000_000)), visits: { in_round: 1, total: 21, entering: "S5" } }),
+    ["total_visit_cap"],
+    "hard",
+  ],
   ["total 60 passes at 20 x 3 rounds", input({ visits: { in_round: 1, total: 60, entering: "S5" } }), [], "none"],
-  ["total 61 fails at 20 x 3 rounds", input({ visits: { in_round: 1, total: 61, entering: "S5" } }), ["total_visit_cap"], "hard"],
-  ["a rework request with an unchanged signature", input({ budget: budget({ previous_signature: SIG_A }), stall: { current: SIG_A, rework: true } }), ["stalled"], "hard"],
-  ["an unchanged signature without a rework request", input({ budget: budget({ previous_signature: SIG_A }), stall: { current: SIG_A, rework: false } }), [], "none"],
-  ["a rework request with a changed signature", input({ budget: budget({ previous_signature: SIG_A }), stall: { current: SIG_B, rework: true } }), [], "none"],
-  ["a rework request in round 1 (no previous signature)", input({ stall: { current: SIG_A, rework: true } }), [], "none"],
-  ["rounds used up and another round wanted", input({ budget: budget({ rounds_started: 3 }), next_round_wanted: true }), ["rounds_exhausted"], "soft"],
-  ["rounds used up and no other round wanted", input({ budget: budget({ rounds_started: 3 }), next_round_wanted: false }), [], "none"],
-  ["one round left and another wanted", input({ budget: budget({ rounds_started: 2 }), next_round_wanted: true }), [], "none"],
-  ["spend over the limit", input({ budget: budget({ spend: { micro_usd: 5_000_001, unknown_count: 0 } }) }), ["spend_exhausted"], "soft"],
-  ["spend equal to the limit, no next round", input({ budget: budget({ spend: { micro_usd: 5_000_000, unknown_count: 0 } }) }), [], "none"],
-  ["spend equal to the limit, next round wanted", input({ budget: budget({ spend: { micro_usd: 5_000_000, unknown_count: 0 } }), next_round_wanted: true }), ["spend_exhausted"], "soft"],
-  ["the same park reason three times since the last human act", input({ reentry: { same_reason: 3, kills: 0 } }), ["reentry_loop"], "hard"],
+  [
+    "total 61 fails at 20 x 3 rounds",
+    input({ visits: { in_round: 1, total: 61, entering: "S5" } }),
+    ["total_visit_cap"],
+    "hard",
+  ],
+  [
+    "a rework request with an unchanged signature",
+    input({ budget: budget({ previous_signature: SIG_A }), stall: { current: SIG_A, rework: true } }),
+    ["stalled"],
+    "hard",
+  ],
+  [
+    "an unchanged signature without a rework request",
+    input({ budget: budget({ previous_signature: SIG_A }), stall: { current: SIG_A, rework: false } }),
+    [],
+    "none",
+  ],
+  [
+    "a rework request with a changed signature",
+    input({ budget: budget({ previous_signature: SIG_A }), stall: { current: SIG_B, rework: true } }),
+    [],
+    "none",
+  ],
+  [
+    "a rework request in round 1 (no previous signature)",
+    input({ stall: { current: SIG_A, rework: true } }),
+    [],
+    "none",
+  ],
+  [
+    "rounds used up and another round wanted",
+    input({ budget: budget({ rounds_started: 3 }), next_round_wanted: true }),
+    ["rounds_exhausted"],
+    "soft",
+  ],
+  [
+    "rounds used up and no other round wanted",
+    input({ budget: budget({ rounds_started: 3 }), next_round_wanted: false }),
+    [],
+    "none",
+  ],
+  [
+    "one round left and another wanted",
+    input({ budget: budget({ rounds_started: 2 }), next_round_wanted: true }),
+    [],
+    "none",
+  ],
+  [
+    "spend over the limit",
+    input({ budget: budget({ spend: { micro_usd: 5_000_001, unknown_count: 0 } }) }),
+    ["spend_exhausted"],
+    "soft",
+  ],
+  [
+    "spend equal to the limit, no next round",
+    input({ budget: budget({ spend: { micro_usd: 5_000_000, unknown_count: 0 } }) }),
+    [],
+    "none",
+  ],
+  [
+    "spend equal to the limit, next round wanted",
+    input({ budget: budget({ spend: { micro_usd: 5_000_000, unknown_count: 0 } }), next_round_wanted: true }),
+    ["spend_exhausted"],
+    "soft",
+  ],
+  [
+    "the same park reason three times since the last human act",
+    input({ reentry: { same_reason: 3, kills: 0 } }),
+    ["reentry_loop"],
+    "hard",
+  ],
   ["three kills since the last human act", input({ reentry: { same_reason: 0, kills: 3 } }), ["reentry_loop"], "hard"],
   ["two of each is not a loop", input({ reentry: { same_reason: 2, kills: 2 } }), [], "none"],
   [
     "a visit cap and exhausted rounds together take the highest severity",
-    input({ budget: budget({ rounds_started: 3 }), next_round_wanted: true, visits: { in_round: 4, total: 4, entering: "S4" } }),
+    input({
+      budget: budget({ rounds_started: 3 }),
+      next_round_wanted: true,
+      visits: { in_round: 4, total: 4, entering: "S4" },
+    }),
     ["visit_cap", "rounds_exhausted"],
     "hard",
   ],
   [
     "an anomaly outranks a soft limit",
-    input({ budget: budget({ rounds_started: 3, anomalies: [{ code: "limits_twice", seq: 3 }] }), next_round_wanted: true }),
+    input({
+      budget: budget({ rounds_started: 3, anomalies: [{ code: "limits_twice", seq: 3 }] }),
+      next_round_wanted: true,
+    }),
     ["ledger_anomaly", "rounds_exhausted"],
     "integrity",
   ],
-  ["a raised limit changes the verdict", input({ budget: budget({ rounds_started: 3, raised: { rounds: 1, model_micro_usd: 0 }, effective: { ...LIMITS, max_rounds: 4 } }), next_round_wanted: true }), [], "none"],
-  ["line entry on a fresh item", input({ budget: budget({ rounds_started: 0 }), visits: { in_round: 0, total: 0, entering: null }, next_round_wanted: true }), [], "none"],
-  ["line entry after the rounds are used up", input({ budget: budget({ rounds_started: 3 }), visits: { in_round: 0, total: 0, entering: null }, next_round_wanted: true }), ["rounds_exhausted"], "soft"],
+  [
+    "a raised limit changes the verdict",
+    input({
+      budget: budget({
+        rounds_started: 3,
+        raised: { rounds: 1, model_micro_usd: 0 },
+        effective: { ...LIMITS, max_rounds: 4 },
+      }),
+      next_round_wanted: true,
+    }),
+    [],
+    "none",
+  ],
+  [
+    "line entry on a fresh item",
+    input({
+      budget: budget({ rounds_started: 0 }),
+      visits: { in_round: 0, total: 0, entering: null },
+      next_round_wanted: true,
+    }),
+    [],
+    "none",
+  ],
+  [
+    "line entry after the rounds are used up",
+    input({
+      budget: budget({ rounds_started: 3 }),
+      visits: { in_round: 0, total: 0, entering: null },
+      next_round_wanted: true,
+    }),
+    ["rounds_exhausted"],
+    "soft",
+  ],
 ];
 
 describe("evaluateGate4", () => {
@@ -105,7 +232,12 @@ describe("evaluateGate4", () => {
   });
 
   it("keeps the warning when the check fails for another reason", () => {
-    const result = evaluateGate4(input({ budget: budget({ rounds_started: 3, spend: { micro_usd: 0, unknown_count: 1 } }), next_round_wanted: true }));
+    const result = evaluateGate4(
+      input({
+        budget: budget({ rounds_started: 3, spend: { micro_usd: 0, unknown_count: 1 } }),
+        next_round_wanted: true,
+      }),
+    );
     expect(result.reasons).toEqual(["rounds_exhausted"]);
     expect(result.warnings).toEqual(["spend_unverifiable"]);
   });
@@ -120,8 +252,18 @@ describe("evaluateGate4", () => {
 
 describe("gate4Result", () => {
   it("maps a result onto the board with closed reason codes only", () => {
-    const failed = evaluateGate4(input({ budget: budget({ rounds_started: 3 }), next_round_wanted: true, visits: { in_round: 4, total: 4, entering: "S4" } }));
-    expect(gate4Result(failed)).toEqual({ gate: "GATE-4", verdict: "fail", reasons: ["visit_cap", "rounds_exhausted"] });
+    const failed = evaluateGate4(
+      input({
+        budget: budget({ rounds_started: 3 }),
+        next_round_wanted: true,
+        visits: { in_round: 4, total: 4, entering: "S4" },
+      }),
+    );
+    expect(gate4Result(failed)).toEqual({
+      gate: "GATE-4",
+      verdict: "fail",
+      reasons: ["visit_cap", "rounds_exhausted"],
+    });
     expect(gate4Result(evaluateGate4(input()))).toEqual({ gate: "GATE-4", verdict: "pass", reasons: [] });
     for (const row of ROWS) {
       for (const reason of gate4Result(evaluateGate4(row[1])).reasons) expect(reason).toMatch(/^[a-z0-9_]+$/);

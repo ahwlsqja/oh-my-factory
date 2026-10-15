@@ -48,7 +48,10 @@ describe("writeScenarioSet", () => {
     expect(readFileSync(join(dir, `${set[0]!.scenario_id}.yaml`), "utf8")).toBe(before);
 
     writeScenarioSet(v.vault, refOf(2), [storedScenario(3)]);
-    expect(readdirSync(join(v.vault.dir, WORK_ID)).sort(), "a second seal is a second directory").toEqual([sealId(1), sealId(2)]);
+    expect(readdirSync(join(v.vault.dir, WORK_ID)).sort(), "a second seal is a second directory").toEqual([
+      sealId(1),
+      sealId(2),
+    ]);
   });
 
   it("keeps a tricky stdin byte for byte through the file", () => {
@@ -64,7 +67,11 @@ describe("writeScenarioSet", () => {
   it.each([
     ["a scenario of another work item", [storedScenario(1, { work_id: OTHER_WORK_ID })], "invalid_scenario"],
     ["a repeated scenario id", [storedScenario(1), storedScenario(1)], "invalid_scenario"],
-    ["a kind the schema refuses", [storedScenario(1, { kind: "nfr" as unknown as StoredScenario["kind"] })], "invalid_scenario"],
+    [
+      "a kind the schema refuses",
+      [storedScenario(1, { kind: "nfr" as unknown as StoredScenario["kind"] })],
+      "invalid_scenario",
+    ],
     [
       "more scenarios than a set may hold",
       Array.from({ length: MAX_SCENARIOS_PER_SET + 1 }, (_, i) => storedScenario(i + 1)),
@@ -103,13 +110,18 @@ describe("set digests", () => {
 
     expect(splitDigest([canary, test, train], none, "train")).toBe(base);
     expect(base).not.toBe(splitDigest(all, none, "test"));
-    expect(splitDigest([train, { ...test, canary: `omf-canary-${hex(9, 32)}` }, canary], none, "train"), "the other split is not part of it").toBe(base);
+    expect(
+      splitDigest([train, { ...test, canary: `omf-canary-${hex(9, 32)}` }, canary], none, "train"),
+      "the other split is not part of it",
+    ).toBe(base);
 
     const retired = new Map<string, ScenarioStatus>([[scenarioRef(train.scenario_id), "retired"]]);
     const contaminated = new Map<string, ScenarioStatus>([[scenarioRef(canary.scenario_id), "contaminated"]]);
     expect(splitDigest(all, retired, "train")).not.toBe(base);
     expect(splitDigest(all, contaminated, "train")).not.toBe(base);
-    expect(splitDigest(all, retired, "test"), "a train retirement leaves the test digest alone").toBe(splitDigest(all, none, "test"));
+    expect(splitDigest(all, retired, "test"), "a train retirement leaves the test digest alone").toBe(
+      splitDigest(all, none, "test"),
+    );
 
     const edited = { ...train, steps: [{ ...train.steps[0]!, invoke: { argv: ["add", "other"], stdin: "" } }] };
     expect(splitDigest([edited, test, canary], none, "train")).not.toBe(base);
@@ -129,7 +141,10 @@ describe("readScenarioSet", () => {
   it("says set_missing for a seal that was never written", () => {
     const { v } = sealed();
     expect(readScenarioSet(v.vault, refOf(9))).toEqual({ ok: false, reason: "set_missing" });
-    expect(readScenarioSet(v.vault, { work_id: "../x", seal_id: sealId(1) }), "an id that is not an id names no set").toEqual({
+    expect(
+      readScenarioSet(v.vault, { work_id: "../x", seal_id: sealId(1) }),
+      "an id that is not an id names no set",
+    ).toEqual({
       ok: false,
       reason: "set_missing",
     });
@@ -147,10 +162,15 @@ describe("readScenarioSet", () => {
       ({ dir, file }: ReturnType<typeof sealed>) => renameSync(file, join(dir, `s-${hex(9, 32)}.yaml`)),
       "name_mismatch",
     ],
-    ["yaml that does not parse", ({ file }: ReturnType<typeof sealed>) => writeFileSync(file, "not: [valid"), "invalid_scenario"],
+    [
+      "yaml that does not parse",
+      ({ file }: ReturnType<typeof sealed>) => writeFileSync(file, "not: [valid"),
+      "invalid_scenario",
+    ],
     [
       "a kind the schema refuses",
-      ({ file }: ReturnType<typeof sealed>) => writeFileSync(file, readFileSync(file, "utf8").replace("kind: behavior", "kind: nfr")),
+      ({ file }: ReturnType<typeof sealed>) =>
+        writeFileSync(file, readFileSync(file, "utf8").replace("kind: behavior", "kind: nfr")),
       "invalid_scenario",
     ],
     [
@@ -158,7 +178,11 @@ describe("readScenarioSet", () => {
       ({ file }: ReturnType<typeof sealed>) => writeFileSync(file, `${readFileSync(file, "utf8")}status: retired\n`),
       "invalid_scenario",
     ],
-    ["bytes that are not utf-8", ({ file }: ReturnType<typeof sealed>) => writeFileSync(file, Buffer.from([0xff, 0xfe, 0x00])), "invalid_scenario"],
+    [
+      "bytes that are not utf-8",
+      ({ file }: ReturnType<typeof sealed>) => writeFileSync(file, Buffer.from([0xff, 0xfe, 0x00])),
+      "invalid_scenario",
+    ],
     [
       "a file over the size limit",
       ({ file }: ReturnType<typeof sealed>) => writeFileSync(file, "x".repeat(MAX_SCENARIO_BYTES * 2 + 1)),

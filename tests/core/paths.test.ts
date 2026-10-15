@@ -139,7 +139,9 @@ describe("case-insensitive repository paths", () => {
     const repo = makeGitRepo();
     const variant = join(dirname(repo), swapCase(basename(repo)));
     const home = makeTempDir("omf-home-");
-    expect(() => projectDir(repo, { HOME: home, OMF_HOME: join(variant, ".omf") })).toThrow(/must live outside the repository/);
+    expect(() => projectDir(repo, { HOME: home, OMF_HOME: join(variant, ".omf") })).toThrow(
+      /must live outside the repository/,
+    );
     expect(repoToplevel(variant)).toBe(repoToplevel(repo));
   });
 });
@@ -148,7 +150,9 @@ describe("OMF state outside the agent CLIs' config homes", () => {
   it("refuses OMF_HOME inside ~/.claude", () => {
     const repo = makeGitRepo();
     const home = makeTempDir("omf-home-");
-    expect(() => projectDir(repo, { HOME: home, OMF_HOME: join(home, ".claude", "omf") })).toThrow(/must not live inside/);
+    expect(() => projectDir(repo, { HOME: home, OMF_HOME: join(home, ".claude", "omf") })).toThrow(
+      /must not live inside/,
+    );
   });
 
   it("refuses OMF_HOME inside ~/.codex", () => {
@@ -161,9 +165,9 @@ describe("OMF state outside the agent CLIs' config homes", () => {
     const repo = makeGitRepo();
     const home = makeTempDir("omf-home-");
     const codexHome = makeTempDir("omf-codex-");
-    expect(() =>
-      projectDir(repo, { HOME: home, CODEX_HOME: codexHome, OMF_HOME: join(codexHome, "omf") }),
-    ).toThrow(/must not live inside/);
+    expect(() => projectDir(repo, { HOME: home, CODEX_HOME: codexHome, OMF_HOME: join(codexHome, "omf") })).toThrow(
+      /must not live inside/,
+    );
   });
 
   it("refuses OMF_HOME inside CLAUDE_CONFIG_DIR when it points elsewhere", () => {

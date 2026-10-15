@@ -70,7 +70,10 @@ describe("examples/hello-goal files", () => {
   });
 
   it("answers with a candidate that passes the output schema and every deterministic filter", () => {
-    const run = spawnSync(process.execPath, [join(EXAMPLE, "reconciler.mjs")], { input: "an untrusted prompt\n", encoding: "utf8" });
+    const run = spawnSync(process.execPath, [join(EXAMPLE, "reconciler.mjs")], {
+      input: "an untrusted prompt\n",
+      encoding: "utf8",
+    });
     expect(run.status, run.stderr).toBe(0);
     const response = JSON.parse(run.stdout) as { candidates: IntentCandidate[] };
     expect(validate("reconcile-output.schema.json", response)).toEqual({ ok: true });
@@ -142,7 +145,13 @@ describe("examples/hello-goal, two turns of the goal loop", () => {
       const reconciler = createReconciler(location.dir, config.reconciler, env);
       const started = Date.now();
       const tick = (minutes: number) =>
-        tickGoal(location, "g-hello", { runner: "host", reconciler, config, env, now: () => new Date(started + minutes * 60_000) });
+        tickGoal(location, "g-hello", {
+          runner: "host",
+          reconciler,
+          config,
+          env,
+          now: () => new Date(started + minutes * 60_000),
+        });
       expect(await tick(1)).toMatchObject({ status: "continue", outcome: "observing", reason_code: "consecutive" });
       expect(await tick(3)).toMatchObject({ status: "finish", outcome: "success_candidate" });
       expect(await tick(4)).toMatchObject({ status: "finish", outcome: "already_final" });

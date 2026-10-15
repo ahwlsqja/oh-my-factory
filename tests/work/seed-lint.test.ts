@@ -68,12 +68,17 @@ describe("seed lint, rule number", () => {
 describe("seed lint, rule metric-name", () => {
   const errorRate = termsFor("m-error-rate");
 
-  it.each(["error rate", "error-rate", "error_rate", "errorRate", "m-error-rate", "ERROR_RATE", "The Error Rate drops"])(
-    "rejects %j for m-error-rate",
-    (text) => {
-      expect(rules(text, errorRate)).toEqual(["metric-name"]);
-    },
-  );
+  it.each([
+    "error rate",
+    "error-rate",
+    "error_rate",
+    "errorRate",
+    "m-error-rate",
+    "ERROR_RATE",
+    "The Error Rate drops",
+  ])("rejects %j for m-error-rate", (text) => {
+    expect(rules(text, errorRate)).toEqual(["metric-name"]);
+  });
 
   it("accepts a single ordinary word of a multi-word id", () => {
     expect(rules("reduce errors on checkout", errorRate)).toEqual([]);
@@ -157,7 +162,9 @@ describe("lintCandidate", () => {
   it("lints declared paths for forbidden names and for decimals or long digit runs", () => {
     const terms = termsFor("m-p95");
     const bad = (path: string): string[] =>
-      lintCandidate({ ...candidate, affected_paths: [path] }, terms).map((finding) => `${finding.rule}:${finding.field}`);
+      lintCandidate({ ...candidate, affected_paths: [path] }, terms).map(
+        (finding) => `${finding.rule}:${finding.field}`,
+      );
     expect(bad("bench/m-p95.sh")).toEqual(["metric-name:affected_paths[0]"]);
     expect(bad("lib/python3.12/x")).toEqual(["number:affected_paths[0]"]);
     expect(bad("db/migrations/20260101_add.sql")).toEqual(["number:affected_paths[0]"]);

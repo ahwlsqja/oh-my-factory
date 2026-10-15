@@ -14,7 +14,10 @@ export type GateLineParse =
   | { kind: "ok"; values: GateLineValues }
   | { kind: "absent" }
   | { kind: "duplicated"; count: number }
-  | { kind: "malformed"; reason: "bad_syntax" | "unknown_gate" | "missing_gate" | "duplicate_gate" | "unknown_value" | "out_of_order" };
+  | {
+      kind: "malformed";
+      reason: "bad_syntax" | "unknown_gate" | "missing_gate" | "duplicate_gate" | "unknown_value" | "out_of_order";
+    };
 
 type Malformed = Extract<GateLineParse, { kind: "malformed" }>;
 const malformed = (reason: Malformed["reason"]): Malformed => ({ kind: "malformed", reason });
@@ -49,7 +52,14 @@ export function parseGateLine(text: string): GateLineParse {
 }
 
 export type GateLineStatus = "GREEN" | "RED" | "MISCONFIGURED";
-export const MISCONFIGURED_REASONS = ["line_absent", "line_duplicated", "line_malformed", "required_skipped", "required_empty", "no_required_gates"] as const;
+export const MISCONFIGURED_REASONS = [
+  "line_absent",
+  "line_duplicated",
+  "line_malformed",
+  "required_skipped",
+  "required_empty",
+  "no_required_gates",
+] as const;
 export type MisconfiguredReason = (typeof MISCONFIGURED_REASONS)[number];
 export interface GateLineVerdict {
   status: GateLineStatus;
@@ -71,7 +81,9 @@ export function evaluateGateLine(parse: GateLineParse, required: readonly GateNa
   const ordered = (): MisconfiguredReason[] => MISCONFIGURED_REASONS.filter((reason) => reasons.has(reason));
 
   if (parse.kind !== "ok") {
-    reasons.add(parse.kind === "absent" ? "line_absent" : parse.kind === "duplicated" ? "line_duplicated" : "line_malformed");
+    reasons.add(
+      parse.kind === "absent" ? "line_absent" : parse.kind === "duplicated" ? "line_duplicated" : "line_malformed",
+    );
     return { status: "MISCONFIGURED", line: null, failing: [], misconfigured: needed, reasons: ordered() };
   }
   const { values } = parse;
@@ -79,7 +91,12 @@ export function evaluateGateLine(parse: GateLineParse, required: readonly GateNa
   if (needed.some((name) => values[name] === "skip")) reasons.add("required_skipped");
   if (needed.some((name) => values[name] === "empty")) reasons.add("required_empty");
   const failing = GATE_NAMES.filter((name) => values[name] === "fail");
-  const status: GateLineStatus = misconfigured.length > 0 || reasons.has("no_required_gates") ? "MISCONFIGURED" : failing.length > 0 ? "RED" : "GREEN";
+  const status: GateLineStatus =
+    misconfigured.length > 0 || reasons.has("no_required_gates")
+      ? "MISCONFIGURED"
+      : failing.length > 0
+        ? "RED"
+        : "GREEN";
   return { status, line: formatGateLine(values), failing, misconfigured, reasons: ordered() };
 }
 

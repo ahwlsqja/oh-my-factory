@@ -4,12 +4,27 @@ import { LockHeldError, type LockOwner } from "../core/lock.js";
 import type { ProjectLocation } from "../core/paths.js";
 import { assertLineSafe } from "../vault/line-guard.js";
 import { type ClaimStatus, claimItem, claimStatus, releaseItem } from "./claim.js";
-import { type Governance, type GovernanceCode, GovernanceError, governanceDrift, readGovernance } from "./governance.js";
+import {
+  type Governance,
+  type GovernanceCode,
+  GovernanceError,
+  governanceDrift,
+  readGovernance,
+} from "./governance.js";
 import { verifiedItems, verifyItemAgainstLedger } from "./ledger-verify.js";
 import { type Disposition, type OutcomeInput, OutcomeError, dispositionOf } from "./outcome.js";
 import type { WorkItem, WorkState } from "./types.js";
 import { type ReasonCode, lastStateEvent, newRunId, wEvent } from "./w-events.js";
-import { type WContext, WError, failItem, parkItem, repairItem, setItemProgress, startItem, submitForReview } from "./w-verbs.js";
+import {
+  type WContext,
+  WError,
+  failItem,
+  parkItem,
+  repairItem,
+  setItemProgress,
+  startItem,
+  submitForReview,
+} from "./w-verbs.js";
 
 export interface BeginRunOptions {
   location: ProjectLocation;
@@ -59,7 +74,12 @@ export interface WRun {
 const HUMAN = /^human:\S+$/;
 
 function sameOwner(found: LockOwner | null, mine: LockOwner): boolean {
-  return found !== null && found.pid === mine.pid && found.start_time === mine.start_time && found.acquired_at === mine.acquired_at;
+  return (
+    found !== null &&
+    found.pid === mine.pid &&
+    found.start_time === mine.start_time &&
+    found.acquired_at === mine.acquired_at
+  );
 }
 
 /**
@@ -263,7 +283,8 @@ export function beginRun(options: BeginRunOptions): WRun {
       try {
         disposition = dispositionOf(input);
       } catch (err) {
-        if (err instanceof OutcomeError) throw new WError("outcome_invalid", "the outcome is not a row of the outcome table");
+        if (err instanceof OutcomeError)
+          throw new WError("outcome_invalid", "the outcome is not a row of the outcome table");
         throw err;
       }
       const checked = recheck();

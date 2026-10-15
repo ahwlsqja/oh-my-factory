@@ -3,7 +3,16 @@ import { exposureUnitsOf, ladderStateFromEvents } from "../../src/feedback/event
 import { type ImplementerFeedback, type ReleaseInput, releaseFeedback } from "../../src/feedback/release.js";
 import { isAllowlistedFeedback, renderFeedback } from "../../src/feedback/render.js";
 import { FeedbackError, type ReleasedCategory, type ScenarioResult } from "../../src/feedback/types.js";
-import { DIGEST, GOAL, WORK, counts, declaredLedger, eventsOf, releaseInput, remaining } from "../helpers/release-fixture.js";
+import {
+  DIGEST,
+  GOAL,
+  WORK,
+  counts,
+  declaredLedger,
+  eventsOf,
+  releaseInput,
+  remaining,
+} from "../helpers/release-fixture.js";
 
 /** The FeedbackError code a call throws, "not a FeedbackError" for anything else, undefined when it does not throw. */
 function codeOf(fn: () => unknown): string | undefined {
@@ -52,17 +61,23 @@ describe("releaseFeedback: validation comes first", () => {
       { exposureLimit: 21 },
       { exposureLimit: 1.5 },
       { exposureLimit: "5" as unknown as number },
-      { results: [{ category: "interface", passed: true, flaky: false, scenario_id: "s-1" }] as unknown as ScenarioResult[] },
+      {
+        results: [
+          { category: "interface", passed: true, flaky: false, scenario_id: "s-1" },
+        ] as unknown as ScenarioResult[],
+      },
     ];
     for (const extra of bad) {
-      expect(codeOf(() => releaseFeedback(ledger, releaseInput(counts({ interface: [3, 5] }), extra)))).toBe("invalid_input");
+      expect(codeOf(() => releaseFeedback(ledger, releaseInput(counts({ interface: [3, 5] }), extra)))).toBe(
+        "invalid_input",
+      );
     }
     expect(ledger.readVerified()).toHaveLength(1);
     expect(remaining(ledger)).toBe(3);
     const undeclared = declaredLedger(null);
-    expect(codeOf(() => releaseFeedback(undeclared, releaseInput(counts({ interface: [3, 5] }), { exposureLimit: 0 })))).toBe(
-      "invalid_input",
-    );
+    expect(
+      codeOf(() => releaseFeedback(undeclared, releaseInput(counts({ interface: [3, 5] }), { exposureLimit: 0 }))),
+    ).toBe("invalid_input");
   });
 });
 
@@ -105,7 +120,12 @@ describe("releaseFeedback: the Ladder and the disclosure unit", () => {
       ["repeat", 3, 60],
       ["repeat", 4, 80],
     ]);
-    expect(ledger.readVerified().slice(before).map((e) => e.type)).toEqual(["feedback.released", "feedback.released"]);
+    expect(
+      ledger
+        .readVerified()
+        .slice(before)
+        .map((e) => e.type),
+    ).toEqual(["feedback.released", "feedback.released"]);
     expect(remaining(ledger)).toBe(2);
   });
 
@@ -132,12 +152,15 @@ describe("releaseFeedback: the Ladder and the disclosure unit", () => {
       reason: "disclosure_exhausted",
     });
     expect(ledger.readVerified()).toHaveLength(before);
-    expect(releaseFeedback(ledger, releaseInput(counts({ interface: [0, 5], security: [0, 5] }))).status).toBe("released");
+    expect(releaseFeedback(ledger, releaseInput(counts({ interface: [0, 5], security: [0, 5] }))).status).toBe(
+      "released",
+    );
   });
 
   it("stops new scores at the exposure limit of the work item and still repeats", () => {
     const ledger = declaredLedger(10);
-    const at = (pass: number) => releaseFeedback(ledger, releaseInput(counts({ interface: [pass, 10] }), { exposureLimit: 2 }));
+    const at = (pass: number) =>
+      releaseFeedback(ledger, releaseInput(counts({ interface: [pass, 10] }), { exposureLimit: 2 }));
     expect(at(0).status).toBe("released");
     expect(at(4).status).toBe("released");
     expect(exposureUnitsOf(ledger.readVerified(), GOAL, WORK)).toBe(2);
@@ -150,10 +173,17 @@ describe("releaseFeedback: the Ladder and the disclosure unit", () => {
     const ledger = declaredLedger(5);
     releaseFeedback(ledger, releaseInput(counts({ interface: [3, 5], security: [4, 5] })));
     const before = ledger.readVerified().length;
-    expect(codeOf(() => releaseFeedback(ledger, releaseInput(counts({ interface: [3, 6], security: [4, 5] }))))).toBe("invalid_input");
-    expect(codeOf(() => releaseFeedback(ledger, releaseInput(counts({ interface: [3, 5], security: [4, 5] }), { workId: "w-aaaaaaaaaaaa" })))).toBe(
+    expect(codeOf(() => releaseFeedback(ledger, releaseInput(counts({ interface: [3, 6], security: [4, 5] }))))).toBe(
       "invalid_input",
     );
+    expect(
+      codeOf(() =>
+        releaseFeedback(
+          ledger,
+          releaseInput(counts({ interface: [3, 5], security: [4, 5] }), { workId: "w-aaaaaaaaaaaa" }),
+        ),
+      ),
+    ).toBe("invalid_input");
     expect(ledger.readVerified()).toHaveLength(before);
     expect(remaining(ledger)).toBe(4);
   });

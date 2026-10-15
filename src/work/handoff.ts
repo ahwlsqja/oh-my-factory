@@ -84,7 +84,8 @@ export const HANDOFF_ROUTES: Readonly<Record<ReasonCode, Route>> = {
   scenarios_need_review: {
     j: "J3",
     state: "The sealed scenarios, or what they were written from, need a person before the line can go on.",
-    question: "The line cannot go on with these scenarios, because a rerun reuses the standing seal. Should the item be dropped?",
+    question:
+      "The line cannot go on with these scenarios, because a rerun reuses the standing seal. Should the item be dropped?",
     options: review,
   },
   audit_flag: {
@@ -186,13 +187,15 @@ export const HANDOFF_ROUTES: Readonly<Record<ReasonCode, Route>> = {
   test_run_incomplete: {
     j: "J6",
     state: "The sealed test split was consumed by an earlier run that never recorded a result.",
-    question: "The line cannot go on: a rerun reuses the standing seal and meets the same used test split. Should the item be dropped?",
+    question:
+      "The line cannot go on: a rerun reuses the standing seal and meets the same used test split. Should the item be dropped?",
     options: review,
   },
   test_reseal_required: {
     j: "J3",
     state: "The sealed test split was already used for different code and needs a fresh split from a person.",
-    question: "The line cannot go on: a rerun reuses the standing seal, and a fresh test split needs a person's authorization, which has no command yet. Should the item be dropped?",
+    question:
+      "The line cannot go on: a rerun reuses the standing seal, and a fresh test split needs a person's authorization, which has no command yet. Should the item be dropped?",
     options: review,
   },
   noise_unverified: {
@@ -203,8 +206,10 @@ export const HANDOFF_ROUTES: Readonly<Record<ReasonCode, Route>> = {
   },
   scenarios_exhausted: {
     j: "J3",
-    state: "The sealed scenarios cannot give more feedback because they are too few or their exposure limit is reached.",
-    question: "The line cannot go on: a rerun reuses the standing seal and would stop here again, and no command seals fresh scenarios yet. Should the item be dropped?",
+    state:
+      "The sealed scenarios cannot give more feedback because they are too few or their exposure limit is reached.",
+    question:
+      "The line cannot go on: a rerun reuses the standing seal and would stop here again, and no command seals fresh scenarios yet. Should the item be dropped?",
     options: review,
   },
 };
@@ -290,7 +295,8 @@ export function writeHandoff(itemDir: string, record: HandoffRecord): void {
   const check = validate("handoff.schema.json", record);
   if (!check.ok) throw new Error(`invalid handoff: ${check.errors}`);
   const path = handoffFile(itemDir, record.run_id, record.kind);
-  if (existsSync(path)) throw new Error(`handoff ${basename(path)} already exists; handoffs are history and are never overwritten`);
+  if (existsSync(path))
+    throw new Error(`handoff ${basename(path)} already exists; handoffs are history and are never overwritten`);
   writePrivateFileAtomic(path, `${JSON.stringify(record, null, 2)}\n`);
 }
 

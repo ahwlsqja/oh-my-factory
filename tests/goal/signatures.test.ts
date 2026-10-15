@@ -28,7 +28,9 @@ describe("normalizeReason", () => {
 
   it("maps a metric id to a placeholder, so the public tick output never names one (E2)", () => {
     expect(normalizeReason("metric lock tampered: m-p95")).toBe("metric lock tampered: <metric>");
-    expect(normalizeReason("watched path changed: bench/x.sh (m-p95-checkout)")).toBe("watched path changed: <path> (<metric>)");
+    expect(normalizeReason("watched path changed: bench/x.sh (m-p95-checkout)")).toBe(
+      "watched path changed: <path> (<metric>)",
+    );
     expect(normalizeReason("metric m-x has no image")).toBe("metric <metric> has no image");
   });
 

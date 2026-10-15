@@ -14,7 +14,9 @@ const FOOTER = "No other information about the scenarios is available.";
 const MAX_RENDERED_N = 9_999_999;
 
 /** Built from DECISION_CLASSES, never `[a-z_]+`: an unknown class name cannot pass the allowlist. */
-const CATEGORY_LINE = new RegExp(`^- (${DECISION_CLASSES.join("|")}): (100|[1-9]?[0-9])% of ([1-9][0-9]{0,6}) scenarios$`);
+const CATEGORY_LINE = new RegExp(
+  `^- (${DECISION_CLASSES.join("|")}): (100|[1-9]?[0-9])% of ([1-9][0-9]{0,6}) scenarios$`,
+);
 
 const isIntIn = (value: unknown, low: number, high: number): boolean =>
   typeof value === "number" && Number.isInteger(value) && value >= low && value <= high;
@@ -39,7 +41,10 @@ export function renderFeedback(categories: readonly ReleasedCategory[]): string 
       throw new FeedbackError("invalid_input", `renderFeedback: category ${index} has a percent outside 0..100`);
     }
     if (!isIntIn(entry.n, 1, MAX_RENDERED_N)) {
-      throw new FeedbackError("invalid_input", `renderFeedback: category ${index} has a scenario count outside 1..${MAX_RENDERED_N}`);
+      throw new FeedbackError(
+        "invalid_input",
+        `renderFeedback: category ${index} has a scenario count outside 1..${MAX_RENDERED_N}`,
+      );
     }
     seen.add(order);
     rows.push({ order, line: `- ${entry.category}: ${entry.score_pct}% of ${entry.n} scenarios` });

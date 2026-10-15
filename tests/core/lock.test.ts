@@ -32,10 +32,7 @@ describe("acquireLock", () => {
 
   it("reclaims a lock whose pid was reused by another process", () => {
     const path = lockPath();
-    writeFileSync(
-      path,
-      JSON.stringify({ pid: process.pid, start_time: "Thu Jan  1 00:00:00 1970", acquired_at: "x" }),
-    );
+    writeFileSync(path, JSON.stringify({ pid: process.pid, start_time: "Thu Jan  1 00:00:00 1970", acquired_at: "x" }));
     expect(acquireLock(path).pid).toBe(process.pid);
   });
 
@@ -96,10 +93,7 @@ describe("releaseLock", () => {
 
   it("refuses a lock with our pid but another start time", () => {
     const path = lockPath();
-    writeFileSync(
-      path,
-      JSON.stringify({ pid: process.pid, start_time: "Thu Jan  1 00:00:00 1970", acquired_at: "x" }),
-    );
+    writeFileSync(path, JSON.stringify({ pid: process.pid, start_time: "Thu Jan  1 00:00:00 1970", acquired_at: "x" }));
     expect(() => releaseLock(path)).toThrow(/refusing to release/);
   });
 });
@@ -121,9 +115,7 @@ describe("withLockSync", () => {
 
   it("refuses an async callback and releases the lock before throwing", () => {
     const path = lockPath();
-    expect(() => withLockSync(path, async () => 1)).toThrow(
-      new TypeError("withLockSync callback must be synchronous"),
-    );
+    expect(() => withLockSync(path, async () => 1)).toThrow(new TypeError("withLockSync callback must be synchronous"));
     expect(withLockSync(path, () => 2)).toBe(2);
   });
 

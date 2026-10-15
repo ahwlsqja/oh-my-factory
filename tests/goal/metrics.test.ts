@@ -14,7 +14,13 @@ import {
 } from "../../src/goal/metrics.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
-const metric = { metric_id: "m-p95-latency", command: ["sh", "bench.sh"], unit: "ms", watched_paths: ["bench/**"], image: null };
+const metric = {
+  metric_id: "m-p95-latency",
+  command: ["sh", "bench.sh"],
+  unit: "ms",
+  watched_paths: ["bench/**"],
+  image: null,
+};
 
 /** A valid lock of `metric` with the given image, for the schema tests. */
 const lockOf = (image: string | null) => ({
@@ -59,7 +65,9 @@ describe("metric proposals and locks", () => {
     const ledger = new Ledger(dir);
     expect(() => proposeMetric(ledger, dir, metric, "agent:claude")).toThrow(/only a person/);
     expect(() => proposeMetric(ledger, dir, { ...metric, metric_id: "latency" }, "human:dev")).toThrow(MetricError);
-    expect(() => proposeMetric(ledger, dir, { ...metric, command: [] }, "human:dev")).toThrow(/invalid metric proposal/);
+    expect(() => proposeMetric(ledger, dir, { ...metric, command: [] }, "human:dev")).toThrow(
+      /invalid metric proposal/,
+    );
     expect(readProposal(dir, "m-p95-latency")).toBeNull();
     expect(ledger.readVerified()).toEqual([]);
   });
@@ -98,7 +106,11 @@ describe("metric proposals and locks", () => {
   it("finds the last locked hash of a goal's metric in the asked regime only", () => {
     const ledger = new Ledger(makeTempDir());
     const lock = (goal: string, sha: string, regime: number): void => {
-      ledger.append({ actor: "human:dev", type: "metric.locked", payload: { goal_id: goal, metric_id: "m-x", sha256: sha, regime } });
+      ledger.append({
+        actor: "human:dev",
+        type: "metric.locked",
+        payload: { goal_id: goal, metric_id: "m-x", sha256: sha, regime },
+      });
     };
     lock("g-a", "a".repeat(64), 1);
     lock("g-b", "b".repeat(64), 1);
@@ -116,23 +128,26 @@ describe("metric proposals and locks", () => {
 
 describe("image references", () => {
   // The image becomes one argv element of `docker run`, so a leading "-" is an option and whitespace is not a reference.
-  it.each(["-v", "--privileged", "a b", "a\tb", ""])("rejects the image %j in a proposal, in a lock and on read", (image) => {
-    const dir = makeTempDir();
-    const ledger = new Ledger(dir);
-    expect(() => proposeMetric(ledger, dir, { ...metric, image }, "human:dev")).toThrow(/invalid metric proposal/);
-    expect(() => writeLock(dir, lockOf(image))).toThrow(/invalid metric lock/);
-    expect(readProposal(dir, metric.metric_id)).toBeNull();
-    expect(readLock(dir, "g-a", metric.metric_id)).toBeNull();
-    expect(ledger.readVerified()).toEqual([]);
+  it.each(["-v", "--privileged", "a b", "a\tb", ""])(
+    "rejects the image %j in a proposal, in a lock and on read",
+    (image) => {
+      const dir = makeTempDir();
+      const ledger = new Ledger(dir);
+      expect(() => proposeMetric(ledger, dir, { ...metric, image }, "human:dev")).toThrow(/invalid metric proposal/);
+      expect(() => writeLock(dir, lockOf(image))).toThrow(/invalid metric lock/);
+      expect(readProposal(dir, metric.metric_id)).toBeNull();
+      expect(readLock(dir, "g-a", metric.metric_id)).toBeNull();
+      expect(ledger.readVerified()).toEqual([]);
 
-    // A file edited by hand is refused when it is read, not only when it is written.
-    const proposal = proposeMetric(ledger, dir, metric, "human:dev");
-    writeFileSync(proposalFile(dir, metric.metric_id), JSON.stringify({ ...proposal, image }));
-    expect(() => readProposal(dir, metric.metric_id)).toThrow(/proposal for m-p95-latency is invalid/);
-    writeLock(dir, lockOf(null));
-    writeFileSync(lockFile(dir, "g-a", metric.metric_id), JSON.stringify({ ...lockOf(null), image }));
-    expect(() => readLock(dir, "g-a", metric.metric_id)).toThrow(/lock for m-p95-latency is invalid/);
-  });
+      // A file edited by hand is refused when it is read, not only when it is written.
+      const proposal = proposeMetric(ledger, dir, metric, "human:dev");
+      writeFileSync(proposalFile(dir, metric.metric_id), JSON.stringify({ ...proposal, image }));
+      expect(() => readProposal(dir, metric.metric_id)).toThrow(/proposal for m-p95-latency is invalid/);
+      writeLock(dir, lockOf(null));
+      writeFileSync(lockFile(dir, "g-a", metric.metric_id), JSON.stringify({ ...lockOf(null), image }));
+      expect(() => readLock(dir, "g-a", metric.metric_id)).toThrow(/lock for m-p95-latency is invalid/);
+    },
+  );
 
   it.each(["node:22", `node@sha256:${"a".repeat(64)}`, "ghcr.io/acme/bench:1.2"])("accepts the image %s", (image) => {
     const dir = makeTempDir();

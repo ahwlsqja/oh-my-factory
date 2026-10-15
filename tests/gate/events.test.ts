@@ -9,7 +9,10 @@ import { makeTempDir } from "../helpers/tmp.js";
 
 const SCOPE = { goal_id: "g-fast", work_id: "w-0123456789ab", run_id: "r-20261014T091500Z-ab12" };
 
-function run(values: { fast: string; full: string; deep: string }, required: Array<"fast" | "full" | "deep">): GateRunResult {
+function run(
+  values: { fast: string; full: string; deep: string },
+  required: Array<"fast" | "full" | "deep">,
+): GateRunResult {
   const v = values as GateRunResult["values"];
   const line = formatGateLine(v);
   return { line, values: v, verdict: evaluateGateLine(parseGateLine(line), required), details: [] };
@@ -41,7 +44,9 @@ describe("gatesEvaluatedEvent", () => {
   it("refuses a line that is not a gate line and an id that is not an id", () => {
     const refused = /invalid gates\.evaluated event/;
     const good = run({ fast: "pass", full: "pass", deep: "pass" }, ["fast"]);
-    expect(() => gatesEvaluatedEvent(SCOPE, { ...good, line: "OMF_GATES: fast=maybe full=pass deep=pass" })).toThrow(refused);
+    expect(() => gatesEvaluatedEvent(SCOPE, { ...good, line: "OMF_GATES: fast=maybe full=pass deep=pass" })).toThrow(
+      refused,
+    );
     expect(() => gatesEvaluatedEvent(SCOPE, { ...good, line: "free text the gate wrote" })).toThrow(refused);
     expect(() => gatesEvaluatedEvent({ ...SCOPE, run_id: "../x" }, good)).toThrow(refused);
     expect(() => gatesEvaluatedEvent({ ...SCOPE, work_id: "w-1" }, good)).toThrow(refused);
@@ -77,7 +82,9 @@ describe("gatesEvaluatedEvent", () => {
 
   it("appends to a ledger that still verifies", () => {
     const ledger = new Ledger(makeTempDir("omf-gate-event-"), () => new Date("2026-10-14T09:15:00.000Z"));
-    const written = ledger.append(gatesEvaluatedEvent(SCOPE, run({ fast: "pass", full: "pass", deep: "skip" }, ["fast", "full"])));
+    const written = ledger.append(
+      gatesEvaluatedEvent(SCOPE, run({ fast: "pass", full: "pass", deep: "skip" }, ["fast", "full"])),
+    );
     expect(written).toMatchObject({ seq: 1, actor: "omf", type: "gates.evaluated" });
     expect(ledger.verify()).toMatchObject({ ok: true, count: 1 });
   });

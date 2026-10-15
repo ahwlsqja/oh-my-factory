@@ -31,11 +31,19 @@ async function once(id: FixtureId, step: StepInput, limits: StepLimits = DEFAULT
 
 describe("host fixture runner: the three fixtures run for real", () => {
   it("null-error exits 1 with no output", async () => {
-    expect(await once("null-error", { argv: ["add", "x"], stdin: "in" })).toEqual({ outcome: "exited", exit_code: 1, stdout: "" });
+    expect(await once("null-error", { argv: ["add", "x"], stdin: "in" })).toEqual({
+      outcome: "exited",
+      exit_code: 1,
+      stdout: "",
+    });
   });
 
   it("null-empty exits 0 with empty stdout", async () => {
-    expect(await once("null-empty", { argv: ["add", "x"], stdin: "in" })).toEqual({ outcome: "exited", exit_code: 0, stdout: "" });
+    expect(await once("null-empty", { argv: ["add", "x"], stdin: "in" })).toEqual({
+      outcome: "exited",
+      exit_code: 0,
+      stdout: "",
+    });
   });
 
   it("echo-everything prints its arguments, a newline and stdin", async () => {
@@ -48,15 +56,29 @@ describe("host fixture runner: the three fixtures run for real", () => {
 
   it("maps an output that exceeds the limit to output_limit", async () => {
     const step = { argv: [], stdin: "x".repeat(5000) };
-    expect(await once("echo-everything", step, { timeoutMs: 5000, maxOutputBytes: 100 })).toEqual({ outcome: "output_limit" });
+    expect(await once("echo-everything", step, { timeoutMs: 5000, maxOutputBytes: 100 })).toEqual({
+      outcome: "output_limit",
+    });
   });
 });
 
 describe("host fixture runner: process results become observations", () => {
   it.each<[string, ProcessResult, unknown]>([
-    ["a normal exit", { kind: "exited", status: 3, signal: null, stdout: "hi\n", stderr: "" }, { outcome: "exited", exit_code: 3, stdout: "hi\n" }],
-    ["a signal", { kind: "exited", status: null, signal: "SIGKILL", stdout: "", stderr: "" }, { outcome: "signaled", signal: "SIGKILL" }],
-    ["invalid UTF-8 (U+FFFD)", { kind: "exited", status: 0, signal: null, stdout: "a�b", stderr: "" }, { outcome: "error" }],
+    [
+      "a normal exit",
+      { kind: "exited", status: 3, signal: null, stdout: "hi\n", stderr: "" },
+      { outcome: "exited", exit_code: 3, stdout: "hi\n" },
+    ],
+    [
+      "a signal",
+      { kind: "exited", status: null, signal: "SIGKILL", stdout: "", stderr: "" },
+      { outcome: "signaled", signal: "SIGKILL" },
+    ],
+    [
+      "invalid UTF-8 (U+FFFD)",
+      { kind: "exited", status: 0, signal: null, stdout: "a�b", stderr: "" },
+      { outcome: "error" },
+    ],
     ["a timeout", { kind: "timeout", stdout: "", stderr: "" }, { outcome: "timeout" }],
     ["the output limit", { kind: "output_limit", stdout: "", stderr: "" }, { outcome: "output_limit" }],
     ["a spawn error", { kind: "error", code: "ENOENT", message: "gone" }, { outcome: "error" }],
@@ -81,7 +103,9 @@ describe("host fixture runner: process results become observations", () => {
 });
 
 describe("runScenario through the host adapter", () => {
-  const weak = runnerScenario({ steps: [stepOf(["x"], { exit_code: 1, stdout_matches: { kind: "exact", text: "" } })] });
+  const weak = runnerScenario({
+    steps: [stepOf(["x"], { exit_code: 1, stdout_matches: { kind: "exact", text: "" } })],
+  });
 
   it("a scenario that expects exit 1 and empty stdout passes null-error and fails null-empty", async () => {
     const runner = createHostFixtureRunner({ scratchRoot: makeTempDir("omf-scratch-") });
@@ -91,6 +115,9 @@ describe("runScenario through the host adapter", () => {
 
   it("a refused target is an error, never a pass", async () => {
     const runner = createHostFixtureRunner({ scratchRoot: makeTempDir("omf-scratch-") });
-    expect(await runScenario(runner, { kind: "candidate", handle: "image:abc" }, weak)).toMatchObject({ outcome: "error", steps_passed: 0 });
+    expect(await runScenario(runner, { kind: "candidate", handle: "image:abc" }, weak)).toMatchObject({
+      outcome: "error",
+      steps_passed: 0,
+    });
   });
 });

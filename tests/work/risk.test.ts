@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { type RiskInput, DEFAULT_HIGH_RISK, TEST_GLOBS, classifyRisk, isTestPath, raiseRisk } from "../../src/work/risk.js";
+import {
+  type RiskInput,
+  DEFAULT_HIGH_RISK,
+  TEST_GLOBS,
+  classifyRisk,
+  isTestPath,
+  raiseRisk,
+} from "../../src/work/risk.js";
 import type { RiskAssessment } from "../../src/work/types.js";
 
 function input(declaredPaths: string[], extra: Partial<RiskInput> = {}): RiskInput {
@@ -20,7 +27,14 @@ describe("classifyRisk default rules", () => {
   });
 
   it("covers every rule in the default table with at least one glob", () => {
-    expect(DEFAULT_HIGH_RISK.map((entry) => entry.rule)).toEqual(["ci", "auth", "migration", "test", "goal-factory", "lockfile"]);
+    expect(DEFAULT_HIGH_RISK.map((entry) => entry.rule)).toEqual([
+      "ci",
+      "auth",
+      "migration",
+      "test",
+      "goal-factory",
+      "lockfile",
+    ]);
     for (const entry of DEFAULT_HIGH_RISK) expect(entry.globs.length).toBeGreaterThan(0);
   });
 
@@ -45,7 +59,9 @@ describe("classifyRisk default rules", () => {
   });
 
   it("collects every rule that fires, sorted, and the paths that fired", () => {
-    expect(classifyRisk(input(["src/render/button.ts", "tests/a.test.ts", "db/migrations/001.sql", "tests/a.test.ts"]))).toEqual({
+    expect(
+      classifyRisk(input(["src/render/button.ts", "tests/a.test.ts", "db/migrations/001.sql", "tests/a.test.ts"])),
+    ).toEqual({
       class: "high",
       rules: ["migration", "test"],
       paths: ["db/migrations/001.sql", "tests/a.test.ts"],
@@ -69,7 +85,9 @@ describe("classifyRisk watched and extra globs", () => {
   });
 
   it("leaves a path outside every glob normal", () => {
-    expect(classifyRisk(input(["src/ui/a.ts"], { watchedGlobs: ["bench/**"], extraGlobs: ["infra/**"] })).class).toBe("normal");
+    expect(classifyRisk(input(["src/ui/a.ts"], { watchedGlobs: ["bench/**"], extraGlobs: ["infra/**"] })).class).toBe(
+      "normal",
+    );
   });
 });
 
@@ -99,15 +117,29 @@ describe("classifyRisk fail closed", () => {
     expect(classifyRisk(input([]))).toEqual({ class: "high", rules: ["undeclared"], paths: [] });
   });
 
-  it.each(["../x", "/etc/passwd", ".git/config", ".GIT/hooks/pre-commit", "src/*.ts", "a/../b", ".", "./", "", "src\\a.ts", "a\nb", "src/{a,b}.ts"])(
-    "is high/unclassifiable for %j",
-    (path) => {
-      expect(classifyRisk(input([path]))).toEqual({ class: "high", rules: ["unclassifiable"], paths: [] });
-    },
-  );
+  it.each([
+    "../x",
+    "/etc/passwd",
+    ".git/config",
+    ".GIT/hooks/pre-commit",
+    "src/*.ts",
+    "a/../b",
+    ".",
+    "./",
+    "",
+    "src\\a.ts",
+    "a\nb",
+    "src/{a,b}.ts",
+  ])("is high/unclassifiable for %j", (path) => {
+    expect(classifyRisk(input([path]))).toEqual({ class: "high", rules: ["unclassifiable"], paths: [] });
+  });
 
   it("keeps the other rules when one path is unclassifiable", () => {
-    expect(classifyRisk(input(["tests/a.test.ts", "../x"]))).toEqual({ class: "high", rules: ["test", "unclassifiable"], paths: ["tests/a.test.ts"] });
+    expect(classifyRisk(input(["tests/a.test.ts", "../x"]))).toEqual({
+      class: "high",
+      rules: ["test", "unclassifiable"],
+      paths: ["tests/a.test.ts"],
+    });
   });
 });
 
@@ -153,7 +185,15 @@ describe("TEST_GLOBS and isTestPath", () => {
   });
 
   it("is false for paths that only look like tests", () => {
-    for (const path of ["latest.js", "src/contest/a.ts", "docs/testing.md", "src/attest.ts", "src/test.js", "README.md", ""]) {
+    for (const path of [
+      "latest.js",
+      "src/contest/a.ts",
+      "docs/testing.md",
+      "src/attest.ts",
+      "src/test.js",
+      "README.md",
+      "",
+    ]) {
       expect(isTestPath(path), path).toBe(false);
     }
   });
@@ -185,11 +225,18 @@ describe("raiseRisk", () => {
 
   it("high declared with a normal recompute stays high and keeps the declared rules", () => {
     expect(raiseRisk(highAuth, normal)).toEqual(highAuth);
-    expect(raiseRisk({ class: "high", rules: ["undeclared"], paths: [] }, normal)).toEqual({ class: "high", rules: ["undeclared"], paths: [] });
+    expect(raiseRisk({ class: "high", rules: ["undeclared"], paths: [] }, normal)).toEqual({
+      class: "high",
+      rules: ["undeclared"],
+      paths: [],
+    });
   });
 
   it("keeps rules and paths as a sorted union without duplicates", () => {
-    const raised = raiseRisk({ class: "high", rules: ["lockfile", "auth"], paths: ["b", "a"] }, { class: "high", rules: ["auth", "ci"], paths: ["c", "a"] });
+    const raised = raiseRisk(
+      { class: "high", rules: ["lockfile", "auth"], paths: ["b", "a"] },
+      { class: "high", rules: ["auth", "ci"], paths: ["c", "a"] },
+    );
     expect(raised).toEqual({ class: "high", rules: ["auth", "ci", "lockfile"], paths: ["a", "b", "c"] });
   });
 

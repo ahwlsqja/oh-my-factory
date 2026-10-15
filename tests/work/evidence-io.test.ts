@@ -60,7 +60,9 @@ describe("evidence files", () => {
     for (const name of [EVIDENCE_MD, EVIDENCE_JSON]) expect(statSync(join(dir, name)).mode & 0o777).toBe(0o600);
     expect(readdirSync(dir).sort()).toEqual([EVIDENCE_JSON, EVIDENCE_MD]);
     expect(readEvidence(dir)).toEqual({ ok: true, doc });
-    expect(() => writeEvidence(makeTempDir(), { ...doc, recommendation: "merge_recommended", outcome: "blocked" })).toThrow("merge_recommended needs outcome success");
+    expect(() =>
+      writeEvidence(makeTempDir(), { ...doc, recommendation: "merge_recommended", outcome: "blocked" }),
+    ).toThrow("merge_recommended needs outcome success");
   });
 
   it("leaves no evidence.json, and no half pair, when the json write fails", async () => {
@@ -101,9 +103,15 @@ describe("evidence files", () => {
 
 describe("trustedRecommendation", () => {
   it("returns the ledger event's recommendation when file, event and item state agree", () => {
-    expect(trustedRecommendation(placed(success()), [submitted("merge_recommended")], front("awaiting_review"))).toBe("merge_recommended");
-    expect(trustedRecommendation(placed(human()), [submitted("human_needed")], front("awaiting_review"))).toBe("human_needed");
-    expect(trustedRecommendation(placed(flawed()), [submitted("not_recommended", "flawed")], front("awaiting_review"))).toBe("not_recommended");
+    expect(trustedRecommendation(placed(success()), [submitted("merge_recommended")], front("awaiting_review"))).toBe(
+      "merge_recommended",
+    );
+    expect(trustedRecommendation(placed(human()), [submitted("human_needed")], front("awaiting_review"))).toBe(
+      "human_needed",
+    );
+    expect(
+      trustedRecommendation(placed(flawed()), [submitted("not_recommended", "flawed")], front("awaiting_review")),
+    ).toBe("not_recommended");
     expect(trustedRecommendation(placed(flawed()), [failed("flawed")], front("failed"))).toBe("not_recommended");
     expect(trustedRecommendation(placed(blocked()), [parked("blocked")], front("ready"))).toBe("human_needed");
     expect(trustedRecommendation(placed(blocked()), [parked("blocked")], front("in_progress"))).toBe("human_needed");
@@ -121,15 +129,61 @@ describe("trustedRecommendation", () => {
   });
 
   const none: [string, () => { dir: string; events: ReturnType<typeof fakeEvent>[]; state: WorkState }][] = [
-    ["no evidence file", () => ({ dir: makeTempDir(), events: [submitted("merge_recommended")], state: "awaiting_review" })],
-    ["a hand-written merge_recommended with no work.submitted", () => ({ dir: placed(success()), events: [], state: "awaiting_review" })],
-    ["a work.submitted from a different run", () => ({ dir: placed(success()), events: [submitted("merge_recommended", "success", OTHER_RUN)], state: "awaiting_review" })],
-    ["an outcome that differs from the event", () => ({ dir: placed(flawed()), events: [submitted("not_recommended", "success")], state: "awaiting_review" })],
-    ["an item that is no longer awaiting_review", () => ({ dir: placed(success()), events: [submitted("merge_recommended")], state: "done" })],
-    ["a failed event while the item is not failed", () => ({ dir: placed(flawed()), events: [failed("flawed")], state: "awaiting_review" })],
-    ["a parked event while the item is failed", () => ({ dir: placed(blocked()), events: [parked("blocked")], state: "failed" })],
-    ["an event from the wrong actor", () => ({ dir: placed(success()), events: [fakeEvent(5, "work.submitted", { goal_id: GOAL, work_id: WORK, run_id: RUN, outcome: "success", recommendation: "merge_recommended" }, "human:dev@example.invalid")], state: "awaiting_review" })],
-    ["a started event as the last state event", () => ({ dir: placed(success()), events: [fakeEvent(5, "work.started", { goal_id: GOAL, work_id: WORK, run_id: RUN, from: "ready" })], state: "in_progress" })],
+    [
+      "no evidence file",
+      () => ({ dir: makeTempDir(), events: [submitted("merge_recommended")], state: "awaiting_review" }),
+    ],
+    [
+      "a hand-written merge_recommended with no work.submitted",
+      () => ({ dir: placed(success()), events: [], state: "awaiting_review" }),
+    ],
+    [
+      "a work.submitted from a different run",
+      () => ({
+        dir: placed(success()),
+        events: [submitted("merge_recommended", "success", OTHER_RUN)],
+        state: "awaiting_review",
+      }),
+    ],
+    [
+      "an outcome that differs from the event",
+      () => ({ dir: placed(flawed()), events: [submitted("not_recommended", "success")], state: "awaiting_review" }),
+    ],
+    [
+      "an item that is no longer awaiting_review",
+      () => ({ dir: placed(success()), events: [submitted("merge_recommended")], state: "done" }),
+    ],
+    [
+      "a failed event while the item is not failed",
+      () => ({ dir: placed(flawed()), events: [failed("flawed")], state: "awaiting_review" }),
+    ],
+    [
+      "a parked event while the item is failed",
+      () => ({ dir: placed(blocked()), events: [parked("blocked")], state: "failed" }),
+    ],
+    [
+      "an event from the wrong actor",
+      () => ({
+        dir: placed(success()),
+        events: [
+          fakeEvent(
+            5,
+            "work.submitted",
+            { goal_id: GOAL, work_id: WORK, run_id: RUN, outcome: "success", recommendation: "merge_recommended" },
+            "human:dev@example.invalid",
+          ),
+        ],
+        state: "awaiting_review",
+      }),
+    ],
+    [
+      "a started event as the last state event",
+      () => ({
+        dir: placed(success()),
+        events: [fakeEvent(5, "work.started", { goal_id: GOAL, work_id: WORK, run_id: RUN, from: "ready" })],
+        state: "in_progress",
+      }),
+    ],
   ];
   for (const [name, setup] of none) {
     it(`is none for ${name}`, () => {

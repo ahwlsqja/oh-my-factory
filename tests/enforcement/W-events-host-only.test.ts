@@ -46,7 +46,11 @@ describe("W-events-host-only: import graph", () => {
 
   it("does not mistake prose or a bare word for an event type, and fails loudly on an unresolvable import", () => {
     const root = makeTempDir("omf-graph-");
-    plant(root, "src/goal/a.ts", `// J8 is a person's decision. Re-approval is separate.\nexport const word = "decision";\n`);
+    plant(
+      root,
+      "src/goal/a.ts",
+      `// J8 is a person's decision. Re-approval is separate.\nexport const word = "decision";\n`,
+    );
     plant(root, "src/cli/goal.ts", `export {};\n`);
     expect(hostOnlyViolations(root, reachableModules(entryFiles(root)))).toEqual([]);
     plant(root, "src/goal/a.ts", `import "./missing.js";\n`);
@@ -57,7 +61,9 @@ describe("W-events-host-only: import graph", () => {
     const modules = reachableModules(entryFiles(ROOT));
     const names = modules.map((file) => relOf(file));
     // Not vacuous: the walk is transitive and saw the goal loop, including the module that reads W events for it.
-    expect(names).toEqual(expect.arrayContaining(["src/goal/reconcile.ts", "src/work/recent-outcomes.ts", "src/core/ledger.ts"]));
+    expect(names).toEqual(
+      expect.arrayContaining(["src/goal/reconcile.ts", "src/work/recent-outcomes.ts", "src/core/ledger.ts"]),
+    );
     expect(names.length).toBeGreaterThan(30);
     expect(hostOnlyViolations(ROOT, modules)).toEqual([]);
   });
@@ -70,7 +76,12 @@ describe("W-events-host-only: planted events", () => {
   it("keeps a decision question and a feedback event out of everything G sees or prints", () => {
     const f = setupDecisionItem();
     const { fx } = f;
-    runDecideAdd(fx.location, f.workId, { id: "d-interface", class: "interface", question: `Which ${DECISION_CANARY} do callers use?` }, "omf");
+    runDecideAdd(
+      fx.location,
+      f.workId,
+      { id: "d-interface", class: "interface", question: `Which ${DECISION_CANARY} do callers use?` },
+      "omf",
+    );
     fx.ledger.append({
       actor: "omf",
       type: "feedback.released",
@@ -96,7 +107,8 @@ describe("W-events-host-only: planted events", () => {
       "item and intent files": itemFiles,
     };
     for (const [name, text] of Object.entries(surfaces)) {
-      for (const canary of [DECISION_CANARY, FEEDBACK_CANARY]) expect(text, `${name} / ${canary}`).not.toContain(canary);
+      for (const canary of [DECISION_CANARY, FEEDBACK_CANARY])
+        expect(text, `${name} / ${canary}`).not.toContain(canary);
     }
 
     // Positive controls: both canaries are in the ledger, the decision one is in spec.md, the model was called and

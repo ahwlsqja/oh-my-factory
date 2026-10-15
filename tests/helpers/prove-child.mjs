@@ -22,7 +22,12 @@ function makeCopy(quarantine, sha, root, holder, scratch) {
   return {
     id: root,
     run: (argv, options) =>
-      runProcessGroup(argv, { cwd: root, env: { PATH: process.env.PATH }, timeoutMs: options.timeoutMs, maxOutputBytes: options.maxOutputBytes }),
+      runProcessGroup(argv, {
+        cwd: root,
+        env: { PATH: process.env.PATH },
+        timeoutMs: options.timeoutMs,
+        maxOutputBytes: options.maxOutputBytes,
+      }),
     isClean: () => isDirClean({ gitDir: quarantine.gitDir, indexFile: join(holder, "index") }, sha, root),
     applyPatch: (patch, options) => applyPatchToDir(scratch, root, patch, options),
     dispose: async () => remove(),

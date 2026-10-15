@@ -14,7 +14,11 @@ function markOf(events: readonly LedgerEvent[], goalId: string): string[] | null
       mark = null;
     } else if (event.type === "goal.stale") {
       const { tripped } = event.payload;
-      if (!Array.isArray(tripped) || tripped.length === 0 || !tripped.every((t) => typeof t === "string" && TRIPPED.has(t))) {
+      if (
+        !Array.isArray(tripped) ||
+        tripped.length === 0 ||
+        !tripped.every((t) => typeof t === "string" && TRIPPED.has(t))
+      ) {
         throw new Error(`invalid goal.stale event at seq ${event.seq}: malformed tripped`);
       }
       mark = tripped as string[];

@@ -11,7 +11,12 @@ export const RUN = "r-20261014T091500Z-ab12";
 export const NOW = new Date("2026-10-14T09:20:00.000Z");
 export const SCOPE = { work_id: WORK, goal_id: GOAL, run_id: RUN };
 
-export const LATENCY: EvidenceDoc["decisions"][number] = { id: "d-latency", threshold: 250, measured: NOT_RUN, status: "resolved" };
+export const LATENCY: EvidenceDoc["decisions"][number] = {
+  id: "d-latency",
+  threshold: 250,
+  measured: NOT_RUN,
+  status: "resolved",
+};
 
 export const SUCCESS: Classification = {
   outcome: "success",
@@ -21,7 +26,13 @@ export const SUCCESS: Classification = {
   unverified_areas: [],
   rule: "success",
 };
-export const FLAWED: Classification = { ...SUCCESS, outcome: "flawed", reason_code: "audit_flag", recommendation: "not_recommended", rule: "audit_flag" };
+export const FLAWED: Classification = {
+  ...SUCCESS,
+  outcome: "flawed",
+  reason_code: "audit_flag",
+  recommendation: "not_recommended",
+  rule: "audit_flag",
+};
 export const BLOCKED: Classification = {
   outcome: "blocked",
   exhausted: false,
@@ -86,5 +97,14 @@ export function notRunBuild(over: Partial<EvidenceBuild> = {}): EvidenceBuild {
 
 /** A ledger event as the verified ledger would return it; only seq, actor, type and payload matter to the readers under test. */
 export function fakeEvent(seq: number, type: string, payload: Record<string, unknown>, actor = "omf"): LedgerEvent {
-  return { schema_version: 1, seq, prev_hash: "0".repeat(64), ts: "2026-10-14T09:21:00.000Z", actor, type, payload, hash: "1".repeat(64) };
+  return {
+    schema_version: 1,
+    seq,
+    prev_hash: "0".repeat(64),
+    ts: "2026-10-14T09:21:00.000Z",
+    actor,
+    type,
+    payload,
+    hash: "1".repeat(64),
+  };
 }

@@ -1,5 +1,12 @@
 import { GATE_NAMES, type GateName, type JudgeConfigDecl } from "../decision/types.js";
-import { type GateLineValue, type GateLineValues, type GateLineVerdict, evaluateGateLine, formatGateLine, parseGateLine } from "./gate-line.js";
+import {
+  type GateLineValue,
+  type GateLineValues,
+  type GateLineVerdict,
+  evaluateGateLine,
+  formatGateLine,
+  parseGateLine,
+} from "./gate-line.js";
 import type { CommandResult, CommandTarget, RunOptions } from "./ports.js";
 
 /** The last non-empty stdout line, when a gate wants to say how many rules it ran. */
@@ -20,7 +27,10 @@ export interface GateRunResult {
 }
 
 function rulesOf(stdout: string): number | null {
-  const last = stdout.split("\n").filter((line) => line.trim() !== "").at(-1);
+  const last = stdout
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .at(-1);
   const match = last === undefined ? null : GATE_RULES_MARKER.exec(last);
   if (match === null) return null;
   const count = Number(match[1]);
@@ -46,7 +56,11 @@ const DEFAULT_OPTIONS: RunOptions = { timeoutMs: 600_000, maxOutputBytes: 1024 *
  * Runs the declared gates fast, full, deep with no short-circuit (the line is complete evidence). The line is built
  * here with `formatGateLine`, never read from a gate's output; the verdict is `evaluateGateLine` over that line.
  */
-export async function runGates(gates: JudgeConfigDecl["gates"], target: CommandTarget, options: Partial<RunOptions> = {}): Promise<GateRunResult> {
+export async function runGates(
+  gates: JudgeConfigDecl["gates"],
+  target: CommandTarget,
+  options: Partial<RunOptions> = {},
+): Promise<GateRunResult> {
   const runOptions: RunOptions = { ...DEFAULT_OPTIONS, ...options };
   const values = {} as GateLineValues;
   const details: GateDetail[] = [];

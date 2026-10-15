@@ -47,7 +47,12 @@
         "run_id": { "$ref": "#/$defs/run_id" },
         "train_digest": { "$ref": "#/$defs/digest" },
         "round": { "type": "integer", "minimum": 1 },
-        "categories": { "type": "array", "minItems": 1, "maxItems": 11, "items": { "$ref": "#/$defs/released_category" } },
+        "categories": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 11,
+          "items": { "$ref": "#/$defs/released_category" }
+        },
         "disclosure_units": { "type": "integer", "enum": [0, 1] }
       }
     },
@@ -92,9 +97,38 @@
     }
   },
   "oneOf": [
-    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "feedback.released" }, "payload": { "$ref": "#/$defs/released_payload" } } },
-    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "feedback.test_run_consumed" }, "payload": { "$ref": "#/$defs/test_run_consumed_payload" } } },
-    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "feedback.test_run_completed" }, "payload": { "$ref": "#/$defs/test_run_completed_payload" } } },
-    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "feedback.test_reseal_authorized" }, "payload": { "$ref": "#/$defs/test_reseal_authorized_payload" } } }
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": { "type": { "const": "feedback.released" }, "payload": { "$ref": "#/$defs/released_payload" } }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": {
+        "type": { "const": "feedback.test_run_consumed" },
+        "payload": { "$ref": "#/$defs/test_run_consumed_payload" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": {
+        "type": { "const": "feedback.test_run_completed" },
+        "payload": { "$ref": "#/$defs/test_run_completed_payload" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": {
+        "type": { "const": "feedback.test_reseal_authorized" },
+        "payload": { "$ref": "#/$defs/test_reseal_authorized_payload" }
+      }
+    }
   ]
 }

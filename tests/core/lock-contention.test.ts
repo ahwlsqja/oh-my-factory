@@ -21,9 +21,13 @@ for (let i = 0; i < Number(rounds); i++) {
 
 function runChild(lock: string, counter: string, rounds: number): Promise<number> {
   return new Promise((done, fail) => {
-    const child = spawn(process.execPath, ["--input-type=module", "-e", CHILD, LOCK_MODULE, lock, counter, String(rounds)], {
-      stdio: ["ignore", "ignore", "inherit"],
-    });
+    const child = spawn(
+      process.execPath,
+      ["--input-type=module", "-e", CHILD, LOCK_MODULE, lock, counter, String(rounds)],
+      {
+        stdio: ["ignore", "ignore", "inherit"],
+      },
+    );
     child.on("error", fail);
     child.on("exit", (code) => done(code ?? -1));
   });

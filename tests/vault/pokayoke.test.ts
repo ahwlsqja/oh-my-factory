@@ -61,7 +61,8 @@ describe("scanForSealed: repository scope", () => {
     const repo = realDir("omf-repo-");
     put(repo, "goal.lock.json");
     put(repo, "deep/m-latency.lock.json");
-    for (const name of ["claim.lock", "item.lock", "approve.lock", "seal.lock", "ledger.lock", "ledger.jsonl"]) put(repo, name);
+    for (const name of ["claim.lock", "item.lock", "approve.lock", "seal.lock", "ledger.lock", "ledger.jsonl"])
+      put(repo, name);
     put(repo, "m_bad.lock.json"); // underscore: not the metric-lock name pattern
     put(repo, "notes.lock"); // not a name OMF writes
     const result = scanForSealed({ repo, worktrees: [] }, { stateRoot: state });
@@ -232,7 +233,9 @@ describe("the guards on a real project", () => {
     }
     expect(caught).toBeInstanceOf(PokaYokeError);
     const error = caught as PokaYokeError;
-    expect(error.message).toBe("refusing to run: sealed material inside the repository or an OMF worktree (1 finding(s)); run `omf doctor` to list them");
+    expect(error.message).toBe(
+      "refusing to run: sealed material inside the repository or an OMF worktree (1 finding(s)); run `omf doctor` to list them",
+    );
     expect(error.findings).toEqual([{ kind: "canary", where: "repo", path: "leak.txt" }]);
     expect(error.message).not.toContain(value);
   });
@@ -254,24 +257,29 @@ describe("the guards on a real project", () => {
     );
   });
 
-  it.skipIf(process.getuid?.() === 0)("refuses with scan_incomplete when worktrees/ cannot be read, instead of a raw EACCES", () => {
-    const p = project();
-    chmodSync(p.worktrees, 0o000);
-    try {
-      let caught: unknown;
+  it.skipIf(process.getuid?.() === 0)(
+    "refuses with scan_incomplete when worktrees/ cannot be read, instead of a raw EACCES",
+    () => {
+      const p = project();
+      chmodSync(p.worktrees, 0o000);
       try {
-        assertNoSealedInRepo(p.location, p.env);
-      } catch (err) {
-        caught = err;
+        let caught: unknown;
+        try {
+          assertNoSealedInRepo(p.location, p.env);
+        } catch (err) {
+          caught = err;
+        }
+        expect(caught).toBeInstanceOf(PokaYokeError);
+        expect((caught as PokaYokeError).findings).toEqual([
+          { kind: "scan_incomplete", where: "worktree", path: "worktrees" },
+        ]);
+        expect(sealedProblem(p.location, p.env)).toContain("scan_incomplete: worktrees");
+        expect(() => scanWorktreeCanaries(p.location, new Set(), p.env)).toThrow(PokaYokeError);
+      } finally {
+        chmodSync(p.worktrees, 0o755);
       }
-      expect(caught).toBeInstanceOf(PokaYokeError);
-      expect((caught as PokaYokeError).findings).toEqual([{ kind: "scan_incomplete", where: "worktree", path: "worktrees" }]);
-      expect(sealedProblem(p.location, p.env)).toContain("scan_incomplete: worktrees");
-      expect(() => scanWorktreeCanaries(p.location, new Set(), p.env)).toThrow(PokaYokeError);
-    } finally {
-      chmodSync(p.worktrees, 0o755);
-    }
-  });
+    },
+  );
 
   it("scanWorktreeCanaries returns hits with known set and does not throw for a made-up canary", () => {
     const p = project();

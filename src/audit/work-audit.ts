@@ -55,7 +55,11 @@ export interface WorkAudit {
 
 const LIST_CAP = 200;
 const cap = (list: readonly string[]): string[] => list.slice(0, LIST_CAP);
-const capRisk = (risk: RiskAssessment): RiskAssessment => ({ class: risk.class, rules: [...risk.rules], paths: cap(risk.paths) });
+const capRisk = (risk: RiskAssessment): RiskAssessment => ({
+  class: risk.class,
+  rules: [...risk.rules],
+  paths: cap(risk.paths),
+});
 
 /**
  * The audit of the real diff between two shas of the quarantine repository. A git failure (a path that is not valid UTF-8, a
@@ -67,10 +71,15 @@ export async function runAudit(input: AuditInput): Promise<WorkAudit> {
   const facts = classifyDiff(entries, input.explicitTestPaths, input.projectionPaths);
   const baseTree = await treePaths(input.quarantine, input.base);
   const { gates, test_command } = input.judge;
-  const argvs = [gates.fast, gates.full, gates.deep, test_command].filter((argv): argv is string[] => argv !== null && argv.length > 0);
+  const argvs = [gates.fast, gates.full, gates.deep, test_command].filter(
+    (argv): argv is string[] => argv !== null && argv.length > 0,
+  );
   const judge = resolveJudgeFiles(argvs, baseTree, facts.paths);
   const canary = await scanCanaries(input.canaries, input.surfaces);
-  const risk = assessDiffRisk(facts, input.declaredRisk, { watchedGlobs: input.watchedGlobs, extraGlobs: input.extraGlobs });
+  const risk = assessDiffRisk(facts, input.declaredRisk, {
+    watchedGlobs: input.watchedGlobs,
+    extraGlobs: input.extraGlobs,
+  });
   return {
     schema_version: 1,
     diff: { files: facts.files, empty: facts.empty, special_entries: facts.special_entries },
@@ -123,7 +132,10 @@ export function auditSignals(report: WorkAudit): AuditSignals {
     unverified,
     judge_config_touched: report.judge_config_touched,
     review_required:
-      report.risk.effective.class === "high" || report.projections_touched.length > 0 || report.diff.special_entries > 0 || report.judge_config_touched,
+      report.risk.effective.class === "high" ||
+      report.projections_touched.length > 0 ||
+      report.diff.special_entries > 0 ||
+      report.judge_config_touched,
   };
 }
 
@@ -184,7 +196,12 @@ function authoritativePayload(events: readonly LedgerEvent[], scope: RunScope): 
   let found: Record<string, unknown> | null = null;
   for (const event of events) {
     if (event.type !== "audit.completed" || event.actor !== "omf") continue;
-    if (event.payload.run_id !== scope.run_id || event.payload.goal_id !== scope.goal_id || event.payload.work_id !== scope.work_id) continue;
+    if (
+      event.payload.run_id !== scope.run_id ||
+      event.payload.goal_id !== scope.goal_id ||
+      event.payload.work_id !== scope.work_id
+    )
+      continue;
     if (!validate("gate-event.schema.json", { type: event.type, payload: event.payload }).ok) continue;
     const fields = withoutScope(event.payload);
     if (found !== null && canonicalize(found) !== canonicalize(fields)) return null;
@@ -279,9 +296,11 @@ export function auditInputsOf(report: WorkAudit | null): AuditClassifierInputs {
     return { canary_hits: "not run", tests_edited: "not run", prove_test: "not run", judge_config_touched: "not run" };
   }
   const signals = auditSignals(report);
-  const proveUnrun = signals.unverified.includes("prove_test_not_run") || signals.unverified.includes("prove_test_misconfigured");
+  const proveUnrun =
+    signals.unverified.includes("prove_test_not_run") || signals.unverified.includes("prove_test_misconfigured");
   return {
-    canary_hits: report.canary.total > 0 ? report.canary.total : signals.unverified.includes("canary_not_scanned") ? "not run" : 0,
+    canary_hits:
+      report.canary.total > 0 ? report.canary.total : signals.unverified.includes("canary_not_scanned") ? "not run" : 0,
     tests_edited: signals.flawed.includes("test_edited"),
     prove_test: signals.flawed.includes("prove_test_failed") ? "fail" : proveUnrun ? "not run" : "pass",
     judge_config_touched: report.judge_files_checked === 0 ? "not run" : signals.judge_config_touched,

@@ -11,7 +11,8 @@ import { lockFile, metricSha256, proposeMetric, readProposal } from "../../src/g
 import { markStale, setupGoal, writeBands } from "../helpers/goal.js";
 import { commitAll } from "../helpers/tmp.js";
 
-const count = (dir: string, type: string): number => new Ledger(dir).readVerified().filter((e) => e.type === type).length;
+const count = (dir: string, type: string): number =>
+  new Ledger(dir).readVerified().filter((e) => e.type === type).length;
 
 describe("approveGoal", () => {
   it("approves a draft as regime 1", () => {
@@ -44,7 +45,7 @@ describe("approveGoal", () => {
     const fx = setupGoal();
     approveGoal(fx.location, "g-fast", "human:dev");
     const file = lockFile(fx.location.dir, "g-fast", "m-p95");
-    writeFileSync(file, readFileSync(file, "utf8").replace("bench/p95.sh\"", "bench/other.sh\""));
+    writeFileSync(file, readFileSync(file, "utf8").replace('bench/p95.sh"', 'bench/other.sh"'));
     const broken = auditGoal(fx.location, "g-fast");
     expect(broken.problems).toEqual(["metric lock tampered: m-p95"]);
     expect(broken.state).toBe("tampered");
@@ -79,11 +80,15 @@ describe("approveGoal", () => {
       "human:dev",
     );
     const before = new Ledger(fx.location.dir).readVerified().length;
-    expect(() => approveGoal(fx.location, "g-fast", "human:dev", undefined, expected)).toThrow(/changed after it was shown/);
+    expect(() => approveGoal(fx.location, "g-fast", "human:dev", undefined, expected)).toThrow(
+      /changed after it was shown/,
+    );
     expect(new Ledger(fx.location.dir).readVerified()).toHaveLength(before);
 
     writeFileSync(fx.goalFile, readFileSync(fx.goalFile, "utf8").replace("value: 250", "value: 400"));
-    expect(() => approveGoal(fx.location, "g-fast", "human:dev", undefined, expected)).toThrow(/changed after it was shown/);
+    expect(() => approveGoal(fx.location, "g-fast", "human:dev", undefined, expected)).toThrow(
+      /changed after it was shown/,
+    );
   });
 
   it("re-approves a goal marked stale as the next regime even though nothing in it changed", () => {
@@ -125,7 +130,9 @@ describe("approveGoal", () => {
     };
     writeBands(fx, "m-errors");
     const before = new Ledger(fx.location.dir).readVerified().length;
-    expect(() => approveGoal(fx.location, "g-fast", "human:dev", undefined, expected)).toThrow(/changed after it was shown/);
+    expect(() => approveGoal(fx.location, "g-fast", "human:dev", undefined, expected)).toThrow(
+      /changed after it was shown/,
+    );
     expect(new Ledger(fx.location.dir).readVerified()).toHaveLength(before);
   });
 });

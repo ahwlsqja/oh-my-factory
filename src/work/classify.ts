@@ -79,7 +79,13 @@ export function resetRoundScopedInputs(inputs: EvidenceInputs): void {
 /** Why the line stopped before it reached the end. `none` means every node was visited. */
 export type LineStop =
   | { kind: "none" }
-  | { kind: "gate"; gate: Exclude<GateId, "GATE-4">; verdict: "fail" | "not_run"; reasons: readonly string[]; stop?: GateStop }
+  | {
+      kind: "gate";
+      gate: Exclude<GateId, "GATE-4">;
+      verdict: "fail" | "not_run";
+      reasons: readonly string[];
+      stop?: GateStop;
+    }
   // round 0 means before S3 of the first round (the S1/S2 loop or the line-entry guard).
   | { kind: "gate4"; severity: Exclude<Gate4Severity, "none">; reasons: readonly Gate4Reason[]; round: number }
   | { kind: "station"; station: StationId; result: "blocked" | "manual" | "error"; reason_code: ReasonCode };
@@ -137,11 +143,13 @@ function unverifiedAreas(input: ClassifierInput): UnverifiedArea[] {
   const { inputs } = input;
   const areas: UnverifiedArea[] = [];
   for (const id of input.decisions_unmeasured) areas.push({ code: "decision_unmeasured", decision_id: id });
-  if (input.gate4_warnings.includes("spend_unverifiable")) areas.push({ code: "model_spend_unverifiable", decision_id: null });
+  if (input.gate4_warnings.includes("spend_unverifiable"))
+    areas.push({ code: "model_spend_unverifiable", decision_id: null });
   if (inputs.noise_check === NOT_RUN) areas.push({ code: "noise_check_not_run", decision_id: null });
   else if (inputs.noise_check === "not_evaluated") areas.push({ code: "noise_check_not_evaluated", decision_id: null });
   if (inputs.high_risk_paths_touched === NOT_RUN) areas.push({ code: "high_risk_paths_not_run", decision_id: null });
-  else if (inputs.high_risk_paths_touched.length > 0) areas.push({ code: "high_risk_paths_touched", decision_id: null });
+  else if (inputs.high_risk_paths_touched.length > 0)
+    areas.push({ code: "high_risk_paths_touched", decision_id: null });
   if (input.injected_gates.length > 0) areas.push({ code: "injected_gate", decision_id: null });
   return areas;
 }
@@ -179,7 +187,8 @@ function auditFlagged(audit: AuditInputs): boolean {
 
 /** A scenario counted as failed. Only called once 6c has made sure both counts ran. */
 function sealedFailed(sealed: SealedInputs): boolean {
-  const failed = (count: { pass: number; total: number } | NotRun): boolean => count !== NOT_RUN && count.pass < count.total;
+  const failed = (count: { pass: number; total: number } | NotRun): boolean =>
+    count !== NOT_RUN && count.pass < count.total;
   return failed(sealed.train) || failed(sealed.test);
 }
 
@@ -195,12 +204,23 @@ function anyFlaky(sealed: SealedInputs): boolean {
  */
 export function classifyOutcome(input: ClassifierInput): Classification {
   const areas = unverifiedAreas(input);
-  const make = (outcome: WOutcome, exhausted: boolean, reason_code: ReasonCode | null, rule: ClassifierRule): Classification => ({
+  const make = (
+    outcome: WOutcome,
+    exhausted: boolean,
+    reason_code: ReasonCode | null,
+    rule: ClassifierRule,
+  ): Classification => ({
     outcome,
     exhausted,
     reason_code,
     recommendation:
-      outcome === "success" ? (areas.length === 0 ? "merge_recommended" : "human_needed") : outcome === "flawed" ? "not_recommended" : "human_needed",
+      outcome === "success"
+        ? areas.length === 0
+          ? "merge_recommended"
+          : "human_needed"
+        : outcome === "flawed"
+          ? "not_recommended"
+          : "human_needed",
     unverified_areas: areas,
     rule,
   });
@@ -233,7 +253,8 @@ export function classifyOutcome(input: ClassifierInput): Classification {
     return make("blocked", false, "budget_exhausted", "gate4_soft");
   }
 
-  if (STATION_IDS.some((id) => stations[id] !== "ok")) return make("blocked", false, "station_skipped", "station_skipped");
+  if (STATION_IDS.some((id) => stations[id] !== "ok"))
+    return make("blocked", false, "station_skipped", "station_skipped");
   if (gates.verdict !== "pass") return make("blocked", false, "gate_not_run", "gate_not_run");
   if (requiredInputMissing(input)) return make("blocked", false, "evidence_incomplete", "evidence_incomplete");
   if (auditFlagged(inputs.audit)) return make("flawed", false, "audit_flag", "audit_flag");
@@ -249,7 +270,12 @@ export function classifyOutcome(input: ClassifierInput): Classification {
  */
 export function toOutcomeInput(c: Classification): OutcomeInput {
   if (c.outcome === "success") {
-    return { outcome: "success", exhausted: false, reason_code: null, human_needed: c.recommendation !== "merge_recommended" };
+    return {
+      outcome: "success",
+      exhausted: false,
+      reason_code: null,
+      human_needed: c.recommendation !== "merge_recommended",
+    };
   }
   return { outcome: c.outcome, exhausted: c.exhausted, reason_code: c.reason_code };
 }

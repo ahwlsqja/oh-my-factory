@@ -57,7 +57,11 @@ export interface PreflightReport {
 }
 
 /** The probe is advisory: one that throws is reported as unmeasurable with its error text and never stops the report. */
-function safeIsolation(probeIsolation: IsolationProbe, env: NodeJS.ProcessEnv, tools: PreflightReport["tools"]): AdvisoryIsolation {
+function safeIsolation(
+  probeIsolation: IsolationProbe,
+  env: NodeJS.ProcessEnv,
+  tools: PreflightReport["tools"],
+): AdvisoryIsolation {
   try {
     return probeIsolation(env, tools);
   } catch (error) {

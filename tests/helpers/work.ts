@@ -29,7 +29,13 @@ export function makeCandidate(title = "Cache the render path", paths: string[] =
 
 /** A store input for goal g-fast. Distinct titles give distinct fingerprints, so distinct work ids. */
 export function makeNewItem(
-  options: { goalId?: string; title?: string; paths?: string[]; risk?: RiskAssessment; trigger?: Trigger | "both" } = {},
+  options: {
+    goalId?: string;
+    title?: string;
+    paths?: string[];
+    risk?: RiskAssessment;
+    trigger?: Trigger | "both";
+  } = {},
 ): NewWorkItem {
   const goalId = options.goalId ?? "g-fast";
   const candidate = makeCandidate(options.title, options.paths);

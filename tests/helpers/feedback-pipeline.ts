@@ -89,9 +89,13 @@ export function runFeedbackPipeline(): FeedbackPipelineRun {
   writePrivateFile(hostFile, JSON.stringify({ train, test }, null, 2));
 
   const trainDigest = digestOf(train.map((s) => s.scenario_id));
-  const roundResults: ScenarioResult[][] = PLAN.map((plan) => toResults(train, verdictsFor(train, new Set(plan.passing), new Set(plan.flaky))));
+  const roundResults: ScenarioResult[][] = PLAN.map((plan) =>
+    toResults(train, verdictsFor(train, new Set(plan.passing), new Set(plan.flaky))),
+  );
   const rounds = roundResults.map((results, index) => {
-    const result = released(releaseFeedback(fx.ledger, { goalId: fx.goalId, workId, runId: runIdOf(index + 1), trainDigest, results }));
+    const result = released(
+      releaseFeedback(fx.ledger, { goalId: fx.goalId, workId, runId: runIdOf(index + 1), trainDigest, results }),
+    );
     return {
       text: result.feedback.text,
       kinds: result.host_only.categories.map((category) => category.kind),

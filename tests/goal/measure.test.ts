@@ -28,7 +28,12 @@ describe("measureGoal", () => {
       runner: "host",
       isolation: "none",
       needs_reapproval: false,
-      target: { metric_id: "m-p95", value: 250, measured: 312, result: { met: false, gap: 62, direction: "decrease", size: "medium" } },
+      target: {
+        metric_id: "m-p95",
+        value: 250,
+        measured: 312,
+        result: { met: false, gap: 62, direction: "decrease", size: "medium" },
+      },
       guardrails: [{ metric_id: "m-errors", status: "unevaluated" }],
     });
     expect(report.metrics.map((m) => [m.metric_id, m.roles, m.value])).toEqual([
@@ -62,7 +67,9 @@ describe("measureGoal", () => {
     // Bands are part of the J1 lock, so they must exist before approval or the readings are pending.
     lockGoal(fx.location, "g-fast", "human:dev");
     for (let i = 0; i < 5; i++) {
-      expect((await measureGoal(fx.location, "g-fast", { runner: "host" })).report.guardrails[0]?.status).toBe("unevaluated");
+      expect((await measureGoal(fx.location, "g-fast", { runner: "host" })).report.guardrails[0]?.status).toBe(
+        "unevaluated",
+      );
     }
     expect((await measureGoal(fx.location, "g-fast", { runner: "host" })).report.guardrails[0]?.status).toBe("pass");
     writeFileSync(join(fx.repo, "bench", "errors.sh"), "echo 5\n");
@@ -76,7 +83,10 @@ describe("measureGoal", () => {
     const fx = setupGoal();
     const file = bandsFile(fx.location.dir, "g-fast", "m-errors");
     mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, "metric: m-errors\nbaseline: rolling_30d\nrules: western_electric\ntiers:\n  1sigma: { action: log }\n");
+    writeFileSync(
+      file,
+      "metric: m-errors\nbaseline: rolling_30d\nrules: western_electric\ntiers:\n  1sigma: { action: log }\n",
+    );
     lockGoal(fx.location, "g-fast", "human:dev");
     for (let i = 0; i < 6; i++) await measureGoal(fx.location, "g-fast", { runner: "host" });
     writeFileSync(join(fx.repo, "bench", "errors.sh"), "echo 95\n");
@@ -108,7 +118,10 @@ describe("measureGoal", () => {
     await measureGoal(fx.location, "g-fast", { runner: "host" });
     const events = new Ledger(fx.location.dir).readVerified();
     expect(events.find((e) => e.type === "metric.measured")?.payload.needs_reapproval).toBe(false);
-    expect(events.find((e) => e.type === "goal.measured")?.payload).toMatchObject({ needs_reapproval: false, target_met: false });
+    expect(events.find((e) => e.type === "goal.measured")?.payload).toMatchObject({
+      needs_reapproval: false,
+      target_met: false,
+    });
   });
 
   it("stops on a tampered lock without measuring", async () => {
@@ -133,7 +146,10 @@ describe("measureGoal", () => {
 });
 
 const lastGuardrails = (dir: string): unknown =>
-  new Ledger(dir).readVerified().filter((e) => e.type === "goal.measured").at(-1)?.payload.guardrails;
+  new Ledger(dir)
+    .readVerified()
+    .filter((e) => e.type === "goal.measured")
+    .at(-1)?.payload.guardrails;
 
 describe("aggregateGuardrails", () => {
   it("ranks breach over unevaluated over pass, and is none without guardrails", () => {

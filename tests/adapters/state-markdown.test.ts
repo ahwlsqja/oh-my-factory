@@ -36,7 +36,11 @@ describe("state-markdown files", () => {
   it("reads back exactly what it wrote, including the intent", () => {
     const projectDir = makeTempDir("omf-store-");
     const store = createMarkdownStore(projectDir);
-    const input = makeNewItem({ title: "Update the CI workflow", paths: [".github/workflows/ci.yml"], risk: HIGH_RISK });
+    const input = makeNewItem({
+      title: "Update the CI workflow",
+      paths: [".github/workflows/ci.yml"],
+      risk: HIGH_RISK,
+    });
     const created = store.createWorkItem(input, T0);
     if (!created.created) throw new Error("expected a new item");
     const [read] = store.fetchWorkItemsByIds([created.item.front.work_id]);

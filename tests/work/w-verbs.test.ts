@@ -102,7 +102,11 @@ describe("submitForReview", () => {
       const submitted = submitForReview(fx.ctx, fx.claim, fx.workId, W_RUN, outcome, humanNeeded);
       expect(submitted.front.state).toBe("awaiting_review");
       const event = fx.events().at(-1);
-      expect(event).toMatchObject({ actor: "omf", type: "work.submitted", payload: { ...fx.scope, outcome, recommendation } });
+      expect(event).toMatchObject({
+        actor: "omf",
+        type: "work.submitted",
+        payload: { ...fx.scope, outcome, recommendation },
+      });
       expect(event?.payload).not.toHaveProperty("reason_code");
       expect(fx.verdict()).toEqual({ ok: true });
     });
@@ -112,7 +116,9 @@ describe("submitForReview", () => {
     const fx = startedFixture();
     const before = fx.ledgerText();
     expect(wCodeOf(() => submitForReview(fx.ctx, fx.claim, fx.workId, W_RUN, "flawed", true))).toBe("outcome_invalid");
-    expect(wCodeOf(() => submitForReview(fx.ctx, fx.claim, fx.workId, W_RUN, "blocked" as unknown as "flawed"))).toBe("outcome_invalid");
+    expect(wCodeOf(() => submitForReview(fx.ctx, fx.claim, fx.workId, W_RUN, "blocked" as unknown as "flawed"))).toBe(
+      "outcome_invalid",
+    );
     expect(fx.ledgerText()).toBe(before);
     expect(fx.fresh().front.state).toBe("in_progress");
   });
@@ -134,16 +140,21 @@ describe("failItem and parkItem", () => {
   it("failItem refuses a ready item, because a failure needs a started item", () => {
     const fx = setupW();
     const before = fx.ledgerText();
-    expect(wCodeOf(() => failItem(fx.ctx, fx.claim, fx.workId, W_RUN, { outcome: "flawed", reason_code: "budget_exhausted" }))).toBe(
-      "wrong_state",
-    );
+    expect(
+      wCodeOf(() =>
+        failItem(fx.ctx, fx.claim, fx.workId, W_RUN, { outcome: "flawed", reason_code: "budget_exhausted" }),
+      ),
+    ).toBe("wrong_state");
     expect(fx.ledgerText()).toBe(before);
   });
 
   it("parkItem appends only an event and leaves item.md byte-identical, from ready and from in_progress", () => {
     const ready = setupW();
     const readyText = ready.itemText();
-    const parked = parkItem(ready.ctx, ready.claim, ready.workId, W_RUN, { outcome: "blocked", reason_code: "j2_open" });
+    const parked = parkItem(ready.ctx, ready.claim, ready.workId, W_RUN, {
+      outcome: "blocked",
+      reason_code: "j2_open",
+    });
     expect(parked.front.state).toBe("ready");
     expect(ready.itemText()).toBe(readyText);
     expect(ready.events().at(-1)).toMatchObject({
@@ -166,8 +177,14 @@ describe("claim proof", () => {
   const calls: [string, (fx: WFixture, claim: LockOwner) => unknown][] = [
     ["startItem", (fx, claim) => startItem(fx.ctx, claim, fx.workId, W_RUN)],
     ["submitForReview", (fx, claim) => submitForReview(fx.ctx, claim, fx.workId, W_RUN, "success")],
-    ["failItem", (fx, claim) => failItem(fx.ctx, claim, fx.workId, W_RUN, { outcome: "blocked", reason_code: "infra_failure" })],
-    ["parkItem", (fx, claim) => parkItem(fx.ctx, claim, fx.workId, W_RUN, { outcome: "blocked", reason_code: "j2_open" })],
+    [
+      "failItem",
+      (fx, claim) => failItem(fx.ctx, claim, fx.workId, W_RUN, { outcome: "blocked", reason_code: "infra_failure" }),
+    ],
+    [
+      "parkItem",
+      (fx, claim) => parkItem(fx.ctx, claim, fx.workId, W_RUN, { outcome: "blocked", reason_code: "j2_open" }),
+    ],
     ["repairItem", (fx, claim) => repairItem(fx.ctx, claim, fx.workId, W_RUN)],
     ["setItemProgress", (fx, claim) => setItemProgress(fx.ctx, claim, fx.workId, { station: "S3", step: "working" })],
   ];
@@ -188,7 +205,10 @@ describe("claim proof", () => {
         const token = forge(fx);
         const ledgerBefore = fx.ledgerText();
         const itemBefore = fx.itemText();
-        expect(wCodeOf(() => call(fx, token)), name).toBe("claim_lost");
+        expect(
+          wCodeOf(() => call(fx, token)),
+          name,
+        ).toBe("claim_lost");
         expect(fx.ledgerText(), name).toBe(ledgerBefore);
         expect(fx.itemText(), name).toBe(itemBefore);
       }
@@ -206,7 +226,12 @@ describe("setItemProgress", () => {
     setItemProgress(fx.ctx, fx.claim, fx.workId, { station: "S3", step: "working" });
     expect(fx.fresh().progress.trim()).toBe("S3 working");
     expect(fx.events()).toHaveLength(length);
-    for (const progress of [bad("S3", CANARY.metricId), bad("S9", "working"), bad("S3", "p95 over 40"), bad("S3", "working\nS4")]) {
+    for (const progress of [
+      bad("S3", CANARY.metricId),
+      bad("S9", "working"),
+      bad("S3", "p95 over 40"),
+      bad("S3", "working\nS4"),
+    ]) {
       expect(wCodeOf(() => setItemProgress(fx.ctx, fx.claim, fx.workId, progress))).toBe("outcome_invalid");
     }
     expect(fx.fresh().progress.trim()).toBe("S3 working");
@@ -214,7 +239,9 @@ describe("setItemProgress", () => {
 
   it("refuses an item that is not in_progress", () => {
     const fx = setupW();
-    expect(wCodeOf(() => setItemProgress(fx.ctx, fx.claim, fx.workId, { station: "S1", step: "entered" }))).toBe("wrong_state");
+    expect(wCodeOf(() => setItemProgress(fx.ctx, fx.claim, fx.workId, { station: "S1", step: "entered" }))).toBe(
+      "wrong_state",
+    );
   });
 });
 

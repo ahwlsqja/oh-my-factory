@@ -1,5 +1,11 @@
 import type { WorkAudit } from "../audit/work-audit.js";
-import { ISOLATION_LEVELS, type IsolationLevel, type MeasuredLevel, type RunIsolation, compareLevel } from "../isolation/types.js";
+import {
+  ISOLATION_LEVELS,
+  type IsolationLevel,
+  type MeasuredLevel,
+  type RunIsolation,
+  compareLevel,
+} from "../isolation/types.js";
 import type { GateRunResult } from "./run-gates.js";
 
 /**
@@ -53,7 +59,10 @@ export interface Gate3Result {
   route: Gate3Route;
 }
 
-const ISOLATION_CONDITIONS: ReadonlySet<Gate3Condition> = new Set<Gate3Condition>(["isolation_below_declared", "isolation_unmeasured"]);
+const ISOLATION_CONDITIONS: ReadonlySet<Gate3Condition> = new Set<Gate3Condition>([
+  "isolation_below_declared",
+  "isolation_unmeasured",
+]);
 
 /**
  * Passes only when no condition is listed. `red` passes: a failing gate is a gate result for GATE-4, not an integrity
@@ -76,7 +85,11 @@ export function evaluateGate3(measured: Measured): Gate3Result {
   else if (compareLevel(level, declared) < 0) found.add("isolation_below_declared");
 
   const failed = GATE3_CONDITIONS.filter((condition) => found.has(condition));
-  const route: Gate3Route = failed.some((condition) => ISOLATION_CONDITIONS.has(condition)) ? "J7" : failed.length > 0 ? "J6" : "none";
+  const route: Gate3Route = failed.some((condition) => ISOLATION_CONDITIONS.has(condition))
+    ? "J7"
+    : failed.length > 0
+      ? "J6"
+      : "none";
   return { passed: failed.length === 0, failed, route };
 }
 
@@ -108,13 +121,22 @@ export function measuredFrom(parts: Gate3Parts): Measured {
     else if (audit.judge_files_checked > 0) judge_config = "unchanged";
   }
   const gate_line: GateLineState =
-    gates === null ? "not_run" : gates.verdict.status === "GREEN" ? "green" : gates.verdict.status === "RED" ? "red" : "misconfigured";
+    gates === null
+      ? "not_run"
+      : gates.verdict.status === "GREEN"
+        ? "green"
+        : gates.verdict.status === "RED"
+          ? "red"
+          : "misconfigured";
   return {
     canary,
     judge_config,
     contradiction_canary: parts.contradiction ?? "not_run",
     gate_line,
-    isolation: { declared: parts.declared, measured: isolation !== null && isolation.complete ? isolation.level : "unmeasured" },
+    isolation: {
+      declared: parts.declared,
+      measured: isolation !== null && isolation.complete ? isolation.level : "unmeasured",
+    },
   };
 }
 
@@ -136,11 +158,20 @@ function isCommitId(value: string): boolean {
  * sha, a sha that is not a full lowercase hex commit id (40 or 64 digits), no contradiction scenario or an impossible
  * count is `not_run`.
  */
-export function contradictionState(verdict: ContradictionVerdict | null, candidateSha: string): ContradictionCanaryState {
-  if (verdict === null || !isCommitId(candidateSha) || !isCommitId(verdict.judged_sha) || verdict.judged_sha !== candidateSha) {
+export function contradictionState(
+  verdict: ContradictionVerdict | null,
+  candidateSha: string,
+): ContradictionCanaryState {
+  if (
+    verdict === null ||
+    !isCommitId(candidateSha) ||
+    !isCommitId(verdict.judged_sha) ||
+    verdict.judged_sha !== candidateSha
+  ) {
     return "not_run";
   }
   const { contradiction_scenarios: total, rejected } = verdict;
-  if (!Number.isInteger(total) || !Number.isInteger(rejected) || total < 1 || rejected < 0 || rejected > total) return "not_run";
+  if (!Number.isInteger(total) || !Number.isInteger(rejected) || total < 1 || rejected < 0 || rejected > total)
+    return "not_run";
   return rejected === total ? "failing" : "passing";
 }

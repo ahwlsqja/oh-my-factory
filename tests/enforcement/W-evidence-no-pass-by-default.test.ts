@@ -75,16 +75,32 @@ const ROWS: Row[] = [
   unverified("an unmeasured quantitative decision", (c) => void (c.decisions_unmeasured = ["d-latency"])),
   unverified("unknown model spend", (c) => void (c.gate4_warnings = ["spend_unverifiable"])),
   unverified("an injected gate", (c) => void (c.injected_gates = ["GATE-2"])),
-  flawed("a gain within run-to-run variance", "within_variance", (c) => void (c.inputs.noise_check = "within_variance")),
-  flawed("a flaky train scenario", "flaky_scenario", (c) => void (c.inputs.sealed.train = { pass: 5, total: 5, flaky: 1 })),
+  flawed(
+    "a gain within run-to-run variance",
+    "within_variance",
+    (c) => void (c.inputs.noise_check = "within_variance"),
+  ),
+  flawed(
+    "a flaky train scenario",
+    "flaky_scenario",
+    (c) => void (c.inputs.sealed.train = { pass: 5, total: 5, flaky: 1 }),
+  ),
   flawed("a canary hit", "audit_flag", (c) => void (c.inputs.audit.canary_hits = 1)),
-  flawed("a failing sealed scenario", "sealed_failed", (c) => void (c.inputs.sealed.train = { pass: 4, total: 5, flaky: 0 })),
+  flawed(
+    "a failing sealed scenario",
+    "sealed_failed",
+    (c) => void (c.inputs.sealed.train = { pass: 4, total: 5, flaky: 0 }),
+  ),
 ];
 
 const RUN = "r-20261014T000000Z-ab12";
 const WORK = "w-0123456789ab";
 
-function build(classification: Classification, inputs: EvidenceInputs, decisions: EvidenceDecisions = { list: [], masked: false }): EvidenceBuild {
+function build(
+  classification: Classification,
+  inputs: EvidenceInputs,
+  decisions: EvidenceDecisions = { list: [], masked: false },
+): EvidenceBuild {
   const gates = new GateBoard();
   for (const gate of GATE_IDS) gates.record({ gate, verdict: "pass", reasons: [] });
   return {
@@ -129,13 +145,38 @@ describe("W-evidence-no-pass-by-default", () => {
     expect(doc.isolation_level).toBe("unmeasured");
     expect(doc.gate_line).toBe(NOT_RUN);
     expect(doc.sealed).toEqual({ train: NOT_RUN, test: NOT_RUN });
-    expect(doc.audit).toEqual({ canary_hits: NOT_RUN, tests_edited: NOT_RUN, prove_test: NOT_RUN, judge_config_touched: NOT_RUN });
+    expect(doc.audit).toEqual({
+      canary_hits: NOT_RUN,
+      tests_edited: NOT_RUN,
+      prove_test: NOT_RUN,
+      judge_config_touched: NOT_RUN,
+    });
     expect(doc.self_metrics.human_interventions_by_J).toBe(NOT_RUN);
     expect(Object.keys(doc).sort()).toEqual(
       [
-        "audit", "created_at", "decisions", "gate_line", "gates", "goal_id", "high_risk_paths_touched", "implementer_notes",
-        "isolation_level", "label", "noise_check", "outcome", "plan_summary", "recommendation", "recommendation_reasons",
-        "run_id", "schema_version", "sealed", "self_metrics", "stations", "unverified_areas", "untrusted_fields", "work_id",
+        "audit",
+        "created_at",
+        "decisions",
+        "gate_line",
+        "gates",
+        "goal_id",
+        "high_risk_paths_touched",
+        "implementer_notes",
+        "isolation_level",
+        "label",
+        "noise_check",
+        "outcome",
+        "plan_summary",
+        "recommendation",
+        "recommendation_reasons",
+        "run_id",
+        "schema_version",
+        "sealed",
+        "self_metrics",
+        "stations",
+        "unverified_areas",
+        "untrusted_fields",
+        "work_id",
       ].sort(),
     );
     expect(JSON.parse(JSON.stringify(doc))).toEqual(doc);
@@ -145,7 +186,12 @@ describe("W-evidence-no-pass-by-default", () => {
   it("lists the unverified areas first, and keeps a decision that now leaks out of both files", () => {
     const f = setupDecisionItem();
     closeInterface(f);
-    runDecideAdd(f.fx.location, f.workId, { id: "d-latency", class: "latency", question: "How fast must a lookup be?" }, "omf");
+    runDecideAdd(
+      f.fx.location,
+      f.workId,
+      { id: "d-latency", class: "latency", question: "How fast must a lookup be?" },
+      "omf",
+    );
     runDecideResolve(
       f.fx.location,
       f.workId,
@@ -154,7 +200,14 @@ describe("W-evidence-no-pass-by-default", () => {
         choice: "Bounded lookup time",
         rationale: "Callers wait on it.",
         rejected: [],
-        response_measure: { metric: "cache lookup time", op: "<=", threshold: 2917.5, unit: "ms", percentile: 95, window: null },
+        response_measure: {
+          metric: "cache lookup time",
+          op: "<=",
+          threshold: 2917.5,
+          unit: "ms",
+          percentile: 95,
+          window: null,
+        },
       },
       HUMAN,
     );

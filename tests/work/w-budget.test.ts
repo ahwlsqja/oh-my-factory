@@ -100,9 +100,18 @@ function put(fx: WFixture, actor: string, type: string, payload: Record<string, 
   return fx.ledger.append({ actor, type, payload }).seq;
 }
 const limits = (fx: WFixture, extra: Record<string, unknown> = {}) => ({ ...fx.scope, ...LIMITS, ...extra });
-const roundOf = (fx: WFixture, round: number, sig: string | null = null) => ({ ...fx.scope, round, prev_signature: sig });
+const roundOf = (fx: WFixture, round: number, sig: string | null = null) => ({
+  ...fx.scope,
+  round,
+  prev_signature: sig,
+});
 const spendOf = (fx: WFixture, micro: number | null, station = "S3") => ({ ...fx.scope, station, micro_usd: micro });
-const raiseOf = (fx: WFixture, kind: string, amount: number) => ({ goal_id: fx.goalId, work_id: fx.workId, kind, amount });
+const raiseOf = (fx: WFixture, kind: string, amount: number) => ({
+  goal_id: fx.goalId,
+  work_id: fx.workId,
+  kind,
+  amount,
+});
 const fold = (fx: WFixture) => foldWorkBudget(fx.events(), fx.workId);
 
 const EMPTY = {
@@ -149,7 +158,12 @@ describe("foldWorkBudget", () => {
     const other = { goal_id: fx.goalId, work_id: "w-aaaaaaaaaaaa", run_id: W_RUN };
     put(fx, "omf", "work.limits_set", { ...other, ...LIMITS });
     put(fx, "omf", "work.spend", { ...other, station: "S3", micro_usd: -5 });
-    put(fx, "human:dev", "work.limit_raised", { goal_id: fx.goalId, work_id: "w-aaaaaaaaaaaa", kind: "rounds", amount: 1 });
+    put(fx, "human:dev", "work.limit_raised", {
+      goal_id: fx.goalId,
+      work_id: "w-aaaaaaaaaaaa",
+      kind: "rounds",
+      amount: 1,
+    });
     expect(fold(fx)).toEqual(EMPTY);
   });
 
@@ -173,7 +187,11 @@ describe("foldWorkBudget", () => {
         return put(fx, "omf", "work.limits_set", limits(fx, { max_rounds: 50 }));
       },
     ],
-    ["a raise before any limits", "raise_before_limits", (fx) => put(fx, "human:dev", "work.limit_raised", raiseOf(fx, "rounds", 1))],
+    [
+      "a raise before any limits",
+      "raise_before_limits",
+      (fx) => put(fx, "human:dev", "work.limit_raised", raiseOf(fx, "rounds", 1)),
+    ],
     ["a round that skips a number", "round_gap", (fx) => put(fx, "omf", "work.round", roundOf(fx, 2))],
     ["a spend with a negative amount", "invalid_event", (fx) => put(fx, "omf", "work.spend", spendOf(fx, -1))],
     [
@@ -222,7 +240,12 @@ describe("foldWorkBudget", () => {
   });
 });
 
-const own = (fx: WFixture): OwnedAppend => ({ ledger: fx.ledger, itemDir: fx.item.dir, claim: fx.claim, scope: fx.scope });
+const own = (fx: WFixture): OwnedAppend => ({
+  ledger: fx.ledger,
+  itemDir: fx.item.dir,
+  claim: fx.claim,
+  scope: fx.scope,
+});
 
 function budgetCode(fn: () => unknown): string {
   try {
@@ -282,7 +305,11 @@ describe("owned appends", () => {
       (fx) =>
         writeFileSync(
           claimFile(fx.item.dir),
-          JSON.stringify({ pid: fx.claim.pid, start_time: fx.claim.start_time, acquired_at: "2030-01-01T00:00:00.000Z" }),
+          JSON.stringify({
+            pid: fx.claim.pid,
+            start_time: fx.claim.start_time,
+            acquired_at: "2030-01-01T00:00:00.000Z",
+          }),
         ),
     ],
   ];
@@ -346,7 +373,11 @@ describe("foldReentry", () => {
     const fx = setupW();
     for (let n = 0; n < 3; n++) recordW(fx.ledger, "work.parked", fx.item);
     recordW(fx.ledger, "work.claim_reclaimed", fx.item);
-    fx.ledger.append({ actor: "human:dev", type: "work.approved", payload: { goal_id: "g-other", work_id: "w-bbbbbbbbbbbb" } });
+    fx.ledger.append({
+      actor: "human:dev",
+      type: "work.approved",
+      payload: { goal_id: "g-other", work_id: "w-bbbbbbbbbbbb" },
+    });
     expect(reentry(fx)).toEqual({ same_reason: 3, kills: 1 });
     appendWorkEvent(fx.ledger, "work.approved", "human:dev", fx.item);
     expect(reentry(fx)).toEqual({ same_reason: 0, kills: 0 });
@@ -355,7 +386,13 @@ describe("foldReentry", () => {
   });
 });
 
-function raiseCode(fx: WFixture, actor: string, kind: "rounds" | "model_micro_usd", amount: number, workId = fx.workId): string {
+function raiseCode(
+  fx: WFixture,
+  actor: string,
+  kind: "rounds" | "model_micro_usd",
+  amount: number,
+  workId = fx.workId,
+): string {
   return budgetCode(() => raiseWorkLimit(fx.ctx.location, workId, kind, amount, actor));
 }
 
@@ -371,7 +408,8 @@ describe("raiseWorkLimit", () => {
     const fx = setupW();
     recordLimits(own(fx), LIMITS);
     const before = fx.ledgerText();
-    for (const actor of ["omf", "agent:x", "human:", "dev"]) expect(raiseCode(fx, actor, "rounds", 1), actor).toBe("forbidden");
+    for (const actor of ["omf", "agent:x", "human:", "dev"])
+      expect(raiseCode(fx, actor, "rounds", 1), actor).toBe("forbidden");
     expect(fx.ledgerText()).toBe(before);
   });
 
@@ -421,7 +459,10 @@ describe("raiseWorkLimit", () => {
     fx.handEdit("ready");
 
     startItem(fx);
-    fx.appendOnly({ type: "work.submitted", payload: { ...fx.scope, outcome: "flawed", recommendation: "not_recommended" } });
+    fx.appendOnly({
+      type: "work.submitted",
+      payload: { ...fx.scope, outcome: "flawed", recommendation: "not_recommended" },
+    });
     fx.handEdit("awaiting_review");
     const before = fx.ledgerText();
     expect(raiseCode(fx, "human:dev", "rounds", 1), "awaiting_review").toBe("wrong_state");

@@ -3,7 +3,14 @@ import { decisionsDigest, foldDecisions } from "../decision/state.js";
 import type { DecisionScope } from "../decision/types.js";
 import { guardRefusal } from "../vault/line-guard.js";
 import { foldSeals } from "./events.js";
-import { type Gate2Context, type Gate2Result, type Gate2Route, gate2EventFor, runGate2, sealFeedbackFor } from "./gate2.js";
+import {
+  type Gate2Context,
+  type Gate2Result,
+  type Gate2Route,
+  gate2EventFor,
+  runGate2,
+  sealFeedbackFor,
+} from "./gate2.js";
 import type { SealFeedback } from "./types.js";
 
 /** The routes that end the line; `back_to_S2` is the only one that loops. */
@@ -34,7 +41,16 @@ export interface Gate2Outcome {
 /** Pure: a `Gate2Result` becomes the outcome. A J2, J3 or J7 route stops the line; looping on it would only reseal until a visit cap. */
 export function gate2Outcome(result: Gate2Result): Gate2Outcome {
   if (result.status === "pass") {
-    return { gate: "GATE-2", verdict: "pass", reasons: [], next: "continue", stop_route: null, feedback: null, not_run: result.not_run, result };
+    return {
+      gate: "GATE-2",
+      verdict: "pass",
+      reasons: [],
+      next: "continue",
+      stop_route: null,
+      feedback: null,
+      not_run: result.not_run,
+      result,
+    };
   }
   const reasons = [...new Set(result.reasons.map((reason) => reason.code))];
   const base = { gate: "GATE-2" as const, verdict: "fail" as const, reasons, not_run: result.not_run, result };
@@ -62,7 +78,16 @@ export async function evaluateGate2Step(ctx: Gate2StepContext): Promise<Gate2Out
   } catch (err) {
     // A guard refusal keeps the closed code the S2 station reports for the same cause (docs/m3c-spec-deviations.md V9).
     const reason = guardRefusal(err) ?? GATE_ERROR_REASON;
-    return { gate: "GATE-2", verdict: "not_run", reasons: [reason], next: "stop", stop_route: "J7", feedback: null, not_run: [], result: null };
+    return {
+      gate: "GATE-2",
+      verdict: "not_run",
+      reasons: [reason],
+      next: "stop",
+      stop_route: "J7",
+      feedback: null,
+      not_run: [],
+      result: null,
+    };
   }
   const scope: DecisionScope = { goal_id: ctx.item.front.goal_id, work_id: ctx.item.front.work_id };
   ctx.ledger.appendWith((events) => {

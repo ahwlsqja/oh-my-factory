@@ -44,7 +44,9 @@ function printAudit(report: AuditReport): void {
     console.log(`ready for J1: run omf goal approve ${report.goal_id}`);
   }
   if (report.state === "tampered") {
-    console.log(`a lock does not match the ledger and measurement is stopped; run omf goal approve ${report.goal_id} to repair it`);
+    console.log(
+      `a lock does not match the ledger and measurement is stopped; run omf goal approve ${report.goal_id} to repair it`,
+    );
   }
   if (report.budget !== null) {
     console.log(`budget: ${report.budget.remaining} of ${report.budget.declared + report.budget.raised} rounds left`);
@@ -81,7 +83,9 @@ export function approvalScreen(
   const out = (line: string): void => void lines.push(line);
   const audit = auditGoal(status, goalId);
   if (audit.problems.length > 0 || audit.regime_changes.length > 0) {
-    out(`why approval is needed again (goal ${safeText(goalId)} is ${audit.state.replace("needs_reapproval", "needs re-approval")}):`);
+    out(
+      `why approval is needed again (goal ${safeText(goalId)} is ${audit.state.replace("needs_reapproval", "needs re-approval")}):`,
+    );
     for (const problem of audit.problems) out(`  problem: ${safeText(problem)}`);
     for (const change of audit.regime_changes) out(`  - ${safeText(change)}`);
     if (audit.approval !== null && audit.watched_paths_changed.length > 0) {
@@ -93,12 +97,18 @@ export function approvalScreen(
   const { front } = readGoal(status.dir, goalId);
   out(`goal ${safeText(front.goal_id)}: ${safeText(front.title)}`);
   out(`objective: ${safeText(front.objective)}`);
-  out(`target: ${safeText(front.target.metric_id)} ${front.target.operator} ${front.target.value} ${safeText(front.target.unit)}`);
+  out(
+    `target: ${safeText(front.target.metric_id)} ${front.target.operator} ${front.target.value} ${safeText(front.target.unit)}`,
+  );
   out(
     `leading: ${safeText(listOrNone(front.leading))}; lagging: ${safeText(listOrNone(front.lagging))}; guardrails: ${safeText(listOrNone(front.guardrails))}`,
   );
-  out(`budget: ${front.budget.rounds} rounds, ${safeText(front.budget.wall_time)} wall time, at most ${front.budget.max_open_work_items} open work items`);
-  out(`decision rule: ${safeText(front.prereg.decision_rule)} (minimum observation ${safeText(front.prereg.min_observation)})`);
+  out(
+    `budget: ${front.budget.rounds} rounds, ${safeText(front.budget.wall_time)} wall time, at most ${front.budget.max_open_work_items} open work items`,
+  );
+  out(
+    `decision rule: ${safeText(front.prereg.decision_rule)} (minimum observation ${safeText(front.prereg.min_observation)})`,
+  );
   const metrics: Record<string, string> = {};
   for (const id of referencedMetrics(front)) {
     const proposal = readProposal(status.dir, id);
@@ -119,7 +129,9 @@ export function approvalScreen(
     out(`bands ${safeText(id)}: ${describeBands(configs[id] ?? null)}`);
   }
   if (audit.approval !== null && audit.approval.bands_sha256 === null) {
-    out("bands not locked (approved before M2b): a change to a bands file is not a regime change until you approve again");
+    out(
+      "bands not locked (approved before M2b): a change to a bands file is not a regime change until you approve again",
+    );
   }
   const bands = bandsLockInfoOf(configs);
   return { lines, expected: { semantic_sha256: semanticHash(front), metrics, bands_sha256: bands.sha256 } };
@@ -169,19 +181,29 @@ interface GoalStatusReport {
 }
 
 function budgetLine(kind: string, state: BudgetState | null): string {
-  return state === null ? `${kind}: not declared` : `${kind}: ${state.remaining} of ${state.declared + state.raised} left`;
+  return state === null
+    ? `${kind}: not declared`
+    : `${kind}: ${state.remaining} of ${state.declared + state.raised} left`;
 }
 
 function printStatus(report: GoalStatusReport): void {
   const audit = report.audit_state.replace("needs_reapproval", "needs re-approval");
-  console.log(`goal ${report.goal_id}: ${report.state} (audit: ${audit}; ${report.ticks} ${report.ticks === 1 ? "tick" : "ticks"})`);
+  console.log(
+    `goal ${report.goal_id}: ${report.state} (audit: ${audit}; ${report.ticks} ${report.ticks === 1 ? "tick" : "ticks"})`,
+  );
   if (report.open_escalation !== null) {
-    console.log(`${report.open_escalation.j} ${report.open_escalation.reason_code}: ${report.open_escalation.question}`);
+    console.log(
+      `${report.open_escalation.j} ${report.open_escalation.reason_code}: ${report.open_escalation.question}`,
+    );
     console.log(`default: ${report.open_escalation.default}`);
   }
   console.log(budgetLine("rounds", report.rounds));
   console.log(budgetLine("disclosure", report.disclosure));
-  console.log(`work: ${Object.entries(report.work).map(([name, count]) => `${name.replace(/_/g, " ")} ${count}`).join(", ")}`);
+  console.log(
+    `work: ${Object.entries(report.work)
+      .map(([name, count]) => `${name.replace(/_/g, " ")} ${count}`)
+      .join(", ")}`,
+  );
   printList("next steps", report.next_steps);
 }
 
@@ -380,17 +402,20 @@ export function registerGoalCommands(program: Command): void {
         const problem = cancelProblem(run, goalId);
         if (problem !== null) throw new Error(problem);
         const open = store.fetchWorkItemsByStates(goalId, OPEN_STATES).length;
-        console.log(`goal ${goalId} is ${run.status}; cancelling ends it for good and cancels ${open} open work ${open === 1 ? "item" : "items"}`);
+        console.log(
+          `goal ${goalId} is ${run.status}; cancelling ends it for good and cancels ${open} open work ${open === 1 ? "item" : "items"}`,
+        );
         if (!(await confirmByTyping(goalId, `Type ${goalId} to cancel as ${actor}: `))) {
           console.error("not cancelled");
           process.exitCode = 1;
           return;
         }
         const result = cancelGoal(ledger, store, goalId, actor, new Date());
-        console.log(`cancelled ${goalId}; ${result.cancelled.length} work ${result.cancelled.length === 1 ? "item" : "items"} cancelled`);
+        console.log(
+          `cancelled ${goalId}; ${result.cancelled.length} work ${result.cancelled.length === 1 ? "item" : "items"} cancelled`,
+        );
       });
     });
-
 
   goal
     .command("tick")
@@ -429,7 +454,13 @@ export function registerGoalCommands(program: Command): void {
       const proposal = proposeMetric(
         new Ledger(status.dir),
         status.dir,
-        { metric_id: metricId, command, unit: options.unit, watched_paths: options.watch, image: options.image ?? null },
+        {
+          metric_id: metricId,
+          command,
+          unit: options.unit,
+          watched_paths: options.watch,
+          image: options.image ?? null,
+        },
         owner,
       );
       console.log(`proposed ${proposal.metric_id} as ${owner}`);

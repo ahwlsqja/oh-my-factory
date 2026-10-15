@@ -6,7 +6,16 @@ import { Ledger, type LedgerEvent } from "../core/ledger.js";
 import type { ProjectLocation } from "../core/paths.js";
 import { writePrivateFile } from "../core/private-fs.js";
 import { auditGoal } from "./audit.js";
-import { type BandAction, type BandResult, type BandsConfig, BandsError, type Tier, baselineWindowMs, detectBand, readBands } from "./bands.js";
+import {
+  type BandAction,
+  type BandResult,
+  type BandsConfig,
+  BandsError,
+  type Tier,
+  baselineWindowMs,
+  detectBand,
+  readBands,
+} from "./bands.js";
 import { type TargetResult, evaluateTarget } from "./evaluate.js";
 import { type GoalSemantic, type GoalTarget, goalDir } from "./goal-file.js";
 import { workingTreeFingerprint } from "./git.js";
@@ -65,7 +74,13 @@ function rolesOf(semantic: GoalSemantic, metricId: string): MetricRole[] {
 }
 
 /** Earlier values of one metric in the same regime, within the baseline window, oldest first. */
-function pastValues(events: readonly LedgerEvent[], goalId: string, metricId: string, regime: number, sinceMs: number): number[] {
+function pastValues(
+  events: readonly LedgerEvent[],
+  goalId: string,
+  metricId: string,
+  regime: number,
+  sinceMs: number,
+): number[] {
   const values: number[] = [];
   for (const event of events) {
     const { payload } = event;
@@ -79,7 +94,12 @@ function pastValues(events: readonly LedgerEvent[], goalId: string, metricId: st
 }
 
 function guardrailStatus(entry: MetricMeasurement | undefined): GuardrailStatus {
-  if (entry === undefined || entry.value === null || entry.band === null || entry.band.status === "insufficient_baseline") {
+  if (
+    entry === undefined ||
+    entry.value === null ||
+    entry.band === null ||
+    entry.band.status === "insufficient_baseline"
+  ) {
     return "unevaluated";
   }
   return entry.band.status === "breach" ? "breach" : "pass";
@@ -150,7 +170,8 @@ export async function measureGoal(
   const now = options.now ?? ((): Date => new Date());
   const ledger = new Ledger(location.dir, now);
   const audit = auditGoal(location, goalId, now());
-  if (audit.state === "draft") stop(ledger, goalId, [`goal ${goalId} is not approved (J1); nothing was measured`, ...audit.problems]);
+  if (audit.state === "draft")
+    stop(ledger, goalId, [`goal ${goalId} is not approved (J1); nothing was measured`, ...audit.problems]);
   if (audit.problems.length > 0) stop(ledger, goalId, audit.problems);
   if (audit.locked === null || audit.approval === null) stop(ledger, goalId, ["goal locks could not be verified"]);
 
@@ -218,7 +239,15 @@ export async function measureGoal(
           ledger.append({
             actor: "omf",
             type: "band.breached",
-            payload: { goal_id: goalId, metric_id: lock.metric_id, tier: band.tier, rule: band.rule, action, regime, needs_reapproval: pending },
+            payload: {
+              goal_id: goalId,
+              metric_id: lock.metric_id,
+              tier: band.tier,
+              rule: band.rule,
+              action,
+              regime,
+              needs_reapproval: pending,
+            },
           });
         }
       }

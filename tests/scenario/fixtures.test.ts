@@ -41,14 +41,20 @@ describe("verifyFixture", () => {
     expect(sha256(check.source)).toBe(FIXTURE_ALLOWLIST.find((entry) => entry.id === "null-error")?.sha256);
   });
 
-  it.each(["rm", "/bin/sh", "../fixtures/null-error", "null-error.mjs", "__proto__", ""])("refuses the unknown id %j", (id) => {
-    expect(verifyFixture(id)).toEqual({ ok: false, code: "unknown_fixture" });
-  });
+  it.each(["rm", "/bin/sh", "../fixtures/null-error", "null-error.mjs", "__proto__", ""])(
+    "refuses the unknown id %j",
+    (id) => {
+      expect(verifyFixture(id)).toEqual({ ok: false, code: "unknown_fixture" });
+    },
+  );
 
   it("accepts a byte-identical copy in another directory and refuses a modified one on hash", () => {
     const dir = copyOfFixtures();
     expect(verifyFixture("echo-everything", dir).ok).toBe(true);
-    writeFileSync(join(dir, "null-error.mjs"), `${readFileSync(join(dir, "null-error.mjs"), "utf8")}process.exit(0);\n`);
+    writeFileSync(
+      join(dir, "null-error.mjs"),
+      `${readFileSync(join(dir, "null-error.mjs"), "utf8")}process.exit(0);\n`,
+    );
     expect(verifyFixture("null-error", dir)).toEqual({ ok: false, code: "fixture_hash_mismatch" });
   });
 

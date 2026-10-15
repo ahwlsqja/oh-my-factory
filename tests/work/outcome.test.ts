@@ -60,14 +60,20 @@ describe("outcome-to-state table (M3-D19)", () => {
     expect(dispositionOf(input("success", false, { human_needed: true }))).toEqual(submit("human_needed"));
     expect(dispositionOf(input("success", false, { human_needed: false }))).toEqual(submit("merge_recommended"));
     for (const outcome of ["flawed", "blocked", "manual"] as const) {
-      expect(() => dispositionOf(input(outcome, false, { human_needed: true }))).toThrow(/human_needed is valid only on success/);
+      expect(() => dispositionOf(input(outcome, false, { human_needed: true }))).toThrow(
+        /human_needed is valid only on success/,
+      );
     }
   });
 
   it("wants no reason_code for success and a closed one for every other outcome", () => {
-    expect(() => dispositionOf(input("success", false, { reason_code: "station_error" }))).toThrow(/a success carries no reason_code/);
+    expect(() => dispositionOf(input("success", false, { reason_code: "station_error" }))).toThrow(
+      /a success carries no reason_code/,
+    );
     for (const outcome of ["flawed", "blocked", "manual"] as const) {
-      expect(() => dispositionOf(input(outcome, false, { reason_code: null })), outcome).toThrow(/needs a reason_code from the closed list/);
+      expect(() => dispositionOf(input(outcome, false, { reason_code: null })), outcome).toThrow(
+        /needs a reason_code from the closed list/,
+      );
       const loose = "p95_over_40ms" as unknown as ReasonCode;
       expect(() => dispositionOf(input(outcome, false, { reason_code: loose })), outcome).toThrow(OutcomeError);
     }

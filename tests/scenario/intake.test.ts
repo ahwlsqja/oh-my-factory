@@ -4,11 +4,19 @@ import { validateDef } from "../../src/core/schema.js";
 import { INTAKE_REJECTION_CODES, intakeAuthored, randomIds } from "../../src/scenario/intake.js";
 import type { IntakeRejectionCode, IntakeResult } from "../../src/scenario/intake.js";
 import { CANARY_PATTERN, SCENARIO_ID_PATTERN } from "../../src/scenario/types.js";
-import { AUTHOR, WORK_ID, authoredScenario, authoredYaml, fakeIds, intakeContext } from "../helpers/scenario-fixture.js";
+import {
+  AUTHOR,
+  WORK_ID,
+  authoredScenario,
+  authoredYaml,
+  fakeIds,
+  intakeContext,
+} from "../helpers/scenario-fixture.js";
 
 const oneStep = (expectation: Record<string, unknown>) => [{ invoke: { argv: ["a"] }, expect: expectation }];
 /** The codes with a non-zero count, so a test says both "this one" and "no other". */
-const codesOf = (result: IntakeResult): IntakeRejectionCode[] => INTAKE_REJECTION_CODES.filter((code) => result.rejected[code] > 0);
+const codesOf = (result: IntakeResult): IntakeRejectionCode[] =>
+  INTAKE_REJECTION_CODES.filter((code) => result.rejected[code] > 0);
 
 describe("intakeAuthored: stamping", () => {
   it("turns a multi-document stream into stamped scenarios", () => {
@@ -16,7 +24,12 @@ describe("intakeAuthored: stamping", () => {
       kind: "contradiction_canary",
       split: "test",
       decision_refs: [],
-      steps: [{ invoke: { argv: ["add", "milk"] }, expect: { stdout_matches: { kind: "exact", text: "" }, json_path: { "$.items": 1 } } }],
+      steps: [
+        {
+          invoke: { argv: ["add", "milk"] },
+          expect: { stdout_matches: { kind: "exact", text: "" }, json_path: { "$.items": 1 } },
+        },
+      ],
     });
     const result = intakeAuthored(authoredYaml(authoredScenario(), canaryDoc), intakeContext());
     expect(result.authored).toBe(2);
@@ -26,18 +39,35 @@ describe("intakeAuthored: stamping", () => {
     const second = result.stored[1];
     if (!first || !second) throw new Error("expected two stored scenarios");
 
-    expect(first).toMatchObject({ schema_version: 1, work_id: WORK_ID, interface: "cli", kind: "behavior", split: "train", decision_refs: ["d-add"] });
+    expect(first).toMatchObject({
+      schema_version: 1,
+      work_id: WORK_ID,
+      interface: "cli",
+      kind: "behavior",
+      split: "train",
+      decision_refs: ["d-add"],
+    });
     expect(first.author).toEqual(AUTHOR);
     expect(first.author.isolation).toBe("host_command");
     expect(first.steps).toEqual([
       {
         invoke: { argv: ["add", "milk"], stdin: "" },
-        expect: { exit_code: 0, stdout_matches: { kind: "exact", text: "added milk\n" }, json_path: null, note: `${first.canary} adding prints the item` },
+        expect: {
+          exit_code: 0,
+          stdout_matches: { kind: "exact", text: "added milk\n" },
+          json_path: null,
+          note: `${first.canary} adding prints the item`,
+        },
       },
     ]);
     expect(second).toMatchObject({ kind: "contradiction_canary", split: "test", decision_refs: [] });
     // No note from the author: the canary alone is the note.
-    expect(second.steps[0]?.expect).toEqual({ exit_code: null, stdout_matches: { kind: "exact", text: "" }, json_path: { "$.items": 1 }, note: second.canary });
+    expect(second.steps[0]?.expect).toEqual({
+      exit_code: null,
+      stdout_matches: { kind: "exact", text: "" },
+      json_path: { "$.items": 1 },
+      note: second.canary,
+    });
 
     for (const scenario of result.stored) {
       expect(validateDef("scenario.schema.json", "stored_scenario", scenario)).toEqual({ ok: true });
@@ -95,13 +125,17 @@ describe("intakeAuthored: stamping", () => {
 
   it("throws, instead of storing, when OMF's own ids do not make a valid stored scenario", () => {
     const broken = intakeContext({ ids: { ...fakeIds(), canary: () => "bad-canary" } });
-    expect(() => intakeAuthored(authoredYaml(authoredScenario()), broken)).toThrow(/stamped scenario is not a stored_scenario/);
+    expect(() => intakeAuthored(authoredYaml(authoredScenario()), broken)).toThrow(
+      /stamped scenario is not a stored_scenario/,
+    );
   });
 });
 
 describe("intakeAuthored: refusals", () => {
   const manyDocuments = authoredYaml(
-    ...Array.from({ length: 101 }, (_, i) => authoredScenario({ steps: [{ invoke: { argv: [`n${i}`] }, expect: { exit_code: 0 } }] })),
+    ...Array.from({ length: 101 }, (_, i) =>
+      authoredScenario({ steps: [{ invoke: { argv: [`n${i}`] }, expect: { exit_code: 0 } }] }),
+    ),
   );
 
   it.each<{ name: string; output: string; code: IntakeRejectionCode; stored?: number }>([
@@ -109,25 +143,64 @@ describe("intakeAuthored: refusals", () => {
     { name: "an alias", output: "a: &x 1\nb: *x\n", code: "yaml_invalid" },
     { name: "a duplicate key", output: "kind: behavior\nkind: nfr\n", code: "yaml_invalid" },
     { name: "an unknown key", output: authoredYaml(authoredScenario({ bogus: 1 })), code: "schema_invalid" },
-    { name: "a kind outside the enum", output: authoredYaml(authoredScenario({ kind: "weird" })), code: "schema_invalid" },
-    { name: "interface http", output: authoredYaml(authoredScenario({ interface: "http" })), code: "http_not_supported" },
+    {
+      name: "a kind outside the enum",
+      output: authoredYaml(authoredScenario({ kind: "weird" })),
+      code: "schema_invalid",
+    },
+    {
+      name: "interface http",
+      output: authoredYaml(authoredScenario({ interface: "http" })),
+      code: "http_not_supported",
+    },
     {
       name: "an http invoke in a cli scenario",
-      output: authoredYaml(authoredScenario({ steps: [{ invoke: { method: "GET", path: "/" }, expect: { exit_code: 0 } }] })),
+      output: authoredYaml(
+        authoredScenario({ steps: [{ invoke: { method: "GET", path: "/" }, expect: { exit_code: 0 } }] }),
+      ),
       code: "http_not_supported",
     },
     { name: "kind nfr", output: authoredYaml(authoredScenario({ kind: "nfr" })), code: "nfr_not_supported" },
-    { name: "an nfr_probe", output: authoredYaml(authoredScenario({ nfr_probe: { p99_ms: 5 } })), code: "nfr_not_supported" },
+    {
+      name: "an nfr_probe",
+      output: authoredYaml(authoredScenario({ nfr_probe: { p99_ms: 5 } })),
+      code: "nfr_not_supported",
+    },
     {
       name: "an anchored pattern outside the grammar",
-      output: authoredYaml(authoredScenario({ steps: oneStep({ stdout_matches: { kind: "anchored", pattern: "^(a+)+$" } }) })),
+      output: authoredYaml(
+        authoredScenario({ steps: oneStep({ stdout_matches: { kind: "anchored", pattern: "^(a+)+$" } }) }),
+      ),
       code: "pattern_unsupported",
     },
-    { name: "a json_path outside the grammar", output: authoredYaml(authoredScenario({ steps: oneStep({ json_path: { "$..x": 1 } }) })), code: "json_path_unsupported" },
-    { name: "an expectation that is only a note", output: authoredYaml(authoredScenario({ steps: oneStep({ note: "only a note" }) })), code: "expect_empty" },
-    { name: "an expectation of explicit nulls", output: authoredYaml(authoredScenario({ steps: oneStep({ exit_code: null, stdout_matches: null, json_path: null }) })), code: "expect_empty" },
-    { name: "a repeated document", output: authoredYaml(authoredScenario(), authoredScenario()), code: "duplicate_document", stored: 1 },
-    { name: "a document above the size limit", output: authoredYaml(authoredScenario({ pad: "x".repeat(70_000) })), code: "too_large" },
+    {
+      name: "a json_path outside the grammar",
+      output: authoredYaml(authoredScenario({ steps: oneStep({ json_path: { "$..x": 1 } }) })),
+      code: "json_path_unsupported",
+    },
+    {
+      name: "an expectation that is only a note",
+      output: authoredYaml(authoredScenario({ steps: oneStep({ note: "only a note" }) })),
+      code: "expect_empty",
+    },
+    {
+      name: "an expectation of explicit nulls",
+      output: authoredYaml(
+        authoredScenario({ steps: oneStep({ exit_code: null, stdout_matches: null, json_path: null }) }),
+      ),
+      code: "expect_empty",
+    },
+    {
+      name: "a repeated document",
+      output: authoredYaml(authoredScenario(), authoredScenario()),
+      code: "duplicate_document",
+      stored: 1,
+    },
+    {
+      name: "a document above the size limit",
+      output: authoredYaml(authoredScenario({ pad: "x".repeat(70_000) })),
+      code: "too_large",
+    },
     { name: "a stream above the output limit", output: "x".repeat(1024 * 1024 + 1), code: "too_large" },
     { name: "more scenarios than a set may hold", output: manyDocuments, code: "too_many", stored: 100 },
   ])("refuses $name with exactly one count", ({ output, code, stored }) => {
@@ -148,7 +221,13 @@ describe("intakeAuthored: refusals", () => {
     const outputs = [
       authoredYaml(authoredScenario({ kind: secret })),
       authoredYaml(authoredScenario({ steps: oneStep({ note: secret }) })),
-      authoredYaml(authoredScenario({ steps: [{ invoke: { argv: [secret] }, expect: { stdout_matches: { kind: "anchored", pattern: `^(${secret})+$` } } }] })),
+      authoredYaml(
+        authoredScenario({
+          steps: [
+            { invoke: { argv: [secret] }, expect: { stdout_matches: { kind: "anchored", pattern: `^(${secret})+$` } } },
+          ],
+        }),
+      ),
       `${secret}: [\n`,
     ];
     for (const output of outputs) {

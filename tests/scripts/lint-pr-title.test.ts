@@ -74,7 +74,7 @@ describe("scripts/lint-pr-title.mjs CLI", () => {
   });
 
   it("does not execute shell metacharacters in the title", () => {
-    const result = run('fix: $(false) `id`');
+    const result = run("fix: $(false) `id`");
     expect(result.status).toBe(0);
   });
 });

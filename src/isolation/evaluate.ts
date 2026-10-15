@@ -35,7 +35,10 @@ const FOLD_CASE = process.platform === "darwin";
 
 function segmentsOf(path: string, foldCase: boolean): string[] {
   const text = foldCase ? path.toLowerCase() : path;
-  return posix.normalize(text).split("/").filter((part) => part !== "" && part !== ".");
+  return posix
+    .normalize(text)
+    .split("/")
+    .filter((part) => part !== "" && part !== ".");
 }
 
 /**
@@ -116,11 +119,23 @@ export function evaluateStage(
   flag("host_pid", !PRIVATE_NAMESPACE.has(facts.pid_mode));
   flag("root_user", isRoot(facts.user));
   flag("rootfs_writable", golden.require_read_only_rootfs && !facts.read_only_rootfs);
-  flag("unexpected_env_name", facts.env_names.some((name) => !golden.allowed_env_names.includes(name)));
-  flag("vendor_binary_present", checks.vendor_binaries.some((name) => !golden.allowed_vendor_binaries.includes(name)));
-  flag("credential_present", checks.credential_paths.some((path) => !golden.allowed_credential_paths.includes(path)));
+  flag(
+    "unexpected_env_name",
+    facts.env_names.some((name) => !golden.allowed_env_names.includes(name)),
+  );
+  flag(
+    "vendor_binary_present",
+    checks.vendor_binaries.some((name) => !golden.allowed_vendor_binaries.includes(name)),
+  );
+  flag(
+    "credential_present",
+    checks.credential_paths.some((path) => !golden.allowed_credential_paths.includes(path)),
+  );
   flag("no_new_privileges_missing", !facts.security_opt.some((option) => NO_NEW_PRIVILEGES.test(option)));
-  flag("security_opt_unconfined", facts.security_opt.some((option) => UNCONFINED.test(option)));
+  flag(
+    "security_opt_unconfined",
+    facts.security_opt.some((option) => UNCONFINED.test(option)),
+  );
   flag("device_mapped", facts.devices.length > 0);
   flag("host_ipc", !PRIVATE_NAMESPACE.has(facts.ipc_mode));
   flag("host_uts", facts.uts_mode === "host");
@@ -135,7 +150,8 @@ export function evaluateStage(
       (allowed) => allowed.destination === mount.destination && sameSource(allowed.source, mount.source),
     );
     if (pinned === undefined) found.add("unexpected_mount");
-    else if (pinned.read_only !== mount.read_only) found.add(pinned.read_only ? "mount_not_read_only" : "unexpected_mount");
+    else if (pinned.read_only !== mount.read_only)
+      found.add(pinned.read_only ? "mount_not_read_only" : "unexpected_mount");
     if (pinned === undefined && mount.type === "bind") {
       flag(
         "forbidden_mount_source",

@@ -3,7 +3,8 @@ import { TOOL_CONFIG_FILES, judgeConfigTouched, resolveJudgeFiles } from "../../
 
 const BASE = ["package.json", "scripts/gates.mjs", "src/a.ts", "tests/gate.mjs", "vitest.config.ts", "README.md"];
 const resolve = (argvs: string[][], diff: string[] = [], base: string[] = BASE) => resolveJudgeFiles(argvs, base, diff);
-const touched = (argvs: string[][], diff: string[], base: string[] = BASE) => judgeConfigTouched(resolve(argvs, diff, base), diff);
+const touched = (argvs: string[][], diff: string[], base: string[] = BASE) =>
+  judgeConfigTouched(resolve(argvs, diff, base), diff);
 
 describe("resolveJudgeFiles", () => {
   it("resolves an exact file token that is in the base tree", () => {
@@ -12,7 +13,9 @@ describe("resolveJudgeFiles", () => {
   });
 
   it("resolves a token that names a file added by the diff", () => {
-    expect(resolve([["node", "scripts/new-gate.mjs"]], ["scripts/new-gate.mjs"]).tracked).toEqual(["scripts/new-gate.mjs"]);
+    expect(resolve([["node", "scripts/new-gate.mjs"]], ["scripts/new-gate.mjs"]).tracked).toEqual([
+      "scripts/new-gate.mjs",
+    ]);
   });
 
   it("does not expand a directory token: `eslint src`, `pytest src` and `.` resolve no file from the directory", () => {
@@ -40,7 +43,9 @@ describe("resolveJudgeFiles", () => {
 
   it("knows python and pytest configs, including conftest.py anywhere", () => {
     const pytest = resolve([["python", "-m", "pytest"]]).config_globs;
-    expect(pytest).toEqual(expect.arrayContaining(["pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg", "**/conftest.py"]));
+    expect(pytest).toEqual(
+      expect.arrayContaining(["pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg", "**/conftest.py"]),
+    );
   });
 
   it("an unknown tool and a prototype key resolve nothing", () => {
@@ -61,7 +66,15 @@ describe("judgeConfigTouched", () => {
   });
 
   it("is false for a normal change when the gate names a script and a directory", () => {
-    expect(touched([["node", "scripts/gates.mjs"], ["eslint", "src"]], ["src/a.ts", "src/b/c.ts"])).toBe(false);
+    expect(
+      touched(
+        [
+          ["node", "scripts/gates.mjs"],
+          ["eslint", "src"],
+        ],
+        ["src/a.ts", "src/b/c.ts"],
+      ),
+    ).toBe(false);
   });
 
   it("is true for an edited package.json when the gate is npm test", () => {

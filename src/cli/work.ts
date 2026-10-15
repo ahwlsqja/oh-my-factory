@@ -142,14 +142,18 @@ export function parseBudgetRaiseArgs(raw: BudgetRaiseArgs): ParsedBudgetRaise {
   const workForm = rounds !== undefined || usd !== undefined || WORK_ID_ARG.test(raw.id);
   if (!workForm) {
     if (raw.kind === undefined || raw.amount === undefined) {
-      throw new Error("budget raise needs <kind> <amount> for a goal, or --rounds <n> or --usd <amount> for a work item");
+      throw new Error(
+        "budget raise needs <kind> <amount> for a goal, or --rounds <n> or --usd <amount> for a work item",
+      );
     }
     const args: BudgetArgs = { verb: "raise", goalId: raw.id, kind: raw.kind, amount: raw.amount };
     parseBudgetArgs(args);
     return { form: "goal", args };
   }
-  if (!WORK_ID_ARG.test(raw.id)) throw new Error(`--rounds and --usd raise a work item's limit; ${raw.id} is not a work id`);
-  if (raw.kind !== undefined || raw.amount !== undefined) throw new Error("a work item takes --rounds or --usd, not <kind> <amount>");
+  if (!WORK_ID_ARG.test(raw.id))
+    throw new Error(`--rounds and --usd raise a work item's limit; ${raw.id} is not a work id`);
+  if (raw.kind !== undefined || raw.amount !== undefined)
+    throw new Error("a work item takes --rounds or --usd, not <kind> <amount>");
   if (rounds !== undefined && usd === undefined) {
     if (!/^[1-9][0-9]*$/.test(rounds) || !Number.isSafeInteger(Number(rounds))) {
       throw new WorkBudgetError("invalid_amount", `--rounds must be a positive integer; got ${rounds}`);
@@ -216,7 +220,6 @@ export async function workLimitRaiseFlow(
   return 0;
 }
 
-
 /** The wall time clock as `auditGoal` enforces it: the limit is the approved time plus the raises (D26). */
 export interface WallTimeReport {
   base_ms: number;
@@ -262,7 +265,14 @@ function wallTimeOf(
   const elapsed_ms = now.getTime() - Date.parse(approval.first_approved_at);
   const remaining_ms = limit_ms - elapsed_ms;
   return {
-    wall_time: { base_ms, raised_ms: limit_ms - base_ms, limit_ms, elapsed_ms, remaining_ms, exceeded: remaining_ms < 0 },
+    wall_time: {
+      base_ms,
+      raised_ms: limit_ms - base_ms,
+      limit_ms,
+      elapsed_ms,
+      remaining_ms,
+      exceeded: remaining_ms < 0,
+    },
     wall_time_note: null,
   };
 }
@@ -296,7 +306,11 @@ function stateLine(label: string, state: BudgetState | null): string {
 
 /** The text of `omf budget show`, also printed above the confirmation prompt of `declare` and `raise`. */
 export function budgetLines(report: BudgetReport): string[] {
-  const lines = [`budget for ${report.goal_id}`, stateLine("rounds", report.rounds), stateLine("disclosure", report.disclosure)];
+  const lines = [
+    `budget for ${report.goal_id}`,
+    stateLine("rounds", report.rounds),
+    stateLine("disclosure", report.disclosure),
+  ];
   const wall = report.wall_time;
   if (wall === null) {
     lines.push(`wall time: ${report.wall_time_note ?? "unavailable"}`);
@@ -361,9 +375,16 @@ export function registerBudgetCommands(program: Command): void {
     .argument("[amount]", "goal form: a positive integer, or a duration such as 2h for wall_time")
     .option("--rounds <n>", "work item form: raise the item's round limit by <n>")
     .option("--usd <amount>", "work item form: raise the item's model spend limit by <amount> dollars")
-    .description("J8: raise a goal's rounds, disclosure or wall_time cap, or a work item's --rounds or --usd limit (needs an interactive terminal)")
+    .description(
+      "J8: raise a goal's rounds, disclosure or wall_time cap, or a work item's --rounds or --usd limit (needs an interactive terminal)",
+    )
     .action(
-      async (id: string, kind: string | undefined, amount: string | undefined, options: { rounds?: string; usd?: string }) => {
+      async (
+        id: string,
+        kind: string | undefined,
+        amount: string | undefined,
+        options: { rounds?: string; usd?: string },
+      ) => {
         const status = requireProject(process.cwd());
         const parsed = parseBudgetRaiseArgs({ id, kind, amount, ...options });
         if (parsed.form === "goal") {
@@ -409,7 +430,12 @@ function assertApprovable(location: ProjectLocation, workId: string, actor: stri
  * authoritative, D27): a crash in between leaves a recorded approval and an item still awaiting one,
  * which `omf work approve` can finish. No J number: the spec has no item-approval judgment (D5).
  */
-export function runWorkApprove(location: ProjectLocation, workId: string, actor: string, now: Date = new Date()): WorkItem {
+export function runWorkApprove(
+  location: ProjectLocation,
+  workId: string,
+  actor: string,
+  now: Date = new Date(),
+): WorkItem {
   const item = assertApprovable(location, workId, actor);
   new Ledger(location.dir).append({
     actor,
@@ -435,7 +461,8 @@ export function runVeto(
   if (text.length === 0 || text.length > 500) throw new Error("veto reason must be 1 to 500 characters");
   const item = requireItem(location.dir, workId);
   const previous = item.front.state;
-  if (!canTransition(previous, "vetoed")) throw new Error(`work item ${workId} is already ${previous}; nothing to veto`);
+  if (!canTransition(previous, "vetoed"))
+    throw new Error(`work item ${workId} is already ${previous}; nothing to veto`);
   const claim = claimStatus(item.dir);
   new Ledger(location.dir).append({
     actor,
@@ -466,12 +493,14 @@ export function registerWorkCommands(program: Command): void {
     .action((goalId: string, options: { state: string[]; json?: boolean }) => {
       const status = requireProject(process.cwd());
       for (const state of options.state) {
-        if (!ALL_STATES.includes(state as WorkState)) throw new Error(`unknown state ${state}; use ${ALL_STATES.join(", ")}`);
+        if (!ALL_STATES.includes(state as WorkState))
+          throw new Error(`unknown state ${state}; use ${ALL_STATES.join(", ")}`);
       }
       const events = new Ledger(status.dir).readVerified();
       const { items, malformed, repairable } = verifiedItems(createMarkdownStore(status.dir), events, goalId);
       const repairableIds = new Set(repairable.map((entry) => entry.work_id));
-      const shown = options.state.length === 0 ? items : items.filter((item) => options.state.includes(item.front.state));
+      const shown =
+        options.state.length === 0 ? items : items.filter((item) => options.state.includes(item.front.state));
       if (options.json) {
         console.log(JSON.stringify({ goal_id: goalId, items: shown.map((item) => item.front), malformed }, null, 2));
       } else {
@@ -485,7 +514,9 @@ export function registerWorkCommands(program: Command): void {
         }
       }
       if (malformed.length > 0) {
-        console.error(`warning: ${malformed.length} malformed work item(s) are never dispatched or counted as open work`);
+        console.error(
+          `warning: ${malformed.length} malformed work item(s) are never dispatched or counted as open work`,
+        );
       }
       process.exitCode = malformed.length > 0 ? 1 : 0;
     });

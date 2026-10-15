@@ -35,12 +35,27 @@ describe("runSealStage: success", () => {
     const fixture = join(dir, "authored.yaml");
     // The author tries to name its own id, exposure, status and author; OMF drops all four.
     const planted = ["scenario_id: s-evil", "exposure: 99", "status: retired", "author: {vendor: forged}"];
-    writeFileSync(fixture, `${authoredDoc({ split: "train", argv: ["zebra-step-text-7"], extra: planted })}\n---\n${authoredDoc({ split: "test" })}\n`);
+    writeFileSync(
+      fixture,
+      `${authoredDoc({ split: "train", argv: ["zebra-step-text-7"], extra: planted })}\n---\n${authoredDoc({ split: "test" })}\n`,
+    );
 
     const result = stored(await runSealStage(depsFor(s, commandAuthor("print", dir, fixture))));
     expect(result.round).toBe(1);
-    expect(result.author).toEqual({ vendor: "command", model: "stub", at: s.now.toISOString(), isolation: "host_command" });
-    expect(result.counts).toMatchObject({ authored: 2, stored: 2, behavior: 2, contradiction_canary: 0, train: 1, test: 1 });
+    expect(result.author).toEqual({
+      vendor: "command",
+      model: "stub",
+      at: s.now.toISOString(),
+      isolation: "host_command",
+    });
+    expect(result.counts).toMatchObject({
+      authored: 2,
+      stored: 2,
+      behavior: 2,
+      contradiction_canary: 0,
+      train: 1,
+      test: 1,
+    });
     expect(result.counts.ignored_fields).toBeGreaterThanOrEqual(1);
 
     const ref = { work_id: s.f.workId, seal_id: result.seal_id };
@@ -68,9 +83,12 @@ describe("runSealStage: success", () => {
     // Scenario text lives in the vault and never in the ledger (M3c-D10). The file is the positive control.
     const train = read.scenarios.find((scenario) => scenario.split === "train");
     if (train === undefined) throw new Error("no train scenario");
-    expect(readFileSync(join(setDir(s.vault, ref), `${train.scenario_id}.yaml`), "utf8")).toContain("zebra-step-text-7");
+    expect(readFileSync(join(setDir(s.vault, ref), `${train.scenario_id}.yaml`), "utf8")).toContain(
+      "zebra-step-text-7",
+    );
     const ledgerText = readFileSync(s.f.fx.ledger.file, "utf8");
-    for (const secret of ["zebra-step-text-7", train.canary, train.scenario_id]) expect(ledgerText).not.toContain(secret);
+    for (const secret of ["zebra-step-text-7", train.canary, train.scenario_id])
+      expect(ledgerText).not.toContain(secret);
   });
 
   it("takes the next round on a re-seal, and the prompt holds decision ids and counts but no scenario", async () => {
@@ -93,7 +111,10 @@ describe("runSealStage: success", () => {
     for (const scenario of old.scenarios) expect(prompt).not.toContain(scenario.scenario_id);
 
     const requested = sealEvents(s).filter((event) => event.type === "seal.requested");
-    expect(requested.map((event) => event.payload.feedback)).toEqual([null, { unlinked_decision_count: 1, weak: 2, contradictions: 0, invalid: 1 }]);
+    expect(requested.map((event) => event.payload.feedback)).toEqual([
+      null,
+      { unlinked_decision_count: 1, weak: 2, contradictions: 0, invalid: 1 },
+    ]);
   });
 });
 
@@ -108,9 +129,16 @@ describe("runSealStage: no set is stored", () => {
       ["print", [garbage], "no_valid_scenarios"],
     ];
     for (const [mode, args, code] of runs) {
-      expect(await runSealStage(depsFor(s, commandAuthor(mode, record(), ...args))), mode).toEqual({ status: "failed", code });
+      expect(await runSealStage(depsFor(s, commandAuthor(mode, record(), ...args))), mode).toEqual({
+        status: "failed",
+        code,
+      });
     }
-    expect(sealEvents(s).filter((event) => event.type === "seal.failed").map((event) => event.payload.code)).toEqual(["nonzero_exit", "no_output", "no_valid_scenarios"]);
+    expect(
+      sealEvents(s)
+        .filter((event) => event.type === "seal.failed")
+        .map((event) => event.payload.code),
+    ).toEqual(["nonzero_exit", "no_output", "no_valid_scenarios"]);
     expect(readdirSync(s.vault.dir), "nothing was written under the vault").toEqual([]);
     expect(stored(await runSealStage(depsFor(s, commandAuthor("from_feedback", record())))).round).toBe(1);
   });
@@ -120,7 +148,10 @@ describe("runSealStage: no set is stored", () => {
     const session = countingSession();
     const before = s.f.fx.ledger.readVerified().length;
     const result = await runSealStage(depsFor(s, session));
-    expect(result).toMatchObject({ status: "blocked_gate1", reasons: expect.arrayContaining([{ code: "interface_missing" }]) });
+    expect(result).toMatchObject({
+      status: "blocked_gate1",
+      reasons: expect.arrayContaining([{ code: "interface_missing" }]),
+    });
     expect(session.calls).toHaveLength(0);
     expect(s.f.fx.ledger.readVerified()).toHaveLength(before);
   });
@@ -138,7 +169,10 @@ describe("runSealStage: no set is stored", () => {
 
     const without = sealFixture();
     startWork(without);
-    expect(await runSealStage(depsFor(without, countingSession()))).toEqual({ status: "refused", reason: "implementation_started" });
+    expect(await runSealStage(depsFor(without, countingSession()))).toEqual({
+      status: "refused",
+      reason: "implementation_started",
+    });
     expect(sealEvents(without)).toEqual([]);
   });
 
@@ -146,7 +180,10 @@ describe("runSealStage: no set is stored", () => {
     const s = sealFixture("open");
     const expected = gate1ForItem(s.f.fx.location, s.f.item, s.f.fx.ledger.readVerified(), s.now).result;
     if (expected.status === "pass") throw new Error("the open fixture should not pass GATE-1");
-    expect(await runSealStage(depsFor(s, countingSession()))).toEqual({ status: "blocked_gate1", reasons: expected.reasons });
+    expect(await runSealStage(depsFor(s, countingSession()))).toEqual({
+      status: "blocked_gate1",
+      reasons: expected.reasons,
+    });
   });
 
   it("a started item is reused even when GATE-1 no longer passes (an expired deferral), and the author is not called", async () => {
@@ -207,7 +244,14 @@ process.stdout.write(JSON.stringify({ status: result.status, seal_id: result.sea
 describe("runSealStage: concurrency", () => {
   it("two processes sealing one item never delete or overwrite each other's set", async () => {
     const s = sealFixture();
-    const args = (): string[] => [resolve("dist"), s.f.fx.repo, s.f.workId, s.f.fx.env.OMF_HOME ?? "", AUTHOR_STUB, record()];
+    const args = (): string[] => [
+      resolve("dist"),
+      s.f.fx.repo,
+      s.f.workId,
+      s.f.fx.env.OMF_HOME ?? "",
+      AUTHOR_STUB,
+      record(),
+    ];
     const runs = await Promise.all([runChild(SEALER, args()), runChild(SEALER, args())]);
     expect(runs.map((run) => run.code)).toEqual([0, 0]);
     const results = runs.map((run) => JSON.parse(run.out) as { status: string; seal_id: string | null });

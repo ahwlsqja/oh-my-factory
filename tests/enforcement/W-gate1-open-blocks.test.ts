@@ -25,7 +25,11 @@ import {
 describe("W-gate1-open-blocks", () => {
   it("zero decisions block with interface_missing; lint exits 3 and persists a record with no default", () => {
     const f = setupDecisionItem();
-    expect(reportAt(f, NOW).gate).toEqual({ status: "blocked_on_user", j: "J2", reasons: [{ code: "interface_missing" }] });
+    expect(reportAt(f, NOW).gate).toEqual({
+      status: "blocked_on_user",
+      j: "J2",
+      reasons: [{ code: "interface_missing" }],
+    });
 
     settle(f);
     const run = decideCli(f, ["lint", f.workId]);
@@ -39,7 +43,10 @@ describe("W-gate1-open-blocks", () => {
     const f = setupDecisionItem();
     closeInterface(f);
     addOpen(f, "d-cache");
-    expect(reasonsFor(reportAt(f, NOW).gate, "d-cache")).toContainEqual({ code: "required_open", decision_id: "d-cache" });
+    expect(reasonsFor(reportAt(f, NOW).gate, "d-cache")).toContainEqual({
+      code: "required_open",
+      decision_id: "d-cache",
+    });
   });
 
   it("a missing interface blocks even when every other decision is closed", () => {
@@ -54,7 +61,14 @@ describe("W-gate1-open-blocks", () => {
     closeInterface(f);
     addOpen(f, "d-cache");
     forge(f, "omf", "decision.deferred", "d-cache", {
-      deferral: { owner: "omf", reason: "later", revisit_trigger: "never", default: "ship as is", signed_by: "omf", expires_at: "2099-01-01T00:00:00.000Z" },
+      deferral: {
+        owner: "omf",
+        reason: "later",
+        revisit_trigger: "never",
+        default: "ship as is",
+        signed_by: "omf",
+        expires_at: "2099-01-01T00:00:00.000Z",
+      },
     });
     const { state, gate } = reportAt(f, NOW);
     expect(findDecision(state, "d-cache")?.status).toBe("open");
@@ -70,7 +84,13 @@ describe("W-gate1-open-blocks", () => {
       f.fx.location,
       f.workId,
       "d-cache",
-      { owner: "dev", reason: "Waiting on the cache benchmark.", revisit_trigger: "After the benchmark lands.", default: "Keep the current behavior.", expires_at: "2026-10-15T00:00:00.000Z" },
+      {
+        owner: "dev",
+        reason: "Waiting on the cache benchmark.",
+        revisit_trigger: "After the benchmark lands.",
+        default: "Keep the current behavior.",
+        expires_at: "2026-10-15T00:00:00.000Z",
+      },
       HUMAN,
       NOW,
     );
@@ -88,7 +108,9 @@ describe("W-gate1-open-blocks", () => {
   });
 
   it("an intent with open questions never passes until a person has closed each one (F8)", () => {
-    const f = setupDecisionItem({ openQuestions: ["Which entries are evicted first?", "Who invalidates stale entries?"] });
+    const f = setupDecisionItem({
+      openQuestions: ["Which entries are evicted first?", "Who invalidates stale entries?"],
+    });
 
     // Nothing is seeded before the first write, so GATE-1 must be fail-closed on its own.
     const unseeded = reasonsOf(reportAt(f, NOW).gate);

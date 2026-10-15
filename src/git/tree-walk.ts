@@ -32,8 +32,19 @@ export function walkTree(root: string, limits: Partial<WalkLimits> = {}): TreeEn
       const path = rel === "" ? name : `${rel}/${name}`;
       const stat = lstatSync(join(real, path));
       if (entries.length >= max.maxEntries) throw new TreeLimitError("too many entries");
-      const kind: TreeEntryKind = stat.isSymbolicLink() ? "symlink" : stat.isDirectory() ? "dir" : stat.isFile() ? "file" : "other";
-      entries.push({ path, kind, size: kind === "file" ? stat.size : 0, executable: kind === "file" && (stat.mode & 0o111) !== 0 });
+      const kind: TreeEntryKind = stat.isSymbolicLink()
+        ? "symlink"
+        : stat.isDirectory()
+          ? "dir"
+          : stat.isFile()
+            ? "file"
+            : "other";
+      entries.push({
+        path,
+        kind,
+        size: kind === "file" ? stat.size : 0,
+        executable: kind === "file" && (stat.mode & 0o111) !== 0,
+      });
       if (kind === "dir") {
         if (depth + 1 >= max.maxDepth) throw new TreeLimitError("tree too deep");
         visit(path, depth + 1);

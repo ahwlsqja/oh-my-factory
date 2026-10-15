@@ -1,13 +1,37 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, readdirSync, readlinkSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readlinkSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { gitEnv } from "../../src/core/paths.js";
-import { HARDENED_GIT_CONFIG, HostGitError, createScratchGitDir, hardenedGitEnv, runHostGit, type GitTarget } from "../../src/git/hardened.js";
+import {
+  HARDENED_GIT_CONFIG,
+  HostGitError,
+  createScratchGitDir,
+  hardenedGitEnv,
+  runHostGit,
+  type GitTarget,
+} from "../../src/git/hardened.js";
 import * as ops from "../../src/git/ops.js";
 import {
-  CHANGED_PATHS, listFiles, makeBundles, makeEmptyQuarantine, makeOpsFixture, put, realTempDir,
-  type BundleFixture, type OpsFixture,
+  CHANGED_PATHS,
+  listFiles,
+  makeBundles,
+  makeEmptyQuarantine,
+  makeOpsFixture,
+  put,
+  realTempDir,
+  type BundleFixture,
+  type OpsFixture,
 } from "../helpers/ops-fixture.js";
 import { gitIn } from "../helpers/tmp.js";
 
@@ -28,7 +52,10 @@ async function codeOf(promise: Promise<unknown>): Promise<string | undefined> {
 }
 
 /** A target with a private temp index, as `isDirClean` requires. */
-const withIndex = (target: GitTarget): GitTarget => ({ ...target, indexFile: join(realTempDir("omf-index-"), "index") });
+const withIndex = (target: GitTarget): GitTarget => ({
+  ...target,
+  indexFile: join(realTempDir("omf-index-"), "index"),
+});
 
 describe("read-only operations", () => {
   it("resolveCommit takes a 40-hex sha and nothing else", async () => {
@@ -42,14 +69,35 @@ describe("read-only operations", () => {
   it("rawDiff and treePaths fail closed on a path that is not valid UTF-8, with a message that names no path", async () => {
     const repo = realTempDir("omf-badpath-");
     const run = (args: string[], input?: Buffer): string =>
-      execFileSync("git", args, { cwd: repo, input, encoding: "utf8", env: gitEnv(), stdio: ["pipe", "pipe", "pipe"] }).trim();
+      execFileSync("git", args, {
+        cwd: repo,
+        input,
+        encoding: "utf8",
+        env: gitEnv(),
+        stdio: ["pipe", "pipe", "pipe"],
+      }).trim();
     run(["init", "-q", "-b", "main"]);
     const blob = run(["hash-object", "-w", "--stdin"], Buffer.from("x\n"));
     const empty = run(["hash-object", "-t", "tree", "-w", "--stdin", "--literally"], Buffer.alloc(0));
-    const entry = Buffer.concat([Buffer.from("100644 "), Buffer.from([0xff, 0x61]), Buffer.from([0]), Buffer.from(blob, "hex")]);
+    const entry = Buffer.concat([
+      Buffer.from("100644 "),
+      Buffer.from([0xff, 0x61]),
+      Buffer.from([0]),
+      Buffer.from(blob, "hex"),
+    ]);
     const tree = run(["hash-object", "-t", "tree", "-w", "--stdin", "--literally"], entry);
     const commit = (treeSha: string, parent?: string): string =>
-      run(["-c", "user.name=omf-test", "-c", "user.email=omf-test@example.invalid", "commit-tree", treeSha, ...(parent === undefined ? [] : ["-p", parent]), "-m", "c"]);
+      run([
+        "-c",
+        "user.name=omf-test",
+        "-c",
+        "user.email=omf-test@example.invalid",
+        "commit-tree",
+        treeSha,
+        ...(parent === undefined ? [] : ["-p", parent]),
+        "-m",
+        "c",
+      ]);
     const base = commit(empty);
     const head = commit(tree, base);
     const target: GitTarget = { gitDir: join(repo, ".git") };
@@ -60,7 +108,9 @@ describe("read-only operations", () => {
   it("isAncestor answers for shas and refuses names", async () => {
     expect(await ops.isAncestor(fx.quarantine, fx.base, fx.head)).toBe(true);
     expect(await ops.isAncestor(fx.quarantine, fx.head, fx.base)).toBe(false);
-    await expect(ops.isAncestor(fx.quarantine, "main", fx.head)).rejects.toThrow("ancestor must be a 40-hex commit sha");
+    await expect(ops.isAncestor(fx.quarantine, "main", fx.head)).rejects.toThrow(
+      "ancestor must be a 40-hex commit sha",
+    );
   });
 
   it("rawDiff marks A, M, D and T with modes, and reports a rename as D plus A", async () => {
@@ -110,8 +160,13 @@ describe("commit messages are read as raw bytes", () => {
     const canary = "OMF-CANARY-9f3a";
     const tree = gitIn(fx.gitDir, "rev-parse", `${fx.head}^{tree}`).trim();
     const body = `tree ${tree}\nparent ${fx.head}\nauthor t <t@example.invalid> 1700000000 +0000\ncommitter t <t@example.invalid> 1700000000 +0000\nencoding UTF-16\n\nmsg ${canary}\n`;
-    const sha = execFileSync("git", ["--git-dir", fx.gitDir, "hash-object", "-t", "commit", "-w", "--stdin"], { input: body, encoding: "utf8" }).trim();
-    const viaLog = execFileSync("git", ["--git-dir", fx.gitDir, "log", "--format=%B", `${fx.head}..${sha}`], { encoding: "utf8" });
+    const sha = execFileSync("git", ["--git-dir", fx.gitDir, "hash-object", "-t", "commit", "-w", "--stdin"], {
+      input: body,
+      encoding: "utf8",
+    }).trim();
+    const viaLog = execFileSync("git", ["--git-dir", fx.gitDir, "log", "--format=%B", `${fx.head}..${sha}`], {
+      encoding: "utf8",
+    });
     expect(viaLog).not.toContain(canary); // the trap: log re-encodes per the header
     const messages = await ops.commitMessages(fx.quarantine, fx.head, sha);
     expect(messages).toContain(canary);
@@ -140,11 +195,15 @@ describe("materialising and checking a tree", () => {
     const link = join(realTempDir("omf-link-"), "dest");
     symlinkSync(outside, link);
     await expect(ops.exportTree(fx.quarantine, fx.head, link)).rejects.toThrow("destination must be a real directory");
-    await expect(ops.exportTree(fx.quarantine, fx.head, join(fx.gitDir, "export"))).rejects.toThrow("must live outside the repository");
+    await expect(ops.exportTree(fx.quarantine, fx.head, join(fx.gitDir, "export"))).rejects.toThrow(
+      "must live outside the repository",
+    );
     const home = realTempDir("omf-home-");
     mkdirSync(join(home, ".claude", "x"), { recursive: true });
     vi.stubEnv("HOME", home);
-    await expect(ops.exportTree(fx.quarantine, fx.head, join(home, ".claude", "x"))).rejects.toThrow("must not live inside");
+    await expect(ops.exportTree(fx.quarantine, fx.head, join(home, ".claude", "x"))).rejects.toThrow(
+      "must not live inside",
+    );
     expect(readdirSync(outside)).toEqual([]);
   });
 
@@ -152,7 +211,11 @@ describe("materialising and checking a tree", () => {
     const outside = realTempDir("omf-outside-");
     const planted = realTempDir("omf-planted-");
     symlinkSync(outside, join(planted, "src"));
-    const target: GitTarget = { gitDir: fx.gitDir, workTree: planted, indexFile: join(realTempDir("omf-index-"), "index") };
+    const target: GitTarget = {
+      gitDir: fx.gitDir,
+      workTree: planted,
+      indexFile: join(realTempDir("omf-index-"), "index"),
+    };
     await runHostGit(target, ["read-tree", fx.head]);
     expect(await codeOf(runHostGit(target, ["checkout-index", "-a"]))).toBe("git_failed");
     expect(readdirSync(outside)).toEqual([]);
@@ -193,7 +256,9 @@ describe("materialising and checking a tree", () => {
   it("isDirClean needs a private index of its own", async () => {
     const dir = realTempDir("omf-clean-");
     await expect(ops.isDirClean(fx.quarantine, fx.head, dir)).rejects.toThrow("private target.indexFile");
-    await expect(ops.isDirClean({ ...fx.quarantine, indexFile: join(fx.gitDir, "index") }, fx.head, dir)).rejects.toThrow("own index");
+    await expect(
+      ops.isDirClean({ ...fx.quarantine, indexFile: join(fx.gitDir, "index") }, fx.head, dir),
+    ).rejects.toThrow("own index");
   });
 
   it("a revert patch takes head back to base and forward again, byte for byte", async () => {
@@ -213,7 +278,16 @@ describe("materialising and checking a tree", () => {
     const outside = realTempDir("omf-outside-");
     symlinkSync(outside, join(dir, "link"));
     const adding = (path: string): string =>
-      ["diff --git a/PATH b/PATH", "new file mode 100644", "index 0000000..e69de29", "--- /dev/null", "+++ b/PATH", "@@ -0,0 +1 @@", "+pwn", ""]
+      [
+        "diff --git a/PATH b/PATH",
+        "new file mode 100644",
+        "index 0000000..e69de29",
+        "--- /dev/null",
+        "+++ b/PATH",
+        "@@ -0,0 +1 @@",
+        "+pwn",
+        "",
+      ]
         .join("\n")
         .replaceAll("PATH", path);
     for (const path of [".git/hooks/pre-commit", ".GIT/x", "link/pwn.txt"]) {
@@ -263,12 +337,16 @@ describe("bundle import without a transport", () => {
   });
 
   it("refuses a relative bundle path", async () => {
-    await expect(ops.bundleVerify(makeEmptyQuarantine(), "good.bundle")).rejects.toThrow("bundle file must be an absolute path");
+    await expect(ops.bundleVerify(makeEmptyQuarantine(), "good.bundle")).rejects.toThrow(
+      "bundle file must be an absolute path",
+    );
   });
 
   it("a plain fetch of a bundle fails under the hardened prefix, which is why import has no fetch path", async () => {
     const quarantine = makeEmptyQuarantine();
-    expect(await codeOf(runHostGit(quarantine, ["fetch", bundles.good, "main"], { cwd: quarantine.gitDir }))).toBe("git_failed");
+    expect(await codeOf(runHostGit(quarantine, ["fetch", bundles.good, "main"], { cwd: quarantine.gitDir }))).toBe(
+      "git_failed",
+    );
     let stderr = "";
     try {
       execFileSync("git", [...HARDENED_GIT_CONFIG, `--git-dir=${quarantine.gitDir}`, "fetch", bundles.good, "main"], {

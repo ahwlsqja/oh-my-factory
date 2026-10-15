@@ -26,7 +26,9 @@ describe("fbCanaryHits", () => {
   it("does not report a canary glued into a longer token, and finds nothing in a feedback text", () => {
     expect(fbCanaryHits("hash a7731b0c906482d and w-7731abcdef01")).toEqual([]);
     expect(
-      fbCanaryHits("Masked feedback from the train scenarios.\n- interface: 33% of 6 scenarios\nNo other information about the scenarios is available."),
+      fbCanaryHits(
+        "Masked feedback from the train scenarios.\n- interface: 33% of 6 scenarios\nNo other information about the scenarios is available.",
+      ),
     ).toEqual([]);
   });
 

@@ -32,7 +32,9 @@ describe("W-gate3-measured-below-declared-stops", () => {
       measurement("harness", "L2"),
     ]);
     expect(rounds.level).toBe("L1");
-    expect(evaluateGate3(measuredFrom(healthyParts({ isolation: rounds }))).failed).toEqual(["isolation_below_declared"]);
+    expect(evaluateGate3(measuredFrom(healthyParts({ isolation: rounds }))).failed).toEqual([
+      "isolation_below_declared",
+    ]);
   });
 
   it("control: all four stages at L2 with L2 declared pass, and a lower declaration accepts a lower level", () => {
@@ -44,7 +46,9 @@ describe("W-gate3-measured-below-declared-stops", () => {
 
 describe("W-gate3-unmeasured-is-lowest", () => {
   it.each([0, 1, 2, 3])("%i of four stages measured at L2 is unmeasured, never L2, and fails GATE-3", (count) => {
-    const levels: Partial<Record<IsolationStage, IsolationLevel>> = Object.fromEntries(ISOLATION_STAGES.slice(0, count).map((stage) => [stage, "L2"]));
+    const levels: Partial<Record<IsolationStage, IsolationLevel>> = Object.fromEntries(
+      ISOLATION_STAGES.slice(0, count).map((stage) => [stage, "L2"]),
+    );
     const isolation = isolationFor(levels);
     expect(isolation).toMatchObject({ level: "unmeasured", complete: false });
     const result = evaluateGate3(measuredFrom(healthyParts({ isolation })));
@@ -61,11 +65,20 @@ describe("W-gate3-unmeasured-is-lowest", () => {
     mkdirSync(itemDir);
     const ledger = new Ledger(dir, () => new Date("2026-10-12T10:00:00.000Z"));
     // Three stages are really recorded at L2. The author stage never is.
-    for (const stage of ["implementer", "sut", "harness"] as const) recordStageMeasurement(ledger, SCOPE, itemDir, measurement(stage, "L2"));
+    for (const stage of ["implementer", "sut", "harness"] as const)
+      recordStageMeasurement(ledger, SCOPE, itemDir, measurement(stage, "L2"));
 
     // The forgeries: an advisory preflight claiming L2, and an isolation.json that claims all four stages at L2.
-    writeFileSync(join(itemDir, "preflight.json"), JSON.stringify({ isolation: { declared: "L2", measured: "L2", advisory: true } }));
-    const forged = { schema_version: 1, run_id: RUN, stages: Object.fromEntries(ISOLATION_STAGES.map((stage) => [stage, [measurement(stage, "L2")]])), level: "L2" };
+    writeFileSync(
+      join(itemDir, "preflight.json"),
+      JSON.stringify({ isolation: { declared: "L2", measured: "L2", advisory: true } }),
+    );
+    const forged = {
+      schema_version: 1,
+      run_id: RUN,
+      stages: Object.fromEntries(ISOLATION_STAGES.map((stage) => [stage, [measurement(stage, "L2")]])),
+      level: "L2",
+    };
     mkdirSync(dirname(isolationPath(itemDir, RUN)), { recursive: true });
     writeFileSync(isolationPath(itemDir, RUN), JSON.stringify(forged));
 
@@ -80,7 +93,12 @@ describe("W-gate3-unmeasured-is-lowest", () => {
     const itemDir = join(dir, "item");
     const ledger = new Ledger(dir, () => new Date("2026-10-12T10:00:00.000Z"));
     mkdirSync(dirname(isolationPath(itemDir, RUN)), { recursive: true });
-    const forged = { schema_version: 1, run_id: RUN, stages: Object.fromEntries(ISOLATION_STAGES.map((stage) => [stage, [measurement(stage, "L2")]])), level: "L2" };
+    const forged = {
+      schema_version: 1,
+      run_id: RUN,
+      stages: Object.fromEntries(ISOLATION_STAGES.map((stage) => [stage, [measurement(stage, "L2")]])),
+      level: "L2",
+    };
     writeFileSync(isolationPath(itemDir, RUN), JSON.stringify(forged));
     const loaded = loadRunIsolation(itemDir, SCOPE, ledger.readVerified());
     expect(Object.values(loaded.stages).every((stage) => stage === null)).toBe(true);

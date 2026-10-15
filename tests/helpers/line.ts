@@ -76,7 +76,10 @@ export type StationBody = (ctx: StationContext) => StationResult | Promise<Stati
  * All seven stations, scripted: each logs its id when it is entered and then runs its body from `bodies` (default:
  * returns ok and writes nothing, so the inputs stay "not run" unless a body calls `fillClean`). Tasks 8 and 9 use it.
  */
-export function stationsOf(log: string[], bodies: Partial<Record<StationId, StationBody>> = {}): Partial<Record<StationId, Station>> {
+export function stationsOf(
+  log: string[],
+  bodies: Partial<Record<StationId, StationBody>> = {},
+): Partial<Record<StationId, Station>> {
   const stations: Partial<Record<StationId, Station>> = {};
   for (const id of STATION_IDS) {
     stations[id] = {
@@ -164,13 +167,25 @@ export function setupLine(setup: { interface?: boolean } = {}): LineFixture {
     clock,
     workId: f.workId,
     itemDir: f.item.dir,
-    options: (extra = {}) => ({ location: f.fx.location, workId: f.workId, stations: cleanStations(), now: clock.now, ...extra }),
+    options: (extra = {}) => ({
+      location: f.fx.location,
+      workId: f.workId,
+      stations: cleanStations(),
+      now: clock.now,
+      ...extra,
+    }),
     events,
-    workTypes: () => events().map((event) => event.type).filter((type) => type.startsWith("work.") && type !== "work.created"),
+    workTypes: () =>
+      events()
+        .map((event) => event.type)
+        .filter((type) => type.startsWith("work.") && type !== "work.created"),
     stateOf: () => item().front.state,
     item,
     fresh: item,
-    trail: () => events().map((event) => event.type).filter((type) => type.startsWith("work.") && type !== "work.created"),
+    trail: () =>
+      events()
+        .map((event) => event.type)
+        .filter((type) => type.startsWith("work.") && type !== "work.created"),
     files: () => {
       const found: string[] = [];
       for (const name of ["evidence.json", "evidence.md"]) if (existsSync(join(f.item.dir, name))) found.push(name);
@@ -185,7 +200,13 @@ export function setupLine(setup: { interface?: boolean } = {}): LineFixture {
     },
     go: async (extra = {}) => {
       const { runLine } = await import("../../src/work/sequencer.js");
-      return runLine({ location: f.fx.location, workId: f.workId, stations: cleanStations(), now: clock.now, ...extra });
+      return runLine({
+        location: f.fx.location,
+        workId: f.workId,
+        stations: cleanStations(),
+        now: clock.now,
+        ...extra,
+      });
     },
   };
 }
@@ -203,6 +224,7 @@ export function textOf(fx: LineFixture, result: LineResult): string {
     if (existsSync(file)) parts.push(readFileSync(file, "utf8"));
   }
   const handoffs = join(fx.itemDir, "handoffs");
-  if (existsSync(handoffs)) for (const name of readdirSync(handoffs)) parts.push(readFileSync(join(handoffs, name), "utf8"));
+  if (existsSync(handoffs))
+    for (const name of readdirSync(handoffs)) parts.push(readFileSync(join(handoffs, name), "utf8"));
   return parts.join("\n");
 }

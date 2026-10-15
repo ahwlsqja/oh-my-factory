@@ -10,7 +10,14 @@ import type { RiskAssessment, RiskRule } from "./types.js";
 export const DEFAULT_HIGH_RISK: ReadonlyArray<{ rule: RiskRule; globs: readonly string[] }> = [
   {
     rule: "ci",
-    globs: [".github/workflows/**", ".github/actions/**", ".gitlab-ci.yml", ".circleci/**", "Jenkinsfile", "azure-pipelines.yml"],
+    globs: [
+      ".github/workflows/**",
+      ".github/actions/**",
+      ".gitlab-ci.yml",
+      ".circleci/**",
+      "Jenkinsfile",
+      "azure-pipelines.yml",
+    ],
   },
   { rule: "auth", globs: ["**/auth/**", "**/authn/**", "**/authz/**", "**/oauth/**", "**/*auth*.*"] },
   { rule: "migration", globs: ["**/migrations/**", "**/migrate/**", "db/migrate/**", "**/*.sql"] },
@@ -18,7 +25,10 @@ export const DEFAULT_HIGH_RISK: ReadonlyArray<{ rule: RiskRule; globs: readonly 
     rule: "test",
     globs: ["**/test/**", "**/tests/**", "**/__tests__/**", "**/*.test.*", "**/*.spec.*", "**/*_test.*", "**/*_spec.*"],
   },
-  { rule: "goal-factory", globs: [".omf/**", ".factory/**", ".claude/**", ".codex/**", "AGENTS.md", "CLAUDE.md", "**/goal.md"] },
+  {
+    rule: "goal-factory",
+    globs: [".omf/**", ".factory/**", ".claude/**", ".codex/**", "AGENTS.md", "CLAUDE.md", "**/goal.md"],
+  },
   {
     rule: "lockfile",
     globs: [
@@ -82,8 +92,10 @@ export function classifyRisk(input: RiskInput): RiskAssessment {
   const rules: Array<{ rule: RiskRule; matches: (path: string) => boolean }> = [
     ...DEFAULT_HIGH_RISK.map(({ rule, globs }) => ({ rule, matches: picomatch([...globs], MATCH_OPTIONS) })),
   ];
-  if (input.watchedGlobs.length > 0) rules.push({ rule: "watched-path", matches: picomatch([...input.watchedGlobs], MATCH_OPTIONS) });
-  if (input.extraGlobs.length > 0) rules.push({ rule: "extra", matches: picomatch([...input.extraGlobs], MATCH_OPTIONS) });
+  if (input.watchedGlobs.length > 0)
+    rules.push({ rule: "watched-path", matches: picomatch([...input.watchedGlobs], MATCH_OPTIONS) });
+  if (input.extraGlobs.length > 0)
+    rules.push({ rule: "extra", matches: picomatch([...input.extraGlobs], MATCH_OPTIONS) });
 
   const found = new Set<RiskRule>();
   const paths = new Set<string>();
@@ -113,12 +125,18 @@ export function classifyRisk(input: RiskInput): RiskAssessment {
  * path string itself. Only a control character, a backslash or an empty path cannot be judged. Every path that raised the class
  * is listed in `paths`, unclassifiable ones included. Declarations keep using `classifyRisk`.
  */
-export function classifyLiteralPaths(input: { paths: readonly string[]; watchedGlobs: readonly string[]; extraGlobs: readonly string[] }): RiskAssessment {
+export function classifyLiteralPaths(input: {
+  paths: readonly string[];
+  watchedGlobs: readonly string[];
+  extraGlobs: readonly string[];
+}): RiskAssessment {
   const rules: Array<{ rule: RiskRule; matches: (path: string) => boolean }> = [
     ...DEFAULT_HIGH_RISK.map(({ rule, globs }) => ({ rule, matches: picomatch([...globs], MATCH_OPTIONS) })),
   ];
-  if (input.watchedGlobs.length > 0) rules.push({ rule: "watched-path", matches: picomatch([...input.watchedGlobs], MATCH_OPTIONS) });
-  if (input.extraGlobs.length > 0) rules.push({ rule: "extra", matches: picomatch([...input.extraGlobs], MATCH_OPTIONS) });
+  if (input.watchedGlobs.length > 0)
+    rules.push({ rule: "watched-path", matches: picomatch([...input.watchedGlobs], MATCH_OPTIONS) });
+  if (input.extraGlobs.length > 0)
+    rules.push({ rule: "extra", matches: picomatch([...input.extraGlobs], MATCH_OPTIONS) });
 
   const found = new Set<RiskRule>();
   const paths = new Set<string>();

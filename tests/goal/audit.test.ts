@@ -111,7 +111,13 @@ describe("auditGoal", () => {
     proposeMetric(
       fx.ledger,
       fx.location.dir,
-      { metric_id: "m-p95", command: ["sh", "bench/p95-v2.sh"], unit: "ms", watched_paths: ["bench/p95.sh"], image: null },
+      {
+        metric_id: "m-p95",
+        command: ["sh", "bench/p95-v2.sh"],
+        unit: "ms",
+        watched_paths: ["bench/p95.sh"],
+        image: null,
+      },
       "human:dev",
     );
     expect(auditGoal(fx.location, "g-fast").regime_changes).toEqual(["metric m-p95 definition changed"]);

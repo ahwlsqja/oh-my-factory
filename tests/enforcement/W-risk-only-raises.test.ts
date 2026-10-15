@@ -18,7 +18,10 @@ async function assess(fx: GitFixture, declared: RiskAssessment, globs = none) {
 
 describe("W-risk-only-raises", () => {
   it("a declared-normal item whose diff touches CI ends high with the rule ci", async () => {
-    const fx = gitFixture({ "src/a.ts": "1\n", ".github/workflows/ci.yml": "on: push\n" }, { "src/a.ts": "2\n", ".github/workflows/ci.yml": "on: [push, pull_request]\n" });
+    const fx = gitFixture(
+      { "src/a.ts": "1\n", ".github/workflows/ci.yml": "on: push\n" },
+      { "src/a.ts": "2\n", ".github/workflows/ci.yml": "on: [push, pull_request]\n" },
+    );
     const outcome = await assess(fx, normal);
     expect(outcome.effective).toEqual({ class: "high", rules: ["ci"], paths: [".github/workflows/ci.yml"] });
     expect(outcome.raised).toBe(true);
@@ -26,7 +29,10 @@ describe("W-risk-only-raises", () => {
   });
 
   it("a deleted CI file and an added lockfile raise too, because every status counts", async () => {
-    const deleted = gitFixture({ "src/a.ts": "1\n", ".github/workflows/ci.yml": "on: push\n" }, { ".github/workflows/ci.yml": null, "src/a.ts": "2\n" });
+    const deleted = gitFixture(
+      { "src/a.ts": "1\n", ".github/workflows/ci.yml": "on: push\n" },
+      { ".github/workflows/ci.yml": null, "src/a.ts": "2\n" },
+    );
     expect((await assess(deleted, normal)).effective).toMatchObject({ class: "high", rules: ["ci"] });
     const added = gitFixture({ "src/a.ts": "1\n" }, { "package-lock.json": "{}\n" });
     expect((await assess(added, normal)).effective).toMatchObject({ class: "high", rules: ["lockfile"] });
@@ -47,7 +53,10 @@ describe("W-risk-only-raises", () => {
   });
 
   it("the declared assessment is never rewritten, even when the diff raises the effective class", async () => {
-    const fx = gitFixture({ "src/a.ts": "1\n", ".github/workflows/ci.yml": "on: push\n" }, { ".github/workflows/ci.yml": "on: [push]\n" });
+    const fx = gitFixture(
+      { "src/a.ts": "1\n", ".github/workflows/ci.yml": "on: push\n" },
+      { ".github/workflows/ci.yml": "on: [push]\n" },
+    );
     const declared: RiskAssessment = { class: "normal", rules: [], paths: [] };
     const before = structuredClone(declared);
     const outcome = await assess(fx, declared);
@@ -70,14 +79,31 @@ describe("W-risk-only-raises", () => {
   });
 
   it("no pair of declared and diff-based assessments gives a lower effective class, and the declared rules are never dropped", () => {
-    const declareds: RiskAssessment[] = [normal, { class: "high", rules: ["auth"], paths: ["a"] }, { class: "high", rules: ["undeclared"], paths: [] }];
-    const diffs: string[][] = [[], ["src/a.ts"], [".github/workflows/x.yml"], ["src/auth/y.ts", "db/migrations/1.sql"], ["src/[odd].ts"], [".github/workflows/b[1].yml"], ["src/odd\\name.ts"]];
+    const declareds: RiskAssessment[] = [
+      normal,
+      { class: "high", rules: ["auth"], paths: ["a"] },
+      { class: "high", rules: ["undeclared"], paths: [] },
+    ];
+    const diffs: string[][] = [
+      [],
+      ["src/a.ts"],
+      [".github/workflows/x.yml"],
+      ["src/auth/y.ts", "db/migrations/1.sql"],
+      ["src/[odd].ts"],
+      [".github/workflows/b[1].yml"],
+      ["src/odd\\name.ts"],
+    ];
     for (const declared of declareds) {
       for (const paths of diffs) {
-        const facts = classifyDiff(paths.map((path) => ({ status: "M" as const, path, old_mode: "100644", new_mode: "100644" })), [], []);
+        const facts = classifyDiff(
+          paths.map((path) => ({ status: "M" as const, path, old_mode: "100644", new_mode: "100644" })),
+          [],
+          [],
+        );
         const { effective } = assessDiffRisk(facts, declared, none);
         if (declared.class === "high") expect(effective.class).toBe("high");
-        if (paths.length > 0 && classifyLiteralPaths({ paths, watchedGlobs: [], extraGlobs: [] }).class === "high") expect(effective.class).toBe("high");
+        if (paths.length > 0 && classifyLiteralPaths({ paths, watchedGlobs: [], extraGlobs: [] }).class === "high")
+          expect(effective.class).toBe("high");
         for (const rule of declared.rules) expect(effective.rules).toContain(rule);
       }
     }

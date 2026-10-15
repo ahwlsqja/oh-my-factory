@@ -21,11 +21,23 @@ describe("runAudit", () => {
       tests_edited: [],
       tests_edited_count: 0,
       tests_added: 0,
-      canary: { status: "scanned", surfaces_scanned: [...SURFACE_KINDS], hits: [], total: 0, symlinks_skipped: 0, truncated: false },
+      canary: {
+        status: "scanned",
+        surfaces_scanned: [...SURFACE_KINDS],
+        hits: [],
+        total: 0,
+        symlinks_skipped: 0,
+        truncated: false,
+      },
       judge_config_touched: false,
       judge_files_checked: 1,
       projections_touched: [],
-      risk: { declared: { class: "normal", rules: [], paths: [] }, recomputed: { class: "normal", rules: [], paths: [] }, effective: { class: "normal", rules: [], paths: [] }, raised: false },
+      risk: {
+        declared: { class: "normal", rules: [], paths: [] },
+        recomputed: { class: "normal", rules: [], paths: [] },
+        effective: { class: "normal", rules: [], paths: [] },
+        raised: false,
+      },
       high_risk_paths_touched: [],
       high_risk_paths_count: 0,
       prove_test: PROVEN,
@@ -34,8 +46,14 @@ describe("runAudit", () => {
   });
 
   it("lists an edited test, counts an added one, and keeps a test path in the judge files when the gate runs it", async () => {
-    const fx = auditFixture({ "src/a.ts": "1\n", "tests/a.test.ts": "x\n", "tests/gate.mjs": "a\n" }, { "tests/a.test.ts": "y\n", "tests/new.test.ts": "z\n", "tests/gate.mjs": "b\n" });
-    const judge = { gates: { fast: ["node", "tests/gate.mjs"], full: null, deep: null, required: ["fast" as const] }, test_command: ["node", "--test"] };
+    const fx = auditFixture(
+      { "src/a.ts": "1\n", "tests/a.test.ts": "x\n", "tests/gate.mjs": "a\n" },
+      { "tests/a.test.ts": "y\n", "tests/new.test.ts": "z\n", "tests/gate.mjs": "b\n" },
+    );
+    const judge = {
+      gates: { fast: ["node", "tests/gate.mjs"], full: null, deep: null, required: ["fast" as const] },
+      test_command: ["node", "--test"],
+    };
     const report = await runAudit(auditInput(fx, { judge }));
     expect(report.tests_edited).toEqual(["tests/a.test.ts", "tests/gate.mjs"]); // a file under tests/ is a test path, a gate script included
     expect(report.tests_edited_count).toBe(2);
@@ -54,7 +72,10 @@ describe("runAudit", () => {
   });
 
   it("raises a declared-normal risk when the diff touches CI, and lists the high-risk paths", async () => {
-    const fx = auditFixture({ "src/a.ts": "1\n", ".github/workflows/ci.yml": "a\n" }, { ".github/workflows/ci.yml": "b\n" });
+    const fx = auditFixture(
+      { "src/a.ts": "1\n", ".github/workflows/ci.yml": "a\n" },
+      { ".github/workflows/ci.yml": "b\n" },
+    );
     const report = await runAudit(auditInput(fx));
     expect(report.risk.declared.class).toBe("normal");
     expect(report.risk.effective).toEqual({ class: "high", rules: ["ci"], paths: [".github/workflows/ci.yml"] });
@@ -64,23 +85,32 @@ describe("runAudit", () => {
   });
 
   it("flags a touched spec or intent projection", async () => {
-    const fx = auditFixture({ "spec.md": "a\n", "intent.md": "a\n", "src/a.ts": "1\n" }, { "spec.md": "b\n", "intent.md": "b\n" });
+    const fx = auditFixture(
+      { "spec.md": "a\n", "intent.md": "a\n", "src/a.ts": "1\n" },
+      { "spec.md": "b\n", "intent.md": "b\n" },
+    );
     const report = await runAudit(auditInput(fx));
     expect(report.projections_touched).toEqual(["intent.md", "spec.md"]);
     expect(report.diff.special_entries).toBe(0);
   });
 
   it("takes the judge config from the ledger argvs, not from the tree: an edited package.json is not flagged for `node scripts/gates.mjs`", async () => {
-    const fx = auditFixture({ "package.json": "{}\n", "src/a.ts": "1\n" }, { "package.json": "{\"scripts\":{}}\n" });
+    const fx = auditFixture({ "package.json": "{}\n", "src/a.ts": "1\n" }, { "package.json": '{"scripts":{}}\n' });
     expect((await runAudit(auditInput(fx))).judge_config_touched).toBe(false);
-    const npm = { gates: { fast: ["npm", "test"], full: null, deep: null, required: ["fast" as const] }, test_command: ["npm", "test"] };
+    const npm = {
+      gates: { fast: ["npm", "test"], full: null, deep: null, required: ["fast" as const] },
+      test_command: ["npm", "test"],
+    };
     const flagged = await runAudit(auditInput(fx, { judge: npm }));
     expect(flagged.judge_config_touched).toBe(true);
     expect(flagged.judge_files_checked).toBeGreaterThan(1);
   });
 
   it("judge_files_checked is zero when the commands name no file and no known tool", async () => {
-    const judge = { gates: { fast: ["my-lint", "--all"], full: null, deep: null, required: ["fast" as const] }, test_command: ["my-test"] };
+    const judge = {
+      gates: { fast: ["my-lint", "--all"], full: null, deep: null, required: ["fast" as const] },
+      test_command: ["my-test"],
+    };
     const report = await runAudit(auditInput(cleanFixture(), { judge }));
     expect(report.judge_files_checked).toBe(0);
     expect(report.judge_config_touched).toBe(false);
@@ -105,11 +135,22 @@ describe("runAudit", () => {
   });
 
   it("prove-test and the audit classify one diff identically when they are given one explicitTestPaths list", async () => {
-    const fx = gitFixture({ "src/calc.mjs": "export const add = (a, b) => a - b;\n", "e2e/flow.mjs": "export const x = 1;\n" }, { "src/calc.mjs": "export const add = (a, b) => a + b;\n", "e2e/flow.mjs": "export const x = 2;\n" });
+    const fx = gitFixture(
+      { "src/calc.mjs": "export const add = (a, b) => a - b;\n", "e2e/flow.mjs": "export const x = 1;\n" },
+      { "src/calc.mjs": "export const add = (a, b) => a + b;\n", "e2e/flow.mjs": "export const x = 2;\n" },
+    );
     for (const explicitTestPaths of [[], ["e2e"]]) {
       const parent = realTempDir("omf-parity-");
       const copies = new TempWorkCopyFactory({ parent, exec: (root) => fixtureTarget(root) });
-      const prove = await proveTest({ quarantine: fx.quarantine, base: fx.base, head: fx.head, testCommand: [process.execPath, "--test"], explicitTestPaths, copies, timeoutMs: 60_000 });
+      const prove = await proveTest({
+        quarantine: fx.quarantine,
+        base: fx.base,
+        head: fx.head,
+        testCommand: [process.execPath, "--test"],
+        explicitTestPaths,
+        copies,
+        timeoutMs: 60_000,
+      });
       const audit = await runAudit(auditInput(fx, { explicitTestPaths, proveTest: null }));
       expect(prove.test_paths).toBe(audit.tests_edited_count + audit.tests_added);
       expect(prove.non_test_paths).toBe(audit.diff.files - prove.test_paths);
@@ -121,15 +162,30 @@ const REPORT = async (): Promise<WorkAudit> => runAudit(auditInput(cleanFixture(
 
 describe("auditSignals", () => {
   it("a clean, fully measured audit has no signal", async () => {
-    expect(auditSignals(await REPORT())).toEqual({ flawed: [], unverified: [], judge_config_touched: false, review_required: false });
+    expect(auditSignals(await REPORT())).toEqual({
+      flawed: [],
+      unverified: [],
+      judge_config_touched: false,
+      review_required: false,
+    });
   });
 
   it("maps the flawed signals in a fixed order", async () => {
     const report = await REPORT();
-    const failed = { status: "FAILED" as const, reason: "test-passed-without-fix" as const, test_exit: 0, non_test_paths: 1, test_paths: 1 };
+    const failed = {
+      status: "FAILED" as const,
+      reason: "test-passed-without-fix" as const,
+      test_exit: 0,
+      non_test_paths: 1,
+      test_paths: 1,
+    };
     expect(auditSignals({ ...report, prove_test: failed }).flawed).toEqual(["prove_test_failed"]);
-    expect(auditSignals({ ...report, canary: { ...report.canary, total: 1, hits: [{ surface: "diff", count: 1 }] } }).flawed).toEqual(["canary_hit"]);
-    expect(auditSignals({ ...report, tests_edited: ["tests/a.test.ts"], tests_edited_count: 1 }).flawed).toEqual(["test_edited"]);
+    expect(
+      auditSignals({ ...report, canary: { ...report.canary, total: 1, hits: [{ surface: "diff", count: 1 }] } }).flawed,
+    ).toEqual(["canary_hit"]);
+    expect(auditSignals({ ...report, tests_edited: ["tests/a.test.ts"], tests_edited_count: 1 }).flawed).toEqual([
+      "test_edited",
+    ]);
     const all = auditSignals({
       ...report,
       prove_test: failed,
@@ -142,19 +198,41 @@ describe("auditSignals", () => {
 
   it("a prove-test that did not run or was misconfigured, and a canary scan that did not run, are unverified and never flawed", async () => {
     const report = await REPORT();
-    const misconfigured = { status: "MISCONFIGURED" as const, reason: "no-non-test-change" as const, test_exit: null, non_test_paths: 0, test_paths: 1 };
+    const misconfigured = {
+      status: "MISCONFIGURED" as const,
+      reason: "no-non-test-change" as const,
+      test_exit: null,
+      non_test_paths: 0,
+      test_paths: 1,
+    };
     const notRun = auditSignals({ ...report, prove_test: "not_run" });
     expect(notRun).toMatchObject({ flawed: [], unverified: ["prove_test_not_run"] });
-    expect(auditSignals({ ...report, prove_test: misconfigured })).toMatchObject({ flawed: [], unverified: ["prove_test_misconfigured"] });
+    expect(auditSignals({ ...report, prove_test: misconfigured })).toMatchObject({
+      flawed: [],
+      unverified: ["prove_test_misconfigured"],
+    });
     const noScan = auditSignals({ ...report, canary: { ...report.canary, status: "not_run", surfaces_scanned: [] } });
     expect(noScan).toMatchObject({ flawed: [], unverified: ["canary_not_scanned"] });
-    const both = auditSignals({ ...report, prove_test: "not_run", canary: { ...report.canary, status: "not_run", surfaces_scanned: [] } });
+    const both = auditSignals({
+      ...report,
+      prove_test: "not_run",
+      canary: { ...report.canary, status: "not_run", surfaces_scanned: [] },
+    });
     expect([...both.unverified].sort()).toEqual(["canary_not_scanned", "prove_test_not_run"]);
   });
 
   it("a canary hit in a scan that did not finish is both flawed and unverified", async () => {
     const report = await REPORT();
-    const signals = auditSignals({ ...report, canary: { ...report.canary, status: "not_run", truncated: true, total: 1, hits: [{ surface: "worktree", count: 1 }] } });
+    const signals = auditSignals({
+      ...report,
+      canary: {
+        ...report.canary,
+        status: "not_run",
+        truncated: true,
+        total: 1,
+        hits: [{ surface: "worktree", count: 1 }],
+      },
+    });
     expect(signals.flawed).toEqual(["canary_hit"]);
     expect(signals.unverified).toEqual(["canary_not_scanned"]);
   });
@@ -165,7 +243,13 @@ describe("auditSignals", () => {
   });
 
   it.each([
-    ["an effective high risk", (r: WorkAudit): WorkAudit => ({ ...r, risk: { ...r.risk, effective: { class: "high", rules: ["ci"], paths: [] } } })],
+    [
+      "an effective high risk",
+      (r: WorkAudit): WorkAudit => ({
+        ...r,
+        risk: { ...r.risk, effective: { class: "high", rules: ["ci"], paths: [] } },
+      }),
+    ],
     ["a touched projection", (r: WorkAudit): WorkAudit => ({ ...r, projections_touched: ["spec.md"] })],
     ["a special entry", (r: WorkAudit): WorkAudit => ({ ...r, diff: { ...r.diff, special_entries: 1 } })],
   ])("%s requires review", async (_name, change) => {
@@ -175,9 +259,22 @@ describe("auditSignals", () => {
 
 describe("work-audit.schema.json", () => {
   it("keeps the surface and rule enums equal to the TypeScript lists", () => {
-    const schema = JSON.parse(readFileSync(schemaUrl("work-audit.schema.json"), "utf8")) as { $defs: { surface_kind: { enum: string[] }; risk_rule: { enum: string[] } } };
+    const schema = JSON.parse(readFileSync(schemaUrl("work-audit.schema.json"), "utf8")) as {
+      $defs: { surface_kind: { enum: string[] }; risk_rule: { enum: string[] } };
+    };
     expect(schema.$defs.surface_kind.enum).toEqual([...SURFACE_KINDS]);
-    expect(schema.$defs.risk_rule.enum).toEqual(["ci", "auth", "migration", "test", "goal-factory", "lockfile", "watched-path", "extra", "undeclared", "unclassifiable"]);
+    expect(schema.$defs.risk_rule.enum).toEqual([
+      "ci",
+      "auth",
+      "migration",
+      "test",
+      "goal-factory",
+      "lockfile",
+      "watched-path",
+      "extra",
+      "undeclared",
+      "unclassifiable",
+    ]);
   });
 
   it("refuses an extra key, a wrong version, an oversize list, an unknown surface and a free-text reason", async () => {
@@ -187,9 +284,24 @@ describe("work-audit.schema.json", () => {
       ["schema_version 2", { ...report, schema_version: 2 }],
       ["201 listed tests", { ...report, tests_edited: Array.from({ length: 201 }, () => "t") }],
       ["an unknown surface", { ...report, canary: { ...report.canary, hits: [{ surface: "sut", count: 1 }] } }],
-      ["a free-text reason", { ...report, prove_test: { status: "MISCONFIGURED", reason: "it broke", test_exit: null, non_test_paths: 0, test_paths: 0 } }],
+      [
+        "a free-text reason",
+        {
+          ...report,
+          prove_test: {
+            status: "MISCONFIGURED",
+            reason: "it broke",
+            test_exit: null,
+            non_test_paths: 0,
+            test_paths: 0,
+          },
+        },
+      ],
       ["a negative count", { ...report, tests_added: -1 }],
-      ["a missing field", Object.fromEntries(Object.entries(report).filter(([key]) => key !== "high_risk_paths_count"))],
+      [
+        "a missing field",
+        Object.fromEntries(Object.entries(report).filter(([key]) => key !== "high_risk_paths_count")),
+      ],
     ];
     expect(validate("work-audit.schema.json", report).ok).toBe(true);
     for (const [name, candidate] of bad) expect(validate("work-audit.schema.json", candidate).ok, name).toBe(false);

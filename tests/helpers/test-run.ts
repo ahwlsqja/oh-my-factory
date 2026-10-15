@@ -26,7 +26,13 @@ export function raw(ledger: Ledger, type: string, payload: Record<string, unknow
 }
 
 export const consume = (ledger: Ledger, digest: string, sha = SHA_1, run = RUN_1, total = 10): LedgerEvent =>
-  raw(ledger, "feedback.test_run_consumed", { ...scope, run_id: run, test_digest: digest, candidate_sha: sha, test_total: total });
+  raw(ledger, "feedback.test_run_consumed", {
+    ...scope,
+    run_id: run,
+    test_digest: digest,
+    candidate_sha: sha,
+    test_total: total,
+  });
 
 export const complete = (
   ledger: Ledger,
@@ -35,10 +41,21 @@ export const complete = (
   run = RUN_1,
   counts = { pass: 8, total: 10, flaky: 1 },
 ): LedgerEvent =>
-  raw(ledger, "feedback.test_run_completed", { ...scope, run_id: run, test_digest: digest, candidate_sha: sha, ...counts });
+  raw(ledger, "feedback.test_run_completed", {
+    ...scope,
+    run_id: run,
+    test_digest: digest,
+    candidate_sha: sha,
+    ...counts,
+  });
 
 /** A person's authorization; `digest` null is the J3 act that names no consumed run. */
-export const authorize = (ledger: Ledger, digest: string | null, basis: "J3" | "J6" = "J3", actor = "human:dev"): LedgerEvent =>
+export const authorize = (
+  ledger: Ledger,
+  digest: string | null,
+  basis: "J3" | "J6" = "J3",
+  actor = "human:dev",
+): LedgerEvent =>
   raw(ledger, "feedback.test_reseal_authorized", { ...scope, consumed_test_digest: digest, basis }, actor);
 
 export const stateOf = (ledger: Ledger): TestRunState => testRunStateFromEvents(ledger.readVerified(), GOAL, WORK);

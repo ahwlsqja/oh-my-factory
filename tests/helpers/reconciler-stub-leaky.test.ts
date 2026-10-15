@@ -15,7 +15,10 @@ function leak(channel: string): { status: number | null; candidates: Candidate[]
   const record = makeTempDir("omf-rec-");
   const canaries = join(record, "canaries.json");
   writeFileSync(canaries, JSON.stringify({ value: CANARY.reading, target: CANARY.target, metric_id: CANARY.metricId }));
-  const result = spawnSync(process.execPath, [STUB, "leaky", record, canaries, channel], { input: "prompt", encoding: "utf8" });
+  const result = spawnSync(process.execPath, [STUB, "leaky", record, canaries, channel], {
+    input: "prompt",
+    encoding: "utf8",
+  });
   const candidates = result.stdout === "" ? [] : (JSON.parse(result.stdout) as { candidates: Candidate[] }).candidates;
   return { status: result.status, candidates, stdout: result.stdout };
 }
@@ -27,7 +30,8 @@ describe("reconciler-stub leaky mode", () => {
     expect(candidates).toHaveLength(5);
     expect(candidates[0]).toEqual(CLEAN_CANDIDATE);
     expect(canaryHits(JSON.stringify(candidates[0]))).toEqual([]);
-    for (const leaky of candidates.slice(1)) expect(canaryHits(JSON.stringify(leaky)).length, JSON.stringify(leaky)).toBeGreaterThan(0);
+    for (const leaky of candidates.slice(1))
+      expect(canaryHits(JSON.stringify(leaky)).length, JSON.stringify(leaky)).toBeGreaterThan(0);
     expect(canaryHits(JSON.stringify(candidates.slice(1)))).toEqual(
       expect.arrayContaining(["reading", "target", "reading digits", "metric id"]),
     );

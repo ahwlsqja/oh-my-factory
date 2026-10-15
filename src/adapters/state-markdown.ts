@@ -156,7 +156,10 @@ function itemDirNames(projectDir: string, goalId: string): string[] {
     .sort();
 }
 
-function loadGoal(projectDir: string, goalId: string): { items: WorkItem[]; malformed: { dir: string; work_id: string | null; reason: string }[] } {
+function loadGoal(
+  projectDir: string,
+  goalId: string,
+): { items: WorkItem[]; malformed: { dir: string; work_id: string | null; reason: string }[] } {
   const items: WorkItem[] = [];
   const malformed: { dir: string; work_id: string | null; reason: string }[] = [];
   for (const name of itemDirNames(projectDir, goalId)) {
@@ -208,7 +211,10 @@ export function createMarkdownStore(projectDir: string): StateStore {
    * Re-reads the item under item.lock, applies `change` to the front matter and the progress text, validates and
    * rewrites item.md atomically. `progress` must already end in a newline unless it is empty (renderWorkItem's form).
    */
-  function mutateItem(workId: string, change: (item: WorkItem) => { front: WorkItemFront; progress: string }): WorkItem {
+  function mutateItem(
+    workId: string,
+    change: (item: WorkItem) => { front: WorkItemFront; progress: string },
+  ): WorkItem {
     const located = locate(projectDir, workId);
     if (located === null) throw new WorkItemError(`unknown work item ${workId}`);
     return withItemLock(located.dir, () => {
@@ -305,7 +311,9 @@ export function createMarkdownStore(projectDir: string): StateStore {
       requireHuman(actor, "approval");
       return mutate(workId, (front) => {
         if (front.state !== "awaiting_approval") {
-          throw new WorkItemError(`work item ${workId} is ${front.state}; only awaiting_approval items can be approved`);
+          throw new WorkItemError(
+            `work item ${workId} is ${front.state}; only awaiting_approval items can be approved`,
+          );
         }
         const stamp = now.toISOString();
         return { ...front, state: "ready", updated_at: stamp, approval: { approved_by: actor, approved_at: stamp } };
@@ -319,7 +327,12 @@ export function createMarkdownStore(projectDir: string): StateStore {
       return mutate(workId, (front) => {
         leave(front, "vetoed");
         const stamp = now.toISOString();
-        return { ...front, state: "vetoed", updated_at: stamp, veto: { vetoed_by: actor, vetoed_at: stamp, reason: text } };
+        return {
+          ...front,
+          state: "vetoed",
+          updated_at: stamp,
+          veto: { vetoed_by: actor, vetoed_at: stamp, reason: text },
+        };
       });
     },
 
@@ -355,7 +368,9 @@ export function createMarkdownStore(projectDir: string): StateStore {
       }
       return mutateItem(workId, ({ front }) => {
         if (front.state !== "in_progress") {
-          throw new WorkItemError(`work item ${workId} is ${front.state}; only in_progress items take a progress marker`);
+          throw new WorkItemError(
+            `work item ${workId} is ${front.state}; only in_progress items take a progress marker`,
+          );
         }
         return { front: { ...front, updated_at: now.toISOString() }, progress: `${marker}\n` };
       });

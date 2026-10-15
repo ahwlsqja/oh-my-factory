@@ -42,6 +42,8 @@ describe("gate1ForItem", () => {
     const f = setupDecisionItem();
     closeInterface(f);
     rmSync(goalLockFile(f.fx.location.dir, f.fx.goalId));
-    expect(errorCode(() => gate1ForItem(f.fx.location, f.item, f.fx.ledger.readVerified(), NOW))).toBe("goal_not_locked");
+    expect(errorCode(() => gate1ForItem(f.fx.location, f.item, f.fx.ledger.readVerified(), NOW))).toBe(
+      "goal_not_locked",
+    );
   });
 });

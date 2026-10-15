@@ -68,7 +68,11 @@ describe("W-visit-cap", () => {
       id: "GATE-2",
       evaluate: (): GateResult => {
         calls += 1;
-        return { gate: "GATE-2", verdict: calls < 3 ? "fail" : "pass", reasons: calls < 3 ? ["scenarios_missing"] : [] };
+        return {
+          gate: "GATE-2",
+          verdict: calls < 3 ? "fail" : "pass",
+          reasons: calls < 3 ? ["scenarios_missing"] : [],
+        };
       },
     };
     const { result, ran } = await line.exec({ gates: { "GATE-2": third, "GATE-3": passGate("GATE-3") } });
@@ -92,7 +96,12 @@ describe("W-visit-cap", () => {
     const classification = classifyOutcome(
       classifierInput({ stop: { kind: "gate4", severity: "hard", reasons: stop.reasons, round: counter.round } }),
     );
-    expect(classification).toMatchObject({ outcome: "flawed", exhausted: true, reason_code: "visit_cap", rule: "gate4_hard" });
+    expect(classification).toMatchObject({
+      outcome: "flawed",
+      exhausted: true,
+      reason_code: "visit_cap",
+      rule: "gate4_hard",
+    });
     expect(dispositionOf(toOutcomeInput(classification))).toMatchObject({ action: "fail", item_state: "failed" });
     expect(HANDOFF_ROUTES.visit_cap.j).toBe("J6");
   });

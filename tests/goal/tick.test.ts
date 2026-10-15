@@ -95,7 +95,12 @@ describe("tickGoal: turn 1", () => {
 
     const result = await fx.tick();
 
-    expect(result).toMatchObject({ status: "continue", outcome: "stopped", reason_code: "nonzero_exit", reconciled: false });
+    expect(result).toMatchObject({
+      status: "continue",
+      outcome: "stopped",
+      reason_code: "nonzero_exit",
+      reconciled: false,
+    });
     expect(result.signatures).toHaveLength(1);
     expect(result.signatures[0]).toMatch(/^reconcile\|failed\|/);
     expect(lastTickTypes(fx)).toEqual([
@@ -107,7 +112,11 @@ describe("tickGoal: turn 1", () => {
       "reconcile.failed",
       "goal.tick_ended",
     ]);
-    expect(lastTickEvents(fx).at(-1)?.payload).toMatchObject({ model_calls: 1, reconciled: false, rounds_remaining: 9 });
+    expect(lastTickEvents(fx).at(-1)?.payload).toMatchObject({
+      model_calls: 1,
+      reconciled: false,
+      rounds_remaining: 9,
+    });
   });
 });
 
@@ -200,7 +209,10 @@ describe("tickGoal: turn 2 (the walking skeleton)", () => {
         "Because the render path dominates the page time",
       ),
     );
-    expect(approveGoal(fx.location, TICK_GOAL, "human:dev", fx.clock.now)).toMatchObject({ created: true, approval: { regime: 2 } });
+    expect(approveGoal(fx.location, TICK_GOAL, "human:dev", fx.clock.now)).toMatchObject({
+      created: true,
+      approval: { regime: 2 },
+    });
 
     const afterApproval = await fx.tick();
     expect(afterApproval).toMatchObject({ status: "continue", outcome: "observing" });
@@ -292,7 +304,11 @@ describe("tickGoal: gates", () => {
 
     const result = await fx.tick();
 
-    expect(result).toMatchObject({ status: "blocked_on_user", outcome: "escalated", reason_code: "reapproval_required" });
+    expect(result).toMatchObject({
+      status: "blocked_on_user",
+      outcome: "escalated",
+      reason_code: "reapproval_required",
+    });
     expect(result.escalation?.j).toBe("J1");
     expect(result.next_steps).toContain(`omf goal approve ${TICK_GOAL}`);
     expect(lastTickTypes(fx)).toEqual(GATE_STOP);
@@ -305,14 +321,22 @@ describe("tickGoal: gates", () => {
     fx.clock.advance(100 * HOUR);
 
     const blocked = await fx.tick();
-    expect(blocked).toMatchObject({ status: "blocked_on_user", outcome: "escalated", reason_code: "wall_time_exceeded" });
+    expect(blocked).toMatchObject({
+      status: "blocked_on_user",
+      outcome: "escalated",
+      reason_code: "wall_time_exceeded",
+    });
     expect(blocked.escalation?.j).toBe("J8");
     expect(lastTickTypes(fx)).toEqual(GATE_STOP);
     expect(count(fx, "budget.consumed")).toBe(0);
 
     const before = ledgerEvents(fx).length;
     const stopped = await fx.tick();
-    expect(stopped).toMatchObject({ status: "blocked_on_user", outcome: "stopped_until_resumed", reason_code: "wall_time_exceeded" });
+    expect(stopped).toMatchObject({
+      status: "blocked_on_user",
+      outcome: "stopped_until_resumed",
+      reason_code: "wall_time_exceeded",
+    });
     expect(stopped.next_steps.length).toBeGreaterThan(0);
     expect(ledgerEvents(fx)).toHaveLength(before);
 
@@ -362,7 +386,13 @@ describe("tickGoal: stale lifecycle (D21)", () => {
     fx.clock.advance(MINUTE);
     const marking = await fx.tick();
     expect(marking).toMatchObject({ status: "continue", outcome: "wip_full" });
-    expect(lastTickTypes(fx)).toEqual(["goal.tick_started", "metric.measured", "goal.measured", "goal.stale", "goal.tick_ended"]);
+    expect(lastTickTypes(fx)).toEqual([
+      "goal.tick_started",
+      "metric.measured",
+      "goal.measured",
+      "goal.stale",
+      "goal.tick_ended",
+    ]);
     expect(lastTickEvents(fx).find((e) => e.type === "goal.stale")?.payload).toMatchObject({
       goal_id: TICK_GOAL,
       regime: 1,
@@ -375,7 +405,10 @@ describe("tickGoal: stale lifecycle (D21)", () => {
     expect(escalated.escalation?.j).toBe("J1");
     expect(lastTickTypes(fx)).toEqual(GATE_STOP);
 
-    expect(approveGoal(fx.location, TICK_GOAL, "human:dev", fx.clock.now)).toMatchObject({ created: true, approval: { regime: 2 } });
+    expect(approveGoal(fx.location, TICK_GOAL, "human:dev", fx.clock.now)).toMatchObject({
+      created: true,
+      approval: { regime: 2 },
+    });
 
     fx.clock.advance(MINUTE);
     const resumed = await fx.tick();
@@ -407,7 +440,11 @@ describe("tickGoal: WIP cap and STOP_IF back-pressure", () => {
 
     const result = await fx.tick();
 
-    expect(result).toMatchObject({ status: "continue", outcome: "back_pressure", reason_code: "stop_if_unreviewed_evidence" });
+    expect(result).toMatchObject({
+      status: "continue",
+      outcome: "back_pressure",
+      reason_code: "stop_if_unreviewed_evidence",
+    });
     expect(fx.reconciler.calls).toBe(0);
     expect(count(fx, "budget.consumed")).toBe(0);
   });

@@ -111,7 +111,12 @@ function reportOf(location: ProjectLocation, item: WorkItem, now: Date, links?: 
 }
 
 /** Read-only: folds, lints, evaluates GATE-1 and compares `spec.md`. Writes nothing. */
-export function decideReport(location: ProjectLocation, workId: string, now: Date, links?: DecisionLinks): DecideReport {
+export function decideReport(
+  location: ProjectLocation,
+  workId: string,
+  now: Date,
+  links?: DecisionLinks,
+): DecideReport {
   return reportOf(location, loadConsistentItem(location, workId), now, links);
 }
 
@@ -290,7 +295,12 @@ function shownReport(report: DecideReport, item: WorkItem): ShownReport {
     }),
     problems: report.problems.map((problem) => ({ ...problem, decision_id: mask(problem.decision_id) })),
     spec: report.spec,
-    decisions: report.state.decisions.map((d) => ({ id: mask(d.id), class: d.class, status: d.status, added_seq: d.added_seq })),
+    decisions: report.state.decisions.map((d) => ({
+      id: mask(d.id),
+      class: d.class,
+      status: d.status,
+      added_seq: d.added_seq,
+    })),
   };
 }
 
@@ -302,7 +312,9 @@ function reportLines(shown: ShownReport): string[] {
   }
   lines.push(shown.gate === "pass" ? "GATE-1: pass" : "GATE-1: blocked_on_user (J2)");
   for (const reason of shown.reasons) {
-    lines.push(`  - ${reason.code}${reason.decision_id === null ? "" : ` ${reason.decision_id}`}${reason.detail === null ? "" : ` (${reason.detail})`}`);
+    lines.push(
+      `  - ${reason.code}${reason.decision_id === null ? "" : ` ${reason.decision_id}`}${reason.detail === null ? "" : ` (${reason.detail})`}`,
+    );
   }
   if (shown.problems.length === 0) {
     lines.push("lint: clean");
@@ -329,12 +341,17 @@ function printReport(shown: ShownReport, json: boolean): void {
  * and a retype. Errors other than `DecisionError` propagate to main.ts, which exits 2.
  */
 export function registerDecideCommands(program: Command): void {
-  const decide = program.command("decide").description("record the design decisions of a work item, lint them and read GATE-1 (J2)");
+  const decide = program
+    .command("decide")
+    .description("record the design decisions of a work item, lint them and read GATE-1 (J2)");
 
   decide
     .command("add")
     .argument("<work_id>")
-    .requiredOption("--file <entry.json>", "the question to record: id, class, question, optional qas and response_measure")
+    .requiredOption(
+      "--file <entry.json>",
+      "the question to record: id, class, question, optional qas and response_measure",
+    )
     .description("record a design question as an open decision and rewrite spec.md")
     .action((workId: string, options: { file: string }) => {
       const location = requireProject(process.cwd());
@@ -361,7 +378,8 @@ export function registerDecideCommands(program: Command): void {
         const report = reportOf(location, item, now);
         syncNeedsHuman(item.dir, scopeOf(item), report.gate, now);
         printReport(shownReport(report, item), options.json === true);
-        if (report.gate.status === "blocked_on_user") console.error(`blocked on a person (J2); wrote ${needsHumanFile(item.dir)}`);
+        if (report.gate.status === "blocked_on_user")
+          console.error(`blocked on a person (J2); wrote ${needsHumanFile(item.dir)}`);
         process.exitCode = lintExitCode(report);
       });
     });
@@ -370,7 +388,9 @@ export function registerDecideCommands(program: Command): void {
     .command("show")
     .argument("<work_id>")
     .option("--json", "print the report as JSON")
-    .description("print the decisions by status, the GATE-1 verdict and whether spec.md matches the ledger; writes nothing")
+    .description(
+      "print the decisions by status, the GATE-1 verdict and whether spec.md matches the ledger; writes nothing",
+    )
     .action((workId: string, options: { json?: boolean }) => {
       const location = requireProject(process.cwd());
       refusing(() => {

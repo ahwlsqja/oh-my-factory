@@ -44,7 +44,10 @@ function outcomeOf(result: ProcessResult): MeasureOutcome {
       return { ok: false, reason: `output exceeded ${MAX_OUTPUT_BYTES} bytes` };
     case "exited":
       if (result.status !== 0) {
-        return { ok: false, reason: result.status === null ? `killed by ${result.signal ?? "a signal"}` : `exit code ${result.status}` };
+        return {
+          ok: false,
+          reason: result.status === null ? `killed by ${result.signal ?? "a signal"}` : `exit code ${result.status}`,
+        };
       }
       return parseMeasurement(result.stdout);
   }
@@ -89,7 +92,8 @@ export function isValidImage(image: string): boolean {
 
 /** Argv for a disposable, network-less container with the repository mounted read-only (spec §4.2). */
 export function dockerArgs(command: readonly string[], repo: string, image: string, name: string): string[] {
-  if (!isValidImage(image)) throw new Error('invalid image reference: it must not start with "-" or contain whitespace');
+  if (!isValidImage(image))
+    throw new Error('invalid image reference: it must not start with "-" or contain whitespace');
   return [
     "run",
     "--rm",
@@ -133,7 +137,12 @@ export async function runInDocker(
   });
   // Killing the docker client does not stop the container, so remove it by name.
   if (result.kind !== "exited") {
-    await runProcessGroup(["docker", "rm", "--force", name], { cwd: repo, env, timeoutMs: 30_000, maxOutputBytes: MAX_OUTPUT_BYTES });
+    await runProcessGroup(["docker", "rm", "--force", name], {
+      cwd: repo,
+      env,
+      timeoutMs: 30_000,
+      maxOutputBytes: MAX_OUTPUT_BYTES,
+    });
   }
   return outcomeOf(result);
 }
@@ -146,7 +155,10 @@ export async function runMeasurement(
 ): Promise<MeasureOutcome> {
   if (runner === "host") return runOnHost(metric.command, repo, env);
   if (metric.image === null) {
-    return { ok: false, reason: `metric ${metric.metric_id} has no image; propose it with --image or measure with --runner host` };
+    return {
+      ok: false,
+      reason: `metric ${metric.metric_id} has no image; propose it with --image or measure with --runner host`,
+    };
   }
   return runInDocker(metric.command, repo, metric.image, env);
 }

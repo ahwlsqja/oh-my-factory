@@ -6,13 +6,7 @@ import { createMarkdownStore } from "../../src/adapters/state-markdown.js";
 import { confirmByTyping } from "../../src/cli/confirm.js";
 import * as decide from "../../src/cli/decide.js";
 import { runDecideDefer, runDecideNa, runDecideResolve } from "../../src/cli/decide.js";
-import {
-  type ConfirmFn,
-  type SignAction,
-  confirmSign,
-  decisionScreen,
-  signRetype,
-} from "../../src/cli/decide-sign.js";
+import { type ConfirmFn, type SignAction, confirmSign, decisionScreen, signRetype } from "../../src/cli/decide-sign.js";
 import { lockGoal } from "../../src/goal/goal-lock.js";
 import { specFile } from "../../src/decision/spec-md.js";
 import { findDecision, foldDecisions } from "../../src/decision/state.js";
@@ -98,7 +92,7 @@ function codeOf(fn: () => unknown): string | undefined {
 
 // Spec §6.2: what is printed is what is signed, so no text may move the cursor, hide or fake a line.
 describe("decisionScreen escaping", () => {
-  const EVIL = "x\u001b[8m\r\nbuild: [\"fake\"]\u202Ey";
+  const EVIL = 'x\u001b[8m\r\nbuild: ["fake"]\u202Ey';
   const hostile = (text: string): boolean => /[\p{Cc}\p{Cf}\u2028\u2029]/u.test(text);
 
   it("prints control and bidi characters as escapes in every free-text field", () => {
@@ -106,7 +100,12 @@ describe("decisionScreen escaping", () => {
     const item = items[0]!;
     const base = recordOf(fx, item, "d-cache-key");
     const record = { ...base, question: EVIL } as typeof base;
-    const input: ResolveInput = { choice: EVIL, rationale: EVIL, rejected: [EVIL], interface: { ...CONTRACT, io_contract: EVIL, build: ["npm", EVIL] } };
+    const input: ResolveInput = {
+      choice: EVIL,
+      rationale: EVIL,
+      rejected: [EVIL],
+      interface: { ...CONTRACT, io_contract: EVIL, build: ["npm", EVIL] },
+    };
     const lines = decisionScreen(item, record, { verb: "resolve", input });
     const text = lines.join("\n");
     expect(hostile(text.replace(/\n/g, ""))).toBe(false);
@@ -119,7 +118,9 @@ describe("decisionScreen escaping", () => {
     const { fx, items } = setup();
     const item = items[0]!;
     const record = recordOf(fx, item, "d-cache-key");
-    expect(hostile(decisionScreen(item, record, { verb: "defer", input: { ...DEFER, reason: EVIL, owner: EVIL } }).join(""))).toBe(false);
+    expect(
+      hostile(decisionScreen(item, record, { verb: "defer", input: { ...DEFER, reason: EVIL, owner: EVIL } }).join("")),
+    ).toBe(false);
     expect(hostile(decisionScreen(item, record, { verb: "na", input: { rationale: EVIL } }).join(""))).toBe(false);
   });
 });
@@ -214,7 +215,9 @@ describe("confirmSign", () => {
     const record = recordOf(fx, second, "d-cache-key");
     const other = signRetype(first.front.work_id, "d-cache-key");
     expect(await confirmSign(second, record, action, "human:dev", typed(other))).toBe(false);
-    expect(await confirmSign(second, record, action, "human:dev", typed(signRetype(second.front.work_id, "d-cache-key")))).toBe(true);
+    expect(
+      await confirmSign(second, record, action, "human:dev", typed(signRetype(second.front.work_id, "d-cache-key"))),
+    ).toBe(true);
   });
 });
 
@@ -226,7 +229,9 @@ describe("runDecideResolve, runDecideDefer and runDecideNa", () => {
     const workId = item.front.work_id;
     const before = readFileSync(specFile(item.dir), "utf8");
     const ledgerBefore = fx.ledger.readVerified().length;
-    expect(codeOf(() => runDecideResolve(fx.location, workId, "d-cache-key", RESOLVE, "agent:x", NOW))).toBe("not_human");
+    expect(codeOf(() => runDecideResolve(fx.location, workId, "d-cache-key", RESOLVE, "agent:x", NOW))).toBe(
+      "not_human",
+    );
     expect(fx.ledger.readVerified()).toHaveLength(ledgerBefore);
     expect(readFileSync(specFile(item.dir), "utf8")).toBe(before);
 
@@ -296,7 +301,11 @@ describe("omf decide resolve|defer on the built CLI", () => {
     const item = items[0]!;
     const ledgerBefore = ledgerText(fx);
     const specBefore = readFileSync(specFile(item.dir), "utf8");
-    const out = omf(["decide", verb, item.front.work_id, "d-cache-key", "--file", bodyFile(body), ...flags], fx.repo, fx.home);
+    const out = omf(
+      ["decide", verb, item.front.work_id, "d-cache-key", "--file", bodyFile(body), ...flags],
+      fx.repo,
+      fx.home,
+    );
     expect(out.code, out.stderr).toBe(2);
     expect(out.stderr).toContain(refusal);
     expect(ledgerText(fx)).toBe(ledgerBefore);
@@ -305,10 +314,25 @@ describe("omf decide resolve|defer on the built CLI", () => {
   });
 
   it.each([
-    { name: "a file that does not exist", file: () => join(makeTempDir("omf-decision-"), "none.json"), id: "d-cache-key", message: "cannot read" },
+    {
+      name: "a file that does not exist",
+      file: () => join(makeTempDir("omf-decision-"), "none.json"),
+      id: "d-cache-key",
+      message: "cannot read",
+    },
     { name: "a file that is not JSON", file: () => rawFile("{"), id: "d-cache-key", message: "is not valid JSON" },
-    { name: "a file of the wrong shape", file: () => bodyFile({ choice: "only" }), id: "d-cache-key", message: "is not a valid resolution" },
-    { name: "a decision that does not exist", file: () => bodyFile(RESOLVE), id: "d-nope", message: "decision d-nope not found" },
+    {
+      name: "a file of the wrong shape",
+      file: () => bodyFile({ choice: "only" }),
+      id: "d-cache-key",
+      message: "is not a valid resolution",
+    },
+    {
+      name: "a decision that does not exist",
+      file: () => bodyFile(RESOLVE),
+      id: "d-nope",
+      message: "decision d-nope not found",
+    },
   ])("reports $name as a usage error (exit 1), before the terminal check", ({ file, id, message }) => {
     const { fx, items } = setup();
     const out = omf(["decide", "resolve", items[0]!.front.work_id, id, "--file", file()], fx.repo, fx.home);
@@ -321,7 +345,11 @@ describe("omf decide resolve|defer on the built CLI", () => {
     const { fx, items } = setup();
     const item = items[0]!;
     runDecideResolve(fx.location, item.front.work_id, "d-cache-key", RESOLVE, "human:dev", NOW);
-    const out = omf(["decide", "resolve", item.front.work_id, "d-cache-key", "--file", bodyFile(RESOLVE)], fx.repo, fx.home);
+    const out = omf(
+      ["decide", "resolve", item.front.work_id, "d-cache-key", "--file", bodyFile(RESOLVE)],
+      fx.repo,
+      fx.home,
+    );
     expect(out.code, out.stderr).toBe(1);
     expect(out.stderr).toContain("decision d-cache-key is already resolved");
   });
@@ -330,7 +358,11 @@ describe("omf decide resolve|defer on the built CLI", () => {
     const { fx, items } = setup();
     const item = items[0]!;
     runDecideDefer(fx.location, item.front.work_id, "d-cache-key", DEFER, "human:dev", NOW);
-    const out = omf(["decide", "resolve", item.front.work_id, "d-cache-key", "--file", bodyFile(RESOLVE)], fx.repo, fx.home);
+    const out = omf(
+      ["decide", "resolve", item.front.work_id, "d-cache-key", "--file", bodyFile(RESOLVE)],
+      fx.repo,
+      fx.home,
+    );
     expect(out.code, out.stderr).toBe(2);
     expect(out.stderr).toContain("interactive terminal");
     expect(out.stderr).not.toContain("already");

@@ -49,7 +49,9 @@ describe("link checker", () => {
 
   it("fails a link to a missing file", () => {
     const { root, names } = fixture({ "a.md": "[gone](nope.md)\n" });
-    expect(checkLinks(root, names)).toMatchObject([{ file: "a.md", line: 1, target: "nope.md", reason: "target does not exist" }]);
+    expect(checkLinks(root, names)).toMatchObject([
+      { file: "a.md", line: 1, target: "nope.md", reason: "target does not exist" },
+    ]);
   });
 
   it("fails a link to a missing heading, and one that leaves the repository", () => {
@@ -82,6 +84,6 @@ describe("link checker", () => {
     expect(slugify("Run the goal loop")).toBe("run-the-goal-loop");
     expect(slugify("What's `omf doctor`?")).toBe("whats-omf-doctor");
     expect([...anchorsOf("## 1. Setup & run\n## 한국어 제목\n")]).toEqual(["1-setup--run", "한국어-제목"]);
-    expect(linksOf("[a](<x y.md>) ![i](img.png \"t\")").map((l) => l.target)).toEqual(["x y.md", "img.png"]);
+    expect(linksOf('[a](<x y.md>) ![i](img.png "t")').map((l) => l.target)).toEqual(["x y.md", "img.png"]);
   });
 });

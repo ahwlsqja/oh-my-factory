@@ -40,18 +40,31 @@ describe("documentation drift", () => {
 
   it("finds the commands the goal loop added", () => {
     for (const path of [
-      "decide resolve", "decide defer",
-      "goal tick", "goal status", "goal resume", "goal cancel",
-      "work list", "work show", "work approve", "veto",
-      "budget show", "budget declare", "budget raise",
-      "decide add", "decide lint", "decide show",
+      "decide resolve",
+      "decide defer",
+      "goal tick",
+      "goal status",
+      "goal resume",
+      "goal cancel",
+      "work list",
+      "work show",
+      "work approve",
+      "veto",
+      "budget show",
+      "budget declare",
+      "budget raise",
+      "decide add",
+      "decide lint",
+      "decide show",
     ]) {
       expect(paths).toContain(path);
     }
   });
 
   it.each(["README.md", "README.ko.md"])("%s has a table row for every command", (file) => {
-    const rows = readRepoFile(file).split("\n").filter((line) => line.startsWith("| `omf "));
+    const rows = readRepoFile(file)
+      .split("\n")
+      .filter((line) => line.startsWith("| `omf "));
     const documented = (path: string): boolean => {
       const prefix = `| \`omf ${path}`;
       return rows.some((row) => row.startsWith(prefix) && /^[ `]/.test(row.slice(prefix.length)));

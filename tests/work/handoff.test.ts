@@ -13,7 +13,14 @@ import {
   remainingAfter,
   writeHandoff,
 } from "../../src/work/handoff.js";
-import { GATE_IDS, LINE_ORDER, STATION_IDS, type NodeId, type UnverifiedArea, type UnverifiedCode } from "../../src/work/line-types.js";
+import {
+  GATE_IDS,
+  LINE_ORDER,
+  STATION_IDS,
+  type NodeId,
+  type UnverifiedArea,
+  type UnverifiedCode,
+} from "../../src/work/line-types.js";
 import { type ReasonCode, W_REASON_CODES } from "../../src/work/w-events.js";
 import { CANARY, canaryHits } from "../helpers/canary.js";
 import { makeTempDir } from "../helpers/tmp.js";
@@ -29,7 +36,11 @@ const item = { front: { goal_id: GOAL, work_id: WORK } };
 const OUTCOMES = ["flawed", "blocked", "manual"] as const;
 
 type Class = Pick<Classification, "outcome" | "reason_code" | "unverified_areas">;
-const classification = (outcome: Class["outcome"], reason_code: ReasonCode | null, unverified_areas: UnverifiedArea[] = []): Class => ({
+const classification = (
+  outcome: Class["outcome"],
+  reason_code: ReasonCode | null,
+  unverified_areas: UnverifiedArea[] = [],
+): Class => ({
   outcome,
   reason_code,
   unverified_areas,
@@ -114,7 +125,9 @@ describe("HANDOFF_ROUTES", () => {
         ).toBe(true);
       }
       const other = "w-aaaaaaaaaaaa";
-      expect(HANDOFF_ROUTES[code].options(other).join("\n").replaceAll(other, "ID"), code).toBe(options.join("\n").replaceAll(WORK, "ID"));
+      expect(HANDOFF_ROUTES[code].options(other).join("\n").replaceAll(other, "ID"), code).toBe(
+        options.join("\n").replaceAll(WORK, "ID"),
+      );
     }
   });
 
@@ -125,7 +138,12 @@ describe("HANDOFF_ROUTES", () => {
   });
 
   it("offers no rerun for the states a rerun cannot clear", () => {
-    for (const code of ["scenarios_need_review", "scenarios_exhausted", "test_reseal_required", "test_run_incomplete"] as const) {
+    for (const code of [
+      "scenarios_need_review",
+      "scenarios_exhausted",
+      "test_reseal_required",
+      "test_run_incomplete",
+    ] as const) {
       const options = HANDOFF_ROUTES[code].options(WORK);
       expect(options, code).toEqual([`omf work show ${WORK}`, `omf veto ${WORK}`]);
       expect(options.join("\n"), code).not.toContain(" run ");
@@ -150,7 +168,12 @@ describe("buildHandoff", () => {
         expect(record.decision_required.j).toBe(HANDOFF_ROUTES[code].j);
         expect(record.decision_required.question).toBe(HANDOFF_ROUTES[code].question);
         expect(record.decision_required.options).toEqual(HANDOFF_ROUTES[code].options(WORK));
-        expect(record).toMatchObject({ schema_version: 1, kind: "outcome", predecessor_seq: null, resume: "not_available_until_m4" });
+        expect(record).toMatchObject({
+          schema_version: 1,
+          kind: "outcome",
+          predecessor_seq: null,
+          resume: "not_available_until_m4",
+        });
       }
     }
   });
@@ -200,11 +223,13 @@ describe("buildHandoff", () => {
       now: NOW,
     };
     expect(() => buildHandoff({ ...base, ran: [{ node: "S3", result: CANARY.metricId }] })).toThrow(/invalid handoff/);
-    expect(() => buildHandoff({ ...base, ran: [{ node: "S9" as NodeId, result: "working" }] })).toThrow(/invalid handoff/);
-    expect(() => buildHandoff({ ...base, remaining: ["S9" as NodeId] })).toThrow(/invalid handoff/);
-    expect(() => buildHandoff({ ...base, classification: { outcome: "success", reason_code: null, unverified_areas: [] } })).toThrow(
-      "a handoff needs a flawed, blocked or manual outcome with a reason code",
+    expect(() => buildHandoff({ ...base, ran: [{ node: "S9" as NodeId, result: "working" }] })).toThrow(
+      /invalid handoff/,
     );
+    expect(() => buildHandoff({ ...base, remaining: ["S9" as NodeId] })).toThrow(/invalid handoff/);
+    expect(() =>
+      buildHandoff({ ...base, classification: { outcome: "success", reason_code: null, unverified_areas: [] } }),
+    ).toThrow("a handoff needs a flawed, blocked or manual outcome with a reason code");
     expect(() => buildHandoff({ ...base, classification: classification("blocked", null) })).toThrow(
       "a handoff needs a flawed, blocked or manual outcome with a reason code",
     );
@@ -213,10 +238,26 @@ describe("buildHandoff", () => {
   it("ties the kind to the predecessor seq and to run_killed", () => {
     const base = { scope, ran: [], remaining: [], now: NOW };
     const killed = classification("blocked", "run_killed");
-    expect(() => buildHandoff({ ...base, kind: "killed_predecessor", predecessor_seq: null, classification: killed })).toThrow(/invalid handoff/);
-    expect(() => buildHandoff({ ...base, kind: "killed_predecessor", predecessor_seq: 4, classification: classification("blocked", "station_error") })).toThrow(/invalid handoff/);
-    expect(() => buildHandoff({ ...base, kind: "outcome", predecessor_seq: 4, classification: killed })).toThrow(/invalid handoff/);
-    expect(predecessorRecord(4)).toMatchObject({ kind: "killed_predecessor", predecessor_seq: 4, outcome: "blocked", reason_code: "run_killed" });
+    expect(() =>
+      buildHandoff({ ...base, kind: "killed_predecessor", predecessor_seq: null, classification: killed }),
+    ).toThrow(/invalid handoff/);
+    expect(() =>
+      buildHandoff({
+        ...base,
+        kind: "killed_predecessor",
+        predecessor_seq: 4,
+        classification: classification("blocked", "station_error"),
+      }),
+    ).toThrow(/invalid handoff/);
+    expect(() => buildHandoff({ ...base, kind: "outcome", predecessor_seq: 4, classification: killed })).toThrow(
+      /invalid handoff/,
+    );
+    expect(predecessorRecord(4)).toMatchObject({
+      kind: "killed_predecessor",
+      predecessor_seq: 4,
+      outcome: "blocked",
+      reason_code: "run_killed",
+    });
   });
 });
 
@@ -291,7 +332,9 @@ describe("writeHandoff", () => {
 
   it("refuses an invalid record and writes nothing", () => {
     const dir = makeTempDir("omf-handoff-");
-    expect(() => writeHandoff(dir, { ...outcomeRecord("station_error"), resume: "later" } as never)).toThrow(/invalid handoff/);
+    expect(() => writeHandoff(dir, { ...outcomeRecord("station_error"), resume: "later" } as never)).toThrow(
+      /invalid handoff/,
+    );
     expect(existsSync(join(dir, "handoffs"))).toBe(false);
   });
 });
@@ -301,7 +344,8 @@ describe("owedPredecessors", () => {
     const dir = makeTempDir("omf-handoff-");
     return { dir, ledger: new Ledger(dir, () => T0) };
   };
-  const owed = (f: { dir: string; ledger: Ledger }, workId: string = WORK) => owedPredecessors(f.dir, f.ledger.readVerified(), workId);
+  const owed = (f: { dir: string; ledger: Ledger }, workId: string = WORK) =>
+    owedPredecessors(f.dir, f.ledger.readVerified(), workId);
 
   it("owes nothing on an empty ledger", () => {
     expect(owed(fresh())).toEqual([]);

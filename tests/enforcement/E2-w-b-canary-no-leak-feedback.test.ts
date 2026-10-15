@@ -56,12 +56,15 @@ describe("E2-W-b canary-no-leak, feedback side (partial: test-local mapper)", ()
       expect(fbCanaryHits(error.message)).toEqual([]);
     });
 
-    it.each(["scenario_id", "input", "expected", "canary"])("refuses a result row with an extra %s key without echoing it", (key) => {
-      const row = { category: "interface", passed: true, flaky: false, [key]: JSON.stringify(scenario) };
-      const error = thrown(() => parseScenarioResults([row]));
-      expect(error.code).toBe("invalid_input");
-      expect(fbCanaryHits(error.message)).toEqual([]);
-    });
+    it.each(["scenario_id", "input", "expected", "canary"])(
+      "refuses a result row with an extra %s key without echoing it",
+      (key) => {
+        const row = { category: "interface", passed: true, flaky: false, [key]: JSON.stringify(scenario) };
+        const error = thrown(() => parseScenarioResults([row]));
+        expect(error.code).toBe("invalid_input");
+        expect(fbCanaryHits(error.message)).toEqual([]);
+      },
+    );
 
     it("accepts what the test-local mapper builds: three keys and no id", () => {
       const results = toResults([scenario], verdictsFor([scenario], new Set([0])));
@@ -92,7 +95,12 @@ describe("E2-W-b canary-no-leak, feedback side (partial: test-local mapper)", ()
       expect(run.rounds[0]?.text).toMatch(/^- error_semantics: 16% of 6 scenarios$/m);
       expect(run.rounds[2]?.text).toMatch(/^- interface: 83% of 6 scenarios$/m);
       expect(run.rounds[3]?.text).toMatch(/^- interface: 83% of 6 scenarios$/m);
-      for (const type of ["feedback.released", "feedback.test_run_consumed", "feedback.test_run_completed", "feedback.test_reseal_authorized"]) {
+      for (const type of [
+        "feedback.released",
+        "feedback.test_run_consumed",
+        "feedback.test_run_completed",
+        "feedback.test_reseal_authorized",
+      ]) {
         expect(ledgerEvents(run.fx, type).length, type).toBe(type === "feedback.released" ? 4 : 1);
       }
       // Two W units and two reconcile ticks draw from the one per-goal pool.
@@ -123,7 +131,9 @@ describe("E2-W-b canary-no-leak, feedback side (partial: test-local mapper)", ()
 
     it("keeps them out of the next reconcile input, the model's stdin and the CLI output", () => {
       const types = ledgerEvents(run.fx).map((event) => event.type);
-      expect(types.lastIndexOf("feedback.released"), "the second tick came after the releases").toBeLessThan(types.lastIndexOf("reconcile.requested"));
+      expect(types.lastIndexOf("feedback.released"), "the second tick came after the releases").toBeLessThan(
+        types.lastIndexOf("reconcile.requested"),
+      );
       const inputs = reconcileInputs(run.fx);
       expect(inputs).toHaveLength(2);
       for (const input of inputs) {
@@ -144,7 +154,11 @@ describe("E2-W-b canary-no-leak, feedback side (partial: test-local mapper)", ()
 
     it("keeps them out of the evidence values M3d produces and the evidence files built from them", () => {
       expect(run.trainCounts).toEqual({ pass: 6, total: 12, flaky: 1 });
-      expect(run.noise).toMatchObject({ status: "not_evaluated", force_not_recommended: true, reason: "flaky_scenarios" });
+      expect(run.noise).toMatchObject({
+        status: "not_evaluated",
+        force_not_recommended: true,
+        reason: "flaky_scenarios",
+      });
       expect(run.sealedTest).toEqual({ pass: 6, total: 8, flaky: 1 });
       const doc = JSON.parse(run.evidence.json) as { sealed: { train: unknown; test: unknown } };
       expect(doc.sealed.train, "the counts reached the evidence file").toEqual(run.trainCounts);
@@ -158,14 +172,30 @@ describe("E2-W-b canary-no-leak, feedback side (partial: test-local mapper)", ()
   });
 
   describe("the property loop (seeded, 200 iterations)", () => {
-    const TEMPLATE_WORDS = ["Masked", "feedback", "from", "the", "train", "scenarios", "of", "No", "other", "information", "about", "is", "available"];
+    const TEMPLATE_WORDS = [
+      "Masked",
+      "feedback",
+      "from",
+      "the",
+      "train",
+      "scenarios",
+      "of",
+      "No",
+      "other",
+      "information",
+      "about",
+      "is",
+      "available",
+    ];
 
     it("releases only template words, class names, percentages and counts, whatever the scenarios say", () => {
       const random = mulberry32(20261014);
       const words = new Set<string>([...DECISION_CLASSES, ...TEMPLATE_WORDS]);
       for (let i = 0; i < 200; i += 1) {
         const count = 5 + Math.floor(random() * 36);
-        const scenarios = Array.from({ length: count }, (_, index) => plantedScenario(random, index, pick(random, LINKABLE_REFS)));
+        const scenarios = Array.from({ length: count }, (_, index) =>
+          plantedScenario(random, index, pick(random, LINKABLE_REFS)),
+        );
         const ledger = new Ledger(makeTempDir("omf-fb-prop-"));
         declareBudget(ledger, "g-prop", "disclosure", 3, "human:dev");
         const released = releaseFeedback(ledger, {
@@ -180,13 +210,24 @@ describe("E2-W-b canary-no-leak, feedback side (partial: test-local mapper)", ()
         const text = released.feedback.text;
         const allowed = new Set(released.host_only.categories.flatMap((c) => [String(c.score_pct), String(c.n)]));
         expect(isAllowlistedFeedback(text), `iteration ${i}`).toBe(true);
-        expect((text.match(/[0-9]+/g) ?? []).filter((digits) => !allowed.has(digits)), `iteration ${i}: stray digit runs`).toEqual([]);
-        expect((text.match(/[A-Za-z_]+/g) ?? []).filter((word) => !words.has(word)), `iteration ${i}: stray words`).toEqual([]);
+        expect(
+          (text.match(/[0-9]+/g) ?? []).filter((digits) => !allowed.has(digits)),
+          `iteration ${i}: stray digit runs`,
+        ).toEqual([]);
+        expect(
+          (text.match(/[A-Za-z_]+/g) ?? []).filter((word) => !words.has(word)),
+          `iteration ${i}: stray words`,
+        ).toEqual([]);
         const surfaces = `${text}\n${readFileSync(ledger.file, "utf8")}`;
-        expect(scenarios.flatMap(plantedOf).filter((value) => containsToken(surfaces, value)), `iteration ${i}: planted values`).toEqual([]);
+        expect(
+          scenarios.flatMap(plantedOf).filter((value) => containsToken(surfaces, value)),
+          `iteration ${i}: planted values`,
+        ).toEqual([]);
       }
     }, 120_000);
   });
 
-  it.todo("M3f: re-run this canary set from vault scenarios through the real judge-station mapper, which must drop the ids");
+  it.todo(
+    "M3f: re-run this canary set from vault scenarios through the real judge-station mapper, which must drop the ids",
+  );
 });

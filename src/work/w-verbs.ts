@@ -296,7 +296,10 @@ export function setItemProgress(
 ): WorkItem {
   assertWorkId(workId);
   const { station, step } = progress;
-  if (!(PROGRESS_STATIONS as readonly string[]).includes(station) || !(PROGRESS_STEPS as readonly string[]).includes(step)) {
+  if (
+    !(PROGRESS_STATIONS as readonly string[]).includes(station) ||
+    !(PROGRESS_STEPS as readonly string[]).includes(step)
+  ) {
     throw new WError("outcome_invalid", "progress is not a station and step from the closed lists");
   }
   const item = readItem(ctx, workId);

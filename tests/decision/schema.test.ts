@@ -59,7 +59,13 @@ const fixtures: Record<string, Record<string, unknown>> = {
   qas,
   response_measure: measure,
   interface_contract: contract as unknown as Record<string, unknown>,
-  add_input: { id: "d-latency", class: "latency", question: "How fast must it answer?", qas, response_measure: measure },
+  add_input: {
+    id: "d-latency",
+    class: "latency",
+    question: "How fast must it answer?",
+    qas,
+    response_measure: measure,
+  },
   resolve_input: {
     choice: "Use a queue",
     rationale: "Bursts must not drop work",
@@ -75,7 +81,14 @@ const fixtures: Record<string, Record<string, unknown>> = {
     expires_at: "2026-11-12T00:00:00Z",
   },
   na_input: { rationale: "This tool has no network surface" },
-  ev_added: { ...scope, decision_id: "d-latency", class: "latency", question: "How fast?", qas, response_measure: measure },
+  ev_added: {
+    ...scope,
+    decision_id: "d-latency",
+    class: "latency",
+    question: "How fast?",
+    qas,
+    response_measure: measure,
+  },
   ev_resolved: { ...scope, decision_id: "d-latency", resolution, response_measure: measure, interface: contract },
   ev_deferred: { ...scope, decision_id: "d-latency", deferral },
   ev_marked_na: {
@@ -85,7 +98,12 @@ const fixtures: Record<string, Record<string, unknown>> = {
     by: "human:dev@example.com",
     at: "2026-10-12T00:00:00.000Z",
   },
-  ev_rejected: { ...scope, decision_id: "d-latency", op: "add", findings: [{ rule: "metric-name", field: "question" }] },
+  ev_rejected: {
+    ...scope,
+    decision_id: "d-latency",
+    op: "add",
+    findings: [{ rule: "metric-name", field: "question" }],
+  },
   needs_human: {
     schema_version: 1,
     id: "nh-0123456789ab",
@@ -129,7 +147,8 @@ describe("decision.schema.json", () => {
       for (const key of schema.$defs[def]?.required ?? []) {
         const { [key]: _removed, ...rest } = doc;
         const result = check(def, rest);
-        if (result.ok || !result.errors.includes(`must have required property '${key}'`)) failures.push(`${def}.${key}`);
+        if (result.ok || !result.errors.includes(`must have required property '${key}'`))
+          failures.push(`${def}.${key}`);
       }
     }
     expect(failures).toEqual([]);
@@ -210,7 +229,9 @@ describe("decision.schema.json", () => {
     expect(check("ev_rejected", { ...noId, decision_id_sha12: "0123456789ab" }).ok).toBe(true);
     expect(check("ev_rejected", noId).ok).toBe(false);
     expect(check("ev_rejected", { ...base, decision_id_sha12: "0123456789ab" }).ok).toBe(false);
-    expect(check("ev_rejected", { ...base, findings: [{ rule: "metric-name", field: "q", text: "leak" }] }).ok).toBe(false);
+    expect(check("ev_rejected", { ...base, findings: [{ rule: "metric-name", field: "q", text: "leak" }] }).ok).toBe(
+      false,
+    );
   });
 });
 
@@ -248,7 +269,13 @@ describe("decision types", () => {
   });
 
   it("ignores build, run, kind and io_contract, which are not part of the judge config", () => {
-    const other = { ...contract, kind: "http", build: ["make"], run: ["./app"], io_contract: "changed" } as InterfaceContract;
+    const other = {
+      ...contract,
+      kind: "http",
+      build: ["make"],
+      run: ["./app"],
+      io_contract: "changed",
+    } as InterfaceContract;
     expect(judgeConfigSha256(other)).toBe(judgeConfigSha256(contract));
   });
 });

@@ -38,7 +38,13 @@ describe("needsHumanFor", () => {
   it("builds a record that matches the schema and never approves by default", () => {
     const record = needsHumanFor(SCOPE, blocked(...ALL_REASONS), T1);
     expect(validateDef("decision.schema.json", "needs_human", record)).toEqual({ ok: true });
-    expect(record).toMatchObject({ schema_version: 1, j: "J2", work_id: "w-0123456789ab", goal_id: "g-demo", default: null });
+    expect(record).toMatchObject({
+      schema_version: 1,
+      j: "J2",
+      work_id: "w-0123456789ab",
+      goal_id: "g-demo",
+      default: null,
+    });
     expect(record.id).toMatch(/^nh-[0-9a-f]{12}$/);
     expect(record.resume_token).toMatch(/^[0-9a-f]{32}$/);
     expect(record.created_at).toBe("2026-10-14T10:00:00.000Z");
@@ -56,7 +62,11 @@ describe("needsHumanFor", () => {
   it("states the question with counts and ids only", () => {
     const record = needsHumanFor(
       SCOPE,
-      blocked({ code: "required_open", decision_id: "d-a" }, { code: "required_open", decision_id: "d-b" }, { code: "interface_missing" }),
+      blocked(
+        { code: "required_open", decision_id: "d-a" },
+        { code: "required_open", decision_id: "d-b" },
+        { code: "interface_missing" },
+      ),
       T1,
     );
     expect(record.question).toBe(
@@ -75,7 +85,10 @@ describe("needsHumanFor", () => {
   it("points an unseeded intent question at show first, then resolve", () => {
     const record = needsHumanFor(
       SCOPE,
-      blocked({ code: "intent_question_missing", decision_id: "d-intent-q1" }, { code: "intent_question_missing", decision_id: "d-intent-q2" }),
+      blocked(
+        { code: "intent_question_missing", decision_id: "d-intent-q1" },
+        { code: "intent_question_missing", decision_id: "d-intent-q2" },
+      ),
       T1,
     );
     expect(record.options).toEqual([

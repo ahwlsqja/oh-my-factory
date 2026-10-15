@@ -62,7 +62,9 @@ describe("containerFactsFromInspect", () => {
     specOnly.Mounts = [];
     specOnly.HostConfig.Binds = null;
     specOnly.HostConfig.Mounts = [{ Type: "bind", Source: "/srv/data", Target: "/data", ReadOnly: true }];
-    expect(containerFactsFromInspect(specOnly).mounts).toEqual([{ type: "bind", source: "/srv/data", destination: "/data", read_only: true }]);
+    expect(containerFactsFromInspect(specOnly).mounts).toEqual([
+      { type: "bind", source: "/srv/data", destination: "/data", read_only: true },
+    ]);
   });
 
   it("parses bind options, a named volume and rejects a malformed bind", () => {

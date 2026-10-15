@@ -11,7 +11,8 @@ export function raiseWallTime(ledger: Ledger, goalId: string, by: string, actor:
   if (!actor.startsWith("human:")) throw new Error(`only a person raises wall time (J8); actor was ${actor}`);
   parseDuration(by);
   ledger.appendWith((events) => {
-    if (latestApproval(events, goalId) === null) throw new Error(`goal ${goalId} is not approved; there is no wall time to raise`);
+    if (latestApproval(events, goalId) === null)
+      throw new Error(`goal ${goalId} is not approved; there is no wall time to raise`);
     return { actor, type: "goal.wall_time_raised", payload: { goal_id: goalId, by } };
   });
 }
@@ -35,7 +36,8 @@ export function wallTimeLimitMs(
   lock: GoalLock | null,
 ): number {
   const base = approval.wall_time ?? lock?.semantic.budget.wall_time;
-  if (base === undefined) throw new Error(`the approved wall time of goal ${goalId} is not recorded; approve the goal again`);
+  if (base === undefined)
+    throw new Error(`the approved wall time of goal ${goalId} is not recorded; approve the goal again`);
   let raised = 0;
   for (const event of events) {
     if (event.payload.goal_id !== goalId) continue;

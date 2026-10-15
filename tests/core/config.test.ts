@@ -126,21 +126,27 @@ describe("parseConfig rejections", () => {
   });
 
   it("says why codex and login_file are refused", () => {
-    expect(() => parseConfig('[reconciler]\nkind = "codex"\n')).toThrow(/reconciler\.kind "codex" needs a container; M3/);
+    expect(() => parseConfig('[reconciler]\nkind = "codex"\n')).toThrow(
+      /reconciler\.kind "codex" needs a container; M3/,
+    );
     expect(() => parseConfig('[roles]\nreconciler = { vendor = "codex" }\n')).toThrow(
       /roles\.reconciler\.vendor "codex" needs a container; M3/,
     );
-    expect(() => parseConfig('[reconciler]\nauth = "login_file"\n')).toThrow(/reconciler\.auth "login_file" needs a container; M3/);
+    expect(() => parseConfig('[reconciler]\nauth = "login_file"\n')).toThrow(
+      /reconciler\.auth "login_file" needs a container; M3/,
+    );
   });
 
   it("still allows codex for the roles M2b does not run", () => {
-    expect(parseConfig('[roles]\nauthor = { vendor = "codex" }\njudge = { vendor = "codex" }\n').roles.judge.vendor).toBe("codex");
+    expect(
+      parseConfig('[roles]\nauthor = { vendor = "codex" }\njudge = { vendor = "codex" }\n').roles.judge.vendor,
+    ).toBe("codex");
   });
 });
 
 describe("configSha256", () => {
   it("hashes the raw bytes and changes when one byte changes", () => {
-    const text = '[reconciler]\ntimeout_ms = 5000\n';
+    const text = "[reconciler]\ntimeout_ms = 5000\n";
     const dir = projectWith(text);
     const first = configSha256(dir);
     expect(first).toBe(sha256Hex(Buffer.from(text, "utf8")));
@@ -191,7 +197,9 @@ describe("[w] table (per-item W limits, M3-D18)", () => {
   });
 
   it("refuses an unknown key under [w]", () => {
-    expect(() => parseConfig("[w]\nmax_rounds = 3\nbogus = 1\n")).toThrow(/data\/w must NOT have additional properties/);
+    expect(() => parseConfig("[w]\nmax_rounds = 3\nbogus = 1\n")).toThrow(
+      /data\/w must NOT have additional properties/,
+    );
   });
 
   it("still refuses a missing config.toml instead of using the [w] defaults (spec §11.5)", () => {

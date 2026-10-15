@@ -10,7 +10,15 @@ import type { GateContext } from "../../src/work/gates.js";
 import type { WorkItem } from "../../src/work/types.js";
 import { HUMAN, NOW, addOpen } from "../helpers/decision-fixture.js";
 import { ledgerEvents } from "../helpers/enforcement-goal.js";
-import { type LineFixture, ROUND1, ROUND2, plantCanary, sealStored, setupLine, writeYaml } from "../helpers/line-fixture.js";
+import {
+  type LineFixture,
+  ROUND1,
+  ROUND2,
+  plantCanary,
+  sealStored,
+  setupLine,
+  writeYaml,
+} from "../helpers/line-fixture.js";
 
 const HOUR = 3_600_000;
 const RUN = "r-20261014T091500Z-ab12";

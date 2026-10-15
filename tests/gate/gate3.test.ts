@@ -40,8 +40,16 @@ describe("evaluateGate3", () => {
     ["contradiction canary not run", withField({ contradiction_canary: "not_run" }), "contradiction_canary_not_run"],
     ["gate line misconfigured", withField({ gate_line: "misconfigured" }), "gate_line_misconfigured"],
     ["gate line not run", withField({ gate_line: "not_run" }), "gate_line_not_run"],
-    ["isolation L1 below declared L2", withField({ isolation: { declared: "L2", measured: "L1" } }), "isolation_below_declared"],
-    ["isolation unmeasured", withField({ isolation: { declared: "L2", measured: "unmeasured" } }), "isolation_unmeasured"],
+    [
+      "isolation L1 below declared L2",
+      withField({ isolation: { declared: "L2", measured: "L1" } }),
+      "isolation_below_declared",
+    ],
+    [
+      "isolation unmeasured",
+      withField({ isolation: { declared: "L2", measured: "unmeasured" } }),
+      "isolation_unmeasured",
+    ],
   ];
 
   it.each(UNHEALTHY)("%s fails with exactly its condition", (_name, measured, condition) => {
@@ -61,7 +69,9 @@ describe("evaluateGate3", () => {
   it("compares the measured level with the declared one, not for equality", () => {
     expect(evaluateGate3(withField({ isolation: { declared: "L2", measured: "L3" } })).passed).toBe(true);
     expect(evaluateGate3(withField({ isolation: { declared: "L1", measured: "L1" } })).passed).toBe(true);
-    expect(evaluateGate3(withField({ isolation: { declared: "L3", measured: "L2" } })).failed).toEqual(["isolation_below_declared"]);
+    expect(evaluateGate3(withField({ isolation: { declared: "L3", measured: "L2" } })).failed).toEqual([
+      "isolation_below_declared",
+    ]);
   });
 
   it("routes any isolation condition to J7 and anything else to J6, and lists every condition", () => {
@@ -79,7 +89,11 @@ describe("evaluateGate3", () => {
   it("fails closed on a declared level outside the closed list instead of comparing it as equal", () => {
     for (const declared of ["L9", "", "l2", "unmeasured"]) {
       const forged = { ...HEALTHY, isolation: { declared, measured: "L2" } } as unknown as Measured;
-      expect(evaluateGate3(forged), declared).toEqual({ passed: false, failed: ["isolation_below_declared"], route: "J7" });
+      expect(evaluateGate3(forged), declared).toEqual({
+        passed: false,
+        failed: ["isolation_below_declared"],
+        route: "J7",
+      });
     }
   });
 });
@@ -110,13 +124,23 @@ describe("measuredFrom", () => {
     const notRun = cleanAudit({ canary: { ...cleanAudit().canary, status: "not_run", surfaces_scanned: [] } });
     expect(measuredFrom(healthyParts({ audit: notRun })).canary).toBe("not_run");
     // A hit found before the cap was reached is still a hit.
-    const truncatedHit = cleanAudit({ canary: { ...cleanAudit().canary, truncated: true, status: "not_run", total: 1, hits: [{ surface: "worktree", count: 1 }] } });
+    const truncatedHit = cleanAudit({
+      canary: {
+        ...cleanAudit().canary,
+        truncated: true,
+        status: "not_run",
+        total: 1,
+        hits: [{ surface: "worktree", count: 1 }],
+      },
+    });
     expect(measuredFrom(healthyParts({ audit: truncatedHit })).canary).toBe("hit");
   });
 
   it("gives judge_config not_run when no judge file was checked, and changed when one was touched", () => {
     expect(measuredFrom(healthyParts({ audit: cleanAudit({ judge_files_checked: 0 }) })).judge_config).toBe("not_run");
-    expect(measuredFrom(healthyParts({ audit: cleanAudit({ judge_config_touched: true }) })).judge_config).toBe("changed");
+    expect(measuredFrom(healthyParts({ audit: cleanAudit({ judge_config_touched: true }) })).judge_config).toBe(
+      "changed",
+    );
   });
 
   it("maps the gate verdict: GREEN green, RED red, MISCONFIGURED misconfigured", () => {
@@ -127,8 +151,13 @@ describe("measuredFrom", () => {
   });
 
   it("reads isolation as unmeasured unless all four stages are measured", () => {
-    expect(measuredFrom(healthyParts({ isolation: isolationFor({ author: "L2", implementer: "L2", sut: "L2" }) })).isolation.measured).toBe("unmeasured");
-    expect(measuredFrom(healthyParts({ isolation: isolationFor({ ...ALL_L2, harness: "L1" }) })).isolation.measured).toBe("L1");
+    expect(
+      measuredFrom(healthyParts({ isolation: isolationFor({ author: "L2", implementer: "L2", sut: "L2" }) })).isolation
+        .measured,
+    ).toBe("unmeasured");
+    expect(
+      measuredFrom(healthyParts({ isolation: isolationFor({ ...ALL_L2, harness: "L1" }) })).isolation.measured,
+    ).toBe("L1");
     // A hand-built summary that claims a level without being complete is still unmeasured.
     const claimed = { ...isolationFor(ALL_L2), complete: false };
     expect(measuredFrom(healthyParts({ isolation: claimed })).isolation.measured).toBe("unmeasured");
@@ -143,11 +172,19 @@ describe("measuredFrom", () => {
     const audit = loadAudit(itemDir, SCOPE, ledger.readVerified());
     expect(audit).not.toBeNull();
 
-    const target: CommandTarget = { run: async () => ({ kind: "exited", status: 0, signal: null, stdout: "", stderr: "" }) };
-    return runGates({ fast: ["true"], full: ["true"], deep: null, required: ["fast", "full"] }, target).then((gates) => {
-      expect(gates.verdict.status).toBe("GREEN");
-      expect(evaluateGate3(measuredFrom(healthyParts({ audit, gates })))).toEqual({ passed: true, failed: [], route: "none" });
-    });
+    const target: CommandTarget = {
+      run: async () => ({ kind: "exited", status: 0, signal: null, stdout: "", stderr: "" }),
+    };
+    return runGates({ fast: ["true"], full: ["true"], deep: null, required: ["fast", "full"] }, target).then(
+      (gates) => {
+        expect(gates.verdict.status).toBe("GREEN");
+        expect(evaluateGate3(measuredFrom(healthyParts({ audit, gates })))).toEqual({
+          passed: true,
+          failed: [],
+          route: "none",
+        });
+      },
+    );
   });
 
   it("does not accept a GATE-2 result as the contradiction-canary input", () => {

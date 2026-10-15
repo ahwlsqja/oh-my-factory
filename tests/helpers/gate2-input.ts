@@ -3,7 +3,13 @@ import type { DecisionClass, DecisionRecord, DecisionState } from "../../src/dec
 import type { EffectiveScenario, SealRecord } from "../../src/scenario/events.js";
 import type { Gate2Input, Gate2Probes, ProbeRun } from "../../src/scenario/gate2.js";
 import { scenarioRef } from "../../src/scenario/types.js";
-import type { RefusalCode, ScenarioSplit, ScenarioStatus, StoredKind, StoredScenario } from "../../src/scenario/types.js";
+import type {
+  RefusalCode,
+  ScenarioSplit,
+  ScenarioStatus,
+  StoredKind,
+  StoredScenario,
+} from "../../src/scenario/types.js";
 import type { ScenarioSetRead } from "../../src/vault/vault.js";
 import { SCOPE } from "./decision.js";
 
@@ -111,7 +117,16 @@ export function sealRecord(over: Partial<SealRecord> = {}): SealRecord {
     author: { vendor: "stub", model: "stub-1", at: AT, isolation: "host_command" },
     decisions_digest: DECISIONS_DIGEST,
     set_sha256: SET_SHA,
-    counts: { authored: 3, stored: 3, behavior: 2, contradiction_canary: 1, train: 2, test: 1, rejected: 0, ignored_fields: 0 },
+    counts: {
+      authored: 3,
+      stored: 3,
+      behavior: 2,
+      contradiction_canary: 1,
+      train: 2,
+      test: 1,
+      rejected: 0,
+      ignored_fields: 0,
+    },
     ...over,
   };
 }
@@ -121,7 +136,10 @@ export function refOf(e: EffectiveScenario): string {
 }
 
 /** Every active scenario gets `verdict` against both nulls; canaries also against the echo stub. Retired and contaminated ones are not probed. */
-export function verdictProbes(scenarios: readonly EffectiveScenario[], verdict: ProbeRun["outcome"] = "fail"): Gate2Probes {
+export function verdictProbes(
+  scenarios: readonly EffectiveScenario[],
+  verdict: ProbeRun["outcome"] = "fail",
+): Gate2Probes {
   const active = scenarios.filter((s) => s.status === "active");
   const run = (s: EffectiveScenario): ProbeRun => ({ scenario_ref: refOf(s), outcome: verdict });
   return {
@@ -159,7 +177,9 @@ export function passingInput(): Gate2Input {
 
 /** The ref of the first effective scenario of this kind (and split); throws when the input has none. */
 export function pick(input: Gate2Input, kind: StoredKind, split?: ScenarioSplit): string {
-  const found = input.effective.find((e) => e.scenario.kind === kind && (split === undefined || e.scenario.split === split));
+  const found = input.effective.find(
+    (e) => e.scenario.kind === kind && (split === undefined || e.scenario.split === split),
+  );
   if (found === undefined) throw new Error(`no ${kind} scenario in the input`);
   return refOf(found);
 }
@@ -173,6 +193,10 @@ export function setProbe(
 ): Gate2Input {
   const probes = input.probes;
   if (probes === null) throw new Error("setProbe needs probes");
-  const next: ProbeRun = refusal === undefined ? { scenario_ref: ref, outcome } : { scenario_ref: ref, outcome, refusal };
-  return { ...input, probes: { ...probes, [list]: probes[list].map((run) => (run.scenario_ref === ref ? next : run)) } };
+  const next: ProbeRun =
+    refusal === undefined ? { scenario_ref: ref, outcome } : { scenario_ref: ref, outcome, refusal };
+  return {
+    ...input,
+    probes: { ...probes, [list]: probes[list].map((run) => (run.scenario_ref === ref ? next : run)) },
+  };
 }

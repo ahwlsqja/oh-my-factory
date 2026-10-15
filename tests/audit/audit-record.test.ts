@@ -1,7 +1,24 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { auditInputsOf, auditPath, auditSignals, loadAudit, recordAudit, repairAudit, runAudit } from "../../src/audit/work-audit.js";
+import {
+  auditInputsOf,
+  auditPath,
+  auditSignals,
+  loadAudit,
+  recordAudit,
+  repairAudit,
+  runAudit,
+} from "../../src/audit/work-audit.js";
 import type { RecordSink, WorkAudit } from "../../src/audit/work-audit.js";
 import { Ledger } from "../../src/core/ledger.js";
 import { classifyOutcome, emptyEvidenceInputs } from "../../src/work/classify.js";
@@ -117,7 +134,12 @@ describe("loadAudit", () => {
     const report = await cleanReport();
     const itemDir = makeTempDir("omf-item-");
     const ledger = new Ledger(makeTempDir("omf-ledger-"));
-    recordAudit({ appendWith: (build) => ledger.appendWith((events) => ({ ...build(events), actor: "agent:forger" })) }, SCOPE, itemDir, report);
+    recordAudit(
+      { appendWith: (build) => ledger.appendWith((events) => ({ ...build(events), actor: "agent:forger" })) },
+      SCOPE,
+      itemDir,
+      report,
+    );
     expect(loadAudit(itemDir, SCOPE, ledger.readVerified())).toBeNull();
   });
 
@@ -130,7 +152,10 @@ describe("loadAudit", () => {
   });
 
   it("rejects a file that empties high_risk_paths_touched to hide a high-risk diff", async () => {
-    const fx = auditFixture({ "src/a.ts": "1\n", ".github/workflows/ci.yml": "a\n" }, { ".github/workflows/ci.yml": "b\n" });
+    const fx = auditFixture(
+      { "src/a.ts": "1\n", ".github/workflows/ci.yml": "a\n" },
+      { ".github/workflows/ci.yml": "b\n" },
+    );
     const report = await runAudit(auditInput(fx));
     expect(report.high_risk_paths_touched).toEqual([".github/workflows/ci.yml"]);
     const rec = recordAndLoad(report);
@@ -141,7 +166,10 @@ describe("loadAudit", () => {
   });
 
   it("rejects a file that empties only the path list and keeps the authenticated count", async () => {
-    const fx = auditFixture({ "src/a.ts": "1\n", ".github/workflows/ci.yml": "a\n" }, { ".github/workflows/ci.yml": "b\n" });
+    const fx = auditFixture(
+      { "src/a.ts": "1\n", ".github/workflows/ci.yml": "a\n" },
+      { ".github/workflows/ci.yml": "b\n" },
+    );
     const report = await runAudit(auditInput(fx));
     expect(report.high_risk_paths_count).toBe(1);
     const rec = recordAndLoad(report);
@@ -157,7 +185,10 @@ describe("loadAudit", () => {
 
   it("gives a file no authority from an event with the same run id but another goal or work item", async () => {
     const report = await cleanReport();
-    for (const other of [{ ...SCOPE, goal_id: "g-someone-else" }, { ...SCOPE, work_id: "w-ba9876543210" }]) {
+    for (const other of [
+      { ...SCOPE, goal_id: "g-someone-else" },
+      { ...SCOPE, work_id: "w-ba9876543210" },
+    ]) {
       const itemDir = makeTempDir("omf-item-");
       const ledger = new Ledger(makeTempDir("omf-ledger-"));
       recordAudit(ledger, other, itemDir, report);
@@ -256,26 +287,56 @@ describe("auditInputsOf", () => {
       prove_test: "not run",
       judge_config_touched: "not run",
     });
-    expect(auditInputsOf({ ...report, canary: { ...report.canary, status: "not_run" as const } }).canary_hits).toBe("not run");
+    expect(auditInputsOf({ ...report, canary: { ...report.canary, status: "not_run" as const } }).canary_hits).toBe(
+      "not run",
+    );
     expect(auditInputsOf({ ...report, prove_test: "not_run" }).prove_test).toBe("not run");
     expect(
-      auditInputsOf({ ...report, prove_test: { status: "MISCONFIGURED", reason: "no-non-test-change", test_exit: null, non_test_paths: 0, test_paths: 0 } }).prove_test,
+      auditInputsOf({
+        ...report,
+        prove_test: {
+          status: "MISCONFIGURED",
+          reason: "no-non-test-change",
+          test_exit: null,
+          non_test_paths: 0,
+          test_paths: 0,
+        },
+      }).prove_test,
     ).toBe("not run");
     expect(auditInputsOf({ ...report, judge_files_checked: 0 }).judge_config_touched).toBe("not run");
   });
 
   it("maps the flawed signals", async () => {
     const report = await cleanReport();
-    const failed = { status: "FAILED" as const, reason: "test-passed-without-fix" as const, test_exit: 0, non_test_paths: 1, test_paths: 1 };
+    const failed = {
+      status: "FAILED" as const,
+      reason: "test-passed-without-fix" as const,
+      test_exit: 0,
+      non_test_paths: 1,
+      test_paths: 1,
+    };
     expect(auditInputsOf({ ...report, prove_test: failed }).prove_test).toBe("fail");
-    expect(auditInputsOf({ ...report, tests_edited: ["tests/a.test.ts"], tests_edited_count: 1 }).tests_edited).toBe(true);
-    expect(auditInputsOf({ ...report, canary: { ...report.canary, hits: [{ surface: "diff", count: 2 }], total: 2 } }).canary_hits).toBe(2);
+    expect(auditInputsOf({ ...report, tests_edited: ["tests/a.test.ts"], tests_edited_count: 1 }).tests_edited).toBe(
+      true,
+    );
+    expect(
+      auditInputsOf({ ...report, canary: { ...report.canary, hits: [{ surface: "diff", count: 2 }], total: 2 } })
+        .canary_hits,
+    ).toBe(2);
     expect(auditInputsOf({ ...report, judge_config_touched: true }).judge_config_touched).toBe(true);
   });
 
   it("keeps a canary hit from a scan that did not finish, and the real classifier calls it flawed", async () => {
     const report = await cleanReport();
-    const unfinished = { ...report, canary: { ...report.canary, status: "not_run" as const, hits: [{ surface: "diff" as const, count: 1 }], total: 1 } };
+    const unfinished = {
+      ...report,
+      canary: {
+        ...report.canary,
+        status: "not_run" as const,
+        hits: [{ surface: "diff" as const, count: 1 }],
+        total: 1,
+      },
+    };
     expect(auditSignals(unfinished).flawed).toContain("canary_hit");
     const inputs = auditInputsOf(unfinished);
     expect(inputs.canary_hits).toBe(1);

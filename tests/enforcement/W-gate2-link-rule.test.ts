@@ -19,11 +19,18 @@ describe("W-gate2-link-rule", () => {
     if (result.status !== "fail") return;
     expect(result.route).toBe("back_to_S2");
     expect(result.reasons).toEqual([{ code: "unlinked_decisions", count: 1, decision_ids: ["d-cache"] }]);
-    expect(result.not_run, "the quantitative decision is listed, never unlinked and never success").toEqual(["d-latency"]);
+    expect(result.not_run, "the quantitative decision is listed, never unlinked and never success").toEqual([
+      "d-latency",
+    ]);
 
     const feedback = sealFeedbackFor(result);
     expect(feedback).toEqual({ unlinked_decision_ids: ["d-cache"], weak: 0, contradictions: 0, invalid: 0 });
-    expect(Object.keys(feedback ?? {}).sort(), "no other content reaches the next seal prompt").toEqual(["contradictions", "invalid", "unlinked_decision_ids", "weak"]);
+    expect(Object.keys(feedback ?? {}).sort(), "no other content reaches the next seal prompt").toEqual([
+      "contradictions",
+      "invalid",
+      "unlinked_decision_ids",
+      "weak",
+    ]);
     const text = JSON.stringify(feedback);
     for (const entry of input.effective) {
       expect(text).not.toContain(entry.scenario.scenario_id);
@@ -44,7 +51,9 @@ describe("W-gate2-link-rule", () => {
         effective({ kind: "behavior", split: "test", refs: ["d-cache"] }),
         effective({ kind: "contradiction_canary", split: "train" }),
       ]),
-      problems: [{ code: "decision_quantitative" as const, scenario_ref: "0123456789abcdef", decision_id: "d-latency" }],
+      problems: [
+        { code: "decision_quantitative" as const, scenario_ref: "0123456789abcdef", decision_id: "d-latency" },
+      ],
     };
     const result = evaluateGate2(input);
     expect(result.status).toBe("fail");

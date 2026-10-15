@@ -127,7 +127,13 @@ export function setupEnforcementGoal(options: EnforcementOptions = {}): Enforcem
   proposeMetric(
     ledger,
     location.dir,
-    { metric_id: TARGET_METRIC, command: ["sh", CANARY.watchedPath], unit: "ms", watched_paths: [CANARY.watchedPath], image: null },
+    {
+      metric_id: TARGET_METRIC,
+      command: ["sh", CANARY.watchedPath],
+      unit: "ms",
+      watched_paths: [CANARY.watchedPath],
+      image: null,
+    },
     "human:dev",
   );
   if (o.guardrail !== "none") {
@@ -189,7 +195,11 @@ export type LeakChannel = "text" | "paths" | "threshold" | "nested-query";
 
 /** A model that plants the canaries in the given channel (see `reconciler-stub.mjs`). */
 export function useLeakyModel(fx: EnforcementFixture, channel: LeakChannel): void {
-  const canaries = writeRecord(fx, "canaries.json", { value: CANARY.reading, target: CANARY.target, metric_id: CANARY.metricId });
+  const canaries = writeRecord(fx, "canaries.json", {
+    value: CANARY.reading,
+    target: CANARY.target,
+    metric_id: CANARY.metricId,
+  });
   useStub(fx, "leaky", canaries, channel);
 }
 
@@ -199,7 +209,10 @@ export function setReading(fx: EnforcementFixture, value: number | string): void
 }
 
 /** `omf goal tick <goal> --runner host [...extra]` in a child process, as cron would run it. */
-export function tickCli(fx: EnforcementFixture, extra: string[] = []): { code: number; stdout: string; stderr: string } {
+export function tickCli(
+  fx: EnforcementFixture,
+  extra: string[] = [],
+): { code: number; stdout: string; stderr: string } {
   return omf(["goal", "tick", fx.goalId, "--runner", "host", ...extra], fx.repo, fx.home);
 }
 

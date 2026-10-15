@@ -71,7 +71,12 @@ function contentRows(record: DecisionRecord): Array<[string, string | null]> {
     ["Scenario", record.qas === null ? null : qasText(record.qas)],
     ["Choice", record.resolution?.choice ?? null],
     ["Rationale", record.resolution?.rationale ?? null],
-    ["Rejected", record.resolution === null || record.resolution.rejected.length === 0 ? null : record.resolution.rejected.join("; ")],
+    [
+      "Rejected",
+      record.resolution === null || record.resolution.rejected.length === 0
+        ? null
+        : record.resolution.rejected.join("; "),
+    ],
     ["Measure", record.response_measure === null ? null : measureText(record.response_measure)],
   ];
 }
@@ -119,7 +124,12 @@ export function renderSpec(state: DecisionState, header: { title: string }, leak
         ]),
       );
     } else if (record.status === "na") {
-      notApplicable.push(...block(record, [["Question", record.question], ["Rationale", record.na?.rationale ?? null]]));
+      notApplicable.push(
+        ...block(record, [
+          ["Question", record.question],
+          ["Rationale", record.na?.rationale ?? null],
+        ]),
+      );
     } else {
       open.push(`- ${record.id} (${record.class}): ${oneLine(record.question)}`);
     }
@@ -136,7 +146,10 @@ export function renderSpec(state: DecisionState, header: { title: string }, leak
     ...section("Open (these block sealing)", open, "None."),
     ...section("Not applicable", notApplicable, "None."),
   ];
-  return `${lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}\n`;
+  return `${lines
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd()}\n`;
 }
 
 /** Atomic and private (0600): `omf decide lint` and a concurrent reader never see a half-written file. */

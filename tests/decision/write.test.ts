@@ -79,11 +79,23 @@ function codeOf(fn: () => unknown): string {
 describe("addDecision", () => {
   it("accepts omf, an agent and a human, and records the actor", () => {
     const ledger = newLedger();
-    for (const [id, actor] of [["d-a", "omf"], ["d-b", "agent:x"], ["d-c", "human:y"]] as const) {
+    for (const [id, actor] of [
+      ["d-a", "omf"],
+      ["d-b", "agent:x"],
+      ["d-c", "human:y"],
+    ] as const) {
       const event = addDecision(ledger, SCOPE, entry(id), actor, ctxFor());
-      expect(event).toMatchObject({ type: "decision.added", actor, payload: { decision_id: id, goal_id: "g-demo", work_id: "w-0123456789ab" } });
+      expect(event).toMatchObject({
+        type: "decision.added",
+        actor,
+        payload: { decision_id: id, goal_id: "g-demo", work_id: "w-0123456789ab" },
+      });
     }
-    expect(stateOf(ledger).decisions.map((d) => [d.id, d.status])).toEqual([["d-a", "open"], ["d-b", "open"], ["d-c", "open"]]);
+    expect(stateOf(ledger).decisions.map((d) => [d.id, d.status])).toEqual([
+      ["d-a", "open"],
+      ["d-b", "open"],
+      ["d-c", "open"],
+    ]);
   });
 
   it("refuses a duplicate id and bad input without writing", () => {
@@ -91,14 +103,20 @@ describe("addDecision", () => {
     addDecision(ledger, SCOPE, entry("d-a"), "omf", ctxFor());
     expect(codeOf(() => addDecision(ledger, SCOPE, entry("d-a"), "omf", ctxFor()))).toBe("duplicate_id");
     expect(codeOf(() => addDecision(ledger, SCOPE, entry("Bad Id"), "omf", ctxFor()))).toBe("invalid_input");
-    expect(codeOf(() => addDecision(ledger, SCOPE, { ...entry("d-a"), question: "" }, "omf", ctxFor()))).toBe("invalid_input");
+    expect(codeOf(() => addDecision(ledger, SCOPE, { ...entry("d-a"), question: "" }, "omf", ctxFor()))).toBe(
+      "invalid_input",
+    );
     expect(count(ledger)).toBe(1);
   });
 
   it("pairs class interface with the id d-interface, both ways", () => {
     const ledger = newLedger();
-    expect(codeOf(() => addDecision(ledger, SCOPE, entry("d-api", "interface"), "omf", ctxFor()))).toBe("invalid_input");
-    expect(codeOf(() => addDecision(ledger, SCOPE, entry("d-interface", "other"), "omf", ctxFor()))).toBe("invalid_input");
+    expect(codeOf(() => addDecision(ledger, SCOPE, entry("d-api", "interface"), "omf", ctxFor()))).toBe(
+      "invalid_input",
+    );
+    expect(codeOf(() => addDecision(ledger, SCOPE, entry("d-interface", "other"), "omf", ctxFor()))).toBe(
+      "invalid_input",
+    );
     expect(count(ledger)).toBe(0);
     addDecision(ledger, SCOPE, entry("d-interface", "interface"), "omf", ctxFor());
     expect(statusOf(ledger, "d-interface")).toBe("open");
@@ -119,7 +137,14 @@ describe("resolveDecision", () => {
   it("closes a decision, signing it with the actor and the injected clock", () => {
     const ledger = newLedger();
     addDecision(ledger, SCOPE, entry("d-a"), "omf", ctxFor());
-    const event = resolveDecision(ledger, SCOPE, "d-a", { choice: CHOICE.choice, rationale: CHOICE.rationale }, HUMAN, ctxFor());
+    const event = resolveDecision(
+      ledger,
+      SCOPE,
+      "d-a",
+      { choice: CHOICE.choice, rationale: CHOICE.rationale },
+      HUMAN,
+      ctxFor(),
+    );
     expect(event.payload.resolution).toEqual({
       choice: CHOICE.choice,
       rationale: CHOICE.rationale,
@@ -143,10 +168,16 @@ describe("resolveDecision", () => {
     const ledger = newLedger();
     addDecision(ledger, SCOPE, entry("d-interface", "interface"), "omf", ctxFor());
     addDecision(ledger, SCOPE, entry("d-a"), "omf", ctxFor());
-    expect(codeOf(() => resolveDecision(ledger, SCOPE, "d-interface", CHOICE, HUMAN, ctxFor()))).toBe("interface_required");
+    expect(codeOf(() => resolveDecision(ledger, SCOPE, "d-interface", CHOICE, HUMAN, ctxFor()))).toBe(
+      "interface_required",
+    );
     const nullGate = { ...CONTRACT, gates: { ...CONTRACT.gates, required: ["full" as const] } };
-    expect(codeOf(() => resolveDecision(ledger, SCOPE, "d-interface", { ...CHOICE, interface: nullGate }, HUMAN, ctxFor()))).toBe("invalid_input");
-    expect(codeOf(() => resolveDecision(ledger, SCOPE, "d-a", { ...CHOICE, interface: CONTRACT }, HUMAN, ctxFor()))).toBe("invalid_input");
+    expect(
+      codeOf(() => resolveDecision(ledger, SCOPE, "d-interface", { ...CHOICE, interface: nullGate }, HUMAN, ctxFor())),
+    ).toBe("invalid_input");
+    expect(
+      codeOf(() => resolveDecision(ledger, SCOPE, "d-a", { ...CHOICE, interface: CONTRACT }, HUMAN, ctxFor())),
+    ).toBe("invalid_input");
     expect(count(ledger)).toBe(2);
     resolveDecision(ledger, SCOPE, "d-interface", { ...CHOICE, interface: CONTRACT }, HUMAN, ctxFor());
     expect(findDecision(stateOf(ledger), "d-interface")?.interface).toEqual(CONTRACT);
@@ -176,9 +207,21 @@ describe("deferDecision and markNotApplicable", () => {
     const ledger = newLedger();
     addDecision(ledger, SCOPE, entry("d-a"), "omf", ctxFor());
     expect(codeOf(() => deferDecision(ledger, SCOPE, "d-a", DEFERRAL, "agent:x", ctxFor()))).toBe("not_human");
-    expect(codeOf(() => deferDecision(ledger, SCOPE, "d-a", { ...DEFERRAL, expires_at: "2026-10-13T00:00:00.000Z" }, HUMAN, ctxFor()))).toBe("deferral_in_past");
-    expect(codeOf(() => deferDecision(ledger, SCOPE, "d-a", { ...DEFERRAL, expires_at: NOW.toISOString() }, HUMAN, ctxFor()))).toBe("deferral_in_past");
-    expect(codeOf(() => deferDecision(ledger, SCOPE, "d-a", { ...DEFERRAL, expires_at: "2026-13-45T00:00:00Z" }, HUMAN, ctxFor()))).toBe("invalid_input");
+    expect(
+      codeOf(() =>
+        deferDecision(ledger, SCOPE, "d-a", { ...DEFERRAL, expires_at: "2026-10-13T00:00:00.000Z" }, HUMAN, ctxFor()),
+      ),
+    ).toBe("deferral_in_past");
+    expect(
+      codeOf(() =>
+        deferDecision(ledger, SCOPE, "d-a", { ...DEFERRAL, expires_at: NOW.toISOString() }, HUMAN, ctxFor()),
+      ),
+    ).toBe("deferral_in_past");
+    expect(
+      codeOf(() =>
+        deferDecision(ledger, SCOPE, "d-a", { ...DEFERRAL, expires_at: "2026-13-45T00:00:00Z" }, HUMAN, ctxFor()),
+      ),
+    ).toBe("invalid_input");
     expect(count(ledger)).toBe(1);
     const event = deferDecision(ledger, SCOPE, "d-a", DEFERRAL, HUMAN, ctxFor());
     expect(event.payload.deferral).toMatchObject({ signed_by: HUMAN, expires_at: DEFERRAL.expires_at });
@@ -198,18 +241,26 @@ describe("deferDecision and markNotApplicable", () => {
     expect(findDecision(stateOf(ledger), "d-b")?.deferral?.expires_at).toBe("2026-12-14T00:00:00.000Z");
     expect(stateOf(ledger).anomalies).toEqual([]);
     expect(codeOf(() => deferDecision(ledger, SCOPE, "d-a", DEFERRAL, HUMAN, ctxFor()))).toBe("already_closed");
-    expect(codeOf(() => markNotApplicable(ledger, SCOPE, "d-a", { rationale: "Not needed." }, HUMAN, ctxFor()))).toBe("already_closed");
+    expect(codeOf(() => markNotApplicable(ledger, SCOPE, "d-a", { rationale: "Not needed." }, HUMAN, ctxFor()))).toBe(
+      "already_closed",
+    );
   });
 
   it("marks n/a as a human, and never closes the interface decision either way", () => {
     const ledger = newLedger();
     addDecision(ledger, SCOPE, entry("d-a"), "omf", ctxFor());
     addDecision(ledger, SCOPE, entry("d-interface", "interface"), "omf", ctxFor());
-    expect(codeOf(() => markNotApplicable(ledger, SCOPE, "d-a", { rationale: "Not needed." }, "omf", ctxFor()))).toBe("not_human");
+    expect(codeOf(() => markNotApplicable(ledger, SCOPE, "d-a", { rationale: "Not needed." }, "omf", ctxFor()))).toBe(
+      "not_human",
+    );
     markNotApplicable(ledger, SCOPE, "d-a", { rationale: "Not needed." }, HUMAN, ctxFor());
     expect(statusOf(ledger, "d-a")).toBe("na");
-    expect(codeOf(() => markNotApplicable(ledger, SCOPE, "d-interface", { rationale: "Not needed." }, HUMAN, ctxFor()))).toBe("interface_not_closable");
-    expect(codeOf(() => deferDecision(ledger, SCOPE, "d-interface", DEFERRAL, HUMAN, ctxFor()))).toBe("interface_not_closable");
+    expect(
+      codeOf(() => markNotApplicable(ledger, SCOPE, "d-interface", { rationale: "Not needed." }, HUMAN, ctxFor())),
+    ).toBe("interface_not_closable");
+    expect(codeOf(() => deferDecision(ledger, SCOPE, "d-interface", DEFERRAL, HUMAN, ctxFor()))).toBe(
+      "interface_not_closable",
+    );
     expect(statusOf(ledger, "d-interface")).toBe("open");
   });
 });
@@ -227,9 +278,18 @@ describe("a refusal is always a valid record", () => {
     const ledger = newLedger();
     addDecision(ledger, SCOPE, entry("d-a"), "omf", ctxFor());
     for (const id of ["D-A", "d-", "x y", ""]) {
-      expect(codeOf(() => resolveDecision(ledger, SCOPE, id, CHOICE, HUMAN, ctxFor())), `resolve ${id}`).toBe("invalid_input");
-      expect(codeOf(() => deferDecision(ledger, SCOPE, id, DEFERRAL, HUMAN, ctxFor())), `defer ${id}`).toBe("invalid_input");
-      expect(codeOf(() => markNotApplicable(ledger, SCOPE, id, { rationale: "Not needed." }, HUMAN, ctxFor())), `na ${id}`).toBe("invalid_input");
+      expect(
+        codeOf(() => resolveDecision(ledger, SCOPE, id, CHOICE, HUMAN, ctxFor())),
+        `resolve ${id}`,
+      ).toBe("invalid_input");
+      expect(
+        codeOf(() => deferDecision(ledger, SCOPE, id, DEFERRAL, HUMAN, ctxFor())),
+        `defer ${id}`,
+      ).toBe("invalid_input");
+      expect(
+        codeOf(() => markNotApplicable(ledger, SCOPE, id, { rationale: "Not needed." }, HUMAN, ctxFor())),
+        `na ${id}`,
+      ).toBe("invalid_input");
     }
     expect(count(ledger)).toBe(1);
   });
@@ -238,7 +298,11 @@ describe("a refusal is always a valid record", () => {
     const ledger = newLedger();
     addDecision(ledger, SCOPE, entry("d-interface", "interface"), "omf", ctxFor());
     const leakyContract = { ...CONTRACT, run: ["node", ...Array.from({ length: 60 }, () => "zebra quokka")] };
-    expect(codeOf(() => resolveDecision(ledger, SCOPE, "d-interface", { ...CHOICE, interface: leakyContract }, HUMAN, ctxFor()))).toBe("leak");
+    expect(
+      codeOf(() =>
+        resolveDecision(ledger, SCOPE, "d-interface", { ...CHOICE, interface: leakyContract }, HUMAN, ctxFor()),
+      ),
+    ).toBe("leak");
     const rejected = ledger.readVerified().at(-1);
     expect(rejected?.type).toBe("decision.rejected");
     expect((rejected?.payload.findings as unknown[]).length).toBe(50);
@@ -254,7 +318,11 @@ describe("goal leakage", () => {
     const events = ledger.readVerified();
     expect(events.map((e) => e.type)).toEqual(["decision.rejected"]);
     const payload = events[0]?.payload;
-    expect(payload).toMatchObject({ op: "add", decision_id: "d-a", findings: [{ rule: "metric-name", field: "question" }] });
+    expect(payload).toMatchObject({
+      op: "add",
+      decision_id: "d-a",
+      findings: [{ rule: "metric-name", field: "question" }],
+    });
     expect(JSON.stringify(payload)).not.toMatch(/zebra|quokka/i);
   });
 
@@ -265,7 +333,10 @@ describe("goal leakage", () => {
     expect(codeOf(() => resolveDecision(ledger, SCOPE, "d-lat", leaky, HUMAN, ctxFor()))).toBe("leak");
     const last = ledger.readVerified().at(-1);
     expect(last?.type).toBe("decision.rejected");
-    expect(last?.payload).toMatchObject({ op: "resolve", findings: [expect.objectContaining({ rule: "number-value" })] });
+    expect(last?.payload).toMatchObject({
+      op: "resolve",
+      findings: [expect.objectContaining({ rule: "number-value" })],
+    });
     expect(JSON.stringify(last?.payload)).not.toContain("3719");
     expect(statusOf(ledger, "d-lat")).toBe("open");
   });
@@ -330,7 +401,9 @@ describe("intent-question seeding", () => {
 
   it("seeds nothing when the write fails its precondition", () => {
     const ledger = newLedger();
-    expect(codeOf(() => resolveDecision(ledger, SCOPE, "d-nope", CHOICE, HUMAN, ctxFor(QUESTIONS)))).toBe("unknown_decision");
+    expect(codeOf(() => resolveDecision(ledger, SCOPE, "d-nope", CHOICE, HUMAN, ctxFor(QUESTIONS)))).toBe(
+      "unknown_decision",
+    );
     expect(count(ledger)).toBe(0);
   });
 
@@ -362,7 +435,11 @@ try {
 describe("preconditions are atomic with the append", () => {
   it("lets exactly one of four concurrent adds of the same id through", async () => {
     const dir = makeTempDir("omf-decide-race-");
-    const args = [resolve("dist/core/ledger.js"), resolve("dist/decision/write.js"), JSON.stringify({ dir, scope: SCOPE, input: entry("d-race"), leak: LEAK })];
+    const args = [
+      resolve("dist/core/ledger.js"),
+      resolve("dist/decision/write.js"),
+      JSON.stringify({ dir, scope: SCOPE, input: entry("d-race"), leak: LEAK }),
+    ];
     const runs = await Promise.all([1, 2, 3, 4].map(() => runChild(CHILD, args)));
     expect(runs.map((r) => r.code)).toEqual([0, 0, 0, 0]);
     expect(runs.map((r) => r.out.trim()).sort()).toEqual(["duplicate_id", "duplicate_id", "duplicate_id", "ok"]);

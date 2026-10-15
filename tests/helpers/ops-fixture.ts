@@ -1,5 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { gitEnv } from "../../src/core/paths.js";
 import type { GitTarget } from "../../src/git/hardened.js";
@@ -27,7 +36,16 @@ export function listFiles(root: string): string[] {
 
 /** The paths that differ between `base` and `head` of `makeOpsFixture`, in byte order. A rename shows as src/keep.ts (D) plus src/moved.ts (A). */
 export const CHANGED_PATHS: readonly string[] = [
-  "*", "bin.dat", "docs/old.md", "l.txt", "latin1.txt", "run.sh", "src/a.ts", "src/keep.ts", "src/moved.ts", "src/new.ts",
+  "*",
+  "bin.dat",
+  "docs/old.md",
+  "l.txt",
+  "latin1.txt",
+  "run.sh",
+  "src/a.ts",
+  "src/keep.ts",
+  "src/moved.ts",
+  "src/new.ts",
 ];
 
 export interface OpsFixture {
@@ -95,7 +113,13 @@ export interface BundleFixture {
 }
 
 function plumb(repo: string, args: string[], input?: Buffer): string {
-  return execFileSync("git", args, { cwd: repo, input, encoding: "utf8", env: gitEnv(), stdio: ["pipe", "pipe", "pipe"] }).trim();
+  return execFileSync("git", args, {
+    cwd: repo,
+    input,
+    encoding: "utf8",
+    env: gitEnv(),
+    stdio: ["pipe", "pipe", "pipe"],
+  }).trim();
 }
 
 export function makeBundles(fixture: OpsFixture): BundleFixture {
@@ -116,7 +140,16 @@ export function makeBundles(fixture: OpsFixture): BundleFixture {
     ["hash-object", "-t", "tree", "-w", "--stdin", "--literally"],
     Buffer.concat([Buffer.from("100644 .git\0"), Buffer.from(blob, "hex")]),
   );
-  const commit = plumb(evil, ["-c", "user.name=omf-test", "-c", "user.email=omf-test@example.invalid", "commit-tree", tree, "-m", "bad"]);
+  const commit = plumb(evil, [
+    "-c",
+    "user.name=omf-test",
+    "-c",
+    "user.email=omf-test@example.invalid",
+    "commit-tree",
+    tree,
+    "-m",
+    "bad",
+  ]);
   plumb(evil, ["update-ref", "refs/heads/bad", commit]);
   const bad = join(dir, "bad.bundle");
   plumb(evil, ["bundle", "create", bad, "bad"]);

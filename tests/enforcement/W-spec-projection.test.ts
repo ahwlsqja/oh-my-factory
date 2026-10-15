@@ -36,13 +36,22 @@ describe("W-spec-projection", () => {
             f.fx.location,
             f.workId,
             "d-cache",
-            { owner: "dev", reason: "Waiting on a benchmark.", revisit_trigger: "After the benchmark.", default: "Keep the current behavior.", expires_at: "2099-01-01T00:00:00.000Z" },
+            {
+              owner: "dev",
+              reason: "Waiting on a benchmark.",
+              revisit_trigger: "After the benchmark.",
+              default: "Keep the current behavior.",
+              expires_at: "2099-01-01T00:00:00.000Z",
+            },
             HUMAN,
             NOW,
           ),
       ],
       ["add d-flag", () => addOpen(f, "d-flag")],
-      ["n/a d-flag", () => runDecideNa(f.fx.location, f.workId, "d-flag", { rationale: "Nothing to decide here." }, HUMAN)],
+      [
+        "n/a d-flag",
+        () => runDecideNa(f.fx.location, f.workId, "d-flag", { rationale: "Nothing to decide here." }, HUMAN),
+      ],
     ];
     for (const [name, step] of steps) {
       step();
@@ -111,7 +120,11 @@ describe("W-spec-projection", () => {
     expect(readFileSync(file, "utf8"), "show does not rewrite the projection").toContain("d-forged");
 
     const events = f.fx.ledger.readVerified();
-    const render = renderSpec(foldDecisions(events, f.scope), { title: f.item.front.title }, loadLeakContext(f.fx.location.dir, f.fx.goalId, events));
+    const render = renderSpec(
+      foldDecisions(events, f.scope),
+      { title: f.item.front.title },
+      loadLeakContext(f.fx.location.dir, f.fx.goalId, events),
+    );
     expect(render).not.toContain("d-forged");
   });
 
@@ -122,7 +135,13 @@ describe("W-spec-projection", () => {
     const runs = await Promise.all(
       ids.map((id) =>
         omfAsync(
-          ["decide", "add", f.workId, "--file", writeJson(f, `${id}.json`, { id, class: "other", question: `Is ${id} needed?` })],
+          [
+            "decide",
+            "add",
+            f.workId,
+            "--file",
+            writeJson(f, `${id}.json`, { id, class: "other", question: `Is ${id} needed?` }),
+          ],
           f.fx.repo,
           f.fx.home,
         ),
@@ -131,7 +150,10 @@ describe("W-spec-projection", () => {
     for (const [index, run] of runs.entries()) expect(run.code, `${ids[index]}: ${run.stderr}`).toBe(0);
 
     expect(f.fx.ledger.verify().ok).toBe(true);
-    const added = f.fx.ledger.readVerified().filter((e) => e.type === "decision.added").map((e) => e.payload.decision_id);
+    const added = f.fx.ledger
+      .readVerified()
+      .filter((e) => e.type === "decision.added")
+      .map((e) => e.payload.decision_id);
     expect(added).toEqual(expect.arrayContaining(ids));
     expect(readFileSync(specFile(f.item.dir), "utf8")).toBe(expectedSpec(f));
   }, 30_000);

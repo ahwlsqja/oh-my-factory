@@ -89,7 +89,10 @@ try {
   git("init", "-q");
   git("commit", "-q", "--allow-empty", "-m", "init");
   // run() throws on a non-zero exit, so reaching the regex means exit 0.
-  for (const [args, expected] of [[["init"], /initialized/i], [["ledger", "verify"], /ok:/i]]) {
+  for (const [args, expected] of [
+    [["init"], /initialized/i],
+    [["ledger", "verify"], /ok:/i],
+  ]) {
     const out = run(bin, args, { cwd: repo });
     if (!expected.test(out)) fail(`omf ${args.join(" ")} output unexpected: ${out.trim()}`);
   }

@@ -60,8 +60,14 @@ function authorEnv(config: CommandAuthorConfig, scratch: string, realEnv: NodeJS
  * `host_command`: it is not sealed from anything the OS user can reach, and the stage result says `stored`,
  * not `sealed`. One scratch directory per run is cwd and HOME, and is removed in `finally`.
  */
-export function createCommandAuthor(config: CommandAuthorConfig, realEnv: NodeJS.ProcessEnv = process.env): AgentSession {
-  const label = config.command.slice(0, 2).map((part) => basename(part)).join("+");
+export function createCommandAuthor(
+  config: CommandAuthorConfig,
+  realEnv: NodeJS.ProcessEnv = process.env,
+): AgentSession {
+  const label = config.command
+    .slice(0, 2)
+    .map((part) => basename(part))
+    .join("+");
   return {
     id: `command:${label}`,
     vendor: "command",

@@ -12,13 +12,28 @@ import { makeTempDir } from "../helpers/tmp.js";
 // Records the closed lists as objects keyed by the type, so a member added to the type without being added
 // here is a compile error in `npm run typecheck`.
 const RULES: Record<RiskRule, true> = {
-  ci: true, auth: true, migration: true, test: true, "goal-factory": true, lockfile: true,
-  "watched-path": true, extra: true, undeclared: true, unclassifiable: true,
+  ci: true,
+  auth: true,
+  migration: true,
+  test: true,
+  "goal-factory": true,
+  lockfile: true,
+  "watched-path": true,
+  extra: true,
+  undeclared: true,
+  unclassifiable: true,
 };
 const PROVE_REASONS: Record<ProveReason, true> = {
-  "test-passed-without-fix": true, "working-tree-not-clean": true, "invalid-base-ref": true, "base-not-ancestor": true,
-  "no-non-test-change": true, "empty-revert-patch": true, "revert-failed": true, "baseline-test-failed": true,
-  "test-command-unrunnable": true, interrupted: true,
+  "test-passed-without-fix": true,
+  "working-tree-not-clean": true,
+  "invalid-base-ref": true,
+  "base-not-ancestor": true,
+  "no-non-test-change": true,
+  "empty-revert-patch": true,
+  "revert-failed": true,
+  "baseline-test-failed": true,
+  "test-command-unrunnable": true,
+  interrupted: true,
 };
 
 async function editedTestReport() {
@@ -78,7 +93,9 @@ describe("audit.completed event", () => {
     const props = schema.$defs.audit_completed_payload?.properties;
     if (props === undefined) throw new Error("gate-event.schema.json has no audit_completed_payload");
     expect([...(props.risk_rules?.items?.enum ?? [])].sort()).toEqual(Object.keys(RULES).sort());
-    expect((props.prove_reason?.enum ?? []).filter((v) => v !== null).sort()).toEqual(Object.keys(PROVE_REASONS).sort());
+    expect((props.prove_reason?.enum ?? []).filter((v) => v !== null).sort()).toEqual(
+      Object.keys(PROVE_REASONS).sort(),
+    );
     expect(props.prove_status?.enum).toEqual(["PROVEN", "FAILED", "MISCONFIGURED", "not_run"]);
     expect(props.canary_status?.enum).toEqual(["scanned", "not_run"]);
     expect(props.risk_effective?.enum).toEqual(["normal", "high"]);

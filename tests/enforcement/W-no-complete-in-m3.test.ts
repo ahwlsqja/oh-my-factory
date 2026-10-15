@@ -16,7 +16,11 @@ const SRC = fileURLToPath(new URL("../../src/", import.meta.url));
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
-    entry.isDirectory() ? sourceFiles(join(dir, entry.name)) : entry.name.endsWith(".ts") ? [join(dir, entry.name)] : [],
+    entry.isDirectory()
+      ? sourceFiles(join(dir, entry.name))
+      : entry.name.endsWith(".ts")
+        ? [join(dir, entry.name)]
+        : [],
   );
 }
 
@@ -25,7 +29,11 @@ const isComment = (line: string): boolean => /^\s*(\/\/|\/\*|\*)/.test(line);
 /** Files (relative to src/, POSIX separators) with the string literal "done" on a line of code. */
 function filesMentioningDone(): string[] {
   return sourceFiles(SRC)
-    .filter((file) => readFileSync(file, "utf8").split("\n").some((line) => !isComment(line) && /["'`]done["'`]/.test(line)))
+    .filter((file) =>
+      readFileSync(file, "utf8")
+        .split("\n")
+        .some((line) => !isComment(line) && /["'`]done["'`]/.test(line)),
+    )
     .map((file) => relative(SRC, file).split(sep).join("/"))
     .sort();
 }
@@ -76,7 +84,9 @@ describe("W-no-complete-in-m3", () => {
     expect(files.filter((file) => !MAY_NAME_DONE.includes(file))).toEqual([]);
 
     const writes = sourceFiles(SRC).filter((file) =>
-      readFileSync(file, "utf8").split("\n").some((line) => !isComment(line) && /\b(state|to)\s*[:=]\s*["'`]done["'`]/.test(line)),
+      readFileSync(file, "utf8")
+        .split("\n")
+        .some((line) => !isComment(line) && /\b(state|to)\s*[:=]\s*["'`]done["'`]/.test(line)),
     );
     expect(writes.map((file) => relative(SRC, file))).toEqual([]);
   });
@@ -98,7 +108,8 @@ describe("W-no-complete-in-m3", () => {
     OUTCOME_ROWS.forEach((row, index) => {
       const workId = seedWorkItem(fx, { title: `Outcome walk ${index}` });
       expect(runWhole(fx, workId, inputFor(row))).toMatchObject({ applied: true });
-      for (const event of wTrail(fx, workId)) expect(targetOf(event.type as (typeof W_EVENT_TYPES)[number])).not.toBe("done");
+      for (const event of wTrail(fx, workId))
+        expect(targetOf(event.type as (typeof W_EVENT_TYPES)[number])).not.toBe("done");
     });
 
     const states = fx.store.fetchAllWorkItems(TICK_GOAL).map((item) => item.front.state);

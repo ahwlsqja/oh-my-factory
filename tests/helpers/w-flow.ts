@@ -23,7 +23,11 @@ export function inputFor(row: OutcomeRow): OutcomeInput {
     case "flawed":
       return { outcome: "flawed", exhausted: row.exhausted, reason_code: "station_error" };
     case "blocked":
-      return { outcome: "blocked", exhausted: row.exhausted, reason_code: row.exhausted ? "budget_exhausted" : "gate_blocked" };
+      return {
+        outcome: "blocked",
+        exhausted: row.exhausted,
+        reason_code: row.exhausted ? "budget_exhausted" : "gate_blocked",
+      };
     case "manual":
       return { outcome: "manual", exhausted: false, reason_code: "manual_required" };
   }
@@ -54,13 +58,19 @@ export function crashAfter(fx: TickFixture, workId: string, edge: "started" | "s
     edge === "started"
       ? wEvent({ type: "work.started", payload: { ...scope, from: "ready" } })
       : edge === "submitted"
-        ? wEvent({ type: "work.submitted", payload: { ...scope, outcome: "success", recommendation: "merge_recommended" } })
+        ? wEvent({
+            type: "work.submitted",
+            payload: { ...scope, outcome: "success", recommendation: "merge_recommended" },
+          })
         : wEvent({ type: "work.failed", payload: { ...scope, outcome: "flawed", reason_code: "station_error" } });
   return fx.ledger.append(event).seq;
 }
 
 /** The item's W-side events in ledger order. */
-export function wTrail(fx: TickFixture, workId: string): { seq: number; type: string; payload: Record<string, unknown> }[] {
+export function wTrail(
+  fx: TickFixture,
+  workId: string,
+): { seq: number; type: string; payload: Record<string, unknown> }[] {
   return ledgerEvents(fx)
     .filter((event) => (W_EVENT_TYPES as readonly string[]).includes(event.type) && event.payload.work_id === workId)
     .map(({ seq, type, payload }) => ({ seq, type, payload }));

@@ -16,7 +16,11 @@ describe("gate3EvaluatedEvent", () => {
       type: "gate3.evaluated",
       payload: { ...SCOPE, passed: false, failed: ["canary_hit", "isolation_unmeasured"], route: "J7" },
     });
-    expect(gate3EvaluatedEvent(SCOPE, { passed: true, failed: [], route: "none" }).payload).toMatchObject({ passed: true, failed: [], route: "none" });
+    expect(gate3EvaluatedEvent(SCOPE, { passed: true, failed: [], route: "none" }).payload).toMatchObject({
+      passed: true,
+      failed: [],
+      route: "none",
+    });
   });
 
   it("refuses a result that contradicts itself and an id that is not an id", () => {
@@ -29,7 +33,9 @@ describe("gate3EvaluatedEvent", () => {
 
   it("keeps the schema enums equal to the TypeScript lists", () => {
     const schema = JSON.parse(readFileSync(schemaUrl("gate-event.schema.json"), "utf8")) as {
-      $defs: { gate3_evaluated_payload: { properties: { failed: { items: { enum: string[] } }; route: { enum: string[] } } } };
+      $defs: {
+        gate3_evaluated_payload: { properties: { failed: { items: { enum: string[] } }; route: { enum: string[] } } };
+      };
     };
     const props = schema.$defs.gate3_evaluated_payload.properties;
     expect(props.failed.items.enum).toEqual([...GATE3_CONDITIONS]);

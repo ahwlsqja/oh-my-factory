@@ -8,6 +8,11 @@ import type { CommandTarget } from "../../src/gate/ports.js";
 export function fixtureTarget(cwd: string): CommandTarget {
   return {
     run: (argv, options) =>
-      runProcessGroup(argv, { cwd, env: { PATH: process.env.PATH }, timeoutMs: options.timeoutMs, maxOutputBytes: options.maxOutputBytes }),
+      runProcessGroup(argv, {
+        cwd,
+        env: { PATH: process.env.PATH },
+        timeoutMs: options.timeoutMs,
+        maxOutputBytes: options.maxOutputBytes,
+      }),
   };
 }

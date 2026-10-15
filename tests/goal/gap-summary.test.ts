@@ -6,7 +6,13 @@ import type { GapReport, MetricMeasurement } from "../../src/goal/measure.js";
 import { summarizeGap } from "../../src/goal/gap-summary.js";
 
 function reportOf(
-  options: { operator?: Operator; target?: number; measured?: number | null; metrics?: MetricMeasurement[]; pending?: boolean } = {},
+  options: {
+    operator?: Operator;
+    target?: number;
+    measured?: number | null;
+    metrics?: MetricMeasurement[];
+    pending?: boolean;
+  } = {},
 ): GapReport {
   const operator = options.operator ?? "<=";
   const value = options.target ?? 100;
@@ -37,7 +43,15 @@ function reportOf(
 
 function breaching(tier: "1sigma" | "2sigma" | "3sigma", action: BandAction | null): MetricMeasurement {
   const band: BandResult = { status: "breach", tier, rule: "beyond_sigma", mean: 10, sigma: 1 };
-  return { metric_id: "m-errors", roles: ["guardrail"], unit: "%", value: 40, failure: null, band, band_action: action };
+  return {
+    metric_id: "m-errors",
+    roles: ["guardrail"],
+    unit: "%",
+    value: 40,
+    failure: null,
+    band,
+    band_action: action,
+  };
 }
 
 describe("summarizeGap", () => {
@@ -62,7 +76,10 @@ describe("summarizeGap", () => {
   });
 
   it("has no trigger once the target is met", () => {
-    expect(summarizeGap(reportOf({ measured: 90 }), "build")).toEqual({ summary: null, none: { reason: "target_met" } });
+    expect(summarizeGap(reportOf({ measured: 90 }), "build")).toEqual({
+      summary: null,
+      none: { reason: "target_met" },
+    });
   });
 
   it("never raises a gap trigger in watch mode", () => {
@@ -75,9 +92,17 @@ describe("summarizeGap", () => {
 
   it("raises a breach trigger for a propose action in either mode, severe beyond 3 sigma", () => {
     const severe = reportOf({ measured: 90, metrics: [breaching("3sigma", "propose")] });
-    expect(summarizeGap(severe, "watch").summary).toEqual({ trigger: "breach", gap: null, breach: { severity: "severe" } });
+    expect(summarizeGap(severe, "watch").summary).toEqual({
+      trigger: "breach",
+      gap: null,
+      breach: { severity: "severe" },
+    });
     // Being at target does not excuse a breach (D17).
-    expect(summarizeGap(severe, "build").summary).toEqual({ trigger: "breach", gap: null, breach: { severity: "severe" } });
+    expect(summarizeGap(severe, "build").summary).toEqual({
+      trigger: "breach",
+      gap: null,
+      breach: { severity: "severe" },
+    });
     const elevated = reportOf({ metrics: [breaching("2sigma", "propose")] });
     expect(summarizeGap(elevated, "watch").summary?.breach).toEqual({ severity: "elevated" });
   });

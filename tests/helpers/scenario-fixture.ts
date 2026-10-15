@@ -5,7 +5,15 @@ import { runDecideAdd, runDecideResolve } from "../../src/cli/decide.js";
 import { decisionsDigest, foldDecisions } from "../../src/decision/state.js";
 import type { Gate2Context, Gate2Reason, Gate2Result } from "../../src/scenario/gate2.js";
 import { type SetRef, type Vault, openVault, setDir, writeScenarioSet } from "../../src/vault/vault.js";
-import { HUMAN, NOW, type DecisionFixture, addOpen, closeInterface, resolveOpen, setupDecisionItem } from "./decision-fixture.js";
+import {
+  HUMAN,
+  NOW,
+  type DecisionFixture,
+  addOpen,
+  closeInterface,
+  resolveOpen,
+  setupDecisionItem,
+} from "./decision-fixture.js";
 import { recordW } from "./work.js";
 import type { Ids, IntakeContext } from "../../src/scenario/intake.js";
 import type { RunTarget, ScenarioRunner, StepInput } from "../../src/scenario/runner.js";
@@ -66,7 +74,11 @@ export function authoredScenario(over: Record<string, unknown> = {}): Record<str
     steps: [
       {
         invoke: { argv: ["add", "milk"] },
-        expect: { exit_code: 0, stdout_matches: { kind: "exact", text: "added milk\n" }, note: "adding prints the item" },
+        expect: {
+          exit_code: 0,
+          stdout_matches: { kind: "exact", text: "added milk\n" },
+          note: "adding prints the item",
+        },
       },
     ],
     ...over,
@@ -150,7 +162,13 @@ export function buildScenarios(specs: readonly SeedSpec[], workId: string): Stor
       steps: [
         {
           invoke: { argv: ["cache", "get", `key-${n}`], stdin: "" },
-          expect: { exit_code: null, stdout_matches: null, json_path: null, ...spec.expect, note: `${canary} scenario ${n}` },
+          expect: {
+            exit_code: null,
+            stdout_matches: null,
+            json_path: null,
+            ...spec.expect,
+            note: `${canary} scenario ${n}`,
+          },
         },
       ],
       canary,
@@ -246,7 +264,12 @@ export function seedSealedItem(specs: readonly SeedSpec[] = DEFAULT_SPECS, optio
   addOpen(f, "d-cache", "compatibility");
   resolveOpen(f, "d-cache");
   if (options.latency === true) {
-    runDecideAdd(f.fx.location, f.workId, { id: "d-latency", class: "latency", question: "How fast must a lookup be?" }, "omf");
+    runDecideAdd(
+      f.fx.location,
+      f.workId,
+      { id: "d-latency", class: "latency", question: "How fast must a lookup be?" },
+      "omf",
+    );
     runDecideResolve(
       f.fx.location,
       f.workId,
@@ -255,7 +278,14 @@ export function seedSealedItem(specs: readonly SeedSpec[] = DEFAULT_SPECS, optio
         choice: "Bounded lookup time",
         rationale: "Callers wait on it.",
         rejected: [],
-        response_measure: { metric: "cache lookup time", op: "<=", threshold: 40, unit: "ms", percentile: 95, window: null },
+        response_measure: {
+          metric: "cache lookup time",
+          op: "<=",
+          threshold: 40,
+          unit: "ms",
+          percentile: 95,
+          window: null,
+        },
       },
       HUMAN,
     );

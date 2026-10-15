@@ -69,7 +69,9 @@ function leakyCandidates(canary, channel) {
       candidate(`Bring the reading under ${canary.target} ms`),
       candidate("Cut render work, second pass", { rationale: `It measured ${canary.value} last time.` }),
       candidate("Cut render work, third pass", { proposed_outcome: `Lower ${canary.metric_id} across the page.` }),
-      candidate("Cut render work, fourth pass", { problem: `The reading is ${String(canary.value).split(".")[0]} right now.` }),
+      candidate("Cut render work, fourth pass", {
+        problem: `The reading is ${String(canary.value).split(".")[0]} right now.`,
+      }),
     ];
   }
   if (channel === "paths") {

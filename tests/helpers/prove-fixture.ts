@@ -21,7 +21,10 @@ export function calcFixture(body = "assert.equal(add(1, 2), 3);"): GitFixture {
 
 /** Everything git could have been made to change in the shared repository, as one comparable string. */
 export function snapshot(fx: GitFixture): string {
-  const sha256 = (path: string): string => createHash("sha256").update(readFileSync(join(fx.repo, path))).digest("hex");
+  const sha256 = (path: string): string =>
+    createHash("sha256")
+      .update(readFileSync(join(fx.repo, path)))
+      .digest("hex");
   return JSON.stringify({
     tree: gitIn(fx.repo, "rev-parse", "HEAD^{tree}"),
     refs: gitIn(fx.repo, "for-each-ref"),

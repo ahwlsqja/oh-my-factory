@@ -123,7 +123,12 @@ export class Ledger {
       const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
       const parsed: unknown = JSON.parse(decoder.decode(tail));
       if (isPlainObject(parsed)) {
-        return { headBytes, events: [...events, parsed as unknown as LedgerEvent], tornTail: null, missingNewline: true };
+        return {
+          headBytes,
+          events: [...events, parsed as unknown as LedgerEvent],
+          tornTail: null,
+          missingNewline: true,
+        };
       }
     } catch {
       // not valid UTF-8 or not JSON: a torn write

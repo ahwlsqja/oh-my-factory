@@ -48,7 +48,15 @@ export const INTAKE_REJECTION_CODES = [
 export type IntakeRejectionCode = (typeof INTAKE_REJECTION_CODES)[number];
 
 /** Keys the author may write but OMF owns: dropped and counted in `ignored_fields`. */
-export const OMF_OWNED_KEYS = ["schema_version", "scenario_id", "work_id", "author", "canary", "exposure", "status"] as const;
+export const OMF_OWNED_KEYS = [
+  "schema_version",
+  "scenario_id",
+  "work_id",
+  "author",
+  "canary",
+  "exposure",
+  "status",
+] as const;
 
 export interface IntakeContext {
   workId: string;
@@ -123,11 +131,14 @@ function classify(doc: AuthoredScenario): IntakeRejectionCode | Body {
     });
   }
   const expectations = steps.map((step) => step.expect);
-  if (expectations.some((e) => e.exit_code === null && e.stdout_matches === null && e.json_path === null)) return "expect_empty";
+  if (expectations.some((e) => e.exit_code === null && e.stdout_matches === null && e.json_path === null))
+    return "expect_empty";
   if (expectations.some((e) => e.stdout_matches?.kind === "anchored" && !compilePattern(e.stdout_matches.pattern).ok)) {
     return "pattern_unsupported";
   }
-  if (expectations.some((e) => e.json_path !== null && Object.keys(e.json_path).some((path) => !compileJsonPath(path).ok))) {
+  if (
+    expectations.some((e) => e.json_path !== null && Object.keys(e.json_path).some((path) => !compileJsonPath(path).ok))
+  ) {
     return "json_path_unsupported";
   }
   return { decision_refs: doc.decision_refs ?? [], kind, split: doc.split, steps };
@@ -168,7 +179,10 @@ function stamp(body: Body, ctx: IntakeContext): StoredScenario {
 export function intakeAuthored(output: string, ctx: IntakeContext): IntakeResult {
   const result: IntakeResult = {
     stored: [],
-    rejected: Object.fromEntries(INTAKE_REJECTION_CODES.map((code) => [code, 0])) as Record<IntakeRejectionCode, number>,
+    rejected: Object.fromEntries(INTAKE_REJECTION_CODES.map((code) => [code, 0])) as Record<
+      IntakeRejectionCode,
+      number
+    >,
     authored: 0,
     ignored_fields: 0,
   };

@@ -1,10 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { BudgetError, type BudgetKind, budgetState, consumeBudget, declareBudget, raiseBudget } from "../../src/core/budget.js";
+import {
+  BudgetError,
+  type BudgetKind,
+  budgetState,
+  consumeBudget,
+  declareBudget,
+  raiseBudget,
+} from "../../src/core/budget.js";
 import { Ledger } from "../../src/core/ledger.js";
 import { resumeGoal } from "../../src/goal/lifecycle.js";
 import type { TickResult } from "../../src/goal/tick.js";
 import { omf } from "../helpers/cli.js";
-import { type EnforcementFixture, ledgerEvents, setReading, setupEnforcementGoal, tickCli, useCleanModel } from "../helpers/enforcement-goal.js";
+import {
+  type EnforcementFixture,
+  ledgerEvents,
+  setReading,
+  setupEnforcementGoal,
+  tickCli,
+  useCleanModel,
+} from "../helpers/enforcement-goal.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
 // Spec §4.4, J8: budgets accumulate in the host ledger. A restart or a re-declaration cannot reset them,
@@ -39,7 +53,6 @@ describe("E3 budget-no-reset", () => {
     expect(budgetState(ledger, "g-a", "rounds")?.remaining).toBe(1);
   });
 });
-
 
 // The same promise at the level of `omf goal tick` (spec §4.4, J8). Every CLI run is a fresh process, so a
 // tick that sees fewer rounds than the last one left is a budget that was refilled by a restart. A round is

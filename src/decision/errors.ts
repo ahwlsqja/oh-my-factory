@@ -1,6 +1,14 @@
 export type DecisionErrorCode =
-  | "not_human" | "unknown_decision" | "duplicate_id" | "already_closed" | "invalid_input" | "leak"
-  | "interface_required" | "interface_not_closable" | "deferral_in_past" | "goal_not_locked";
+  | "not_human"
+  | "unknown_decision"
+  | "duplicate_id"
+  | "already_closed"
+  | "invalid_input"
+  | "leak"
+  | "interface_required"
+  | "interface_not_closable"
+  | "deferral_in_past"
+  | "goal_not_locked";
 
 /**
  * A refusal the decision verbs can name. The CLI maps it to exit 1 with its message; any other thrown error stays

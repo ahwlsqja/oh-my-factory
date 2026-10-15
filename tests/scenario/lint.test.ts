@@ -14,7 +14,12 @@ const idOf = (n: number): string => `s-${hex(n)}`;
 const canaryOf = (n: number): string => `omf-canary-${hex(n)}`;
 const refOf = (n: number): string => scenarioRef(idOf(n));
 
-const AUTHOR: AuthorStamp = { vendor: "command", model: "stub", at: "2026-10-14T00:00:00.000Z", isolation: "host_command" };
+const AUTHOR: AuthorStamp = {
+  vendor: "command",
+  model: "stub",
+  at: "2026-10-14T00:00:00.000Z",
+  isolation: "host_command",
+};
 const CLEAN_LEAK: LeakContext = { terms: { phrases: [] }, targetValues: [], targetNumbers: [], measuredNumbers: [] };
 
 let seq = 1;
@@ -57,7 +62,13 @@ const STATE: DecisionState = {
 
 /** A step whose note starts with scenario n's canary, as OMF stamps it at intake. */
 function step(n: number, argv: string[], expectOver: Partial<Expect> = {}, stdin = ""): ScenarioStep {
-  const expectation: Expect = { exit_code: 0, stdout_matches: null, json_path: null, note: `${canaryOf(n)} expectation`, ...expectOver };
+  const expectation: Expect = {
+    exit_code: 0,
+    stdout_matches: null,
+    json_path: null,
+    note: `${canaryOf(n)} expectation`,
+    ...expectOver,
+  };
   return { invoke: { argv, stdin }, expect: expectation };
 }
 
@@ -79,16 +90,23 @@ function scenario(n: number, over: Partial<StoredScenario> = {}): StoredScenario
 
 /** A canary no program can pass: the exact text is not JSON, but the step also demands a json_path value. */
 function canary(n: number, over: Partial<StoredScenario> = {}): StoredScenario {
-  const unsatisfiable = step(n, ["show"], { stdout_matches: { kind: "exact", text: "not json\n" }, json_path: { "$.ok": true } });
+  const unsatisfiable = step(n, ["show"], {
+    stdout_matches: { kind: "exact", text: "not json\n" },
+    json_path: { "$.ok": true },
+  });
   return scenario(n, { kind: "contradiction_canary", decision_refs: [], steps: [unsatisfiable], ...over });
 }
 
-const eff = (scenarioValue: StoredScenario, status: ScenarioStatus = "active"): EffectiveScenario => ({ scenario: scenarioValue, status });
+const eff = (scenarioValue: StoredScenario, status: ScenarioStatus = "active"): EffectiveScenario => ({
+  scenario: scenarioValue,
+  status,
+});
 
 function lint(items: EffectiveScenario[], over: Partial<LintInput> = {}) {
   return lintScenarioSet({ scenarios: items, state: STATE, workId: WORK, sealedAuthor: AUTHOR, ...over });
 }
-const codes = (items: EffectiveScenario[], over: Partial<LintInput> = {}): string[] => lint(items, over).map((p) => p.code);
+const codes = (items: EffectiveScenario[], over: Partial<LintInput> = {}): string[] =>
+  lint(items, over).map((p) => p.code);
 
 describe("lintScenarioSet: set-level identity", () => {
   it("accepts a clean behavior scenario and a clean canary", () => {
@@ -114,7 +132,9 @@ describe("lintScenarioSet: set-level identity", () => {
 
 describe("lintScenarioSet: decision references", () => {
   it("requires at least one reference on a behavior scenario, but not on a canary", () => {
-    expect(lint([eff(scenario(1, { decision_refs: [] }))])).toEqual([{ code: "no_decision_ref", scenario_ref: refOf(1) }]);
+    expect(lint([eff(scenario(1, { decision_refs: [] }))])).toEqual([
+      { code: "no_decision_ref", scenario_ref: refOf(1) },
+    ]);
     expect(lint([eff(canary(2))])).toEqual([]);
   });
 
@@ -125,7 +145,9 @@ describe("lintScenarioSet: decision references", () => {
     ["d-na", "decision_not_resolved"],
     ["d-latency", "decision_quantitative"],
   ])("reference %s is a %s problem and names the decision", (ref, code) => {
-    expect(lint([eff(scenario(1, { decision_refs: [ref] }))])).toEqual([{ code, scenario_ref: refOf(1), decision_id: ref }]);
+    expect(lint([eff(scenario(1, { decision_refs: [ref] }))])).toEqual([
+      { code, scenario_ref: refOf(1), decision_id: ref },
+    ]);
   });
 });
 
@@ -150,7 +172,10 @@ describe("lintScenarioSet: canary_satisfiable", () => {
   it.each([
     ["an anchored-only canary", [{ stdout_matches: { kind: "anchored", pattern: "^ok$" } }]],
     ["an exact text with only an exit code", [{ stdout_matches: exact("ok\n") }]],
-    ["an exact JSON text that satisfies its own json_path", [{ stdout_matches: exact('{"ok":true}'), json_path: { "$.ok": true } }]],
+    [
+      "an exact JSON text that satisfies its own json_path",
+      [{ stdout_matches: exact('{"ok":true}'), json_path: { "$.ok": true } }],
+    ],
   ] as const)("refuses %s", (_name, expectOver) => {
     const satisfiable = canary(1, { steps: [step(1, ["show"], expectOver[0] as Partial<Expect>)] });
     expect(lint([eff(satisfiable)])).toEqual([{ code: "canary_satisfiable", scenario_ref: refOf(1) }]);
@@ -192,9 +217,15 @@ describe("contradictions", () => {
 
   it("does not pair equal demands, an unset side, canaries or inactive scenarios", () => {
     const same = [demand(1, [step(1, ["list"])]), demand(2, [step(2, ["list"])])];
-    const unset = [demand(3, [step(3, ["list"], { exit_code: 0 })]), demand(4, [step(4, ["list"], { exit_code: null, stdout_matches: { kind: "anchored", pattern: "^$" } })])];
+    const unset = [
+      demand(3, [step(3, ["list"], { exit_code: 0 })]),
+      demand(4, [step(4, ["list"], { exit_code: null, stdout_matches: { kind: "anchored", pattern: "^$" } })]),
+    ];
     const canaries = [eff(canary(5)), eff(canary(6, { steps: [step(6, ["show"], { exit_code: 1 })] }))];
-    const retired = [demand(7, [step(7, ["list"], { exit_code: 0 })]), eff(scenario(8, { steps: [step(8, ["list"], { exit_code: 1 })] }), "retired")];
+    const retired = [
+      demand(7, [step(7, ["list"], { exit_code: 0 })]),
+      eff(scenario(8, { steps: [step(8, ["list"], { exit_code: 1 })] }), "retired"),
+    ];
     for (const group of [same, unset, canaries, retired]) expect(contradictions(group)).toEqual([]);
   });
 
@@ -207,7 +238,10 @@ describe("contradictions", () => {
 
 describe("problems carry references, not text", () => {
   it("never contain argv, stdin, a pattern or a canary", () => {
-    const leaky = scenario(1, { decision_refs: ["d-missing"], steps: [step(1, ["add", "distinctive-zq9"], { exit_code: null }, `stdin ${canaryOf(1)}`)] });
+    const leaky = scenario(1, {
+      decision_refs: ["d-missing"],
+      steps: [step(1, ["add", "distinctive-zq9"], { exit_code: null }, `stdin ${canaryOf(1)}`)],
+    });
     const text = JSON.stringify(lint([eff(leaky)]));
     expect(text).not.toContain("distinctive-zq9");
     expect(text).not.toContain("omf-canary-");
