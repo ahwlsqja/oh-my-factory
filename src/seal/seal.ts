@@ -19,6 +19,7 @@ import {
 } from "../scenario/events.js";
 import { type Ids, intakeAuthored } from "../scenario/intake.js";
 import type { AuthorStamp, SealFeedback } from "../scenario/types.js";
+import { locationEnv } from "../vault/line-guard.js";
 import { assertNoSealedInRepo } from "../vault/pokayoke.js";
 import { type Vault, writeScenarioSet } from "../vault/vault.js";
 import type { WorkItem } from "../work/types.js";
@@ -35,7 +36,7 @@ export interface SealDeps {
   ids: Ids;
   timeoutMs?: number;
   feedback?: SealFeedback;
-  /** The state root is resolved from this, like `Gate2Context.env`; defaults to `process.env`. */
+  /** The state root is resolved from this, like `Gate2Context.env`; defaults to the environment the location implies (`locationEnv`), never `process.env`. */
   env?: NodeJS.ProcessEnv;
   /** Default: `assertStateTreeClean` then `assertNoSealedInRepo`. A throw ends the stage before anything else happens. */
   preflight?: () => void;
@@ -84,7 +85,8 @@ function checked(def: string, type: string, payload: Record<string, unknown>): N
  * The lock is held from step 2 to step 10.
  */
 export async function runSealStage(deps: SealDeps): Promise<SealStageResult> {
-  const { location, item, env } = deps;
+  const { location, item } = deps;
+  const env = deps.env ?? locationEnv(location);
   const preflight =
     deps.preflight ??
     ((): void => {

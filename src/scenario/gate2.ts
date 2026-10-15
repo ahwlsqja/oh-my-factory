@@ -9,6 +9,7 @@ import { loadLeakContext } from "../decision/leak-lint.js";
 import { scenarioLinkCoverage } from "../decision/lint.js";
 import { decisionsDigest, foldDecisions } from "../decision/state.js";
 import type { DecisionScope, DecisionState } from "../decision/types.js";
+import { locationEnv } from "../vault/line-guard.js";
 import { assertNoSealedInRepo } from "../vault/pokayoke.js";
 import { readScenarioSet, splitDigest } from "../vault/vault.js";
 import type { ScenarioSetRead, Vault } from "../vault/vault.js";
@@ -489,7 +490,7 @@ export interface Gate2Context {
  * - Exposure is asked per split digest and only when the set is readable; a missing set has nothing to count.
  */
 export async function runGate2(ctx: Gate2Context): Promise<Gate2Result> {
-  const env = ctx.env ?? process.env;
+  const env = ctx.env ?? locationEnv(ctx.location);
   (ctx.preflight ??
     (() => {
       assertStateTreeClean(ctx.location, env);

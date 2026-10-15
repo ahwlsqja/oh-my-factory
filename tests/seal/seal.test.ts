@@ -1,7 +1,8 @@
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { acquireLock, releaseLock } from "../../src/core/lock.js";
+import { SymlinkRefusedError } from "../../src/core/safe-fs.js";
 import { runSealStage, sealLockFile } from "../../src/seal/seal.js";
 import { readScenarioSet, setDir } from "../../src/vault/vault.js";
 import { runChild } from "../helpers/child.js";
@@ -197,5 +198,19 @@ describe("runSealStage: concurrency", () => {
       expect(read.set_sha256).toBe(event.payload.set_sha256);
     }
     expect(existsSync(sealLockFile(s.f.item.dir))).toBe(false);
+  });
+});
+
+describe("runSealStage: default environment", () => {
+  it("takes the state root from the location, never from the caller's process.env", async () => {
+    const s = sealFixture();
+    vi.stubEnv("OMF_HOME", makeTempDir("omf-elsewhere-"));
+    try {
+      symlinkSync(s.f.fx.repo, join(s.f.fx.location.dir, "stray-link"));
+      const { env: _env, ...deps } = depsFor(s, countingSession());
+      await expect(runSealStage(deps)).rejects.toBeInstanceOf(SymlinkRefusedError);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

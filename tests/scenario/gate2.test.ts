@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   GATE2_REASON_CODES,
   GATE2_ROUTE_OF,
@@ -508,6 +508,7 @@ import { symlinkSync } from "node:fs";
 import { SymlinkRefusedError } from "../../src/core/safe-fs.js";
 import { splitDigest } from "../../src/vault/vault.js";
 import { sealedCtx, seedSealedItem } from "../helpers/scenario-fixture.js";
+import { makeTempDir } from "../helpers/tmp.js";
 
 describe("runGate2", () => {
   it.each([
@@ -549,6 +550,18 @@ describe("runGate2", () => {
     await expect(runGate2(sealedCtx(s, { runner: fake.runner }))).rejects.toBeInstanceOf(SymlinkRefusedError);
     expect(fake.opened, "no scenario was run").toHaveLength(0);
     expect(s.f.fx.ledger.readVerified()).toHaveLength(before);
+  });
+
+  it("takes its default environment from the location, never from the caller's process.env", async () => {
+    const s = seedSealedItem();
+    vi.stubEnv("OMF_HOME", makeTempDir("omf-elsewhere-"));
+    try {
+      symlinkSync(s.f.fx.repo, join(s.f.fx.location.dir, "stray-link"));
+      const { env: _env, ...ctx } = sealedCtx(s, { runner: fakeFixtureRunner().runner });
+      await expect(runGate2(ctx)).rejects.toBeInstanceOf(SymlinkRefusedError);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("refuses a runner that executes candidate code", async () => {
