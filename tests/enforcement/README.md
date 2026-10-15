@@ -60,3 +60,13 @@ Planned in later milestones: E2 canary-no-leak for the implementer and verifier 
 E7 empty-means-fail (the gate part landed in M3b2 as E7a and the GATE-2 part as E7b; the judge's verdict-file part is M3f), E8 no-auto-approve (M4). E2 on the goal-loop side and E4 landed in M2b, together with
 the two-turn walking skeleton in `tests/examples/hello-goal.test.ts`. The command table in the READMEs is
 checked against `omf --help` by `tests/cli/help-drift.test.ts`.
+
+Status after M3d: the masked feedback, the Ladder, the test split and the counts-only aggregates are enforced by
+`W-small-category-merge.test.ts`, `W-ladder-no-reset.test.ts`, `W-test-split-once.test.ts` (it also holds
+`W-test-run-incomplete-blocked`), `W-aggregates-counts-only.test.ts` and `W-events-host-only.test.ts`. Goal re-seeds
+and feedback releases draw from one per-goal `disclosure` budget (E3 and `W-ladder-no-reset.test.ts` pin it). The
+feedback half of the W side of E2 is `E2-w-b-canary-no-leak-feedback.test.ts` and it is partial: it maps fake vault
+scenarios to `ScenarioResult` with a test-local mapper, so the real judge-station mapper (M3f)
+must re-run the same canary. Not enforced: truncating the ledger undoes release and test-run counts (spec §8), canaries catch verbatim leaks
+and not paraphrase, and a person who can write `~/.omf` can forge a `human:*` reseal event because v0.1 signatures
+are not cryptographic (spec §8).

@@ -2,6 +2,7 @@ import { budgetStateFromEvents } from "../core/budget.js";
 import type { Ledger, LedgerEvent } from "../core/ledger.js";
 import { feedbackEvent, feedbackEventsOf } from "./events.js";
 import { FeedbackError } from "./types.js";
+import type { NoiseCheck } from "./noise.js";
 
 /**
  * The sealed test split runs once per work item and test digest (spec §5.5 to §5.8). The only state is the
@@ -286,4 +287,25 @@ export function authorizeTestReseal(
       actor,
     );
   });
+}
+
+/**
+ * What M3b2's evidence calls `sealed.test`: { pass, total } or the word "not run", never anything else.
+ * `consumed_incomplete` and `consumed_other_candidate` are real states on the host (the handoff and the
+ * `blocked` outcomes use them), but they are not a result for this code, so the evidence reads them as not run.
+ * A total of 0 is not a pass either (E7). `flaky` is dropped here: the evidence's noise_check carries flakiness.
+ */
+export function evidenceSealedTest(field: SealedTestField): { pass: number; total: number } | "not run" {
+  if (typeof field === "string") return "not run";
+  if (field.total === 0) return "not run";
+  return { pass: field.pass, total: field.total };
+}
+
+/**
+ * What the evidence calls `noise_check`: `ok | within_variance | not_evaluated | not run`. v0.1 never evaluates variance, so
+ * every computed check is `not_evaluated`, k < 2 included (kept fail closed: the evidence lists it as an unverified area); no
+ * check yet is `not run`. The classifier reads no noise reason code: flakiness arrives through the sealed counts.
+ */
+export function noiseCheckField(check: NoiseCheck | null): "not_evaluated" | "not run" {
+  return check === null ? "not run" : "not_evaluated";
 }
