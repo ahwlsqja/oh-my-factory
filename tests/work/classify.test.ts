@@ -29,6 +29,7 @@ function cleanInputs(): EvidenceInputs {
     high_risk_paths_touched: [],
     noise_check: "ok",
     gate_line: "OMF_GATES fast=pass",
+    gate_verdict: "GREEN",
     plan_summary: "Plan.",
     implementer_notes: "Notes.",
   };
@@ -43,6 +44,7 @@ describe("evidence inputs (a field nobody produced never reads as passed)", () =
       high_risk_paths_touched: NOT_RUN,
       noise_check: NOT_RUN,
       gate_line: NOT_RUN,
+      gate_verdict: NOT_RUN,
       plan_summary: NOT_RUN,
       implementer_notes: NOT_RUN,
     });
@@ -58,6 +60,7 @@ describe("evidence inputs (a field nobody produced never reads as passed)", () =
     expect([...ROUND_SCOPED_INPUTS].sort()).toEqual([
       "audit",
       "gate_line",
+      "gate_verdict",
       "high_risk_paths_touched",
       "implementer_notes",
       "noise_check",
@@ -703,6 +706,7 @@ function randomInput(next: () => number): ClassifierInput {
   if (fault(0.1)) inputs.sealed.test = pick(next, [NOT_RUN, { pass: 0, total: 0 }, { pass: 1, total: 2 }]);
   if (fault(0.1)) inputs.isolation_level = pick(next, ["unmeasured", "L1", "L3"] as const);
   if (fault(0.1)) inputs.gate_line = NOT_RUN;
+  if (fault(0.1)) inputs.gate_verdict = pick(next, [NOT_RUN, "RED", "MISCONFIGURED"] as const);
   if (fault(0.1)) inputs.noise_check = pick(next, [NOT_RUN, "within_variance", "not_evaluated"] as const);
   if (fault(0.1)) inputs.high_risk_paths_touched = pick(next, [NOT_RUN, ["src/a.ts"]]);
   const stations = stationsAll();
@@ -766,6 +770,7 @@ describe("the classifier is total and can only lower a result (whole-table safet
       );
       expect(["L2", "L3"]).toContain(i.isolation_level);
       expect(i.gate_line).not.toBe(NOT_RUN);
+      expect(i.gate_verdict).toBe("GREEN");
       expect(i.noise_check).not.toBe("within_variance");
     }
     // The generator reaches every outcome, so the loop above is not vacuous.

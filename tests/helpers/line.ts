@@ -30,6 +30,7 @@ export function fillClean(inputs: EvidenceInputs, id?: StationId): void {
     inputs.isolation_level = "L2";
     inputs.high_risk_paths_touched = [];
     inputs.gate_line = "OMF_GATES fast=pass";
+    inputs.gate_verdict = "GREEN";
   }
   if (id === undefined || id === "S6") {
     inputs.noise_check = "ok";

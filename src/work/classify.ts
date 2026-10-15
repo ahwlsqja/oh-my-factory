@@ -20,6 +20,9 @@ import type { ReasonCode, Recommendation } from "./w-events.js";
 
 export type Level = "L1" | "L2" | "L3";
 
+/** What the gate run decided, as a closed value: the classifier never parses the gate line text. */
+export type GateVerdictInput = "GREEN" | "RED" | "MISCONFIGURED" | NotRun;
+
 /** What GATE-3's audit found. Any field that is `"not run"` makes the evidence incomplete. */
 export interface AuditInputs {
   canary_hits: number | NotRun;
@@ -48,6 +51,8 @@ export interface EvidenceInputs {
   noise_check: "ok" | "within_variance" | "not_evaluated" | NotRun;
   /** The OMF_GATES line, produced by M3e. Required: not run is `evidence_incomplete`. */
   gate_line: string | NotRun;
+  /** The structured verdict of the same gate run. Required: not run is `evidence_incomplete`. */
+  gate_verdict: GateVerdictInput;
   plan_summary: string | NotRun;
   implementer_notes: string | NotRun;
 }
@@ -60,6 +65,7 @@ export function emptyEvidenceInputs(): EvidenceInputs {
     high_risk_paths_touched: NOT_RUN,
     noise_check: NOT_RUN,
     gate_line: NOT_RUN,
+    gate_verdict: NOT_RUN,
     plan_summary: NOT_RUN,
     implementer_notes: NOT_RUN,
   };
@@ -108,6 +114,8 @@ export type ClassifierRule =
   | "station_skipped"
   | "evidence_incomplete"
   | "audit_flag"
+  | "gates_failed"
+  | "gates_misconfigured"
   | "sealed_failed"
   | "flaky_scenario"
   | "within_variance"
@@ -159,9 +167,17 @@ function ran(count: { total: number } | NotRun): boolean {
   return count !== NOT_RUN && count.total > 0;
 }
 
+/**
+ * A signal that already makes the result flawed: a failing gate line, an audit flag or a flaky train scenario. The
+ * sealed test split is used once (spec §5.7) and a flawed line never spends it, so row 6c does not ask for its count then.
+ */
+function knownFlawed(inputs: EvidenceInputs): boolean {
+  return inputs.gate_verdict === "RED" || auditFlagged(inputs.audit) || anyFlaky(inputs.sealed);
+}
+
 /** Row 6c: an input a success depends on that nobody produced (or measured too weakly). */
 function requiredInputMissing(input: ClassifierInput): boolean {
-  const { audit, sealed, gate_line, isolation_level } = input.inputs;
+  const { audit, sealed, gate_line, gate_verdict, isolation_level } = input.inputs;
   if (
     audit.canary_hits === NOT_RUN ||
     audit.tests_edited === NOT_RUN ||
@@ -170,8 +186,9 @@ function requiredInputMissing(input: ClassifierInput): boolean {
   ) {
     return true;
   }
-  if (!ran(sealed.train) || !ran(sealed.test)) return true;
-  if (gate_line === NOT_RUN) return true;
+  if (!ran(sealed.train)) return true;
+  if (!ran(sealed.test) && !knownFlawed(input.inputs)) return true;
+  if (gate_line === NOT_RUN || gate_verdict === NOT_RUN) return true;
   return isolation_level === "unmeasured" || LEVEL_RANK[isolation_level] < LEVEL_RANK[input.declared_level];
 }
 
@@ -185,7 +202,7 @@ function auditFlagged(audit: AuditInputs): boolean {
   );
 }
 
-/** A scenario counted as failed. Only called once 6c has made sure both counts ran. */
+/** A scenario counted as failed. Only called once 6c has made sure the train count ran; the test count may be missing when a known-flawed signal made the split unnecessary. */
 function sealedFailed(sealed: SealedInputs): boolean {
   const failed = (count: { pass: number; total: number } | NotRun): boolean =>
     count !== NOT_RUN && count.pass < count.total;
@@ -256,8 +273,11 @@ export function classifyOutcome(input: ClassifierInput): Classification {
   if (STATION_IDS.some((id) => stations[id] !== "ok"))
     return make("blocked", false, "station_skipped", "station_skipped");
   if (gates.verdict !== "pass") return make("blocked", false, "gate_not_run", "gate_not_run");
+  // A misconfigured gate is a fault of the setup, not evidence about the candidate: a person fixes it (blocked, not flawed).
+  if (inputs.gate_verdict === "MISCONFIGURED") return make("blocked", false, "gate_blocked", "gates_misconfigured");
   if (requiredInputMissing(input)) return make("blocked", false, "evidence_incomplete", "evidence_incomplete");
   if (auditFlagged(inputs.audit)) return make("flawed", false, "audit_flag", "audit_flag");
+  if (inputs.gate_verdict === "RED") return make("flawed", false, "gates_failed", "gates_failed");
   if (anyFlaky(inputs.sealed)) return make("flawed", false, "flaky_scenario", "flaky_scenario");
   if (sealedFailed(inputs.sealed)) return make("flawed", false, "sealed_failed", "sealed_failed");
   if (inputs.noise_check === "within_variance") return make("flawed", false, "within_variance", "within_variance");

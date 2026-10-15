@@ -36,6 +36,7 @@ export const ROUND_SCOPED_INPUTS: readonly (keyof EvidenceInputs)[] = [
   "noise_check",
   "high_risk_paths_touched",
   "gate_line",
+  "gate_verdict",
   "plan_summary",
   "implementer_notes",
 ];
