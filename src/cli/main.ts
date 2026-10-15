@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import { runDoctorParallel } from "../core/doctor.js";
 import { Ledger, TORN_TAIL_WARNING } from "../core/ledger.js";
-import { GitNotFoundError, NotAGitRepoError, resolveProject } from "../core/paths.js";
-import { assertStateTreeClean } from "../core/safe-fs.js";
+import { GitNotFoundError, NotAGitRepoError, UnsupportedRepoError, resolveProject } from "../core/paths.js";
+import { SymlinkRefusedError, assertStateTreeClean } from "../core/safe-fs.js";
 import { exitFor } from "./exit.js";
 import { registerDecideCommands } from "./decide.js";
 import { registerDecideSigningCommands } from "./decide-sign.js";
@@ -73,37 +73,78 @@ ledgerCommand
   .description("verify the ledger hash chain")
   .option("--json", "print the result as JSON")
   .action((options: { json?: boolean }) => {
-    const location = resolveProject(process.cwd());
-    // A planted link stops the command with exit 2 (the catch at the bottom of this file) before the ledger is read.
-    assertStateTreeClean(location);
-    const status = readProjectStatus(location);
-    const { ledger } = status;
-    const path = new Ledger(location.dir).file;
-    if (ledger === null || (ledger.ok && !status.initialized)) {
-      // Not initialized: the command could not run, like goal audit, work list and budget show.
-      if (options.json) console.log(JSON.stringify({ ok: false, error: NOT_INITIALIZED_MESSAGE }, null, 2));
-      else console.error(NOT_INITIALIZED_MESSAGE);
+    try {
+      verifyLedger(options.json === true);
+    } catch (err) {
+      // With --json every error is the same object on stdout, so a script parses one shape for all of them.
+      if (options.json !== true) throw err;
+      console.log(JSON.stringify({ ok: false, error: { code: errorCode(err), message: errorMessage(err) } }, null, 2));
       process.exitCode = exitFor("cannotRun");
-    } else if (!ledger.ok) {
-      if (options.json) {
-        const report = { ok: false, seq: ledger.seq, reason: ledger.reason, ...corruptionFields(ledger.seq, path) };
-        console.log(JSON.stringify(report, null, 2));
-      } else {
-        console.error(`corrupt at seq ${ledger.seq}: ${ledger.reason}`);
-        console.error(corruptionHint(ledger.seq, path));
-      }
-      process.exitCode = exitFor("problem");
-    } else {
-      if (options.json) {
-        const report = { ok: true, count: ledger.count, head: ledger.head, tornTail: ledger.tornTail === true, path };
-        console.log(JSON.stringify(report, null, 2));
-      } else {
-        console.log(`ok: ${ledger.count} ${ledger.count === 1 ? "event" : "events"}, head ${ledger.head}`);
-      }
-      if (ledger.tornTail) console.error(`warning: ${TORN_TAIL_WARNING}`);
-      process.exitCode = exitFor("ok");
     }
   });
+
+/** Closed set of `error.code` values of `omf ledger verify --json`. */
+type VerifyErrorCode =
+  | "not_initialized"
+  | "ledger_corrupt"
+  | "not_a_git_repository"
+  | "git_not_found"
+  | "unsupported_repository"
+  | "symlink_refused"
+  | "cannot_run";
+
+function errorCode(err: unknown): VerifyErrorCode {
+  if (err instanceof NotAGitRepoError) return "not_a_git_repository";
+  if (err instanceof GitNotFoundError) return "git_not_found";
+  if (err instanceof UnsupportedRepoError) return "unsupported_repository";
+  if (err instanceof SymlinkRefusedError) return "symlink_refused";
+  return "cannot_run";
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function verifyLedger(json: boolean): void {
+  const location = resolveProject(process.cwd());
+  // A planted link stops the command with exit 2 before the ledger is read.
+  assertStateTreeClean(location);
+  const status = readProjectStatus(location);
+  const { ledger } = status;
+  const path = new Ledger(location.dir).file;
+  if (ledger === null || (ledger.ok && !status.initialized)) {
+    // Not initialized: the command could not run, like goal audit, work list and budget show.
+    if (json) {
+      const error = { code: "not_initialized", message: NOT_INITIALIZED_MESSAGE };
+      console.log(JSON.stringify({ ok: false, error }, null, 2));
+    } else console.error(NOT_INITIALIZED_MESSAGE);
+    process.exitCode = exitFor("cannotRun");
+  } else if (!ledger.ok) {
+    if (json) {
+      const error = {
+        code: "ledger_corrupt",
+        message: `ledger corrupt at seq ${ledger.seq}: ${ledger.reason}`,
+        seq: ledger.seq,
+        reason: ledger.reason,
+        ...corruptionFields(ledger.seq, path),
+      };
+      console.log(JSON.stringify({ ok: false, error }, null, 2));
+    } else {
+      console.error(`corrupt at seq ${ledger.seq}: ${ledger.reason}`);
+      console.error(corruptionHint(ledger.seq, path));
+    }
+    process.exitCode = exitFor("problem");
+  } else {
+    if (json) {
+      const report = { ok: true, count: ledger.count, head: ledger.head, torn_tail: ledger.tornTail === true, path };
+      console.log(JSON.stringify(report, null, 2));
+    } else {
+      console.log(`ok: ${ledger.count} ${ledger.count === 1 ? "event" : "events"}, head ${ledger.head}`);
+    }
+    if (ledger.tornTail) console.error(`warning: ${TORN_TAIL_WARNING}`);
+    process.exitCode = exitFor("ok");
+  }
+}
 
 registerGoalCommands(program);
 registerWorkCommands(program);

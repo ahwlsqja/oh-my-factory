@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { projectDir } from "../../src/core/paths.js";
@@ -44,11 +44,15 @@ describe("a ledger event that lacks a field", () => {
     expect(out.code).toBe(1);
     expect(JSON.parse(out.stdout)).toEqual({
       ok: false,
-      seq: 1,
-      reason: "line 1 has no seq",
-      line: 1,
-      path: ledger,
-      next_action: "do not edit the ledger; restore it from a backup",
+      error: {
+        code: "ledger_corrupt",
+        message: "ledger corrupt at seq 1: line 1 has no seq",
+        seq: 1,
+        reason: "line 1 has no seq",
+        line: 1,
+        path: ledger,
+        next_action: "do not edit the ledger; restore it from a backup",
+      },
     });
   });
 
@@ -77,7 +81,53 @@ describe("ledger verify --json", () => {
   it("exits 2 with an error object before init", () => {
     const out = omf(["ledger", "verify", "--json"], makeGitRepo(), makeTempDir("omf-home-"));
     expect(out.code).toBe(2);
-    expect(JSON.parse(out.stdout)).toMatchObject({ ok: false, error: "project not initialized; run omf init" });
+    expect(JSON.parse(out.stdout)).toEqual({
+      ok: false,
+      error: { code: "not_initialized", message: "project not initialized; run omf init" },
+    });
+  });
+
+  it("uses the same error object when the command cannot run at all", () => {
+    const out = omf(["ledger", "verify", "--json"], makeTempDir(), makeTempDir("omf-home-"));
+    expect(out.code).toBe(2);
+    expect(out.stderr).toBe("");
+    const report = JSON.parse(out.stdout) as { ok: boolean; error: { code: string; message: string } };
+    expect(report.ok).toBe(false);
+    expect(report.error.code).toBe("not_a_git_repository");
+    expect(report.error.message).toMatch(/^not a git repository: /);
+    const noGit = omf(["ledger", "verify", "--json"], makeGitRepo(), makeTempDir("omf-home-"), {
+      PATH: makeTempDir("omf-nogit-"),
+    });
+    expect(noGit.code).toBe(2);
+    expect(JSON.parse(noGit.stdout)).toEqual({
+      ok: false,
+      error: { code: "git_not_found", message: "git not found on PATH" },
+    });
+  });
+
+  it("uses the same error object for a state directory holding a symbolic link", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    omf(["init"], repo, home);
+    symlinkSync(makeTempDir("omf-elsewhere-"), join(projectDir(repo, { HOME: home }), "planted"));
+    const out = omf(["ledger", "verify", "--json"], repo, home);
+    expect(out.code).toBe(2);
+    const report = JSON.parse(out.stdout) as { ok: boolean; error: { code: string; message: string } };
+    expect(report).toMatchObject({ ok: false, error: { code: "symlink_refused" } });
+    expect(report.error.message).toContain("planted");
+  });
+
+  it("names every key in snake_case, the torn tail included", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    omf(["init"], repo, home);
+    const clean = JSON.parse(omf(["ledger", "verify", "--json"], repo, home).stdout) as Record<string, unknown>;
+    expect(Object.keys(clean)).toEqual(["ok", "count", "head", "torn_tail", "path"]);
+    expect(clean.torn_tail).toBe(false);
+    appendFileSync(join(projectDir(repo, { HOME: home }), "ledger.jsonl"), '{"schema_version":1,"se');
+    const torn = omf(["ledger", "verify", "--json"], repo, home);
+    expect(torn.code).toBe(0);
+    expect(JSON.parse(torn.stdout)).toMatchObject({ ok: true, torn_tail: true });
   });
 });
 
