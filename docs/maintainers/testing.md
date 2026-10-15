@@ -107,7 +107,8 @@ Suites under `tests/gated` need a real Docker daemon and are skipped unless `OMF
 evidence. Nobody sets the switch by hand: `npm run test:gated` starts the dedicated colima profile `omf-m3f` (2 CPU,
 4 GiB), runs `vitest run tests/gated` against the `colima-omf-m3f` context only, and stops the profile afterwards. The
 test process gets a temporary `DOCKER_CONFIG` that holds only that context, a temporary `OMF_HOME`, and no `HOME`. The
-script never names another profile and never removes one.
+script never names another profile and never removes one. It starts the profile with `--activate=false`, so the user's
+current Docker context is left alone (and put back if it changed anyway).
 
 ```sh
 npm run test:gated                                  # every gated suite

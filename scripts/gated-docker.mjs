@@ -10,6 +10,8 @@
 // 2 refused (colima or docker missing, another OMF_GATED value, a context that is not the omf-m3f socket,
 // --record on a dirty tree, an unknown argument); 3 colima could not start the profile.
 //
+// The run never changes the user's current Docker context (`--activate=false`, and it is restored if it changed anyway).
+//
 // The script names exactly one profile and one context. It never touches another profile and never removes
 // one: the machine runs other colima profiles that belong to other work. The test process gets a temporary
 // DOCKER_CONFIG that holds only the omf-m3f context, a temporary OMF_HOME, and no HOME.
@@ -34,8 +36,11 @@ const HOST_PATTERN = /^unix:\/\/\/.+\/omf-m3f\/docker\.sock$/;
 /** The only colima and docker commands the driver runs against the profile, as data so a test can read them. */
 export function colimaPlan() {
   return {
-    start: ["colima", "start", PROFILE, "--cpu", "2", "--memory", "4"],
+    start: ["colima", "start", PROFILE, "--cpu", "2", "--memory", "4", "--activate=false"],
     stop: ["colima", "stop", PROFILE],
+    // Read-only: the user's current Docker context, noted before the start so a run can leave it as it found it.
+    currentContext: ["docker", "context", "show"],
+    restoreContext: (name) => ["docker", "context", "use", name],
     // Read-only: asks the user's docker config where colima put the profile's socket.
     contextHost: ["docker", "context", "inspect", CONTEXT, "--format", "{{.Endpoints.docker.Host}}"],
   };
@@ -179,6 +184,9 @@ export function main(argv, env, deps) {
 
   const plan = colimaPlan();
   const exec = (argvList, options = {}) => deps.run(argvList[0], argvList.slice(1), options);
+  // `--activate=false` keeps colima from switching the user's current context; this is the backstop if it ever does.
+  const before = exec(plan.currentContext);
+  const previous = before.status === 0 ? before.stdout.trim() : "";
   try {
     if (exec(plan.start).status !== 0) {
       deps.log(`colima could not start the ${PROFILE} profile`);
@@ -209,6 +217,10 @@ export function main(argv, env, deps) {
     return args.record ? record(deps, testEnv, reportFile) : EXIT.ok;
   } finally {
     exec(plan.stop);
+    if (previous !== "" && previous !== CONTEXT) {
+      const after = exec(plan.currentContext);
+      if (after.status === 0 && after.stdout.trim() !== previous) exec(plan.restoreContext(previous));
+    }
   }
 }
 

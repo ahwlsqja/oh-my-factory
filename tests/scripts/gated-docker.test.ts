@@ -27,7 +27,13 @@ const script = (await import(SCRIPT)) as {
   PROFILE: string;
   CONTEXT: string;
   EXIT: { ok: number; failed: number; refused: number; colima: number };
-  colimaPlan: () => { start: string[]; stop: string[]; contextHost: string[] };
+  colimaPlan: () => {
+    start: string[];
+    stop: string[];
+    contextHost: string[];
+    currentContext: string[];
+    restoreContext: (name: string) => string[];
+  };
   parseArgs: (argv: string[]) => { only: string | null; record: boolean } | { error: string };
   dockerConfigFor: (dir: string, host: string) => string;
   gatedEnv: (env: Record<string, string | undefined>, dockerConfig: string, omfHome: string) => Record<string, string>;
@@ -48,7 +54,7 @@ const RECORD = {
 describe("colima plan", () => {
   it("names only the omf-m3f profile and the colima-omf-m3f context, and never deletes anything", () => {
     const plan = script.colimaPlan();
-    expect(plan.start).toEqual(["colima", "start", "omf-m3f", "--cpu", "2", "--memory", "4"]);
+    expect(plan.start).toEqual(["colima", "start", "omf-m3f", "--cpu", "2", "--memory", "4", "--activate=false"]);
     expect(plan.stop).toEqual(["colima", "stop", "omf-m3f"]);
     expect(plan.contextHost).toEqual([
       "docker",
@@ -168,7 +174,8 @@ const BASE: Record<string, RunResult> = {
   "colima version": OK,
   "docker --version": OK,
   "colima start": OK,
-  "docker context": { ...OK, stdout: "unix:///home/dev/.colima/omf-m3f/docker.sock\n" },
+  "docker context inspect": { ...OK, stdout: "unix:///home/dev/.colima/omf-m3f/docker.sock\n" },
+  "docker context show": { ...OK, stdout: "default\n" },
   "colima stop": OK,
   "git status": OK,
   "git rev-parse": { ...OK, stdout: `${COMMIT}\n` },
@@ -199,7 +206,7 @@ function harness(overrides: Record<string, Partial<RunResult>> = {}) {
     run: (command, args) => {
       calls.push([command, ...args].join(" "));
       const isVitest = args.some((arg) => arg.endsWith("vitest.mjs"));
-      const key = isVitest ? "vitest" : `${command} ${args[0] ?? ""}`;
+      const key = isVitest ? "vitest" : `${command} ${args[0] ?? ""}${args[0] === "context" ? ` ${args[1]}` : ""}`;
       const out = args.find((arg) => arg.startsWith("--outputFile.json="));
       if (isVitest && out !== undefined) writeFileSync(out.slice("--outputFile.json=".length), JSON.stringify(REPORT));
       return { ...(BASE[key] ?? OK), ...overrides[key] };
@@ -220,15 +227,38 @@ describe("main", () => {
     expect(calls).toEqual([
       "colima version",
       "docker --version",
-      "colima start omf-m3f --cpu 2 --memory 4",
+      "docker context show",
+      "colima start omf-m3f --cpu 2 --memory 4 --activate=false",
+
       "docker context inspect colima-omf-m3f --format {{.Endpoints.docker.Host}}",
       expect.stringMatching(
         /vitest\.mjs run tests\/gated --reporter=default --reporter=json --outputFile\.json=.+vitest\.json$/,
       ),
       "colima stop omf-m3f",
+      "docker context show",
     ]);
     expect(calls.filter((call) => call.startsWith("colima ") && call !== "colima version")).toSatisfy(
       (list: string[]) => list.every((call) => call.split(" ")[2] === PROFILE),
+    );
+  });
+
+  it("restores the user's current context if the run changed it", () => {
+    const { deps, calls } = harness();
+    const run = deps.run;
+    let shows = 0;
+    deps.run = (command, args, options) => {
+      if (command === "docker" && args[0] === "context" && args[1] === "show") {
+        shows += 1;
+        calls.push("docker context show");
+        return { status: 0, stdout: shows === 1 ? "desktop-linux\n" : "colima-omf-m3f\n", stderr: "" };
+      }
+      return run(command, args, options);
+    };
+    expect(script.main([], {}, deps)).toBe(EXIT.ok);
+    expect(calls.at(-2)).toBe("docker context show");
+    expect(calls.at(-1)).toBe("docker context use desktop-linux");
+    expect(calls.indexOf("docker context show")).toBeLessThan(
+      calls.indexOf("colima start omf-m3f --cpu 2 --memory 4 --activate=false"),
     );
   });
 
@@ -241,20 +271,22 @@ describe("main", () => {
   it("stops the profile when a gated test fails (exit 1)", () => {
     const { deps, calls } = harness({ vitest: { status: 1 } });
     expect(script.main([], {}, deps)).toBe(EXIT.failed);
-    expect(calls.at(-1)).toBe("colima stop omf-m3f");
+    expect(calls.at(-2)).toBe("colima stop omf-m3f");
   });
 
   it("exits 3 and still stops when colima cannot start the profile", () => {
     const { deps, calls } = harness({ "colima start": { status: 1 } });
     expect(script.main([], {}, deps)).toBe(EXIT.colima);
-    expect(calls.at(-1)).toBe("colima stop omf-m3f");
+    expect(calls.at(-2)).toBe("colima stop omf-m3f");
     expect(calls.some((call) => call.includes("vitest"))).toBe(false);
   });
 
   it("exits 2 and still stops when the context points at another socket", () => {
-    const { deps, calls } = harness({ "docker context": { stdout: "unix:///home/dev/.colima/default/docker.sock\n" } });
+    const { deps, calls } = harness({
+      "docker context inspect": { stdout: "unix:///home/dev/.colima/default/docker.sock\n" },
+    });
     expect(script.main([], {}, deps)).toBe(EXIT.refused);
-    expect(calls.at(-1)).toBe("colima stop omf-m3f");
+    expect(calls.at(-2)).toBe("colima stop omf-m3f");
   });
 
   it.each([
