@@ -2,7 +2,6 @@ import { Ledger } from "../core/ledger.js";
 import type { NewEvent } from "../core/ledger.js";
 import type { ProjectLocation } from "../core/paths.js";
 import { assertStateTreeClean } from "../core/safe-fs.js";
-import { validateDef } from "../core/schema.js";
 import { evaluateGate1, intentQuestionIds } from "../decision/gate1.js";
 import type { Gate1Result } from "../decision/gate1.js";
 import { loadLeakContext } from "../decision/leak-lint.js";
@@ -14,7 +13,7 @@ import { assertNoSealedInRepo } from "../vault/pokayoke.js";
 import { readScenarioSet, splitDigest } from "../vault/vault.js";
 import type { ScenarioSetRead, Vault } from "../vault/vault.js";
 import type { WorkItem } from "../work/types.js";
-import { authorPrecedesStart, effectiveScenarios, foldSeals, foldStatuses } from "./events.js";
+import { authorPrecedesStart, effectiveScenarios, foldSeals, foldStatuses, gate2EvaluatedEvent } from "./events.js";
 import type { AuthorOrder, EffectiveScenario, SealRecord } from "./events.js";
 import { contradictions, lintScenarioSet, vaultDecisionLinks } from "./lint.js";
 import type { ScenarioProblem } from "./lint.js";
@@ -320,30 +319,25 @@ export function gate2EventFor(
   const reasons = result.status === "fail" ? result.reasons : [];
   const unlinked = reasons.find((reason) => reason.code === "unlinked_decisions")?.decision_ids ?? [];
   const aggregate = result.aggregate;
-  const payload = {
-      goal_id: scope.goal_id,
-      work_id: scope.work_id,
-      round,
-      seal_id: digests.seal_id,
-      status: result.status,
-      route: result.status === "fail" ? result.route : null,
-      reason_codes: [...new Set(reasons.map((reason) => reason.code))],
-      unlinked_decision_ids: unlinked.slice(0, MAX_EVENT_DECISION_IDS),
-      not_run_decision_ids: [...result.not_run],
-      counts: {
-        active: aggregate?.active ?? 0,
-        behavior_train: aggregate?.behavior.train ?? 0,
-        behavior_test: aggregate?.behavior.test ?? 0,
-        canaries: (aggregate?.contradiction_canary.train ?? 0) + (aggregate?.contradiction_canary.test ?? 0),
-        contaminated: aggregate?.contaminated ?? 0,
-        retired: aggregate?.retired ?? 0,
-      },
-      set_sha256: digests.set_sha256,
-      decisions_digest: digests.decisions_digest,
-  };
-  const checked = validateDef("scenario.schema.json", "ev_gate2_evaluated", payload);
-  if (!checked.ok) throw new Error(`invalid gate2.evaluated payload: ${checked.errors}`);
-  return { actor: "omf", type: "gate2.evaluated", payload };
+  return gate2EvaluatedEvent(scope, {
+    round,
+    seal_id: digests.seal_id,
+    status: result.status,
+    route: result.status === "fail" ? result.route : null,
+    reason_codes: [...new Set(reasons.map((reason) => reason.code))],
+    unlinked_decision_ids: unlinked.slice(0, MAX_EVENT_DECISION_IDS),
+    not_run_decision_ids: [...result.not_run],
+    counts: {
+      active: aggregate?.active ?? 0,
+      behavior_train: aggregate?.behavior.train ?? 0,
+      behavior_test: aggregate?.behavior.test ?? 0,
+      canaries: (aggregate?.contradiction_canary.train ?? 0) + (aggregate?.contradiction_canary.test ?? 0),
+      contaminated: aggregate?.contaminated ?? 0,
+      retired: aggregate?.retired ?? 0,
+    },
+    set_sha256: digests.set_sha256,
+    decisions_digest: digests.decisions_digest,
+  });
 }
 
 /**

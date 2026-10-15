@@ -1,10 +1,9 @@
 import { join } from "node:path";
 import { sha256Hex } from "../core/canonical-json.js";
-import type { Ledger, NewEvent } from "../core/ledger.js";
+import type { Ledger } from "../core/ledger.js";
 import { LockHeldError, acquireLock, releaseLock } from "../core/lock.js";
 import type { ProjectLocation } from "../core/paths.js";
 import { assertStateTreeClean } from "../core/safe-fs.js";
-import { validateDef } from "../core/schema.js";
 import { type Gate1Reason, evaluateGate1, intentQuestionIds } from "../decision/gate1.js";
 import { loadLeakContext } from "../decision/leak-lint.js";
 import { decisionsDigest, foldDecisions } from "../decision/state.js";
@@ -16,6 +15,9 @@ import {
   WORK_STARTED_EVENT,
   authorPrecedesStart,
   foldSeals,
+  sealCompletedEvent,
+  sealFailedEvent,
+  sealRequestedEvent,
 } from "../scenario/events.js";
 import { type Ids, intakeAuthored } from "../scenario/intake.js";
 import type { AuthorStamp, SealFeedback } from "../scenario/types.js";
@@ -58,13 +60,6 @@ export type SealStageResult =
  */
 export function sealLockFile(itemDir: string): string {
   return join(itemDir, "seal.lock");
-}
-
-/** The payload is checked against its schema def at the writer, so a drifted field fails here and not in a later fold. */
-function checked(def: string, type: string, payload: Record<string, unknown>): NewEvent {
-  const check = validateDef("scenario.schema.json", def, payload);
-  if (!check.ok) throw new Error(`invalid ${type} event: ${check.errors}`);
-  return { actor: "omf", type, payload };
 }
 
 /**
@@ -143,23 +138,18 @@ async function sealLocked(deps: SealDeps): Promise<SealStageResult> {
   const round = seals.completed + 1;
   const { feedback } = deps;
   ledger.append(
-    checked("ev_seal_requested", "seal.requested", {
-      goal_id: scope.goal_id,
-      work_id: scope.work_id,
+    sealRequestedEvent(scope, {
       round,
       author: { vendor: session.vendor, model: session.model, isolation: session.isolation },
       input_sha256: sha256Hex(prompt),
       decisions_digest: digest,
-      feedback:
-        feedback === undefined
-          ? null
-          : { unlinked_decision_count: feedback.unlinked_decision_ids.length, weak: feedback.weak, contradictions: feedback.contradictions, invalid: feedback.invalid },
+      feedback: feedback ?? null,
     }),
   );
 
   const outcome = await session.run({ prompt, timeoutMs: deps.timeoutMs ?? DEFAULT_AUTHOR_TIMEOUT_MS });
   const fail = (code: SealFailureCode, durationMs: number): SealStageResult => {
-    ledger.append(checked("ev_seal_failed", "seal.failed", { goal_id: scope.goal_id, work_id: scope.work_id, round, code, duration_ms: Math.round(durationMs) }));
+    ledger.append(sealFailedEvent(scope, { round, code, duration_ms: Math.round(durationMs) }));
     return { status: "failed", code };
   };
   if (!outcome.ok) return fail(outcome.code, outcome.durationMs);
@@ -190,9 +180,7 @@ async function sealLocked(deps: SealDeps): Promise<SealStageResult> {
   };
   // The round is recounted under the ledger lock, so it follows completed seals only, whatever else was written meanwhile.
   const written = ledger.appendWith((current) =>
-    checked("ev_seal_completed", "seal.completed", {
-      goal_id: scope.goal_id,
-      work_id: scope.work_id,
+    sealCompletedEvent(scope, {
       round: foldSeals(current, scope).completed + 1,
       seal_id: sealId,
       author,
