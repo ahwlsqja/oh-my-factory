@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { GATE2_REASON_CODES, GATE2_ROUTE_OF, evaluateGate2, scenarioAggregate } from "../../src/scenario/gate2.js";
+import {
+  GATE2_REASON_CODES,
+  GATE2_ROUTE_OF,
+  evaluateGate2,
+  gate2EventFor,
+  scenarioAggregate,
+  sealFeedbackFor,
+} from "../../src/scenario/gate2.js";
+import type { Gate2Result } from "../../src/scenario/gate2.js";
+import { validateDef } from "../../src/core/schema.js";
+import { SCOPE } from "../helpers/decision.js";
 import type { Gate2Input, Gate2ReasonCode, Gate2Route } from "../../src/scenario/gate2.js";
 import { EXPOSURE_LIMIT } from "../../src/scenario/types.js";
 import {
@@ -337,5 +347,97 @@ describe("scenarioAggregate", () => {
     const walk = (v: unknown): void => (typeof v === "object" && v !== null ? Object.values(v).forEach(walk) : void leaves.push(v));
     walk(aggregate);
     expect(leaves.every((v) => typeof v === "number")).toBe(true);
+  });
+});
+
+describe("gate2EventFor", () => {
+  const digests = { seal_id: "seal-0123456789abcdef", set_sha256: sha("set"), decisions_digest: DECISIONS_DIGEST };
+
+  it("builds a gate2.evaluated event that validates and carries codes, counts and ids only", () => {
+    const input = unlink(passingInput());
+    const result = evaluateGate2(input);
+    const event = gate2EventFor(SCOPE, 2, result, digests);
+    expect(event.actor).toBe("omf");
+    expect(event.type).toBe("gate2.evaluated");
+    expect(validateDef("scenario.schema.json", "ev_gate2_evaluated", event.payload)).toEqual({ ok: true });
+    expect(event.payload).toMatchObject({
+      goal_id: SCOPE.goal_id,
+      work_id: SCOPE.work_id,
+      round: 2,
+      seal_id: digests.seal_id,
+      status: "fail",
+      route: "back_to_S2",
+      reason_codes: ["unlinked_decisions"],
+      unlinked_decision_ids: ["d-cache"],
+      not_run_decision_ids: ["d-latency"],
+      counts: { active: 3, behavior_train: 1, behavior_test: 1, canaries: 1, contaminated: 0, retired: 0 },
+    });
+    const text = JSON.stringify(event);
+    for (const entry of input.effective) {
+      expect(text).not.toContain(entry.scenario.canary);
+      expect(text).not.toContain(entry.scenario.scenario_id);
+      expect(text).not.toContain("reports a miss");
+    }
+  });
+
+  it("writes a pass with a null route, and zero counts when there was no set to count", () => {
+    const pass = gate2EventFor(SCOPE, 1, evaluateGate2(passingInput()), digests);
+    expect(validateDef("scenario.schema.json", "ev_gate2_evaluated", pass.payload)).toEqual({ ok: true });
+    expect(pass.payload).toMatchObject({ status: "pass", route: null, reason_codes: [], unlinked_decision_ids: [] });
+
+    const noSeal: Gate2Result = evaluateGate2({ ...passingInput(), seal: null, set: null, effective: [], probes: null, order: { ok: false, reason: "no_seal" } });
+    const event = gate2EventFor(SCOPE, 1, noSeal, { seal_id: null, set_sha256: null, decisions_digest: DECISIONS_DIGEST });
+    expect(validateDef("scenario.schema.json", "ev_gate2_evaluated", event.payload)).toEqual({ ok: true });
+    expect(event.payload).toMatchObject({
+      seal_id: null,
+      set_sha256: null,
+      counts: { active: 0, behavior_train: 0, behavior_test: 0, canaries: 0, contaminated: 0, retired: 0 },
+    });
+  });
+
+  it("lists each reason code once and keeps at most 100 unlinked decision ids", () => {
+    const ids = Array.from({ length: 120 }, (_, n) => `d-x${n}`);
+    const result: Gate2Result = {
+      status: "fail",
+      route: "back_to_S2",
+      reasons: [
+        { code: "split_missing", split: "train" },
+        { code: "split_missing", split: "test" },
+        { code: "unlinked_decisions", count: 120, decision_ids: ids },
+      ],
+      not_run: [],
+      aggregate: null,
+    };
+    const event = gate2EventFor(SCOPE, 1, result, digests);
+    expect(event.payload["reason_codes"]).toEqual(["split_missing", "unlinked_decisions"]);
+    expect(event.payload["unlinked_decision_ids"]).toEqual(ids.slice(0, 100));
+    expect(validateDef("scenario.schema.json", "ev_gate2_evaluated", event.payload)).toEqual({ ok: true });
+  });
+
+  it("throws, appending nothing, when a reason code has drifted from the schema enum", () => {
+    const drifted = {
+      status: "fail",
+      route: "back_to_S2",
+      reasons: [{ code: "not_a_schema_code" }],
+      not_run: [],
+      aggregate: null,
+    } as unknown as Gate2Result;
+    expect(() => gate2EventFor(SCOPE, 1, drifted, digests)).toThrow(/invalid gate2\.evaluated payload/);
+  });
+});
+
+describe("sealFeedbackFor", () => {
+  it("is null for pass and for the J2, J3 and J7 routes: those never rerun the author", () => {
+    expect(sealFeedbackFor(evaluateGate2(passingInput()))).toBeNull();
+    expect(sealFeedbackFor(evaluateGate2(blockGate1(passingInput())))).toBeNull();
+    expect(sealFeedbackFor(evaluateGate2(addAnomalies(passingInput())))).toBeNull();
+    expect(sealFeedbackFor(evaluateGate2(probeError(passingInput())))).toBeNull();
+  });
+
+  it("gives plain counts and the unlinked ids when the item goes back to S2", () => {
+    const result = evaluateGate2(unlink(nullPasses(passingInput())));
+    expect(sealFeedbackFor(result)).toEqual({ unlinked_decision_ids: ["d-cache"], weak: 0, contradictions: 0, invalid: 0 });
+    const weak = evaluateGate2(nullPasses(passingInput()));
+    expect(sealFeedbackFor(weak)).toEqual({ unlinked_decision_ids: [], weak: 1, contradictions: 0, invalid: 0 });
   });
 });

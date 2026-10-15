@@ -1,4 +1,5 @@
 import type { NewEvent } from "../core/ledger.js";
+import { validateDef } from "../core/schema.js";
 import type { Gate1Result } from "../decision/gate1.js";
 import { scenarioLinkCoverage } from "../decision/lint.js";
 import type { DecisionScope, DecisionState } from "../decision/types.js";
@@ -285,4 +286,66 @@ export function evaluateGate2(input: Gate2Input): Gate2Result {
 
   if (reasons.length === 0 && aggregate !== null) return { status: "pass", not_run: coverage.not_run, aggregate };
   return { status: "fail", route: routeOf(reasons), reasons, not_run: coverage.not_run, aggregate };
+}
+
+/** The ledger caps the unlinked ids at 100 (`ev_gate2_evaluated`); a set with more is still `fail`, and the next lint run lists the rest. */
+const MAX_EVENT_DECISION_IDS = 100;
+
+/**
+ * The `gate2.evaluated` event for one evaluation (M3c-D10: codes, counts, digests and decision ids only). Pure; the Task 11 adapter
+ * appends it. `digests` come from the caller because a missing seal has none: `seal_id` and `set_sha256` are then null and the counts
+ * are zero. A reason code listed twice (one `split_missing` per split) is written once. The payload is validated against
+ * `ev_gate2_evaluated` before it is returned and the function throws on a mismatch, like every Task 5 builder: a reason code or
+ * route that drifts from the schema enum must never reach `Ledger.append`, which checks only the event envelope.
+ */
+export function gate2EventFor(
+  scope: DecisionScope,
+  round: number,
+  result: Gate2Result,
+  digests: { seal_id: string | null; set_sha256: string | null; decisions_digest: string },
+): NewEvent {
+  const reasons = result.status === "fail" ? result.reasons : [];
+  const unlinked = reasons.find((reason) => reason.code === "unlinked_decisions")?.decision_ids ?? [];
+  const aggregate = result.aggregate;
+  const payload = {
+      goal_id: scope.goal_id,
+      work_id: scope.work_id,
+      round,
+      seal_id: digests.seal_id,
+      status: result.status,
+      route: result.status === "fail" ? result.route : null,
+      reason_codes: [...new Set(reasons.map((reason) => reason.code))],
+      unlinked_decision_ids: unlinked.slice(0, MAX_EVENT_DECISION_IDS),
+      not_run_decision_ids: [...result.not_run],
+      counts: {
+        active: aggregate?.active ?? 0,
+        behavior_train: aggregate?.behavior.train ?? 0,
+        behavior_test: aggregate?.behavior.test ?? 0,
+        canaries: (aggregate?.contradiction_canary.train ?? 0) + (aggregate?.contradiction_canary.test ?? 0),
+        contaminated: aggregate?.contaminated ?? 0,
+        retired: aggregate?.retired ?? 0,
+      },
+      set_sha256: digests.set_sha256,
+      decisions_digest: digests.decisions_digest,
+  };
+  const checked = validateDef("scenario.schema.json", "ev_gate2_evaluated", payload);
+  if (!checked.ok) throw new Error(`invalid gate2.evaluated payload: ${checked.errors}`);
+  return { actor: "omf", type: "gate2.evaluated", payload };
+}
+
+/**
+ * What the next seal prompt may contain after a failed GATE-2 (M3c-D12): the unlinked decision ids and plain counts, nothing that
+ * names a scenario. null for a pass and for J2, J3 and J7, which a reseal cannot fix and must not rerun the author for.
+ * `canary_missing`, like `split_missing`, has no field here: the closed `SealFeedback` shape stays as it is, and the fixed seal
+ * instructions (Task 10) already ask for at least one canary per set.
+ */
+export function sealFeedbackFor(result: Gate2Result): SealFeedback | null {
+  if (result.status !== "fail" || result.route !== "back_to_S2") return null;
+  const reasonOf = (code: Gate2ReasonCode): Gate2Reason | undefined => result.reasons.find((reason) => reason.code === code);
+  return {
+    unlinked_decision_ids: [...(reasonOf("unlinked_decisions")?.decision_ids ?? [])],
+    weak: reasonOf("null_impl_passes")?.count ?? 0,
+    contradictions: reasonOf("contradiction")?.count ?? 0,
+    invalid: reasonOf("scenario_invalid")?.count ?? 0,
+  };
 }
