@@ -1,5 +1,5 @@
 import type { Gate4Reason, Gate4Severity, Gate4Warning } from "./gate4.js";
-import type { GateAggregate } from "./gates.js";
+import type { GateAggregate, GateStop } from "./gates.js";
 import {
   type GateId,
   NOT_RUN,
@@ -79,7 +79,7 @@ export function resetRoundScopedInputs(inputs: EvidenceInputs): void {
 /** Why the line stopped before it reached the end. `none` means every node was visited. */
 export type LineStop =
   | { kind: "none" }
-  | { kind: "gate"; gate: Exclude<GateId, "GATE-4">; verdict: "fail" | "not_run"; reasons: readonly string[] }
+  | { kind: "gate"; gate: Exclude<GateId, "GATE-4">; verdict: "fail" | "not_run"; reasons: readonly string[]; stop?: GateStop }
   // round 0 means before S3 of the first round (the S1/S2 loop or the line-entry guard).
   | { kind: "gate4"; severity: Exclude<Gate4Severity, "none">; reasons: readonly Gate4Reason[]; round: number }
   | { kind: "station"; station: StationId; result: "blocked" | "manual" | "error"; reason_code: ReasonCode };
@@ -91,6 +91,7 @@ export type ClassifierRule =
   | "station_blocked"
   | "gate_not_run"
   | "gate1_open"
+  | "gate2_stop"
   | "gate3_flawed"
   | "gate3_blocked"
   | "gate4_integrity"
@@ -213,6 +214,10 @@ export function classifyOutcome(input: ClassifierInput): Classification {
   if (stop.kind === "gate") {
     if (stop.verdict === "not_run") return make("blocked", false, "gate_not_run", "gate_not_run");
     if (stop.gate === "GATE-1") return make("blocked", false, "j2_open", "gate1_open");
+    if (stop.gate === "GATE-2" && stop.stop !== undefined) {
+      const code = stop.stop === "J2" ? "j2_open" : stop.stop === "J3" ? "scenarios_need_review" : "gate_blocked";
+      return make("blocked", false, code, "gate2_stop");
+    }
     if (stop.gate === "GATE-3" && stations.S3 === "ok" && auditFlagged(inputs.audit)) {
       return make("flawed", false, "audit_flag", "gate3_flawed");
     }

@@ -78,6 +78,7 @@ describe("HANDOFF_ROUTES", () => {
     expect(j).toEqual({
       j2_open: "J2",
       gate2_exhausted: "J3",
+      scenarios_need_review: "J3",
       audit_flag: "J4",
       sealed_failed: "J4",
       flaky_scenario: "J4",

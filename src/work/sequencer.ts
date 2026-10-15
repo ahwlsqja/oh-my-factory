@@ -162,12 +162,18 @@ function gateError(gate: GateId): GateResult {
  * reasons is a gate error, so a free-text reason can never reach evidence, a handoff or the ledger.
  */
 function checkedResult(id: Exclude<GateId, "GATE-4">, raw: unknown): GateResult {
-  const r = raw as { gate?: unknown; verdict?: unknown; reasons?: unknown } | null;
+  const r = raw as { gate?: unknown; verdict?: unknown; reasons?: unknown; stop?: unknown } | null;
   if (r === null || typeof r !== "object" || r.gate !== id) return gateError(id);
   const { verdict, reasons } = r;
   if (verdict !== "pass" && verdict !== "fail" && verdict !== "not_run") return gateError(id);
   if (!Array.isArray(reasons) || !reasons.every((x): x is string => typeof x === "string" && REASON_SHAPE.test(x))) return gateError(id);
-  return { gate: id, verdict, reasons: [...reasons] };
+  const result: GateResult = { gate: id, verdict, reasons: [...reasons] };
+  // Only a GATE-2 fail may name where the line stops; on any other gate or verdict a stop is ignored.
+  if (id === "GATE-2" && verdict === "fail" && "stop" in r && r.stop !== undefined) {
+    if (r.stop !== "J2" && r.stop !== "J3" && r.stop !== "J7") return gateError(id);
+    return { ...result, stop: r.stop };
+  }
+  return result;
 }
 
 type Reading =
@@ -474,9 +480,16 @@ class Line {
     this.trail.push({ node: id, status: result.verdict, digest: null });
     this.ran.push({ node: id, result: result.verdict });
     if (result.verdict === "pass") return index + 1;
-    // GATE-2 fail goes back to S2; the visit guard in `visit` bounds the loop. Anything else stops the line.
-    if (id === "GATE-2" && result.verdict === "fail") return LINE_ORDER.indexOf("S2");
-    this.stop = { kind: "gate", gate: id, verdict: result.verdict, reasons: result.reasons };
+    // Only a GATE-2 fail without a stop route goes back to S2; the visit guard in `visit` bounds the loop.
+    // Anything else stops the line, a GATE-2 fail with a stop route at that route's J act.
+    if (id === "GATE-2" && result.verdict === "fail" && result.stop === undefined) return LINE_ORDER.indexOf("S2");
+    this.stop = {
+      kind: "gate",
+      gate: id,
+      verdict: result.verdict,
+      reasons: result.reasons,
+      ...(result.stop === undefined ? {} : { stop: result.stop }),
+    };
     return index;
   }
 

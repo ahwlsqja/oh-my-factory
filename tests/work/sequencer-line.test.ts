@@ -11,7 +11,7 @@ import { handoffFile } from "../../src/work/handoff.js";
 import { LINE_ORDER, type StationId } from "../../src/work/line-types.js";
 import { type Station, runLine } from "../../src/work/sequencer.js";
 import { HUMAN, addOpen, resolveOpen } from "../helpers/decision-fixture.js";
-import { PLANTED, cleanStations, finished, passGate, passGates, setupLine, station, textOf } from "../helpers/line.js";
+import { PLANTED, cleanStations, finished, passGate, passGates, setupLine, station, stationsOf, textOf } from "../helpers/line.js";
 
 // Spec §5.0, §5.6, §6.3. With always-pass fake gates and clean stations the line ends in a submit; every other
 // test takes one thing away from that line and checks the closed result.
@@ -246,5 +246,91 @@ describe("runLine, straight line (8a)", () => {
       spy.mockRestore();
     }
     expect(seen).toEqual(expected);
+  });
+});
+
+// A GATE-2 that names where the line stops (GATE-2 fail with a stop route) ends the line at once; a plain fail still loops to S2.
+describe("runLine, GATE-2 stop routes", () => {
+  const gate2 = (log: string[], result: unknown): Gate => ({
+    id: "GATE-2",
+    evaluate: () => {
+      log.push("GATE-2");
+      return result as never;
+    },
+  });
+  const ROUTES = [
+    { stop: "J2", reason: "j2_open", j: "J2" },
+    { stop: "J3", reason: "scenarios_need_review", j: "J3" },
+    { stop: "J7", reason: "gate_blocked", j: "J7" },
+  ] as const;
+
+  it.each(ROUTES)("a GATE-2 fail with stop $stop ends the line at once as blocked $reason with that J", async ({ stop, reason, j }) => {
+    const fx = setupLine();
+    const log: string[] = [];
+    const result = finished(
+      await runLine(
+        fx.options({
+          stations: stationsOf(log),
+          gates: { "GATE-2": gate2(log, { gate: "GATE-2", verdict: "fail", reasons: ["seal_missing"], stop }), "GATE-3": passGate("GATE-3") },
+        }),
+      ),
+    );
+
+    expect(log).toEqual(["S1", "S2", "GATE-2"]);
+    expect(result).toMatchObject({ outcome: "blocked", reason_code: reason, disposition: { action: "park" } });
+    expect(result.handoff?.decision_required.j).toBe(j);
+    expect(result.evidence.gates.history).toContainEqual({ gate: "GATE-2", verdict: "fail", reasons: ["seal_missing"] });
+    expect(JSON.stringify(result.evidence.gates.history)).not.toContain('"stop"');
+    expect(fx.stateOf()).toBe("ready");
+  });
+
+  it("a GATE-2 fail without a stop route still loops, and the 4th S2 visit is blocked gate2_exhausted", async () => {
+    const fx = setupLine();
+    const log: string[] = [];
+    const result = finished(
+      await runLine(
+        fx.options({
+          stations: stationsOf(log),
+          gates: { "GATE-2": gate2(log, { gate: "GATE-2", verdict: "fail", reasons: ["seal_gap"] }), "GATE-3": passGate("GATE-3") },
+        }),
+      ),
+    );
+    expect(log.filter((id) => id === "S2")).toHaveLength(3);
+    expect(result).toMatchObject({ outcome: "blocked", reason_code: "gate2_exhausted" });
+  });
+
+  it("a GATE-2 that throws is blocked gate_not_run", async () => {
+    const fx = setupLine();
+    const boom: Gate = {
+      id: "GATE-2",
+      evaluate: () => {
+        throw new Error(PLANTED);
+      },
+    };
+    const result = finished(await runLine(fx.options({ gates: { "GATE-2": boom, "GATE-3": passGate("GATE-3") } })));
+    expect(result).toMatchObject({ outcome: "blocked", reason_code: "gate_not_run" });
+    expect(result.evidence.gates.history).toContainEqual({ gate: "GATE-2", verdict: "not_run", reasons: ["gate_error"] });
+  });
+
+  it.each([
+    ["stop J4 on a GATE-2 fail", { gate: "GATE-2", verdict: "fail", reasons: ["x"], stop: "J4" }],
+    ["a non-string stop on a GATE-2 fail", { gate: "GATE-2", verdict: "fail", reasons: ["x"], stop: 3 }],
+  ])("%s becomes not_run gate_error", async (_name, raw) => {
+    const fx = setupLine();
+    const result = finished(await runLine(fx.options({ gates: { "GATE-2": gate2([], raw), "GATE-3": passGate("GATE-3") } })));
+    expect(result.evidence.gates.history).toContainEqual({ gate: "GATE-2", verdict: "not_run", reasons: ["gate_error"] });
+    expect(result).toMatchObject({ outcome: "blocked", reason_code: "gate_not_run" });
+  });
+
+  it("drops a stop on a GATE-2 pass and on GATE-3", async () => {
+    const fx = setupLine();
+    const gate3: Gate = { id: "GATE-3", evaluate: () => ({ gate: "GATE-3", verdict: "fail", reasons: ["canary_hit"], stop: "J3" }) as never };
+    const result = finished(
+      await runLine(fx.options({ gates: { "GATE-2": gate2([], { gate: "GATE-2", verdict: "pass", reasons: [], stop: "J3" }), "GATE-3": gate3 } })),
+    );
+    // GATE-2 passed (stop dropped), GATE-3 failed as an ordinary gate: no gate2_stop row, no J3 scenario route.
+    expect(result.reason_code).not.toBe("scenarios_need_review");
+    expect(result.evidence.gates.per_gate["GATE-2"]).toBe("pass");
+    expect(result.evidence.gates.per_gate["GATE-3"]).toBe("fail");
   });
 });

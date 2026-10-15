@@ -81,6 +81,12 @@ export const HANDOFF_ROUTES: Readonly<Record<ReasonCode, Route>> = {
     question: "Should the scenarios be reworked, or should the item be dropped?",
     options: retry,
   },
+  scenarios_need_review: {
+    j: "J3",
+    state: "The sealed scenarios, or what they were written from, need a person before the line can go on.",
+    question: "Should the scenarios be repaired or rewritten, or should the item be dropped?",
+    options: retry,
+  },
   audit_flag: {
     j: "J4",
     state: "The audit flagged the result, so it is not recommended.",

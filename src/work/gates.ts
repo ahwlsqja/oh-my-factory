@@ -9,11 +9,16 @@ import type { WorkItem } from "./types.js";
 export type GateVerdict = "pass" | "fail" | "not_run";
 export type GateStatus = GateVerdict | "not_visited";
 
+/** Where a GATE-2 fail sends the item instead of looping back to S2: J2 (a design question), J3 (the scenarios) or J7 (a person looks). */
+export type GateStop = "J2" | "J3" | "J7";
+
 /** `reasons` are closed codes matching /^[a-z0-9_]+$/; never text, never an error message. */
 export interface GateResult {
   gate: GateId;
   verdict: GateVerdict;
   reasons: readonly string[];
+  /** GATE-2 with verdict `fail` only: the line stops at this J act instead of returning to S2. */
+  stop?: GateStop;
 }
 
 export interface GateAggregate {
