@@ -3,10 +3,18 @@ import type { SecretHandle } from "../container/runtime.js";
 import type { SecretEnvName } from "../container/spec.js";
 
 /**
- * The variable each vendor's implementer reads its one key from. Only the claude implementer runs in a container
- * in this version, so there is one entry; adding a vendor adds a name here and to `SECRET_ENV_NAMES`.
+ * The variable each vendor's implementer receives its one key under inside the container: the name the vendor CLI
+ * expects. Only the claude implementer runs in a container in this version, so there is one entry; adding a vendor
+ * adds a name here and to `SECRET_ENV_NAMES`.
  */
 export const CREDENTIAL_ENV: Readonly<Record<"claude", SecretEnvName>> = { claude: "ANTHROPIC_API_KEY" };
+
+/**
+ * The variable on the OMF host that holds the implementer's key. It is deliberately not the vendor's own name:
+ * `ANTHROPIC_API_KEY` is the reconciler's key on the host, and code in the implementer container can read the key it
+ * is given, so the implementer gets a separate key, created for it with a provider-side spend limit.
+ */
+export const CREDENTIAL_SOURCE_ENV: Readonly<Record<"claude", string>> = { claude: "OMF_IMPLEMENTER_API_KEY" };
 
 const MASK = "[credential]";
 /** A vendor key is far shorter; a longer value is not a key and is refused rather than passed on. */
@@ -55,16 +63,16 @@ export class Credential implements SecretHandle {
 }
 
 /**
- * Reads the vendor key from the OMF process environment and from no other variable. `null` when it is unset, empty,
+ * Reads the implementer's key from the OMF process environment variable `OMF_IMPLEMENTER_API_KEY` and from no other
+ * variable (never `ANTHROPIC_API_KEY`); the credential is named for the variable the vendor CLI reads in the container. `null` when it is unset, empty,
  * longer than 512 characters, or not printable ASCII without whitespace: a padded or odd value is refused instead of
  * being trimmed, because a key that was altered on the way in would only fail later at the provider with a message
  * that does not say why.
  */
 export function readCredential(vendor: "claude", env: NodeJS.ProcessEnv): Credential | null {
-  const name = CREDENTIAL_ENV[vendor];
-  const value = env[name];
+  const value = env[CREDENTIAL_SOURCE_ENV[vendor]];
   if (value === undefined || value.length === 0 || value.length > MAX_LENGTH || !PRINTABLE.test(value)) return null;
-  return new Credential(name, value);
+  return new Credential(CREDENTIAL_ENV[vendor], value);
 }
 
 /** Replaces every occurrence of the value with `[redacted]`. The value is matched as text, never as a pattern. */

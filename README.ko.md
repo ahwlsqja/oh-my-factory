@@ -277,6 +277,12 @@ kind = "claude"          # 또는 "command": 프롬프트를 stdin 으로 읽고
 키체인이나 로그인 파일 로그인은 쓰지 않습니다. `kind = "command"` 는 `command` 에 적은 argv 를 실행하며,
 시험과 예제가 씁니다. `kind = "codex"` 와 `auth = "login_file"` 은 컨테이너 실행기가 생길 때까지 거부됩니다.
 
+구현자 컨테이너는 일부러 다르게 다룹니다. 구현자가 컨테이너 안에서 쓰고 실행하는 코드는 받은 키를 읽을 수 있으므로,
+그 키는 조정 모델용 `ANTHROPIC_API_KEY` 가 아닙니다. 사용 한도를 건 별도의 Anthropic 워크스페이스 키를 만들어,
+구현자를 돌리는 명령 한 번에만 `OMF_IMPLEMENTER_API_KEY` 로 지정하세요. OMF 는 이 변수만 읽고
+(`ANTHROPIC_API_KEY` 로 대신하지 않습니다) 컨테이너에는 Claude CLI 가 기대하는 이름으로 전달합니다. 키가 없으면
+구현자 단계는 `OMF_IMPLEMENTER_API_KEY` 를 이름으로 밝히는 인프라 실패로 막힙니다.
+
 `claude` 종류는 실제 모델로 검증하지 않았습니다. `scripts/smoke-reconciler.sh` 가 수동 확인 수단입니다.
 
 ### 라운드, 종료 상태, 종료 코드

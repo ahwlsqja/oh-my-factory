@@ -34,7 +34,7 @@ describe("W-history-scan-before-publish", () => {
   ];
 
   it.each(cases)("finds %s", async (_name, work, expected) => {
-    const credential = readCredential("claude", { ANTHROPIC_API_KEY: KEY });
+    const credential = readCredential("claude", { OMF_IMPLEMENTER_API_KEY: KEY });
     if (credential === null) throw new Error("the test credential was rejected");
     const world = makeCandidateWorld({ workId: "w1", work });
     const imported = await importCandidate(world);

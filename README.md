@@ -289,6 +289,13 @@ The `claude` kind is unverified against a real model; `scripts/smoke-reconciler.
 not pass `--json-schema` (Claude Code implements that with an extra tool-call turn, which the one-turn check
 rejects); OMF validates the answer against its own schema.
 
+The implementer container is different on purpose. Code the implementer writes and runs inside its container can
+read the key it is given, so the key is never the reconciler's `ANTHROPIC_API_KEY`. Create a separate Anthropic
+workspace key with a spend limit and export it as `OMF_IMPLEMENTER_API_KEY` for the one command that runs the
+implementer. OMF reads that variable only (it does not fall back to `ANTHROPIC_API_KEY`) and hands the key to the
+container under the name the Claude CLI expects. If it is missing, the implementer step is blocked as an
+infrastructure failure that names `OMF_IMPLEMENTER_API_KEY`.
+
 ### Rounds, ending states and exit codes
 
 A round is a tick that called the model, and only that tick spends one of the goal's rounds. A tick that waits

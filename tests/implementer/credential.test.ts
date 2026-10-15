@@ -4,6 +4,7 @@ import type { SecretHandle } from "../../src/container/runtime.js";
 import { CREDENTIAL_SHAPED_ENV_NAMES, SECRET_ENV_NAMES } from "../../src/container/spec.js";
 import {
   CREDENTIAL_ENV,
+  CREDENTIAL_SOURCE_ENV,
   Credential,
   containsCredential,
   readCredential,
@@ -13,7 +14,7 @@ import {
 const KEY = "sk-ant-test-0123456789abcdef";
 
 function mint(value = KEY): Credential {
-  const credential = readCredential("claude", { ANTHROPIC_API_KEY: value });
+  const credential = readCredential("claude", { OMF_IMPLEMENTER_API_KEY: value });
   if (credential === null) throw new Error("the fixture key was refused");
   return credential;
 }
@@ -22,6 +23,7 @@ describe("closed env-name tables", () => {
   it("names exactly one secret, ANTHROPIC_API_KEY, which is also credential-shaped", () => {
     expect([...SECRET_ENV_NAMES]).toEqual(["ANTHROPIC_API_KEY"]);
     expect(CREDENTIAL_ENV).toEqual({ claude: "ANTHROPIC_API_KEY" });
+    expect(CREDENTIAL_SOURCE_ENV).toEqual({ claude: "OMF_IMPLEMENTER_API_KEY" });
     for (const name of SECRET_ENV_NAMES) expect(CREDENTIAL_SHAPED_ENV_NAMES).toContain(name);
   });
 
@@ -59,17 +61,22 @@ describe("readCredential", () => {
     ["holding a control character", "sk-\u0000-x"],
     ["not ASCII", "sk-é-x"],
   ])("returns null for a value that is %s", (_name, value) => {
-    expect(readCredential("claude", value === undefined ? {} : { ANTHROPIC_API_KEY: value })).toBeNull();
+    expect(readCredential("claude", value === undefined ? {} : { OMF_IMPLEMENTER_API_KEY: value })).toBeNull();
   });
 
   it("accepts a value of exactly 512 characters", () => {
-    expect(readCredential("claude", { ANTHROPIC_API_KEY: "a".repeat(512) })?.reveal()).toBe("a".repeat(512));
+    expect(readCredential("claude", { OMF_IMPLEMENTER_API_KEY: "a".repeat(512) })?.reveal()).toBe("a".repeat(512));
   });
 
   it("reads one variable and no other, and ignores other vendors' keys", () => {
     const reads: string[] = [];
     const probed = new Proxy<NodeJS.ProcessEnv>(
-      { ANTHROPIC_API_KEY: KEY, OPENAI_API_KEY: "other", CLAUDE_CODE_OAUTH_TOKEN: "other" },
+      {
+        OMF_IMPLEMENTER_API_KEY: KEY,
+        ANTHROPIC_API_KEY: "reconciler",
+        OPENAI_API_KEY: "other",
+        CLAUDE_CODE_OAUTH_TOKEN: "other",
+      },
       {
         get(target, prop, receiver) {
           reads.push(String(prop));
@@ -78,9 +85,14 @@ describe("readCredential", () => {
       },
     );
     expect(readCredential("claude", probed)?.reveal()).toBe(KEY);
-    expect(reads).toEqual(["ANTHROPIC_API_KEY"]);
+    expect(reads).toEqual(["OMF_IMPLEMENTER_API_KEY"]);
     expect(
-      readCredential("claude", { OPENAI_API_KEY: "x", ANTHROPIC_AUTH_TOKEN: "x", CLAUDE_CODE_OAUTH_TOKEN: "x" }),
+      readCredential("claude", {
+        ANTHROPIC_API_KEY: "the reconciler key",
+        OPENAI_API_KEY: "x",
+        ANTHROPIC_AUTH_TOKEN: "x",
+        CLAUDE_CODE_OAUTH_TOKEN: "x",
+      }),
     ).toBeNull();
   });
 });

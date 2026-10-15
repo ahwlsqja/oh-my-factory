@@ -9,7 +9,7 @@ const NO_CANARIES: VaultCanaryIndex = { index: [], unverified: [], unverified_ca
 const CAP = 64 * 1024 * 1024;
 
 function credential(): Credential {
-  const value = readCredential("claude", { ANTHROPIC_API_KEY: KEY });
+  const value = readCredential("claude", { OMF_IMPLEMENTER_API_KEY: KEY });
   if (value === null) throw new Error("the test credential was rejected");
   return value;
 }

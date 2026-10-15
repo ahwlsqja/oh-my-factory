@@ -17,7 +17,7 @@ const KEY = 'omf-test-key-"quoted"\\tail-0123456789';
 const ESCAPED_KEY = JSON.stringify(KEY).slice(1, -1);
 
 function credentialOf(value: string): Credential {
-  const credential = readCredential("claude", { ANTHROPIC_API_KEY: value });
+  const credential = readCredential("claude", { OMF_IMPLEMENTER_API_KEY: value });
   if (credential === null) throw new Error("the test key was rejected by readCredential");
   return credential;
 }
