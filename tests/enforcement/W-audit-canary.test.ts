@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { SURFACE_KINDS, textSurface } from "../../src/audit/canary-scan.js";
 import { auditPath, auditSignals, runAudit } from "../../src/audit/work-audit.js";
+import type { WorkAudit } from "../../src/audit/work-audit.js";
 import { CANARY_TEXT, SCOPE, auditFixture, auditInput, surfacesWith } from "../helpers/audit-diff-fixture.js";
 import { recordAndLoad } from "../helpers/audit-record.js";
 
@@ -42,7 +43,8 @@ describe("W-audit-canary", () => {
       expect(report.canary.status).toBe("not_run");
       const rec = recordAndLoad(report);
       expect(rec.payload).toMatchObject({ canary_status: "not_run" });
-      if (rec.loaded !== null) expect(auditSignals(rec.loaded).unverified).toContain("canary_not_scanned");
+      expect(rec.loaded).not.toBeNull();
+      expect(auditSignals(rec.loaded as WorkAudit).unverified).toContain("canary_not_scanned");
     }
   });
 });
