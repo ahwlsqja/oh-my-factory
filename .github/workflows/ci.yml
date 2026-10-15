@@ -154,7 +154,7 @@ jobs:
 
   # Report-only: Biome is configured but the bulk format is pending, so findings are shown and never fail.
   biome:
-    name: biome (report only)
+    name: biome
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -166,18 +166,17 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      # Errors fail the job; warnings and infos are reported only.
       - name: Biome lint
-        continue-on-error: true
         run: npm run lint
       - name: Biome format check
-        continue-on-error: true
         run: npm run format:check
 
   # Single stable check name for branch protection.
   ci:
     name: ci
     if: always()
-    needs: [test, lint, package, dependency-review, zizmor]
+    needs: [test, lint, biome, package, dependency-review, zizmor]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

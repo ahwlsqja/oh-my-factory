@@ -88,13 +88,11 @@ strings and no secret is mapped. Permissions are `contents: read`.
 
 ## Lint and format (Biome)
 
-Configuration only. `biome.json`, `.editorconfig` and `.gitattributes` are in place, and `npm run lint` and
-`npm run format:check` run Biome 2.5.15. The CI `biome (report only)` job runs both with `continue-on-error`
-and is not in the aggregate `ci` job.
+`biome.json`, `.editorconfig` and `.gitattributes` are in place, and `npm run lint` and `npm run format:check` run
+Biome 2.5.15. The CI `biome` job runs both and is part of the aggregate `ci` job, so a formatting difference or a lint
+error fails the pull request. Run `npx biome format --write .` before committing.
 
-- Lint rules: `recommended` preset; the five rules that report errors on the current code are set to `warn` so the
-  first adoption is non-failing. Currently 51 warnings and 11 infos, no errors.
-- Format: 20 files currently differ from the Biome style. **The bulk format is pending**: the owner chose to run it
-  after M3e, so no existing file has been reformatted and nothing is excluded from `biome.json` permanently. After the
-  bulk format, record its commit in `.git-blame-ignore-revs`, make the CI job blocking, and promote the `warn`
-  rules to `error` as they reach zero.
+- Lint rules: `recommended` preset. The five rules that reported errors when Biome was adopted are set to `warn`;
+  warnings and infos are reported but do not fail the job. Promote a rule back to `error` once its count reaches zero.
+- Format: the whole repository was formatted in one commit, which is listed in `.git-blame-ignore-revs`. Run
+  `git config blame.ignoreRevsFile .git-blame-ignore-revs` once so `git blame` skips it.
