@@ -92,7 +92,7 @@ export interface HostFixtureRunnerOptions {
   /** One mkdtemp per scenario session, removed by close(). Default: the OS temp directory. */
   scratchRoot?: string;
   /** Test seam only. The committed allowlist still applies, so a modified copy is refused on its hash. */
-  fixturesDir?: string;
+  fixturesDir?: string | undefined;
 }
 
 /**

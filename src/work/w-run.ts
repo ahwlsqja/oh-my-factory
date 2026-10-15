@@ -30,8 +30,8 @@ export interface BeginRunOptions {
   location: ProjectLocation;
   workId: string;
   now?: () => Date;
-  newRunId?: (now: Date) => string;
-  store?: StateStore;
+  newRunId?: ((now: Date) => string) | undefined;
+  store?: StateStore | undefined;
 }
 
 export type RecheckFailure = "vetoed" | "cancelled" | "state_changed" | "malformed" | "claim_lost" | "governance";

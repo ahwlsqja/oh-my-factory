@@ -126,7 +126,7 @@ export function buildReconcilerInput(args: {
    * ledger says they are open, so they hold a WIP slot: leaving them out would let a crash free a slot that
    * is really taken. Only the count is needed; the model never sees them.
    */
-  repairableOpen?: number;
+  repairableOpen?: number | undefined;
   /** `recentOutcomes(...)` of the same ledger read. Required, so no caller can forget the field. */
   recent: RecentOutcomes;
 }): ReconcilerInput | { problem: "approach_unusable" } {

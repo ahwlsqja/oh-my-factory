@@ -1,5 +1,4 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { approveGoal } from "../../src/goal/approve.js";
 import { requireProject } from "../../src/core/project.js";

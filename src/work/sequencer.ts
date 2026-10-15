@@ -117,7 +117,7 @@ export interface LineOptions {
    */
   gates?: Partial<Record<"GATE-2" | "GATE-3", Gate>>;
   now?: () => Date;
-  newRunId?: (at: Date) => string;
+  newRunId?: ((at: Date) => string) | undefined;
   store?: StateStore;
 }
 

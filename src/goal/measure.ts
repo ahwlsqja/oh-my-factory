@@ -61,7 +61,7 @@ export class GoalStopError extends Error {
 export interface MeasureOptions {
   runner: RunnerKind;
   now?: () => Date;
-  env?: NodeJS.ProcessEnv;
+  env?: NodeJS.ProcessEnv | undefined;
 }
 
 function rolesOf(semantic: GoalSemantic, metricId: string): MetricRole[] {
