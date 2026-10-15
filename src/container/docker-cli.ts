@@ -29,7 +29,7 @@ import { isImageId } from "./spec.js";
 
 export type DockerRunner = (
   argv: readonly string[],
-  options: { stdin?: string | Buffer; timeoutMs: number; maxOutputBytes: number },
+  options: { stdin?: string | Buffer; timeoutMs: number; maxOutputBytes: number; tailOnly?: boolean },
 ) => Promise<ProcessResult>;
 
 export interface DockerRuntimeOptions {
@@ -161,8 +161,8 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
   }
 
   /** Runs a command that must succeed and returns its stdout. */
-  async function succeed(argv: string[], timeoutMs: number): Promise<string> {
-    const result = await run(argv, { timeoutMs, maxOutputBytes: META_BYTES });
+  async function succeed(argv: string[], timeoutMs: number, tailOnly = false): Promise<string> {
+    const result = await run(argv, { timeoutMs, maxOutputBytes: META_BYTES, ...(tailOnly ? { tailOnly } : {}) });
     if (result.kind !== "exited" || result.status !== 0) throw new RuntimeError("docker_failed", failureText(result));
     return result.stdout;
   }
@@ -236,7 +236,8 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
     async build(spec) {
       const name = await requireLocal();
       const { timeoutMs, ...build } = spec;
-      await succeed(buildArgv(build, name), timeoutMs);
+      // BuildKit progress includes the candidate's own RUN output: keep a bounded tail and judge the build by its exit status.
+      await succeed(buildArgv(build, name), timeoutMs, true);
       const info = await imageInfo(spec.tag);
       if (info.volumes.length > 0) throw new RuntimeError("image_declares_volume");
       return info;

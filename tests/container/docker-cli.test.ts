@@ -1,3 +1,5 @@
+import { chmodSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createArgv, execArgv, removeArgv } from "../../src/container/argv.js";
 import { createDockerRuntime, dockerEnv, resolveDockerConfig } from "../../src/container/docker-cli.js";
@@ -8,6 +10,7 @@ import { FIXTURE_RUN_ID, SUT_BASE, labelsFor, specFor } from "../helpers/contain
 import { FakeDocker, fakeDockerBin, verbOf } from "../helpers/fake-docker.js";
 import { addImage, addRegistryImage } from "../helpers/fake-docker-core.mjs";
 import { fakeRuntime } from "../helpers/fake-runtime.js";
+import { makeTempDir } from "../helpers/tmp.js";
 
 const codeOf = async (promise: Promise<unknown>): Promise<string> => {
   try {
@@ -213,5 +216,38 @@ describe("listOwned and removeImage through the real adapter", () => {
     ]);
     await runtime.removeImage("omf-sut:run-9-2" as ImageId);
     expect((await runtime.listOwned({ run_id: "run-9" })).length).toBe(0);
+  });
+});
+
+describe("createDockerRuntime build output", () => {
+  // BuildKit progress carries the candidate's own RUN output. A build that succeeds is never failed for how much it printed.
+  it("keeps a bounded tail and succeeds when a successful build prints more than the metadata limit", async () => {
+    const bin = makeTempDir("omf-noisy-docker-");
+    const image = JSON.stringify([{ Id: `sha256:${"a".repeat(64)}`, Config: { Env: [], User: "", Volumes: null } }]);
+    const context = JSON.stringify([{ Endpoints: { docker: { Host: "unix:///nonexistent/omf.sock" } } }]);
+    writeFileSync(
+      join(bin, "docker"),
+      [
+        "#!/bin/sh",
+        'case "$*" in',
+        `  *"context inspect"*) echo '${context}' ;;`,
+        '  *" build "*) head -c 6000000 /dev/zero | tr "\\0" "x" >&2; echo build-finished >&2 ;;',
+        `  *"image inspect"*) echo '${image}' ;;`,
+        "esac",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(join(bin, "docker"), 0o755);
+    const runtime = createDockerRuntime({
+      context: "colima-omf-m3f",
+      env: { PATH: `${bin}:/usr/bin:/bin`, HOME: makeTempDir("omf-home-") },
+    });
+    const built = await runtime.build({
+      contextDir: makeTempDir("omf-ctx-"),
+      tag: `omf-sut:${FIXTURE_RUN_ID}-1`,
+      labels: labelsFor("sut"),
+      timeoutMs: 60_000,
+    });
+    expect(built.id).toBe(`sha256:${"a".repeat(64)}`);
   });
 });

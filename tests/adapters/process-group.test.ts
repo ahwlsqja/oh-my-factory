@@ -26,6 +26,17 @@ describe("runProcessGroup", () => {
     expect(result).toEqual({ kind: "exited", status: 3, signal: null, stdout: "out\n", stderr: "err\n" });
   });
 
+  it("with tailOnly keeps the last bytes of a long output and still reports the exit", async () => {
+    const result = await runProcessGroup(
+      ["sh", "-c", "head -c 3000 /dev/zero | tr '\\0' 'x'; echo END; echo oops >&2; exit 0"],
+      options({ maxOutputBytes: 100, tailOnly: true }),
+    );
+    expect(result).toMatchObject({ kind: "exited", status: 0, stderr: "oops\n" });
+    if (result.kind !== "exited") return;
+    expect(result.stdout).toHaveLength(100);
+    expect(result.stdout.endsWith("xxxEND\n")).toBe(true);
+  });
+
   it("delivers stdin", async () => {
     const result = await runProcessGroup(["cat"], options({ stdin: "hello" }));
     expect(result).toMatchObject({ kind: "exited", status: 0, stdout: "hello" });
