@@ -254,6 +254,25 @@ describe("the guards on a real project", () => {
     );
   });
 
+  it.skipIf(process.getuid?.() === 0)("refuses with scan_incomplete when worktrees/ cannot be read, instead of a raw EACCES", () => {
+    const p = project();
+    chmodSync(p.worktrees, 0o000);
+    try {
+      let caught: unknown;
+      try {
+        assertNoSealedInRepo(p.location, p.env);
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(PokaYokeError);
+      expect((caught as PokaYokeError).findings).toEqual([{ kind: "scan_incomplete", where: "worktree", path: "worktrees" }]);
+      expect(sealedProblem(p.location, p.env)).toContain("scan_incomplete: worktrees");
+      expect(() => scanWorktreeCanaries(p.location, new Set(), p.env)).toThrow(PokaYokeError);
+    } finally {
+      chmodSync(p.worktrees, 0o755);
+    }
+  });
+
   it("scanWorktreeCanaries returns hits with known set and does not throw for a made-up canary", () => {
     const p = project();
     const known = canary();

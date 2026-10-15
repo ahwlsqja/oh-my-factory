@@ -231,6 +231,8 @@ interface WorktreeLayout {
   dirs: string[];
   /** Entries that are symlinks (or "." when worktrees/ itself is one): each is a finding, and none is scanned. */
   links: string[];
+  /** worktrees/ exists but could not be listed: nothing under it was looked at, so the scan is incomplete. */
+  unreadable: boolean;
 }
 
 /**
@@ -239,16 +241,27 @@ interface WorktreeLayout {
  */
 function worktreeLayout(location: ProjectLocation, env: NodeJS.ProcessEnv): WorktreeLayout {
   const base = join(realProjectDir(location, env).dir, "worktrees");
-  const stat = lstatOrNull(base);
-  if (stat === null) return { dirs: [], links: [] };
-  if (stat.isSymbolicLink()) return { dirs: [], links: ["."] };
+  let stat: Stats | null;
+  try {
+    stat = lstatOrNull(base);
+  } catch {
+    return { dirs: [], links: [], unreadable: true };
+  }
+  if (stat === null) return { dirs: [], links: [], unreadable: false };
+  if (stat.isSymbolicLink()) return { dirs: [], links: ["."], unreadable: false };
   const dirs: string[] = [];
   const links: string[] = [];
-  for (const entry of readdirSync(base, { withFileTypes: true })) {
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(base, { withFileTypes: true });
+  } catch {
+    return { dirs: [], links: [], unreadable: true };
+  }
+  for (const entry of entries) {
     if (entry.isSymbolicLink()) links.push(entry.name);
     else if (entry.isDirectory()) dirs.push(join(base, entry.name));
   }
-  return { dirs: dirs.sort(), links: links.sort() };
+  return { dirs: dirs.sort(), links: links.sort(), unreadable: false };
 }
 
 /** repo = location.repo; worktrees = the real directories under <projectDir>/worktrees. */
@@ -260,6 +273,7 @@ function fullScan(location: ProjectLocation, env: NodeJS.ProcessEnv): ScanResult
   const layout = worktreeLayout(location, env);
   const result = scanForSealed({ repo: location.repo, worktrees: layout.dirs }, { stateRoot: stateRoot(env) });
   for (const name of layout.links) result.findings.push({ kind: "symlink_into_state", where: "worktree", path: name });
+  if (layout.unreadable) result.findings.push({ kind: "scan_incomplete", where: "worktree", path: "worktrees" });
   return result;
 }
 
@@ -286,6 +300,7 @@ export function scanWorktreeCanaries(
   const layout = worktreeLayout(location, env);
   const out = scanScope({ repo: null, worktrees: layout.dirs }, { stateRoot: stateRoot(env), knownCanaries });
   const incomplete = out.findings.filter((finding) => finding.kind === "scan_incomplete");
+  if (layout.unreadable) incomplete.push({ kind: "scan_incomplete", where: "worktree", path: "worktrees" });
   if (incomplete.length > 0) throw new PokaYokeError(incomplete);
   return out.canary_hits;
 }
