@@ -181,6 +181,7 @@ describe("[w] table (per-item W limits, M3-D18)", () => {
     ['max_rounds = "3"'],
     ["max_model_usd = 0"],
     ["max_model_usd = -1"],
+    ["max_model_usd = 0.0000001"], // below one micro-dollar: microUsd() would reject it
     ["max_model_usd = nan"],
     ['max_model_usd = "5"'],
     ["max_model_usd = 10000.5"],
