@@ -38,7 +38,8 @@ export async function confirmByTyping(
   prompt: string,
   io: PromptStreams = { input: process.stdin, output: process.stdout },
 ): Promise<boolean> {
-  const rl = createInterface({ input: io.input, output: io.output });
+  // terminal: false keeps readline from writing cursor escapes; the tty echoes typed characters itself in cooked mode.
+  const rl = createInterface({ input: io.input, output: io.output, terminal: false });
   try {
     const closed = new Promise<string>((resolve) => rl.once("close", () => resolve("")));
     const answer = await Promise.race([rl.question(prompt), closed]);
