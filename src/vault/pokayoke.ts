@@ -30,7 +30,7 @@ export interface PokaYokeFinding {
 
 export class PokaYokeError extends Error {
   constructor(readonly findings: readonly PokaYokeFinding[]) {
-    super(`refusing to run: sealed material inside the repository or an OMF worktree (${findings.length} finding(s))`);
+    super(`refusing to run: sealed material inside the repository or an OMF worktree (${findings.length} finding(s)); run \`omf doctor\` to list them`);
     this.name = "PokaYokeError";
   }
 }

@@ -232,7 +232,7 @@ describe("the guards on a real project", () => {
     }
     expect(caught).toBeInstanceOf(PokaYokeError);
     const error = caught as PokaYokeError;
-    expect(error.message).toBe("refusing to run: sealed material inside the repository or an OMF worktree (1 finding(s))");
+    expect(error.message).toBe("refusing to run: sealed material inside the repository or an OMF worktree (1 finding(s)); run `omf doctor` to list them");
     expect(error.findings).toEqual([{ kind: "canary", where: "repo", path: "leak.txt" }]);
     expect(error.message).not.toContain(value);
   });
