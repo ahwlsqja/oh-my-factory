@@ -6,6 +6,7 @@ import { emptyEvidenceInputs } from "../../src/work/classify.js";
 import {
   type Gate,
   type GateContext,
+  type GateResult,
   type GateStatus,
   GateBoard,
   REQUIRED_GATES,
@@ -211,18 +212,24 @@ describe("gate1 (the real adapter)", () => {
 });
 
 describe("default gates", () => {
-  it("never implements GATE-2 or GATE-3 yet: both are not_run not_implemented", async () => {
+  it("the unimplemented gate is not_run not_implemented", async () => {
     for (const id of ["GATE-2", "GATE-3"] as const) {
       expect(await unimplementedGate(id).evaluate(bareContext())).toEqual({ gate: id, verdict: "not_run", reasons: ["not_implemented"] });
     }
   });
 
-  it("registers GATE-1 real and GATE-2 and GATE-3 unimplemented, each under its own id", async () => {
+  it("registers GATE-1 and GATE-2 real and GATE-3 unimplemented, each under its own id", async () => {
     const gates = defaultGates();
     expect(Object.keys(gates).sort()).toEqual(["GATE-1", "GATE-2", "GATE-3"]);
     for (const [key, gate] of Object.entries(gates)) expect(gate.id).toBe(key);
-    expect(await gates["GATE-2"].evaluate(bareContext())).toMatchObject({ verdict: "not_run" });
-    expect(await gates["GATE-3"].evaluate(bareContext())).toMatchObject({ verdict: "not_run" });
+    // GATE-2 is the real gate, not the placeholder: it does not answer not_implemented (the real one needs a real item, so it is only registered here).
+    expect(gates["GATE-2"].evaluate.toString()).not.toBe(unimplementedGate("GATE-2").evaluate.toString());
+    expect(await gates["GATE-3"].evaluate(bareContext())).toEqual({ gate: "GATE-3", verdict: "not_run", reasons: ["not_implemented"] });
+  });
+
+  it("a GateResult can carry a stop route", () => {
+    const result: GateResult = { gate: "GATE-2", verdict: "fail", reasons: ["exposure_exhausted"], stop: "J3" };
+    expect(result.stop).toBe("J3");
   });
 
   it("lists exactly the gates that were replaced, in line order", () => {

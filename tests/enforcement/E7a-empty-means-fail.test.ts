@@ -44,19 +44,19 @@ describe("E7a-empty-means-fail", () => {
     expect(board.aggregate().verdict).toBe("fail");
   });
 
-  it("the default line fails closed: GATE-2 is not implemented, GATE-3 and GATE-4 are never visited", async () => {
+  it("the default line fails closed: with no seal GATE-2 fails, the loop runs out, GATE-3 is never visited", async () => {
     const line = setupLine();
     const { result, ran } = await line.exec();
     const done = finished(result);
-    expect(done).toMatchObject({ outcome: "blocked", reason_code: "gate_not_run" });
+    expect(done).toMatchObject({ outcome: "blocked", reason_code: "gate2_exhausted" });
     expect(done.evidence.recommendation).not.toBe("merge_recommended");
     expect(done.evidence.gates.per_gate).toEqual({
       "GATE-1": "pass",
-      "GATE-2": "not_run",
+      "GATE-2": "fail",
       "GATE-3": "not_visited",
-      "GATE-4": "not_visited",
+      "GATE-4": "fail",
     });
-    expect(ran).toEqual(["S1", "S2"]);
+    expect(ran).toEqual(["S1", "S2", "S2", "S2"]);
     expect(line.state()).toBe("ready");
   });
 

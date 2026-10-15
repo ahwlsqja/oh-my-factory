@@ -11,6 +11,7 @@ import { handoffFile } from "../../src/work/handoff.js";
 import { LINE_ORDER, type StationId } from "../../src/work/line-types.js";
 import { type Station, runLine } from "../../src/work/sequencer.js";
 import { HUMAN, addOpen, resolveOpen } from "../helpers/decision-fixture.js";
+import { plantCanary } from "../helpers/line-fixture.js";
 import { PLANTED, cleanStations, finished, passGate, passGates, setupLine, station, stationsOf, textOf } from "../helpers/line.js";
 
 // Spec §5.0, §5.6, §6.3. With always-pass fake gates and clean stations the line ends in a submit; every other
@@ -57,23 +58,44 @@ describe("runLine, straight line (8a)", () => {
     ]);
   });
 
-  it("fails closed with the default gates: GATE-2 is not implemented, so GATE-3 and GATE-4 are never visited", async () => {
+  it("with the default gates and no seal GATE-2 fails three times and the 4th S2 visit parks the item: gate2_exhausted, J3", async () => {
     const fx = setupLine();
+    const seen: string[] = [];
 
-    const result = finished(await runLine(fx.options()));
+    const result = finished(await runLine(fx.options({ stations: cleanStations({ trace: seen }) })));
 
-    expect(result).toMatchObject({ outcome: "blocked", reason_code: "gate_not_run", disposition: { action: "park" } });
+    expect(seen.filter((id) => id.startsWith("S"))).toEqual(["S1", "S2", "S2", "S2"]);
+    expect(result).toMatchObject({ outcome: "blocked", reason_code: "gate2_exhausted", disposition: { action: "park" } });
+    // GATE-4 failed on the visit cap; GATE-3 was never reached
     expect(result.evidence.gates.per_gate).toEqual({
       "GATE-1": "pass",
-      "GATE-2": "not_run",
+      "GATE-2": "fail",
       "GATE-3": "not_visited",
-      "GATE-4": "not_visited",
+      "GATE-4": "fail",
     });
+    const gate2 = result.evidence.gates.history.filter((entry) => entry.gate === "GATE-2");
+    expect(gate2).toEqual(Array.from({ length: 3 }, () => ({ gate: "GATE-2", verdict: "fail", reasons: ["seal_missing"] })));
+    expect(fx.events().filter((event) => event.type === "gate2.evaluated")).toHaveLength(3);
+    expect(result.evidence.gates.injected).toEqual([]);
     expect(result.evidence.stations).toMatchObject({ S1: "ok", S2: "ok", S3: "not_run", S7: "not_run" });
-    expect(result.handoff).toMatchObject({ outcome: "blocked", reason_code: "gate_not_run", decision_required: { j: "J6" } });
+    expect(result.handoff).toMatchObject({ outcome: "blocked", reason_code: "gate2_exhausted", decision_required: { j: "J3" } });
     expect(existsSync(handoffFile(fx.itemDir, result.run_id, "outcome"))).toBe(true);
     expect(fx.stateOf()).toBe("ready");
     expect(fx.workTypes()).toEqual(["work.limits_set", "work.parked"]);
+  });
+
+  it("a guard refusal at GATE-2 keeps its closed code and ends the line blocked gate_not_run", async () => {
+    const fx = setupLine();
+    const plant = station("S2", () => {
+      plantCanary(fx.fx.repo);
+      return { kind: "ok" };
+    });
+
+    const result = finished(await runLine(fx.options({ stations: cleanStations({ override: { S2: plant } }) })));
+
+    expect(result.evidence.gates.history).toContainEqual({ gate: "GATE-2", verdict: "not_run", reasons: ["sealed_material_in_repo"] });
+    expect(result).toMatchObject({ outcome: "blocked", reason_code: "gate_not_run" });
+    expect(result.evidence.gates.per_gate["GATE-2"]).toBe("not_run");
   });
 
   it("merges gates over the defaults and records only the replaced one as injected", async () => {
@@ -82,7 +104,7 @@ describe("runLine, straight line (8a)", () => {
     const result = finished(await runLine(fx.options({ gates: { "GATE-3": passGate("GATE-3") } })));
 
     expect(result.evidence.gates.injected).toEqual(["GATE-3"]);
-    expect(result.evidence.gates.per_gate["GATE-2"]).toBe("not_run");
+    expect(result.evidence.gates.per_gate["GATE-2"]).toBe("fail");
   });
 
   it("refuses a GATE-1 key before it touches the claim or the ledger", async () => {
