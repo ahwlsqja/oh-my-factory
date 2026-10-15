@@ -65,6 +65,40 @@ describe("a ledger event that lacks a field", () => {
   });
 });
 
+describe("the line number of a corrupt ledger event", () => {
+  /** An initialized project and its sound first ledger line, for tests that rewrite the file. */
+  function ledgerFile(): { repo: string; home: string; ledger: string; first: string } {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    omf(["init"], repo, home);
+    const ledger = join(projectDir(repo, { HOME: home }), "ledger.jsonl");
+    return { repo, home, ledger, first: readFileSync(ledger, "utf8").split("\n")[0] ?? "" };
+  }
+
+  it("is the file line, and a blank line is itself the corruption (never skipped), so line equals seq", () => {
+    const { repo, home, ledger, first } = ledgerFile();
+    // line 1 sound, line 2 blank, line 3 garbage: the reader stops at the blank line, which is line 2 of the file.
+    writeFileSync(ledger, `${first}\n\n{not json\n`);
+    const out = omf(["ledger", "verify", "--json"], repo, home);
+    expect(out.code).toBe(1);
+    const { error } = JSON.parse(out.stdout) as { error: { seq: number; line: number; reason: string } };
+    expect(error).toMatchObject({ seq: 2, line: 2, reason: "empty line" });
+    const text = omf(["ledger", "verify"], repo, home).stderr.split("\n");
+    expect(text[0]).toBe("corrupt at seq 2: empty line");
+    expect(text[1]).toContain("line 2");
+  });
+
+  it("is the file line of a later event too", () => {
+    const { repo, home, ledger, first } = ledgerFile();
+    writeFileSync(ledger, `${first}\n${first}\n`);
+    const out = omf(["ledger", "verify", "--json"], repo, home);
+    const { error } = JSON.parse(out.stdout) as { error: { seq: number; line: number } };
+    expect(error.seq).toBe(2);
+    expect(error.line).toBe(2);
+    expect(readFileSync(ledger, "utf8").split("\n")[error.line - 1]).toBe(first);
+  });
+});
+
 describe("ledger verify --json", () => {
   it("prints the count and head of a sound ledger with the path", () => {
     const repo = makeGitRepo();

@@ -154,7 +154,10 @@ registerDecideSigningCommands(program);
 
 const CORRUPT_MESSAGE = /^ledger corrupt at seq (\d+): /;
 
-/** Structured form of `corruptionHint`. One ledger line holds one event, so the line number is the seq. */
+/**
+ * Structured form of `corruptionHint`. The ledger reader turns every line, a blank one included, into one event or
+ * rejects it as corrupt at that line, so the 1-based file line of the bad event is its seq.
+ */
 function corruptionFields(seq: number, path: string): Record<string, unknown> {
   return { line: seq, path, next_action: "do not edit the ledger; restore it from a backup" };
 }
