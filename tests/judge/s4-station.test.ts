@@ -18,6 +18,12 @@ const digestOf = (result: StationResult): string | undefined =>
   result.kind === "ok" ? result.progress_digest : undefined;
 
 describe("S4", () => {
+  it("blocks as infra_failure, and does not throw, when config.toml is malformed", async () => {
+    const r = s4Rig({ judge: "[judge\nnot toml" });
+    const result = await r.station.run(r.ctx());
+    expect(result).toMatchObject({ kind: "blocked", reason_code: "infra_failure" });
+  });
+
   it("fills sealed.train from the tallies (flaky apart), records the round and a host-only tally file", async () => {
     const r = s4Rig({ plan: MIXED });
     const ctx = r.ctx();

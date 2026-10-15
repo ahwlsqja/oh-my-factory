@@ -5,9 +5,9 @@ import type { buildRoundImages, RoundScenario, RoundVerdict } from "./round.js";
 export type RoundLease = Awaited<ReturnType<typeof buildRoundImages>>;
 
 /**
- * What S4 leaves for S5 and S6 of the same round (spec §5.5). In memory only: a restart re-enters from S1 (M3b1), so
+ * What S4 leaves for S5 and S6 of the same round (spec §5.5). In memory only: a restart re-enters from S1, so
  * a station that finds it missing stops with `station_error`. S5 sets `flawed_signal` (gate verdict not GREEN, prove-test
- * not PROVEN, or an audit flag); S6 then does not spend the test split (M3f-D12).
+ * not PROVEN, or an audit flag); S6 then does not spend the test split.
  */
 export interface RoundState {
   round: number;

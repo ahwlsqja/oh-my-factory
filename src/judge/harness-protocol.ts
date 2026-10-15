@@ -116,7 +116,7 @@ function expectOp<Op extends HarnessReply["op"]>(reply: HarnessReply, op: Op): E
 }
 
 /**
- * One `docker exec -i` per operation (M3f-D5): the request is JSON on stdin, the reply is one JSON document on stdout.
+ * One `docker exec -i` per operation: the request is JSON on stdin, the reply is one JSON document on stdout.
  * Every reply is schema-checked and must echo this client's nonce; a missing, oversized, malformed or foreign reply
  * throws, so "no verdict" can never be read as a pass (the verdict half of E7).
  */

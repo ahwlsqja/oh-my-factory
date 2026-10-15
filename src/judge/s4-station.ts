@@ -80,7 +80,7 @@ export async function sweepEarlierRuns(
 /**
  * S4, the judge (spec §5.5): the train split's behavior scenarios plus the contradiction canaries of BOTH splits, k
  * repetitions each, in the two-container judge. Never a test-split behavior scenario: that split is spent once, by S6, after
- * GATE-3 (M3f-D12, D20). It reads only the ledger and the vault set the seal pinned, and a set whose digest differs is not
+ * GATE-3. It reads only the ledger and the vault set the seal pinned, and a set whose digest differs is not
  * run. It writes `sealed.train` (flaky apart), one `judge.round_completed` event and a host-only tally file by scenario
  * ref, and leaves the round state and the SUT image for S5 and S6. Any failure is one closed code and nothing else.
  */
@@ -101,7 +101,12 @@ export function s4Station(deps: ResolvedDeps, holder: RoundHolder): Station {
       if (!standing.ok) return blocked("gate_blocked");
       const contract = standing.state.decisions.find((decision) => decision.id === INTERFACE_DECISION_ID)?.interface;
       if (contract === undefined || contract === null) return blocked("gate_blocked");
-      const config = readConfig(location.dir).judge;
+      let config: ReturnType<typeof readConfig>["judge"];
+      try {
+        config = readConfig(location.dir).judge;
+      } catch {
+        return blocked("infra_failure");
+      }
       if (
         runtime.context === null ||
         config.docker_context === null ||

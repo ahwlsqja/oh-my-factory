@@ -22,7 +22,7 @@ export interface RelayInput {
  * `docker exec` whose argv are `[...run, ...step.argv]` and whose stdin is `step.stdin`: data, never a shell string,
  * so no element of a scenario is ever the program. The runner returns an observation and never sees an expectation.
  *
- * Who caused a stop decides how it is reported (M3f-D8). A timeout, an output limit, invalid UTF-8 and a container
+ * Who caused a stop decides how it is reported. A timeout, an output limit, invalid UTF-8 and a container
  * the candidate killed are the candidate's doing, so they come back as `signaled` (which every expectation fails with
  * `not_exited`) and the candidate cannot end the item `blocked` by causing them. Only a runtime fault (the exec client
  * failed while the container is alive) is `error`. A timeout kills the docker client, not the process inside the

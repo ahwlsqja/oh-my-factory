@@ -8,7 +8,7 @@ import { harnessScenarioOf } from "./harness-protocol.js";
 import type { RoundScenario, RoundVerdict, ScenarioTally } from "./round.js";
 
 /**
- * The real mapper (E2-W-b): tallies to the closed `ScenarioResult` feedback may see. Behavior scenarios only; canaries
+ * The real mapper: tallies to the closed `ScenarioResult` feedback may see. Behavior scenarios only; canaries
  * are judged for GATE-3 and never scored. `passed` = every one of the k repetitions passed, `flaky` = they disagreed. An
  * `error` verdict was already turned into a thrown round error, so reaching here with one is a bug and stops the line.
  */

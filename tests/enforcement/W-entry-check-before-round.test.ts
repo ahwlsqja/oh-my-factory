@@ -16,7 +16,7 @@ import { cleanStations, finished, passGates, station } from "../helpers/line.js"
 import { DEFAULT_SPECS, type SealedItem, seedSealedItem } from "../helpers/scenario-fixture.js";
 import { fakeClock } from "../helpers/tick.js";
 
-// X-17: the entry check sits at the end of S2, after the seal stands and before GATE-2, so a line that cannot reach its
+// the entry check sits at the end of S2, after the seal stands and before GATE-2, so a line that cannot reach its
 // test split stops before S3 opens a round (before any model spend, train round or disclosure unit).
 async function lineOver(s: SealedItem, trace: string[], head: string | null = SHA_A) {
   const s2 = withEntryCheck(
