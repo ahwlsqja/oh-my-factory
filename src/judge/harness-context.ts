@@ -33,7 +33,7 @@ function read(file: string): Buffer {
 /**
  * Reads the shipped files: `<package>/harness/{Dockerfile,main.mjs}` and `<package>/dist/scenario/matcher.js`. Both
  * URLs sit two levels above `src/judge` and `dist/judge`, like `schemaUrl`. `matcher.js` imports only types, so the
- * compiled file is self-contained and the harness runs the very matcher the host tests cover (M3f-D6).
+ * compiled file is self-contained and the harness runs the very matcher the host tests cover.
  */
 export function harnessSources(options: { harnessDir?: string; matcherFile?: string } = {}): HarnessSources {
   const dir = options.harnessDir ?? fileURLToPath(new URL("../../harness/", import.meta.url));
@@ -78,12 +78,11 @@ export function writeHarnessContext(
   base: PinnedImage,
   contextSha256: string,
 ): void {
-  // The files end up in the image as written, and the harness runs as the sandbox user: a 0600 file would belong to root and be
-  // unreadable there. The context directory is 0700, so 0644 files are still private on the host.
+  // Private on the host. The image recipe makes the copied files readable for the sandbox user.
   const write = (name: string, data: string | Buffer): void => {
     const file = join(dir, name);
-    writeFileSync(file, data, { mode: 0o644, flag: "wx" });
-    chmodSync(file, 0o644);
+    writeFileSync(file, data, { mode: 0o600, flag: "wx" });
+    chmodSync(file, 0o600);
   };
   write("Dockerfile", renderHarnessDockerfile(sources, base, contextSha256));
   write("main.mjs", sources.main);

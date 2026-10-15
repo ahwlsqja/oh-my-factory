@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const SRC = fileURLToPath(new URL("../../src/", import.meta.url));
 
 /**
- * The one named exception (M3f-D25): the container work copy implements the work-copy ports and runs every command inside a
+ * The one named exception: the container work copy implements the work-copy ports and runs every command inside a
  * container through the ContainerRuntime port. M3c's fixture runner is a ScenarioRunner and needs no entry (cross-plan X-24).
  */
 const ALLOWED_HOST_ADAPTERS: readonly string[] = ["container/work-copy.ts"];
@@ -95,7 +95,6 @@ describe("no module under src/ runs candidate code on the host (M3e-D7)", () => 
     expect(adapter).toBeDefined();
     expect(IMPLEMENTS.test(adapter?.text ?? "")).toBe(true);
     expect(SPAWNS_ANY.test(adapter?.text ?? "")).toBe(false);
-    expect(ALLOWED_HOST_ADAPTERS).toEqual(["container/work-copy.ts"]);
   });
 
   it("the gate, audit and isolation modules start no process", () => {

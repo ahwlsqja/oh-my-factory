@@ -126,8 +126,8 @@ export interface DisposableLease {
 }
 
 /**
- * Removes the per-round SUT image. The harness image is cached by context hash and reused across rounds, so it stays
- * (M3f-D10); `W-judge-leak-sweep` pins that exemption.
+ * Removes the per-round SUT image. The harness image is cached by context hash and reused across rounds, so it stays;
+ * `W-judge-leak-sweep` pins that exemption.
  */
 export async function disposeImages(
   runtime: Pick<ContainerRuntime, "removeImage">,
@@ -137,7 +137,7 @@ export async function disposeImages(
 }
 
 /**
- * Holds the one image lease of a line. The SUT image lives from S4 to S6 of a round (M3f-D12), so a new round's lease replaces
+ * Holds the one image lease of a line. The SUT image lives from S4 to S6 of a round, so a new round's lease replaces
  * the old one, and the line's `dispose()` removes the last. A removal that fails leaves the lease held: the error reaches the
  * caller and the next run's `sweepOrphans` finds the image by its run id.
  */

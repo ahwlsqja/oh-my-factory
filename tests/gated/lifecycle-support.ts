@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { createDockerRuntime } from "../../src/container/docker-cli.js";
 import { type PinnedImage, pinnedImage } from "../../src/container/image-ref.js";
 import type { ContainerRuntime } from "../../src/container/runtime.js";
@@ -13,36 +13,23 @@ import { type GatedContext, gatedPath } from "./helpers.js";
 export const GATED_LABELS = { work_id: "w-0123456789ab", run_id: "r-20261015T090000Z-ab12", round: 1 };
 export const GATED_SCOPE = { goal_id: "g-gated", work_id: GATED_LABELS.work_id, run_id: GATED_LABELS.run_id };
 
-/** Fetches `tag` once, only to learn its digest in this gated lane; everything after uses the digest reference. */
-function digestReference(ctx: GatedContext, tag: string): PinnedImage {
-  const client = (args: string[]) =>
-    spawnSync("docker", ["--context", ctx.context, ...args], {
-      env: { PATH: gatedPath(), DOCKER_CONFIG: ctx.dockerConfig },
-      encoding: "utf8",
-      timeout: 300_000,
-    });
-  const fetched = client(["pull", "--quiet", tag]);
-  if (fetched.status !== 0) throw new Error(`could not fetch the base image: ${fetched.stderr.trim()}`);
-  return pinnedImage(client(["image", "inspect", "--format", "{{index .RepoDigests 0}}", tag]).stdout.trim());
+/** A digest-pinned reference from the environment; a missing one is a refusal, never a tag pulled in its place. */
+function requiredDigest(name: string, purpose: string): PinnedImage {
+  const ref = process.env[name];
+  if (ref === undefined || ref === "") {
+    throw new Error(`${name} must name ${purpose} by digest (registry/name@sha256:...); no image is pulled by tag`);
+  }
+  return pinnedImage(ref);
 }
 
-/**
- * A digest-pinned base image with `sh`, `sleep` and `tar` (busybox). `OMF_GATED_BASE_IMAGE` names one; without it the
- * `alpine:3.22` tag is read once to learn its digest. (The gated driver passes a fixed environment to the test process, so the
- * variable is only set when vitest is started by hand.)
- */
-export function gatedBaseImage(ctx: GatedContext): PinnedImage {
-  const ref = process.env.OMF_GATED_BASE_IMAGE;
-  return ref !== undefined && ref !== "" ? pinnedImage(ref) : digestReference(ctx, "alpine:3.22");
+/** A digest-pinned base image with `sh`, `sleep` and `tar` (busybox), named by `OMF_GATED_BASE_IMAGE`. */
+export function gatedBaseImage(_ctx: GatedContext): PinnedImage {
+  return requiredDigest("OMF_GATED_BASE_IMAGE", "a base image with sh, sleep and tar");
 }
 
-/**
- * The harness runs `node main.mjs`, so its base also ships Node. `OMF_GATED_HARNESS_IMAGE` names one by digest; without it
- * `node:22-alpine` is read once to learn its digest.
- */
-export function gatedHarnessImage(ctx: GatedContext): PinnedImage {
-  const ref = process.env.OMF_GATED_HARNESS_IMAGE;
-  return ref !== undefined && ref !== "" ? pinnedImage(ref) : digestReference(ctx, "node:22-alpine");
+/** The harness runs `node main.mjs`, so its base also ships Node: `OMF_GATED_HARNESS_IMAGE`. */
+export function gatedHarnessImage(_ctx: GatedContext): PinnedImage {
+  return requiredDigest("OMF_GATED_HARNESS_IMAGE", "a base image with Node");
 }
 
 export function gatedRuntime(ctx: GatedContext): ContainerRuntime {

@@ -72,7 +72,7 @@ export function dockerConfigFor(dir, host) {
   return dir;
 }
 
-/** The whole environment of the test process. No HOME, no API key, no caller OMF variable but the two named. */
+/** The whole environment of the test process. No HOME, no API key; the only caller variables passed are TMPDIR, the fixture switch and the two gated image digests. */
 export function gatedEnv(env, dockerConfig, omfHome) {
   const out = {
     PATH: env.PATH ?? "",
@@ -81,7 +81,9 @@ export function gatedEnv(env, dockerConfig, omfHome) {
     OMF_GATED_CONTEXT: CONTEXT,
     OMF_HOME: omfHome,
   };
-  for (const name of ["TMPDIR", "OMF_CAPTURE_FIXTURES"]) if (env[name] !== undefined) out[name] = env[name];
+  for (const name of ["TMPDIR", "OMF_CAPTURE_FIXTURES", "OMF_GATED_BASE_IMAGE", "OMF_GATED_HARNESS_IMAGE"]) {
+    if (env[name] !== undefined) out[name] = env[name];
+  }
   return out;
 }
 

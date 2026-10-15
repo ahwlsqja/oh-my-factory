@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -99,6 +99,22 @@ describe("arguments and environment", () => {
     expect(script.parseArgs(["--only", "G-x", "--record"])).toEqual({ only: "G-x", record: true });
     expect(script.parseArgs(["--only"])).toEqual({ error: "--only needs a test name" });
     expect(script.parseArgs(["--profile", "default"])).toEqual({ error: "unknown argument: --profile" });
+  });
+
+  it("passes the two image digests through and nothing else from the OMF namespace", () => {
+    const env = script.gatedEnv(
+      {
+        PATH: "/bin",
+        OMF_GATED_BASE_IMAGE: "r/a@sha256:1",
+        OMF_GATED_HARNESS_IMAGE: "r/n@sha256:2",
+        OMF_API_TOKEN: "x",
+      },
+      "/tmp/cfg",
+      "/tmp/omf-home",
+    );
+    expect(env.OMF_GATED_BASE_IMAGE).toBe("r/a@sha256:1");
+    expect(env.OMF_GATED_HARNESS_IMAGE).toBe("r/n@sha256:2");
+    expect(env.OMF_API_TOKEN).toBeUndefined();
   });
 
   it("gives the test process only a short list of variables, never HOME or a key", () => {
