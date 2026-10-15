@@ -5,7 +5,8 @@ export interface ProcessOptions {
   cwd: string;
   /** Used verbatim; callers strip what the child must not see. */
   env: NodeJS.ProcessEnv;
-  stdin?: string;
+  /** A string is sent as UTF-8; a Buffer is sent byte for byte (a tar stream for a work copy is not text). */
+  stdin?: string | Buffer;
   timeoutMs: number;
   /** Combined stdout and stderr bytes; one byte more stops the command. */
   maxOutputBytes: number;

@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { liveGroupCount, runProcessGroup } from "../../src/adapters/process-group.js";
@@ -29,6 +29,15 @@ describe("runProcessGroup", () => {
   it("delivers stdin", async () => {
     const result = await runProcessGroup(["cat"], options({ stdin: "hello" }));
     expect(result).toMatchObject({ kind: "exited", status: 0, stdout: "hello" });
+  });
+
+  it("delivers a binary Buffer on stdin byte for byte", async () => {
+    // A tar stream for a work copy is not text: it must not pass through a UTF-8 string.
+    const target = join(makeTempDir(), "stdin.bin");
+    const bytes = Buffer.from([0xff, 0xfe, 0x00, 0x80, 0x0a, 0xc3, 0x28]);
+    const result = await runProcessGroup(["sh", "-c", 'cat > "$1"', "sh", target], options({ stdin: bytes }));
+    expect(result).toMatchObject({ kind: "exited", status: 0 });
+    expect(readFileSync(target).equals(bytes)).toBe(true);
   });
 
   it("uses the given environment verbatim", async () => {
