@@ -183,6 +183,30 @@ export const HANDOFF_ROUTES: Readonly<Record<ReasonCode, Route>> = {
     question: RETRY_QUESTION,
     options: retry,
   },
+  test_run_incomplete: {
+    j: "J6",
+    state: "The sealed test split was consumed by an earlier run that never recorded a result.",
+    question: RETRY_QUESTION,
+    options: retry,
+  },
+  test_reseal_required: {
+    j: "J3",
+    state: "The sealed test split was already used for different code and needs a fresh split from a person.",
+    question: "Should a person authorize a fresh test split, or should the item be dropped?",
+    options: retry,
+  },
+  noise_unverified: {
+    j: "J4",
+    state: "The run passed, but with fewer than two repetitions its result cannot be shown to be stable.",
+    question: REVIEW_QUESTION,
+    options: review,
+  },
+  scenarios_exhausted: {
+    j: "J3",
+    state: "The sealed scenarios cannot give more feedback because they are too few or their exposure limit is reached.",
+    question: "Should fresh scenarios be sealed, or should the item be dropped?",
+    options: retry,
+  },
 };
 
 /**

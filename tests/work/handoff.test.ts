@@ -95,6 +95,10 @@ describe("HANDOFF_ROUTES", () => {
       station_skipped: "J6",
       evidence_incomplete: "J6",
       infra_failure: "J6",
+      test_run_incomplete: "J6",
+      test_reseal_required: "J3",
+      noise_unverified: "J4",
+      scenarios_exhausted: "J3",
     });
   });
 
