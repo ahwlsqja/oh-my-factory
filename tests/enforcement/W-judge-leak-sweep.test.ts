@@ -3,6 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import type { ContainerHandle } from "../../src/container/runtime.js";
+import { assertName, type ImageId } from "../../src/container/spec.js";
 import { sweepOrphans } from "../../src/judge/state.js";
 import { MemoryRuntime } from "../helpers/memory-runtime.js";
 import { put, realTempDir } from "../helpers/ops-fixture.js";
@@ -33,7 +35,7 @@ describe("W-judge-leak-sweep", () => {
       { kind: "container", name: `omf-sut-${OTHER_ITEM}-1-1`, run_id: OTHER_ITEM }, // another work item's run: not under this item's runs/
     ];
     const swept = await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT });
-    expect(swept).toEqual({ containers: 2, images: 1, staging: 1 });
+    expect(swept).toEqual({ containers: 2, images: 1, staging: 1, skipped: [] });
     expect(memory.owned.map((resource) => resource.name).sort()).toEqual(
       [
         "omf-harness:0123456789ab",
@@ -49,7 +51,32 @@ describe("W-judge-leak-sweep", () => {
       containers: 0,
       images: 0,
       staging: 0,
+      skipped: [],
     });
+  });
+
+  it("skips and reports a labelled container whose name is off the pattern, and still sweeps the rest", async () => {
+    const itemDir = realTempDir("omf-sweep-item-");
+    put(itemDir, `runs/${EARLIER}/audit-1.json`, "{}");
+    const odd = `omf-sut-${EARLIER}-odd name`;
+    const memory = new MemoryRuntime();
+    memory.owned = [
+      { kind: "container", name: odd, run_id: EARLIER },
+      { kind: "container", name: `omf-sut-${EARLIER}-1-1`, run_id: EARLIER },
+      { kind: "image", name: `omf-sut:${EARLIER}-1`, run_id: EARLIER },
+    ];
+    // The real runtime refuses a name outside the container name pattern when it builds the removal argv.
+    const strict = {
+      listOwned: (filter: { run_id: string | null }) => memory.listOwned(filter),
+      removeImage: (id: ImageId) => memory.removeImage(id),
+      remove: async (handle: ContainerHandle) => {
+        assertName(handle.name);
+        await memory.remove(handle);
+      },
+    };
+    const swept = await sweepOrphans({ runtime: strict, itemDir, currentRunId: CURRENT });
+    expect(swept).toEqual({ containers: 1, images: 1, staging: 0, skipped: [odd] });
+    expect(memory.owned.map((resource) => resource.name)).toEqual([odd]);
   });
 
   it("a SIGKILLed round leaves its containers, and the next run's sweep removes them", async () => {

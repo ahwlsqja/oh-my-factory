@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { ProcessResult } from "../adapters/process-group.js";
 import type { PinnedImage } from "../container/image-ref.js";
 import type { ContainerHandle, ContainerRuntime, ExecSpec, ImageInfo, OwnedResource } from "../container/runtime.js";
-import type { ContainerRole, ContainerSpec, ImageId } from "../container/spec.js";
+import { assertName, type ContainerRole, type ContainerSpec, type ImageId } from "../container/spec.js";
 import { registerCleanup } from "../core/cleanup-registry.js";
 
 /** A runtime that remembers every container it made and can remove them without a handle. */
@@ -175,6 +175,8 @@ export interface SweepResult {
   images: number;
   /** Earlier runs whose host build-context directory (`runs/<run_id>/judge`) was removed. */
   staging: number;
+  /** Labelled containers of earlier runs whose name is off the container name pattern: left in place and reported, never removed. */
+  skipped: string[];
 }
 
 const ROLE_OF_NAME = /^omf-(sut|harness|workcopy)-/;
@@ -184,18 +186,25 @@ const ROLE_OF_NAME = /^omf-(sut|harness|workcopy)-/;
  * other run of the item is an orphan. Selection is by run id: a run id belongs to exactly one item, and `<item>/runs/` lists this
  * item's runs, so another item's resources are never selected. Only per-round SUT images (`omf-sut:`) are removed; the cached
  * harness image is kept. Containers go first, then host directories. A resource whose name does not match the container name
- * pattern is left alone.
+ * pattern is left alone; an owned container whose name is off the full pattern is reported in `skipped`.
  */
 export async function sweepOrphans(input: SweepInput): Promise<SweepResult> {
   const runsDir = join(input.itemDir, "runs");
   const earlier = new Set(existsSync(runsDir) ? readdirSync(runsDir) : []);
   earlier.delete(input.currentRunId);
-  const result: SweepResult = { containers: 0, images: 0, staging: 0 };
+  const result: SweepResult = { containers: 0, images: 0, staging: 0, skipped: [] };
   for (const resource of await input.runtime.listOwned({ run_id: null })) {
     if (!earlier.has(resource.run_id)) continue;
     if (resource.kind === "container") {
       const role = ROLE_OF_NAME.exec(resource.name)?.[1] as ContainerRole | undefined;
       if (role === undefined) continue;
+      // The runtime refuses a name outside the full pattern; one such resource must not stop the sweep of the others.
+      try {
+        assertName(resource.name);
+      } catch {
+        result.skipped.push(resource.name);
+        continue;
+      }
       await input.runtime.remove({ name: resource.name, id: resource.name, role });
       result.containers += 1;
     } else if (resource.name.startsWith("omf-sut:")) {
