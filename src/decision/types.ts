@@ -75,8 +75,8 @@ export interface InterfaceContract {
 }
 
 /**
- * "Judge config" as M3a defines it: the gate definitions and test_command. M3e adds the harness image digest and the
- * files these resolve to at the base sha.
+ * "Judge config" as M3a defines it: the gate definitions and test_command. M3e adds the files these resolve to at the
+ * base sha (src/audit/judge-files.ts); the harness image digest is added by M3f (M3e-D23).
  */
 export interface JudgeConfigDecl {
   gates: InterfaceContract["gates"];
