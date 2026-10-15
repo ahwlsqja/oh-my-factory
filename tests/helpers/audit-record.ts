@@ -15,6 +15,6 @@ export function recordAndLoad(report: WorkAudit) {
     ledger,
     events,
     payload: events.at(-1)?.payload ?? {},
-    loaded: loadAudit(itemDir, SCOPE.run_id, events),
+    loaded: loadAudit(itemDir, SCOPE, events),
   };
 }

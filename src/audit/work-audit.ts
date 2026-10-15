@@ -127,9 +127,12 @@ export function auditSignals(report: WorkAudit): AuditSignals {
   };
 }
 
-/** Where `recordAudit` appends. `Ledger` satisfies it: audit events are plain ledger appends (only the budget events are claim-checked). */
+/**
+ * Where `recordAudit` appends. `Ledger` satisfies it: `appendWith` hands `build` the verified events under the
+ * ledger lock, so the one-record-per-run check cannot race another writer.
+ */
 export interface RecordSink {
-  append(event: NewEvent): LedgerEvent;
+  appendWith(build: (events: LedgerEvent[]) => NewEvent): LedgerEvent;
 }
 
 /** The three ids every gate, audit and isolation event carries. */
@@ -151,13 +154,18 @@ function writeAuditFile(itemDir: string, runId: string, report: WorkAudit): void
 /**
  * Ledger event first, then the atomic host file (the M2b/M3b1 order). A crash between the two leaves an event and
  * no file, which `loadAudit` reads as absent and `repairAudit` heals. An invalid report throws before the event, so
- * the ledger never holds an audit that the schema refuses.
+ * the ledger never holds an audit that the schema refuses. A run has one audit: a second record for the same run is
+ * refused, identical or not (a lost file is healed by `repairAudit`, not by recording again).
  */
 export function recordAudit(sink: RecordSink, scope: RunScope, itemDir: string, report: WorkAudit): void {
   const check = validate("work-audit.schema.json", report);
   if (!check.ok) throw new Error(`invalid audit report: ${check.errors}`);
-  const event = auditCompletedEvent(scope, report);
-  sink.append(event);
+  sink.appendWith((events) => {
+    if (events.some((event) => event.type === "audit.completed" && event.payload.run_id === scope.run_id)) {
+      throw new Error(`an audit for run ${scope.run_id} is already recorded`);
+    }
+    return auditCompletedEvent(scope, report);
+  });
   writeAuditFile(itemDir, scope.run_id, report);
 }
 
@@ -172,10 +180,11 @@ function withoutScope(payload: Record<string, unknown>): Record<string, unknown>
  * `omf`. Events by another actor and events that fail the schema are not evidence. Two valid events that
  * disagree make the audit untrustworthy (null), so a second, differing event can never replace the first.
  */
-function authoritativePayload(events: readonly LedgerEvent[], runId: string): Record<string, unknown> | null {
+function authoritativePayload(events: readonly LedgerEvent[], scope: RunScope): Record<string, unknown> | null {
   let found: Record<string, unknown> | null = null;
   for (const event of events) {
-    if (event.type !== "audit.completed" || event.actor !== "omf" || event.payload.run_id !== runId) continue;
+    if (event.type !== "audit.completed" || event.actor !== "omf") continue;
+    if (event.payload.run_id !== scope.run_id || event.payload.goal_id !== scope.goal_id || event.payload.work_id !== scope.work_id) continue;
     if (!validate("gate-event.schema.json", { type: event.type, payload: event.payload }).ok) continue;
     const fields = withoutScope(event.payload);
     if (found !== null && canonicalize(found) !== canonicalize(fields)) return null;
@@ -201,9 +210,10 @@ function readAuditFile(itemDir: string, runId: string): WorkAudit | null {
  * pinned to the authenticated counts (`listsMatchCounts`), so a file cannot empty `high_risk_paths_touched` or
  * `tests_edited` while the count says otherwise; the names inside a list are display data and rendering escapes them.
  */
-export function loadAudit(itemDir: string, runId: string, events: readonly LedgerEvent[]): WorkAudit | null {
+export function loadAudit(itemDir: string, scope: RunScope, events: readonly LedgerEvent[]): WorkAudit | null {
+  const runId = scope.run_id;
   if (!RUN_ID_PATTERN.test(runId)) return null;
-  const authority = authoritativePayload(events, runId);
+  const authority = authoritativePayload(events, scope);
   if (authority === null) return null;
   const report = readAuditFile(itemDir, runId);
   if (report === null) return null;
@@ -227,13 +237,15 @@ function listsMatchCounts(report: WorkAudit): boolean {
  */
 export async function repairAudit(
   itemDir: string,
-  runId: string,
+  scope: RunScope,
   events: readonly LedgerEvent[],
   rerun: () => Promise<WorkAudit | null>,
 ): Promise<WorkAudit | null> {
-  const existing = loadAudit(itemDir, runId, events);
+  const runId = scope.run_id;
+  if (!RUN_ID_PATTERN.test(runId)) return null;
+  const existing = loadAudit(itemDir, scope, events);
   if (existing !== null) return existing;
-  const authority = authoritativePayload(events, runId);
+  const authority = authoritativePayload(events, scope);
   if (authority === null) return null; // no event: nothing to repair, the caller records a fresh audit
   let report: WorkAudit | null;
   try {
