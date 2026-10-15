@@ -119,6 +119,8 @@ const CREATE = {
 const BUILD = { value: new Set(["--network", "--pull", "--label", "--tag"]), bool: new Set(["--no-cache"]) };
 const EXEC = { value: new Set(["--workdir", "--env"]), bool: new Set(["-i"]) };
 const REMOVE = { value: new Set(), bool: new Set(["--force", "--volumes", "-f", "-v"]) };
+const LISTING = { value: new Set(["--filter", "--format"]), bool: new Set(["--all", "-a"]) };
+const IMAGE_REMOVE = { value: new Set(), bool: new Set(["--force", "-f"]) };
 const PULL = { value: new Set(), bool: new Set(["--quiet", "-q"]) };
 
 function create(state, args) {
@@ -281,7 +283,39 @@ export function handle(state, argv, stdin = null, hooks = {}) {
         ? { status: 1, stdout: "[]\n", stderr: `Error: No such container: ${rest[1]}\n` }
         : out(`${JSON.stringify([inspectDoc(state, container, hooks)])}\n`);
     }
+    case "ps": {
+      const parsed = parseFlags(rest, LISTING);
+      if (parsed.error) return fail(parsed.error, 125);
+      const wanted = valuesOf(parsed, "--filter")
+        .filter((f) => f.startsWith("label="))
+        .map((f) => f.slice(6));
+      const lines = Object.values(state.containers)
+        .filter((c) => wanted.every((w) => c.labels[w.split("=")[0]] === w.split("=")[1]))
+        .map((c) => `${c.name}\t${c.labels["omf.run"] ?? ""}`);
+      return out(lines.length === 0 ? "" : `${lines.join("\n")}\n`);
+    }
     case "image": {
+      if (rest[0] === "ls") {
+        const parsed = parseFlags(rest.slice(1), LISTING);
+        if (parsed.error) return fail(parsed.error, 125);
+        const wanted = valuesOf(parsed, "--filter")
+          .filter((f) => f.startsWith("label="))
+          .map((f) => f.slice(6));
+        const lines = Object.values(state.images)
+          .filter((i) => wanted.every((w) => i.labels[w.split("=")[0]] === w.split("=")[1]))
+          .flatMap((i) => i.tags);
+        return out(lines.length === 0 ? "" : `${lines.join("\n")}\n`);
+      }
+      if (rest[0] === "rm") {
+        const parsed = parseFlags(rest.slice(1), IMAGE_REMOVE);
+        if (parsed.error) return fail(parsed.error, 125);
+        for (const id of parsed.rest) {
+          for (const [key, image] of Object.entries(state.images)) {
+            if (image.id === id || image.tags.includes(id)) delete state.images[key];
+          }
+        }
+        return out(`${parsed.rest.join("\n")}\n`);
+      }
       const image = rest[0] === "inspect" ? findImage(state, rest[1]) : undefined;
       return image === undefined
         ? { status: 1, stdout: "[]\n", stderr: `Error: No such image: ${rest[1]}\n` }

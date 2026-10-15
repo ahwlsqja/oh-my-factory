@@ -23,6 +23,13 @@ export interface ContainerHandle {
   readonly role: ContainerRole;
 }
 
+/** A container or image carrying `omf.owner=omf`. An image's run id is read from its tag (`omf-sut:<run_id>-<round>`); a cached harness image belongs to no run and reports "". */
+export interface OwnedResource {
+  kind: "container" | "image";
+  name: string;
+  run_id: string;
+}
+
 export interface ExecSpec {
   argv: readonly string[];
   stdin?: string | Buffer;
@@ -78,6 +85,10 @@ export interface ContainerRuntime {
   exec(handle: ContainerHandle, spec: ExecSpec): Promise<ProcessResult>;
   /** Idempotent: removing a container that is gone succeeds. */
   remove(handle: ContainerHandle): Promise<void>;
+  /** Everything OMF-labelled, or only one run's containers and round images. */
+  listOwned(filter: { run_id: string | null }): Promise<OwnedResource[]>;
+  /** Idempotent: removing an image that is gone succeeds. */
+  removeImage(id: ImageId): Promise<void>;
   /** For a signal handler: synchronous, best effort, by name. */
   removeAllSync(names: readonly string[]): void;
 }

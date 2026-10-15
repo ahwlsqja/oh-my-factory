@@ -6,6 +6,7 @@ import {
   ContainerSpecError,
   IDLE_ARGS,
   IDLE_ENTRYPOINT,
+  type ImageId,
   type OwnedLabels,
   SANDBOX_USER,
   type TmpfsSpec,
@@ -14,6 +15,7 @@ import {
   assertLabels,
   assertName,
   assertSpec,
+  isImageId,
 } from "./spec.js";
 
 /**
@@ -162,6 +164,26 @@ export function removeArgv(names: readonly string[], context: string | null): st
   if (names.length === 0) throw new ContainerSpecError("invalid_name");
   for (const name of names) assertName(name);
   return [...contextArgs(context), "rm", "--force", "--volumes", ...names];
+}
+
+const RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
+const OMF_IMAGE_RE = /^(omf-sut|omf-harness):[A-Za-z0-9_.-]{1,128}$/;
+
+/** `ps --all` for containers, `image ls` for images; both only what OMF labelled. A run id narrows containers by label. */
+export function listOwnedArgv(kind: "container" | "image", runId: string | null, context: string | null): string[] {
+  if (runId !== null && !RUN_ID_RE.test(runId)) throw new ContainerSpecError("invalid_name");
+  const owner = ["--filter", "label=omf.owner=omf"];
+  if (kind === "image") {
+    return [...contextArgs(context), "image", "ls", ...owner, "--format", "{{.Repository}}:{{.Tag}}"];
+  }
+  const run = runId === null ? [] : ["--filter", `label=omf.run=${runId}`];
+  return [...contextArgs(context), "ps", "--all", ...owner, ...run, "--format", '{{.Names}}\t{{.Label "omf.run"}}'];
+}
+
+/** Removes one OMF round image or harness image by tag, or any local image by id. Never a base image by tag. */
+export function removeImageArgv(id: ImageId, context: string | null): string[] {
+  if (!OMF_IMAGE_RE.test(id) && !isImageId(id)) throw new ContainerSpecError("invalid_image");
+  return [...contextArgs(context), "image", "rm", "--force", id];
 }
 
 export function infoArgv(context: string | null): string[] {

@@ -1,5 +1,11 @@
 import type { ProcessResult } from "../../src/adapters/process-group.js";
-import type { ContainerHandle, ContainerRuntime, ExecSpec, ImageInfo } from "../../src/container/runtime.js";
+import type {
+  ContainerHandle,
+  ContainerRuntime,
+  ExecSpec,
+  ImageInfo,
+  OwnedResource,
+} from "../../src/container/runtime.js";
 import type { ContainerSpec, ImageId } from "../../src/container/spec.js";
 import type { HarnessReply, HarnessRequest, HarnessSet, HarnessVerdict } from "../../src/judge/harness-protocol.js";
 import { evaluateExpect } from "../../src/scenario/matcher.js";
@@ -96,6 +102,12 @@ export class RuntimeDouble implements ContainerRuntime {
   async remove(handle: ContainerHandle): Promise<void> {
     this.calls.push(`remove:${handle.name}`);
     this.live.delete(handle.name);
+  }
+  async listOwned(): Promise<OwnedResource[]> {
+    return [];
+  }
+  async removeImage(id: ImageId): Promise<void> {
+    this.calls.push(`removeImage:${id}`);
   }
   removeAllSync(names: readonly string[]): void {
     this.calls.push(`removeAllSync:${names.join(",")}`);

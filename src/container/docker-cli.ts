@@ -10,8 +10,10 @@ import {
   imageInspectArgv,
   infoArgv,
   inspectArgv,
+  listOwnedArgv,
   pullArgv,
   removeArgv,
+  removeImageArgv,
   startArgv,
 } from "./argv.js";
 import type { PinnedImage } from "./image-ref.js";
@@ -20,6 +22,7 @@ import {
   type ContainerRuntime,
   type EndpointInfo,
   type ImageInfo,
+  type OwnedResource,
   RuntimeError,
 } from "./runtime.js";
 import { isImageId } from "./spec.js";
@@ -275,6 +278,26 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
 
     async remove(handle) {
       await succeed(removeArgv([handle.name], requireContext()), META_MS);
+    },
+
+    async listOwned(filter) {
+      const name = await requireLocal();
+      const resources: OwnedResource[] = [];
+      for (const line of (await succeed(listOwnedArgv("container", filter.run_id, name), META_MS)).split("\n")) {
+        const [containerName, runId = ""] = line.trim().split("\t");
+        if (containerName) resources.push({ kind: "container", name: containerName, run_id: runId });
+      }
+      for (const line of (await succeed(listOwnedArgv("image", null, name), META_MS)).split("\n")) {
+        const tag = line.trim();
+        if (!tag || tag.startsWith("<none>")) continue;
+        const run = /^omf-sut:(.+)-\d+$/.exec(tag)?.[1] ?? "";
+        if (filter.run_id === null || run === filter.run_id) resources.push({ kind: "image", name: tag, run_id: run });
+      }
+      return resources;
+    },
+
+    async removeImage(id) {
+      await succeed(removeImageArgv(id, requireContext()), META_MS);
     },
 
     removeAllSync(names) {

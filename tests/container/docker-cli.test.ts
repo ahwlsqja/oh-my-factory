@@ -3,10 +3,10 @@ import { createArgv, execArgv, removeArgv } from "../../src/container/argv.js";
 import { createDockerRuntime, dockerEnv, resolveDockerConfig } from "../../src/container/docker-cli.js";
 import { pinnedImage } from "../../src/container/image-ref.js";
 import { RuntimeError } from "../../src/container/runtime.js";
-import { containerName } from "../../src/container/spec.js";
+import { type ImageId, containerName } from "../../src/container/spec.js";
 import { FIXTURE_RUN_ID, SUT_BASE, labelsFor, specFor } from "../helpers/container-fixture.js";
 import { FakeDocker, fakeDockerBin, verbOf } from "../helpers/fake-docker.js";
-import { addRegistryImage } from "../helpers/fake-docker-core.mjs";
+import { addImage, addRegistryImage } from "../helpers/fake-docker-core.mjs";
 import { fakeRuntime } from "../helpers/fake-runtime.js";
 
 const codeOf = async (promise: Promise<unknown>): Promise<string> => {
@@ -183,5 +183,35 @@ describe("the default runner", () => {
   it("reports a missing program as a failure text, not a crash", async () => {
     const runtime = createDockerRuntime({ context: "fake", env: { PATH: "/nonexistent-omf-bin" } });
     expect(await runtime.info()).toEqual({ ok: false, failure: expect.stringContaining("ENOENT") });
+  });
+});
+
+describe("listOwned and removeImage through the real adapter", () => {
+  it("reports an owned container by run id, then removes it and a round image", async () => {
+    const fake = new FakeDocker();
+    const runtime = fakeRuntime(fake);
+    // Create a container through the adapter (the same path the judge uses), then list it.
+    const handle = await runtime.create(specFor("sut"));
+    expect(await runtime.listOwned({ run_id: null })).toContainEqual({
+      kind: "container",
+      name: handle.name,
+      run_id: FIXTURE_RUN_ID,
+    });
+    expect(await runtime.listOwned({ run_id: "some-other-run" })).toEqual([]);
+    await runtime.remove(handle);
+    expect((await runtime.listOwned({ run_id: FIXTURE_RUN_ID })).filter((r) => r.kind === "container")).toEqual([]);
+  });
+
+  it("derives a round image's run id from its tag and removes it", async () => {
+    const fake = new FakeDocker();
+    addImage(fake.state, "omf-sut:run-9-2", { labels: { "omf.owner": "omf" } });
+    addImage(fake.state, "omf-harness:0123456789ab", { labels: { "omf.owner": "omf" } });
+    const runtime = fakeRuntime(fake);
+    expect(await runtime.listOwned({ run_id: null })).toEqual([
+      { kind: "image", name: "omf-sut:run-9-2", run_id: "run-9" },
+      { kind: "image", name: "omf-harness:0123456789ab", run_id: "" },
+    ]);
+    await runtime.removeImage("omf-sut:run-9-2" as ImageId);
+    expect((await runtime.listOwned({ run_id: "run-9" })).length).toBe(0);
   });
 });

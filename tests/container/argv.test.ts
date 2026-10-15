@@ -7,8 +7,10 @@ import {
   imageInspectArgv,
   infoArgv,
   inspectArgv,
+  listOwnedArgv,
   pullArgv,
   removeArgv,
+  removeImageArgv,
   startArgv,
 } from "../../src/container/argv.js";
 import type { PinnedImage } from "../../src/container/image-ref.js";
@@ -16,6 +18,7 @@ import {
   type ContainerRole,
   ContainerSpecError,
   type ContainerSpecErrorCode,
+  type ImageId,
   RUN_ID_RE,
   type TmpfsSpec,
   containerName,
@@ -181,5 +184,61 @@ describe("the other builders", () => {
       "omf-harness:abc",
       "/work/ctx",
     ]);
+  });
+});
+
+describe("listing and image removal", () => {
+  it("lists containers and images owned by OMF, optionally for one run, with fixed formats", () => {
+    expect(listOwnedArgv("container", null, "ctx")).toEqual([
+      "--context",
+      "ctx",
+      "ps",
+      "--all",
+      "--filter",
+      "label=omf.owner=omf",
+      "--format",
+      '{{.Names}}\t{{.Label "omf.run"}}',
+    ]);
+    expect(listOwnedArgv("container", "run-1", null)).toEqual([
+      "ps",
+      "--all",
+      "--filter",
+      "label=omf.owner=omf",
+      "--filter",
+      "label=omf.run=run-1",
+      "--format",
+      '{{.Names}}\t{{.Label "omf.run"}}',
+    ]);
+    expect(listOwnedArgv("image", null, "ctx")).toEqual([
+      "--context",
+      "ctx",
+      "image",
+      "ls",
+      "--filter",
+      "label=omf.owner=omf",
+      "--format",
+      "{{.Repository}}:{{.Tag}}",
+    ]);
+  });
+
+  it("refuses an unsafe run id and removes only OMF image names or ids", () => {
+    expect(() => listOwnedArgv("container", "a b", null)).toThrow();
+    expect(() => listOwnedArgv("container", "--all", null)).toThrow();
+    expect(removeImageArgv("omf-sut:run-1-1" as ImageId, "ctx")).toEqual([
+      "--context",
+      "ctx",
+      "image",
+      "rm",
+      "--force",
+      "omf-sut:run-1-1",
+    ]);
+    expect(removeImageArgv(`sha256:${"a".repeat(64)}` as ImageId, null)).toEqual([
+      "image",
+      "rm",
+      "--force",
+      `sha256:${"a".repeat(64)}`,
+    ]);
+    expect(() => removeImageArgv("alpine:3" as ImageId, null)).toThrow();
+    expect(() => removeImageArgv("-f" as ImageId, null)).toThrow();
   });
 });
