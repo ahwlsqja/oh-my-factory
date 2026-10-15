@@ -125,8 +125,10 @@ export function isolationMeasuredEvent(
 
 /**
  * The `gate3.evaluated` event as OMF appends it (actor `omf`). The payload is checked against the
- * schema first, including that `passed`, `failed` and `route` agree, so an inconsistent result fails here, at the
- * writer, instead of becoming a ledger event.
+ * schema first, which ties `passed` to `failed` and `route`: `passed` true goes with an empty `failed` and route
+ * `none`; `passed` false goes with at least one condition and route `J6` or `J7`. The schema does not check that the
+ * route matches the kind of condition. A result that breaks these ties fails here, at the writer, instead of becoming
+ * a ledger event.
  */
 export function gate3EvaluatedEvent(scope: { goal_id: string; work_id: string; run_id: string }, result: Gate3Result): NewEvent {
   const payload: Record<string, unknown> = { ...scope, passed: result.passed, failed: [...result.failed], route: result.route };
