@@ -224,6 +224,19 @@ function removeOwnFiles(itemDir: string, runId: string, evidence: boolean): void
  * (rounds and the GATE-2 loop revisit nodes), which can be far more than the 11 nodes the schema allows; the schema
  * cap stays tied to the node list, not to the visit cap.
  */
+function stopNode(stop: LineStop): NodeId | null {
+  switch (stop.kind) {
+    case "station":
+      return stop.station;
+    case "gate":
+      return stop.gate;
+    case "gate4":
+      return "GATE-4";
+    default:
+      return null;
+  }
+}
+
 function lastPerNode(entries: readonly { node: NodeId; result: string }[]): { node: NodeId; result: string }[] {
   const last = new Map<NodeId, string>();
   for (const entry of entries) last.set(entry.node, entry.result);
@@ -543,13 +556,16 @@ class Line {
       // One entry per node, not per visit: a stall in round 2 has 16 visits and the schema allows 11 entries.
       const ran = lastPerNode(this.ran);
       const visited = new Set(ran.map((entry) => entry.node));
+      // The node that stopped the line is still to be resolved by a person, so it leads `remaining`
+      // (consistent with killed_predecessor, which includes the node the dead run reached).
+      const stopped = stopNode(this.stop);
       handoff = buildHandoff({
         kind: "outcome",
         predecessor_seq: null,
         scope: own.scope,
         classification,
         ran,
-        remaining: LINE_ORDER.filter((node) => !visited.has(node)),
+        remaining: LINE_ORDER.filter((node) => node === stopped || !visited.has(node)),
         now: this.now(),
       });
       writeHandoff(itemDir, handoff);

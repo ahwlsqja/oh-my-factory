@@ -172,6 +172,10 @@ describe("runLine, straight line (8a)", () => {
       expect(parked).toMatchObject({ outcome: "blocked", reason_code: "j2_open", disposition: { action: "park" } });
       expect(parked.evidence.gates.per_gate["GATE-1"]).toBe("fail");
       expect(parked.handoff?.decision_required.j).toBe("J2");
+      // the node that stopped the line is still in line, as in a killed_predecessor handoff
+      expect(parked.handoff?.remaining[0]).toBe("GATE-1");
+      expect(parked.handoff?.remaining).toContain("S2");
+      expect(parked.handoff?.state).toContain("Next in line: GATE-1.");
       expect(fx.stateOf()).toBe("ready");
       expect(fx.workTypes()).toEqual(["work.limits_set", "work.parked"]);
       expect(existsSync(needsHumanFile(fx.itemDir))).toBe(true);
