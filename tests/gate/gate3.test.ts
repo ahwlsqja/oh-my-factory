@@ -187,4 +187,18 @@ describe("contradictionState", () => {
     expect(contradictionState(verdict({ rejected: -1 }), CANDIDATE)).toBe("not_run");
     expect(contradictionState(verdict({ rejected: 1.5 }), CANDIDATE)).toBe("not_run");
   });
+
+  it("is not_run when either sha is empty, a placeholder or not a full lowercase hex commit id", () => {
+    expect(contradictionState(verdict({ judged_sha: "" }), "")).toBe("not_run");
+    expect(contradictionState(verdict({ judged_sha: "HEAD" }), "HEAD")).toBe("not_run");
+    expect(contradictionState(verdict({ judged_sha: "abc123" }), "abc123")).toBe("not_run");
+    expect(contradictionState(verdict({ judged_sha: "A".repeat(40) }), "A".repeat(40))).toBe("not_run");
+    expect(contradictionState(verdict({ judged_sha: "g".repeat(40) }), "g".repeat(40))).toBe("not_run");
+    expect(contradictionState(verdict(), "")).toBe("not_run");
+  });
+
+  it("accepts a 64-digit commit id", () => {
+    const long = "c".repeat(64);
+    expect(contradictionState(verdict({ judged_sha: long }), long)).toBe("failing");
+  });
 });

@@ -121,13 +121,21 @@ export interface ContradictionVerdict {
   rejected: number;
 }
 
+/** A full-length lowercase hex commit id (SHA-1 or SHA-256 object format). */
+function isCommitId(value: string): boolean {
+  return /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value);
+}
+
 /**
  * The only way a verdict becomes `ContradictionCanaryState`. Only a verdict run against the candidate sha counts:
  * GATE-2's result against the stubs is `failing` by construction and would always read healthy. No verdict, another
- * sha, no contradiction scenario or an impossible count is `not_run`.
+ * sha, a sha that is not a full lowercase hex commit id (40 or 64 digits), no contradiction scenario or an impossible
+ * count is `not_run`.
  */
 export function contradictionState(verdict: ContradictionVerdict | null, candidateSha: string): ContradictionCanaryState {
-  if (verdict === null || verdict.judged_sha !== candidateSha) return "not_run";
+  if (verdict === null || !isCommitId(candidateSha) || !isCommitId(verdict.judged_sha) || verdict.judged_sha !== candidateSha) {
+    return "not_run";
+  }
   const { contradiction_scenarios: total, rejected } = verdict;
   if (!Number.isInteger(total) || !Number.isInteger(rejected) || total < 1 || rejected < 0 || rejected > total) return "not_run";
   return rejected === total ? "failing" : "passing";
