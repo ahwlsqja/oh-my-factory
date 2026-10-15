@@ -123,11 +123,11 @@ describe("gate2Gate", () => {
     expect(result.reasons).toContain("gate1_not_passing");
   });
 
-  it("keeps the guard's closed code for a guard refusal, as not_run without a stop", async () => {
+  it("keeps the guard's closed code for a guard refusal, as a fail that stops at J7", async () => {
     const l = setupLine();
     plantCanary(l.f.fx.repo);
     const result = await gate2Gate().evaluate(ctxOf(l));
-    expect(result).toEqual({ gate: "GATE-2", verdict: "not_run", reasons: ["sealed_material_in_repo"] });
+    expect(result).toEqual({ gate: "GATE-2", verdict: "fail", reasons: ["sealed_material_in_repo"], stop: "J7" });
     expect(ledgerEvents(l.f.fx, "gate2.evaluated"), "nothing was evaluated, so nothing is appended").toHaveLength(0);
   });
 

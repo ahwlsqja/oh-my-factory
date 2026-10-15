@@ -84,7 +84,7 @@ describe("runLine, straight line (8a)", () => {
     expect(fx.workTypes()).toEqual(["work.limits_set", "work.parked"]);
   });
 
-  it("a guard refusal at GATE-2 keeps its closed code and ends the line blocked gate_not_run", async () => {
+  it("a guard refusal at GATE-2 keeps its closed code and ends the line blocked gate_blocked", async () => {
     const fx = setupLine();
     const plant = station("S2", () => {
       plantCanary(fx.fx.repo);
@@ -93,9 +93,9 @@ describe("runLine, straight line (8a)", () => {
 
     const result = finished(await runLine(fx.options({ stations: cleanStations({ override: { S2: plant } }) })));
 
-    expect(result.evidence.gates.history).toContainEqual({ gate: "GATE-2", verdict: "not_run", reasons: ["sealed_material_in_repo"] });
-    expect(result).toMatchObject({ outcome: "blocked", reason_code: "gate_not_run" });
-    expect(result.evidence.gates.per_gate["GATE-2"]).toBe("not_run");
+    expect(result.evidence.gates.history).toContainEqual({ gate: "GATE-2", verdict: "fail", reasons: ["sealed_material_in_repo"] });
+    expect(result).toMatchObject({ outcome: "blocked", reason_code: "gate_blocked" });
+    expect(result.evidence.gates.per_gate["GATE-2"]).toBe("fail");
   });
 
   it("guards before every station: a canary planted by S3 stops the line blocked gate_blocked before S4 runs", async () => {

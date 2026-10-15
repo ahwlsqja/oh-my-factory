@@ -4,13 +4,14 @@ import { locationEnv } from "../vault/line-guard.js";
 import { openVault } from "../vault/vault.js";
 import type { Gate } from "../work/gates.js";
 import { createHostFixtureRunner } from "./fixtures.js";
-import { evaluateGate2Step } from "./gate2-adapter.js";
+import { GATE_ERROR_REASON, evaluateGate2Step } from "./gate2-adapter.js";
 
 /**
  * The real GATE-2 as the line runs it. It maps the adapter's outcome onto the line's gate result:
  *
- * - `not_run` is mapped first, with the adapter's closed reason (the guard's code for a guard refusal, `gate_error`
- *   otherwise) and never a stop: a gate that did not evaluate has nothing to route.
+ * - `not_run` is mapped first. A guard refusal (the adapter's reason is the guard's closed code) is a fail that stops at J7,
+ *   the same route a refusal before a station takes. Any other throw is `not_run` with `gate_error` and no stop: a gate that
+ *   did not evaluate has nothing to route.
  * - `continue` is a pass.
  * - `back_to_S2` is a fail that loops to S2 while the item is `ready`. Once the item is `in_progress` S2 can only reuse the
  *   standing seal (spec §5.3), so looping could change nothing: the fail stops at J3.
@@ -34,7 +35,12 @@ export function gate2Gate(): Gate {
         env,
         exposureCount: exposureCountFor(ctx.events, ctx.item.front.goal_id, ctx.item.front.work_id),
       });
-      if (outcome.verdict === "not_run") return { gate: "GATE-2", verdict: "not_run", reasons: outcome.reasons };
+      if (outcome.verdict === "not_run") {
+        const guarded = outcome.reasons.length > 0 && !outcome.reasons.includes(GATE_ERROR_REASON);
+        return guarded
+          ? { gate: "GATE-2", verdict: "fail", reasons: outcome.reasons, stop: "J7" }
+          : { gate: "GATE-2", verdict: "not_run", reasons: outcome.reasons };
+      }
       if (outcome.next === "continue") return { gate: "GATE-2", verdict: "pass", reasons: [] };
       if (outcome.next === "back_to_S2") {
         return ctx.item.front.state === "in_progress"
