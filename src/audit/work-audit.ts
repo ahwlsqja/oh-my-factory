@@ -197,8 +197,9 @@ function readAuditFile(itemDir: string, runId: string): WorkAudit | null {
  * The run's audit, or null. `audit.json` is accepted only when every closed field equals the `audit.completed`
  * event (canary status and total, judge_config_touched, judge_files_checked, tests_edited_count, prove status and
  * reason, risk class and the rest of `auditPayloadOf`). GATE-3 reads the audit through this function or straight
- * from the event payload, never from the raw file. Only the closed fields are authenticated: the path lists in the
- * file are display data, and evidence rendering escapes them.
+ * from the event payload, never from the raw file. The path lists are not in the event, but their lengths are
+ * pinned to the authenticated counts (`listsMatchCounts`), so a file cannot empty `high_risk_paths_touched` or
+ * `tests_edited` while the count says otherwise; the names inside a list are display data and rendering escapes them.
  */
 export function loadAudit(itemDir: string, runId: string, events: readonly LedgerEvent[]): WorkAudit | null {
   if (!RUN_ID_PATTERN.test(runId)) return null;
@@ -206,7 +207,16 @@ export function loadAudit(itemDir: string, runId: string, events: readonly Ledge
   if (authority === null) return null;
   const report = readAuditFile(itemDir, runId);
   if (report === null) return null;
+  if (!listsMatchCounts(report)) return null;
   return canonicalize(auditPayloadOf(report)) === canonicalize(authority) ? report : null;
+}
+
+/** The capped lists carry as many entries as the authenticated counts say (up to the cap). */
+function listsMatchCounts(report: WorkAudit): boolean {
+  return (
+    report.high_risk_paths_touched.length === Math.min(report.high_risk_paths_count, LIST_CAP) &&
+    report.tests_edited.length === Math.min(report.tests_edited_count, LIST_CAP)
+  );
 }
 
 /**
@@ -231,7 +241,7 @@ export async function repairAudit(
   } catch {
     return null; // the inputs are gone
   }
-  if (report === null || !validate("work-audit.schema.json", report).ok) return null;
+  if (report === null || !validate("work-audit.schema.json", report).ok || !listsMatchCounts(report)) return null;
   if (canonicalize(auditPayloadOf(report)) !== canonicalize(authority)) return null;
   writeAuditFile(itemDir, runId, report);
   return report;
@@ -246,7 +256,9 @@ export interface AuditClassifierInputs {
 }
 
 /**
- * Feeds the classifier from `auditSignals`, so the two cannot disagree. A part nobody produced is `"not run"`:
+ * Feeds the classifier from `auditSignals`, so the two cannot disagree. A canary hit is reported even when the scan
+ * did not finish (it is both flawed and unverified); only a scan that found nothing and did not finish is `"not run"`.
+ * A part nobody produced is `"not run"`:
  * a missing audit, an unscanned canary surface, a prove-test that was not run or misconfigured, and a
  * judge config that named no file all stop a run short of `success`.
  */
@@ -257,7 +269,7 @@ export function auditInputsOf(report: WorkAudit | null): AuditClassifierInputs {
   const signals = auditSignals(report);
   const proveUnrun = signals.unverified.includes("prove_test_not_run") || signals.unverified.includes("prove_test_misconfigured");
   return {
-    canary_hits: signals.unverified.includes("canary_not_scanned") ? "not run" : report.canary.total,
+    canary_hits: report.canary.total > 0 ? report.canary.total : signals.unverified.includes("canary_not_scanned") ? "not run" : 0,
     tests_edited: signals.flawed.includes("test_edited"),
     prove_test: signals.flawed.includes("prove_test_failed") ? "fail" : proveUnrun ? "not run" : "pass",
     judge_config_touched: report.judge_files_checked === 0 ? "not run" : signals.judge_config_touched,

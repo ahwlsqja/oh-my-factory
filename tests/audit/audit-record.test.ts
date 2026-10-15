@@ -1,9 +1,13 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { auditInputsOf, auditPath, loadAudit, recordAudit, repairAudit, runAudit } from "../../src/audit/work-audit.js";
+import { auditInputsOf, auditPath, auditSignals, loadAudit, recordAudit, repairAudit, runAudit } from "../../src/audit/work-audit.js";
 import type { RecordSink, WorkAudit } from "../../src/audit/work-audit.js";
 import { Ledger } from "../../src/core/ledger.js";
+import { classifyOutcome, emptyEvidenceInputs } from "../../src/work/classify.js";
+import { aggregateGates } from "../../src/work/gates.js";
+import { STATION_IDS } from "../../src/work/line-types.js";
+import type { StationId, StationStatus } from "../../src/work/line-types.js";
 import { validate } from "../../src/core/schema.js";
 import { auditCompletedEvent } from "../../src/gate/events.js";
 import { CANARY_TEXT, SCOPE, auditFixture, auditInput, surfacesWith } from "../helpers/audit-diff-fixture.js";
@@ -136,6 +140,21 @@ describe("loadAudit", () => {
     expect(loadAudit(rec.itemDir, SCOPE.run_id, rec.events)).toBeNull();
   });
 
+  it("rejects a file that empties only the path list and keeps the authenticated count", async () => {
+    const fx = auditFixture({ "src/a.ts": "1\n", ".github/workflows/ci.yml": "a\n" }, { ".github/workflows/ci.yml": "b\n" });
+    const report = await runAudit(auditInput(fx));
+    expect(report.high_risk_paths_count).toBe(1);
+    const rec = recordAndLoad(report);
+    const forged = { ...report, high_risk_paths_touched: [] };
+    expect(validate("work-audit.schema.json", forged).ok).toBe(true);
+    writeFileSync(auditPath(rec.itemDir, SCOPE.run_id), JSON.stringify(forged));
+    expect(loadAudit(rec.itemDir, SCOPE.run_id, rec.events)).toBeNull();
+    // the same holds for tests_edited, and repairAudit refuses to write such a report
+    const edited = { ...report, tests_edited: [], tests_edited_count: 2 };
+    const crashed = await crashedRecord(edited);
+    expect(await repairAudit(crashed.itemDir, SCOPE.run_id, crashed.events, async () => edited)).toBeNull();
+  });
+
   it("trusts nothing when two valid events of one run disagree", async () => {
     const report = await cleanReport();
     const rec = recordAndLoad(report);
@@ -231,5 +250,25 @@ describe("auditInputsOf", () => {
     expect(auditInputsOf({ ...report, tests_edited: ["tests/a.test.ts"], tests_edited_count: 1 }).tests_edited).toBe(true);
     expect(auditInputsOf({ ...report, canary: { ...report.canary, hits: [{ surface: "diff", count: 2 }], total: 2 } }).canary_hits).toBe(2);
     expect(auditInputsOf({ ...report, judge_config_touched: true }).judge_config_touched).toBe(true);
+  });
+
+  it("keeps a canary hit from a scan that did not finish, and the real classifier calls it flawed", async () => {
+    const report = await cleanReport();
+    const unfinished = { ...report, canary: { ...report.canary, status: "not_run" as const, hits: [{ surface: "diff" as const, count: 1 }], total: 1 } };
+    expect(auditSignals(unfinished).flawed).toContain("canary_hit");
+    const inputs = auditInputsOf(unfinished);
+    expect(inputs.canary_hits).toBe(1);
+    const stations = Object.fromEntries(STATION_IDS.map((id) => [id, "ok"])) as Record<StationId, StationStatus>;
+    const result = classifyOutcome({
+      stop: { kind: "gate", gate: "GATE-3", verdict: "fail", reasons: ["canary_hit"] },
+      stations,
+      gates: aggregateGates({ "GATE-1": "pass", "GATE-2": "pass", "GATE-3": "fail" }),
+      inputs: { ...emptyEvidenceInputs(), audit: inputs },
+      decisions_unmeasured: [],
+      gate4_warnings: [],
+      injected_gates: [],
+      declared_level: "L2",
+    });
+    expect(result).toMatchObject({ outcome: "flawed", reason_code: "audit_flag" });
   });
 });
