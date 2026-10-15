@@ -3,12 +3,7 @@ import { evaluateGate1, intentQuestionIds } from "../../src/decision/gate1.js";
 import type { Gate1Reason, Gate1Result } from "../../src/decision/gate1.js";
 import { recordProblems } from "../../src/decision/lint.js";
 import type { LeakContext } from "../../src/decision/leak-lint.js";
-import type {
-  AnomalyCode,
-  DecisionRecord,
-  DecisionState,
-  InterfaceContract,
-} from "../../src/decision/types.js";
+import type { AnomalyCode, DecisionRecord, DecisionState, InterfaceContract } from "../../src/decision/types.js";
 
 const NOW = new Date("2026-10-14T12:00:00.000Z");
 const HUMAN = "human:dev@example.com";
@@ -54,7 +49,13 @@ function open(id: string, over: Partial<DecisionRecord> = {}): DecisionRecord {
 function resolved(id: string, over: Partial<DecisionRecord> = {}): DecisionRecord {
   return open(id, {
     status: "resolved",
-    resolution: { choice: "sqlite", rationale: "one file, no daemon", rejected: ["postgres"], by: HUMAN, at: NOW.toISOString() },
+    resolution: {
+      choice: "sqlite",
+      rationale: "one file, no daemon",
+      rejected: ["postgres"],
+      by: HUMAN,
+      at: NOW.toISOString(),
+    },
     closed_seq: 2,
     measure_seq: null,
     ...over,
@@ -62,7 +63,12 @@ function resolved(id: string, over: Partial<DecisionRecord> = {}): DecisionRecor
 }
 
 function interfaceRecord(over: Partial<DecisionRecord> = {}): DecisionRecord {
-  return resolved("d-interface", { class: "interface", question: "What is the interface?", interface: contract(), ...over });
+  return resolved("d-interface", {
+    class: "interface",
+    question: "What is the interface?",
+    interface: contract(),
+    ...over,
+  });
 }
 
 function deferred(id: string, expiresAt: string, signedBy = HUMAN): DecisionRecord {
@@ -89,7 +95,12 @@ function stateOf(decisions: DecisionRecord[], anomalies: DecisionState["anomalie
   };
 }
 
-function gate(state: DecisionState, ids: readonly string[] = [], leak: LeakContext = CLEAN, now: Date = NOW): Gate1Result {
+function gate(
+  state: DecisionState,
+  ids: readonly string[] = [],
+  leak: LeakContext = CLEAN,
+  now: Date = NOW,
+): Gate1Result {
   return evaluateGate1(state, now, { leak, intentQuestionIds: ids });
 }
 
@@ -141,7 +152,11 @@ describe("GATE-1 spec conditions", () => {
   });
 
   it("passes a human-signed deferral and a human not-applicable closure", () => {
-    const na = open("d-extra", { status: "na", na: { rationale: "not relevant", by: HUMAN, at: NOW.toISOString() }, closed_seq: 2 });
+    const na = open("d-extra", {
+      status: "na",
+      na: { rationale: "not relevant", by: HUMAN, at: NOW.toISOString() },
+      closed_seq: 2,
+    });
     expect(gate(stateOf([interfaceRecord(), deferred("d-storage", inSeconds(3600)), na]))).toEqual({ status: "pass" });
   });
 
@@ -153,10 +168,14 @@ describe("GATE-1 spec conditions", () => {
   it("treats an expired deferral as open, using the injected clock", () => {
     const at = (seconds: number) => gate(stateOf([interfaceRecord(), deferred("d-storage", inSeconds(seconds))]));
     expect(at(1)).toEqual({ status: "pass" });
-    expect(blocked(at(0))).toEqual([{ code: "deferral_expired", decision_id: "d-storage", expires_at: NOW.toISOString() }]);
+    expect(blocked(at(0))).toEqual([
+      { code: "deferral_expired", decision_id: "d-storage", expires_at: NOW.toISOString() },
+    ]);
     expect(blocked(at(-1))).toHaveLength(1);
     const later = new Date(NOW.getTime() + 2000);
-    expect(gate(stateOf([interfaceRecord(), deferred("d-storage", inSeconds(1))]), [], CLEAN, later).status).toBe("blocked_on_user");
+    expect(gate(stateOf([interfaceRecord(), deferred("d-storage", inSeconds(1))]), [], CLEAN, later).status).toBe(
+      "blocked_on_user",
+    );
   });
 
   it("blocks a deferral whose expiry does not parse", () => {
@@ -168,7 +187,9 @@ describe("GATE-1 spec conditions", () => {
     const forged = resolved("d-storage", {
       resolution: { choice: "sqlite", rationale: "because", rejected: [], by: "agent:worker", at: NOW.toISOString() },
     });
-    expect(blocked(gate(stateOf([interfaceRecord(), forged])))).toEqual([{ code: "resolution_not_human", decision_id: "d-storage" }]);
+    expect(blocked(gate(stateOf([interfaceRecord(), forged])))).toEqual([
+      { code: "resolution_not_human", decision_id: "d-storage" },
+    ]);
   });
 
   it("takes no link input: GATE-1 has exactly state, now and context", () => {
@@ -195,7 +216,9 @@ describe("GATE-1 anomalies", () => {
 
   it("keeps the decision a forged event tried to close open", () => {
     const open_ = open("d-storage");
-    const reasons = blocked(gate(stateOf([interfaceRecord(), open_], [{ code: "resolution_not_human", decision_id: "d-storage", seq: 5 }])));
+    const reasons = blocked(
+      gate(stateOf([interfaceRecord(), open_], [{ code: "resolution_not_human", decision_id: "d-storage", seq: 5 }])),
+    );
     expect(reasons).toEqual([
       { code: "ledger_anomaly", decision_id: "d-storage", anomaly: "resolution_not_human" },
       { code: "required_open", decision_id: "d-storage" },
@@ -246,7 +269,13 @@ describe("GATE-1 validity is part of closure (record_invalid)", () => {
 
   it("rejects text that leaks under a goal re-lock, though it was clean when written", () => {
     const record = resolved("d-storage", {
-      resolution: { choice: "sqlite", rationale: "keeps the error rate down", rejected: [], by: HUMAN, at: NOW.toISOString() },
+      resolution: {
+        choice: "sqlite",
+        rationale: "keeps the error rate down",
+        rejected: [],
+        by: HUMAN,
+        at: NOW.toISOString(),
+      },
     });
     expect(gate(stateOf([interfaceRecord(), record]))).toEqual({ status: "pass" });
     expect(invalid(record, RELOCKED)).toEqual([{ code: "record_invalid", decision_id: "d-storage", problem: "leak" }]);
@@ -254,19 +283,30 @@ describe("GATE-1 validity is part of closure (record_invalid)", () => {
 
   it("judges a record against the readings that existed when it was written (A22)", () => {
     const latency = (closedSeq: number) =>
-      resolved("d-latency", { class: "latency", closed_seq: closedSeq, measure_seq: closedSeq, response_measure: { ...measure(), threshold: 300 } });
+      resolved("d-latency", {
+        class: "latency",
+        closed_seq: closedSeq,
+        measure_seq: closedSeq,
+        response_measure: { ...measure(), threshold: 300 },
+      });
     const later: LeakContext = { ...CLEAN, measuredNumbers: [300], readings: [{ seq: 10, value: 300 }] };
     // Closed at seq 4, before the reading at seq 10 that has the same number: still valid.
     expect(gate(stateOf([interfaceRecord(), latency(4)]), [], later)).toEqual({ status: "pass" });
     // Closed at seq 12, after that reading: the threshold equals a reading the person could have seen.
-    expect(invalid(latency(12), later)).toEqual([{ code: "record_invalid", decision_id: "d-latency", problem: "leak" }]);
+    expect(invalid(latency(12), later)).toEqual([
+      { code: "record_invalid", decision_id: "d-latency", problem: "leak" },
+    ]);
   });
 
   it("judges the add-time fields as of the add, not the close (A22)", () => {
     const later: LeakContext = { ...CLEAN, measuredNumbers: [3], readings: [{ seq: 10, value: 3 }] };
     const base = { question: "Should we keep 3 retries?", added_seq: 1, closed_seq: 20 };
     const done = resolved("d-retries", base);
-    const na = open("d-retries", { ...base, status: "na", na: { rationale: "not relevant", by: HUMAN, at: NOW.toISOString() } });
+    const na = open("d-retries", {
+      ...base,
+      status: "na",
+      na: { rationale: "not relevant", by: HUMAN, at: NOW.toISOString() },
+    });
     expect(recordProblems(done, later)).toEqual([]);
     expect(recordProblems(na, later)).toEqual([]);
     expect(gate(stateOf([interfaceRecord(), done]), [], later)).toEqual({ status: "pass" });

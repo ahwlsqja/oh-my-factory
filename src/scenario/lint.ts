@@ -57,7 +57,11 @@ function isEmptyExpect(expectation: Expect): boolean {
 function stepIsUnsatisfiable(step: ScenarioStep): boolean {
   const { stdout_matches: match, json_path: path } = step.expect;
   if (match === null || match.kind !== "exact" || path === null) return false;
-  const verdict = evaluateExpect(step.expect, { outcome: "exited", exit_code: step.expect.exit_code ?? 0, stdout: match.text });
+  const verdict = evaluateExpect(step.expect, {
+    outcome: "exited",
+    exit_code: step.expect.exit_code ?? 0,
+    stdout: match.text,
+  });
   return !verdict.pass;
 }
 
@@ -76,7 +80,11 @@ function namedExpectFaults(scenario: StoredScenario, ref: string): ScenarioProbl
   return problems;
 }
 
-function refProblems(scenario: StoredScenario, ref: string, decisions: ReadonlyMap<string, DecisionRecord>): ScenarioProblem[] {
+function refProblems(
+  scenario: StoredScenario,
+  ref: string,
+  decisions: ReadonlyMap<string, DecisionRecord>,
+): ScenarioProblem[] {
   const problems: ScenarioProblem[] = [];
   if (scenario.kind === "behavior" && scenario.decision_refs.length === 0) {
     problems.push({ code: "no_decision_ref", scenario_ref: ref });
@@ -84,16 +92,21 @@ function refProblems(scenario: StoredScenario, ref: string, decisions: ReadonlyM
   for (const id of scenario.decision_refs) {
     const decision = decisions.get(id);
     if (decision === undefined) problems.push({ code: "unknown_decision_ref", scenario_ref: ref, decision_id: id });
-    else if (decision.status !== "resolved") problems.push({ code: "decision_not_resolved", scenario_ref: ref, decision_id: id });
-    else if (isQuantitative(decision.class)) problems.push({ code: "decision_quantitative", scenario_ref: ref, decision_id: id });
+    else if (decision.status !== "resolved")
+      problems.push({ code: "decision_not_resolved", scenario_ref: ref, decision_id: id });
+    else if (isQuantitative(decision.class))
+      problems.push({ code: "decision_quantitative", scenario_ref: ref, decision_id: id });
   }
   return problems;
 }
 
 function bodyProblems(scenario: StoredScenario, ref: string): ScenarioProblem[] {
   const problems: ScenarioProblem[] = [];
-  if (scenario.steps.some((step) => isEmptyExpect(step.expect))) problems.push({ code: "expect_empty", scenario_ref: ref });
-  const inInvoke = scenario.steps.some((step) => [...step.invoke.argv, step.invoke.stdin].some((text) => text.includes(scenario.canary)));
+  if (scenario.steps.some((step) => isEmptyExpect(step.expect)))
+    problems.push({ code: "expect_empty", scenario_ref: ref });
+  const inInvoke = scenario.steps.some((step) =>
+    [...step.invoke.argv, step.invoke.stdin].some((text) => text.includes(scenario.canary)),
+  );
   if (inInvoke) problems.push({ code: "canary_in_invoke", scenario_ref: ref });
   if (scenario.steps.some((step) => !step.expect.note.startsWith(scenario.canary))) {
     problems.push({ code: "canary_missing_from_note", scenario_ref: ref });
@@ -141,7 +154,8 @@ export function lintScenarioSet(input: LintInput): ScenarioProblem[] {
     wellFormed.push(item);
   }
 
-  for (const pair of contradictions(wellFormed)) problems.push({ code: "contradiction", scenario_ref: pair.scenario_ref_a });
+  for (const pair of contradictions(wellFormed))
+    problems.push({ code: "contradiction", scenario_ref: pair.scenario_ref_a });
   return problems;
 }
 
@@ -153,7 +167,9 @@ interface Demand {
 
 /** sha256 of every {argv, stdin} from step 0 through step `upTo`: the state a step runs in is the sequence that led to it. */
 function prefixKey(steps: readonly ScenarioStep[], upTo: number): string {
-  return sha256Hex(canonicalize(steps.slice(0, upTo + 1).map((step) => ({ argv: step.invoke.argv, stdin: step.invoke.stdin }))));
+  return sha256Hex(
+    canonicalize(steps.slice(0, upTo + 1).map((step) => ({ argv: step.invoke.argv, stdin: step.invoke.stdin }))),
+  );
 }
 
 function conflicts(a: Demand, b: Demand): boolean {
@@ -166,13 +182,19 @@ function conflicts(a: Demand, b: Demand): boolean {
  * stdout. `list` after `add x` and a bare `list` have different prefixes and are never compared. Canaries contradict on purpose and
  * are excluded, as are retired and contaminated scenarios. Pairs come out once, earlier scenario (input order) first.
  */
-export function contradictions(scenarios: readonly EffectiveScenario[]): { scenario_ref_a: string; scenario_ref_b: string }[] {
+export function contradictions(
+  scenarios: readonly EffectiveScenario[],
+): { scenario_ref_a: string; scenario_ref_b: string }[] {
   const active = scenarios.filter((item) => item.status === "active" && item.scenario.kind === "behavior");
   const byKey = new Map<string, Demand[]>();
   active.forEach((item, index) => {
     item.scenario.steps.forEach((step, i) => {
       const match = step.expect.stdout_matches;
-      const demand: Demand = { index, exit_code: step.expect.exit_code, exact: match !== null && match.kind === "exact" ? match.text : null };
+      const demand: Demand = {
+        index,
+        exit_code: step.expect.exit_code,
+        exact: match !== null && match.kind === "exact" ? match.text : null,
+      };
       const key = prefixKey(item.scenario.steps, i);
       const list = byKey.get(key);
       if (list === undefined) byKey.set(key, [demand]);
@@ -184,13 +206,20 @@ export function contradictions(scenarios: readonly EffectiveScenario[]): { scena
   for (const list of byKey.values()) {
     for (const [i, a] of list.entries()) {
       for (const b of list.slice(i + 1)) {
-        if (a.index !== b.index && conflicts(a, b)) pairs.set(`${Math.min(a.index, b.index)}:${Math.max(a.index, b.index)}`, [Math.min(a.index, b.index), Math.max(a.index, b.index)]);
+        if (a.index !== b.index && conflicts(a, b))
+          pairs.set(`${Math.min(a.index, b.index)}:${Math.max(a.index, b.index)}`, [
+            Math.min(a.index, b.index),
+            Math.max(a.index, b.index),
+          ]);
       }
     }
   }
   return [...pairs.values()]
     .sort((x, y) => x[0] - y[0] || x[1] - y[1])
-    .map(([a, b]) => ({ scenario_ref_a: scenarioRef(active[a]!.scenario.scenario_id), scenario_ref_b: scenarioRef(active[b]!.scenario.scenario_id) }));
+    .map(([a, b]) => ({
+      scenario_ref_a: scenarioRef(active[a]!.scenario.scenario_id),
+      scenario_ref_b: scenarioRef(active[b]!.scenario.scenario_id),
+    }));
 }
 
 /**

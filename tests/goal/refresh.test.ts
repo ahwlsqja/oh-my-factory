@@ -71,9 +71,7 @@ describe("evaluateStaleness: age and commits", () => {
   });
 
   it("lists every tripped signal in a fixed order", () => {
-    const verdict = evaluateStaleness(
-      args({ now: at(30 * DAY), commitsSince: 400, targetLatest: 1000 }),
-    );
+    const verdict = evaluateStaleness(args({ now: at(30 * DAY), commitsSince: 400, targetLatest: 1000 }));
     expect(verdict.tripped).toEqual(["age", "commits", "target_move"]);
   });
 });
@@ -139,8 +137,12 @@ describe("evaluateStaleness: target_move counts only worsening", () => {
   });
 
   it("counts any movement for an == target that is not met", () => {
-    expect(evaluateStaleness(args({ targetOperator: "==", targetFirst: 10, targetLatest: 12 })).signals.target_move).toBeCloseTo(0.2, 10);
-    expect(evaluateStaleness(args({ targetOperator: "==", targetFirst: 10, targetLatest: 30 })).tripped).toEqual(["target_move"]);
+    expect(
+      evaluateStaleness(args({ targetOperator: "==", targetFirst: 10, targetLatest: 12 })).signals.target_move,
+    ).toBeCloseTo(0.2, 10);
+    expect(evaluateStaleness(args({ targetOperator: "==", targetFirst: 10, targetLatest: 30 })).tripped).toEqual([
+      "target_move",
+    ]);
   });
 
   it("is null and not tripped when a value or the verdict is missing", () => {

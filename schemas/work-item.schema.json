@@ -27,7 +27,10 @@
     ]
   },
   "$defs": {
-    "timestamp": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$" },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+    },
     "human": { "type": "string", "pattern": "^human:\\S+$" }
   },
   "properties": {
@@ -36,16 +39,7 @@
     "goal_id": { "type": "string", "pattern": "^g-[a-z0-9]+(-[a-z0-9]+)*$" },
     "title": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[^\\u0000-\\u001f\\u007f]+$" },
     "state": {
-      "enum": [
-        "ready",
-        "awaiting_approval",
-        "in_progress",
-        "awaiting_review",
-        "done",
-        "failed",
-        "vetoed",
-        "cancelled"
-      ]
+      "enum": ["ready", "awaiting_approval", "in_progress", "awaiting_review", "done", "failed", "vetoed", "cancelled"]
     },
     "fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "risk": {
@@ -75,7 +69,11 @@
         "paths": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 200 } }
       }
     },
-    "affected_paths": { "type": "array", "maxItems": 20, "items": { "type": "string", "minLength": 1, "maxLength": 200 } },
+    "affected_paths": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+    },
     "has_open_questions": { "type": "boolean" },
     "origin": {
       "type": "object",

@@ -7,7 +7,9 @@ import { describe, expect, it } from "vitest";
 const ROOT = new URL("../../", import.meta.url);
 const read = (path: string): string => readFileSync(new URL(path, ROOT), "utf8");
 const enforcementFiles = (): string[] =>
-  readdirSync(new URL("tests/enforcement/", ROOT)).filter((name) => name.endsWith(".test.ts")).sort();
+  readdirSync(new URL("tests/enforcement/", ROOT))
+    .filter((name) => name.endsWith(".test.ts"))
+    .sort();
 
 describe("enforcement README, final pass", () => {
   it("names every tests/enforcement test file", () => {
@@ -43,7 +45,10 @@ describe("the READMEs state the shared disclosure pool", () => {
 
 describe("M3d re-check of the Depends-on list", () => {
   const doc = (): string => read("docs/design/2026-10-14-omf-m3d-recheck.md");
-  const rows = (): string[] => doc().split("\n").filter((line) => /^\| R\d+ \|/.test(line));
+  const rows = (): string[] =>
+    doc()
+      .split("\n")
+      .filter((line) => /^\| R\d+ \|/.test(line));
 
   it("has one row per dependency, each with a recorded result", () => {
     expect(rows().length).toBeGreaterThanOrEqual(17);
@@ -55,7 +60,9 @@ describe("M3d re-check of the Depends-on list", () => {
   });
 
   it("names only repository paths that exist", () => {
-    const named = [...doc().matchAll(/`((?:src|tests|schemas|docs\/design)\/[A-Za-z0-9_./-]+\.[a-z]+)`/g)].map((m) => m[1] ?? "");
+    const named = [...doc().matchAll(/`((?:src|tests|schemas|docs\/design)\/[A-Za-z0-9_./-]+\.[a-z]+)`/g)].map(
+      (m) => m[1] ?? "",
+    );
     expect(named.length).toBeGreaterThan(8);
     expect(named.filter((path) => !existsSync(new URL(path, ROOT)))).toEqual([]);
   });

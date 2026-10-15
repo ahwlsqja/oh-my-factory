@@ -27,10 +27,24 @@ import {
   finalizeClassification,
   writeEvidence,
 } from "./evidence.js";
-import { type Gate4Result, type Gate4Warning, VisitCounter, evaluateGate4, gate4Result, roundSignature } from "./gate4.js";
+import {
+  type Gate4Result,
+  type Gate4Warning,
+  VisitCounter,
+  evaluateGate4,
+  gate4Result,
+  roundSignature,
+} from "./gate4.js";
 import { type GateResult, type GateVerdict, type Gate, GateBoard, defaultGates, injectedGateIds } from "./gates.js";
 import type { GovernanceCode } from "./governance.js";
-import { type HandoffRecord, buildHandoff, handoffFile, markerToRan, owedPredecessors, writeHandoff } from "./handoff.js";
+import {
+  type HandoffRecord,
+  buildHandoff,
+  handoffFile,
+  markerToRan,
+  owedPredecessors,
+  writeHandoff,
+} from "./handoff.js";
 import {
   type GateId,
   LINE_ORDER,
@@ -42,7 +56,16 @@ import {
 } from "./line-types.js";
 import { type Disposition, OutcomeError, type WOutcome, dispositionOf } from "./outcome.js";
 import type { WorkItem } from "./types.js";
-import { type OwnedAppend, WorkBudgetError, foldReentry, foldWorkBudget, microUsd, recordLimits, recordRound, recordSpend } from "./w-budget.js";
+import {
+  type OwnedAppend,
+  WorkBudgetError,
+  foldReentry,
+  foldWorkBudget,
+  microUsd,
+  recordLimits,
+  recordRound,
+  recordSpend,
+} from "./w-budget.js";
 import { type ReasonCode, W_REASON_CODES, lastStateEvent } from "./w-events.js";
 import { type RecheckFailure, type WRun, beginRun } from "./w-run.js";
 import { WError, type WErrorCode } from "./w-verbs.js";
@@ -145,7 +168,8 @@ function guard<T>(act: () => T): T {
     if (err instanceof WError) throw new RunAbort("run_error", null, err.code);
     if (err instanceof OutcomeError) throw new RunAbort("run_error", null, "outcome_invalid");
     // The own-claim appends of Task 2 refuse with their own error; the code is all that leaves, never the message.
-    if (err instanceof WorkBudgetError) throw new RunAbort("run_error", null, err.code === "claim_lost" ? "claim_lost" : "malformed");
+    if (err instanceof WorkBudgetError)
+      throw new RunAbort("run_error", null, err.code === "claim_lost" ? "claim_lost" : "malformed");
     throw err;
   }
 }
@@ -167,7 +191,8 @@ export function checkedResult(id: Exclude<GateId, "GATE-4">, raw: unknown): Gate
   if (r === null || typeof r !== "object" || r.gate !== id) return gateError(id);
   const { verdict, reasons } = r;
   if (verdict !== "pass" && verdict !== "fail" && verdict !== "not_run") return gateError(id);
-  if (!Array.isArray(reasons) || !reasons.every((x): x is string => typeof x === "string" && REASON_SHAPE.test(x))) return gateError(id);
+  if (!Array.isArray(reasons) || !reasons.every((x): x is string => typeof x === "string" && REASON_SHAPE.test(x)))
+    return gateError(id);
   const result: GateResult = { gate: id, verdict, reasons: [...reasons] };
   // Only a GATE-2 fail may name where the line stops; on any other gate or verdict a stop is ignored.
   if (id === "GATE-2" && verdict === "fail" && "stop" in r && r.stop !== undefined) {
@@ -561,7 +586,13 @@ class Line {
     });
     const budget = foldWorkBudget(events, own.scope.work_id);
     // Evidence-level areas and the recommendation, once, so the ledger event and the file state the same thing.
-    const classification = finalizeClassification({ classification: classified, decisions, injected_gates: injected, budget, inputs: this.inputs });
+    const classification = finalizeClassification({
+      classification: classified,
+      decisions,
+      injected_gates: injected,
+      budget,
+      inputs: this.inputs,
+    });
     const input = toOutcomeInput(classification);
     const disposition = guard(() => dispositionOf(input));
 
@@ -630,7 +661,8 @@ export async function runLine(options: LineOptions): Promise<LineResult> {
   const defaults = defaultGates();
   const gates: LineGates = { ...defaults };
   if (options.gates !== undefined) {
-    if (Object.keys(options.gates).includes("GATE-1")) throw new TypeError("GATE-1 cannot be replaced: it is the item's governance gate");
+    if (Object.keys(options.gates).includes("GATE-1"))
+      throw new TypeError("GATE-1 cannot be replaced: it is the item's governance gate");
     for (const id of ["GATE-2", "GATE-3"] as const) {
       const given = options.gates[id];
       if (given !== undefined) gates[id] = given;
@@ -638,7 +670,13 @@ export async function runLine(options: LineOptions): Promise<LineResult> {
   }
   const injected = injectedGateIds(gates, defaults);
   const now = options.now ?? ((): Date => new Date());
-  const run = beginRun({ location: options.location, workId: options.workId, now, newRunId: options.newRunId, store: options.store });
+  const run = beginRun({
+    location: options.location,
+    workId: options.workId,
+    now,
+    newRunId: options.newRunId,
+    store: options.store,
+  });
 
   let itemDir = null as string | null;
   let line = undefined as Line | undefined;
@@ -653,7 +691,12 @@ export async function runLine(options: LineOptions): Promise<LineResult> {
     if (owner === null || owner.pid !== process.pid) throw new RunAbort("claim_lost", null, null);
 
     const ledger = new Ledger(options.location.dir, now);
-    const own: OwnedAppend = { ledger, itemDir, claim: owner, scope: { goal_id: run.goalId, work_id: run.workId, run_id: run.runId } };
+    const own: OwnedAppend = {
+      ledger,
+      itemDir,
+      claim: owner,
+      scope: { goal_id: run.goalId, work_id: run.workId, run_id: run.runId },
+    };
     clearEvidence(itemDir); // a killed run leaves none, and a stale file is never current
 
     // A killed run leaves no result, so the ledger is asked who died (M3b2-D21): a work.claim_reclaimed after the
@@ -681,7 +724,9 @@ export async function runLine(options: LineOptions): Promise<LineResult> {
         }),
       );
     }
-    guard(() => recordLimits(own, { max_rounds: config.w.max_rounds, max_model_micro_usd: microUsd(config.w.max_model_usd) }));
+    guard(() =>
+      recordLimits(own, { max_rounds: config.w.max_rounds, max_model_micro_usd: microUsd(config.w.max_model_usd) }),
+    );
 
     line = new Line({ run, options, gates, injected, ledger, itemDir, own, config, now }, entry.item);
     await line.walk();
@@ -690,7 +735,14 @@ export async function runLine(options: LineOptions): Promise<LineResult> {
     const err = caught instanceof RunAbort ? caught : new RunAbort("run_error", null, null);
     const lost = err.reason === "claim_lost" || err.wcode === "claim_lost";
     if (itemDir !== null) removeOwnFiles(itemDir, run.runId, line?.wroteEvidence === true && !lost);
-    return { kind: "aborted", run_id: run.runId, reason: err.reason, code: err.code, wcode: err.wcode, at: line?.at ?? "S1" };
+    return {
+      kind: "aborted",
+      run_id: run.runId,
+      reason: err.reason,
+      code: err.code,
+      wcode: err.wcode,
+      at: line?.at ?? "S1",
+    };
   } finally {
     run.abandon();
   }

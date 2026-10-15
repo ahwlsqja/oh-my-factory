@@ -70,7 +70,10 @@ describe("parseBudgetArgs", () => {
   it("refuses amounts that are not positive integers", () => {
     for (const amount of ["0", "-1", "2.5", "abc", "1e3", ""]) {
       const args = { verb: "raise", goalId: "g-fast", kind: "rounds", amount } as const;
-      expect(codeOf(() => parseBudgetArgs(args)), amount).toBe("invalid_amount");
+      expect(
+        codeOf(() => parseBudgetArgs(args)),
+        amount,
+      ).toBe("invalid_amount");
     }
     expect(() => parseBudgetArgs({ verb: "raise", goalId: "g-fast", kind: "rounds", amount: "abc" })).toThrow(
       "amount must be a positive integer; got abc",
@@ -136,7 +139,10 @@ describe("runBudgetCommand", () => {
     ] as const;
     for (const args of attempts) {
       for (const actor of ["omf", "agent:claude"]) {
-        expect(codeOf(() => runBudgetCommand(fx.location, args, actor)), `${args.kind} ${actor}`).toBe("forbidden");
+        expect(
+          codeOf(() => runBudgetCommand(fx.location, args, actor)),
+          `${args.kind} ${actor}`,
+        ).toBe("forbidden");
       }
     }
     expect(() =>

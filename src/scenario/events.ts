@@ -153,7 +153,11 @@ export function sealCompletedEvent(scope: DecisionScope, input: SealCompletedInp
 }
 
 export function sealFailedEvent(scope: DecisionScope, input: SealFailedInput): NewEvent {
-  return build(scope, "seal.failed", "ev_seal_failed", { round: input.round, code: input.code, duration_ms: input.duration_ms });
+  return build(scope, "seal.failed", "ev_seal_failed", {
+    round: input.round,
+    code: input.code,
+    duration_ms: input.duration_ms,
+  });
 }
 
 export function scenarioStatusChangedEvent(scope: DecisionScope, input: ScenarioStatusChangedInput): NewEvent {
@@ -276,7 +280,10 @@ export function foldStatuses(
   for (const event of events) {
     if (!event.type.startsWith("scenario.")) continue;
     if (event.actor !== "omf" || !inScope(event, scope)) continue;
-    if (event.type !== "scenario.status_changed" || !validateDef(SCHEMA, "ev_scenario_status_changed", event.payload).ok) {
+    if (
+      event.type !== "scenario.status_changed" ||
+      !validateDef(SCHEMA, "ev_scenario_status_changed", event.payload).ok
+    ) {
       anomalies += 1;
       continue;
     }
@@ -297,7 +304,10 @@ export interface EffectiveScenario {
 }
 
 /** The ledger's status, else `active` (OMF stamps active at intake). No field of the stored file is read for this. */
-export function effectiveScenarios(set: readonly StoredScenario[], statuses: ReadonlyMap<string, ScenarioStatus>): EffectiveScenario[] {
+export function effectiveScenarios(
+  set: readonly StoredScenario[],
+  statuses: ReadonlyMap<string, ScenarioStatus>,
+): EffectiveScenario[] {
   return set.map((scenario) => ({ scenario, status: statuses.get(scenarioRef(scenario.scenario_id)) ?? "active" }));
 }
 
@@ -360,9 +370,13 @@ export function sealFeedbackFromEvents(events: readonly LedgerEvent[], scope: De
   const after = foldSeals(events, scope).latest?.seq ?? -1;
   let found: SealFeedback | null = null;
   for (const event of events) {
-    if (event.type !== "gate2.evaluated" || event.actor !== "omf" || !inScope(event, scope) || event.seq <= after) continue;
+    if (event.type !== "gate2.evaluated" || event.actor !== "omf" || !inScope(event, scope) || event.seq <= after)
+      continue;
     if (!validateDef(SCHEMA, "ev_gate2_evaluated", event.payload).ok) continue;
-    const payload = event.payload as unknown as Pick<Gate2EventInput, "route" | "unlinked_decision_ids" | "feedback_counts">;
+    const payload = event.payload as unknown as Pick<
+      Gate2EventInput,
+      "route" | "unlinked_decision_ids" | "feedback_counts"
+    >;
     if (payload.route !== "back_to_S2" || payload.feedback_counts === null) continue;
     found = {
       unlinked_decision_ids: [...payload.unlinked_decision_ids],

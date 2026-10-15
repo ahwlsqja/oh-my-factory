@@ -42,7 +42,10 @@ describe("runOnHost", () => {
   });
 
   it("reports a non-zero exit", async () => {
-    expect(await runOnHost(["sh", "-c", "echo 1; exit 3"], makeTempDir(), env)).toEqual({ ok: false, reason: "exit code 3" });
+    expect(await runOnHost(["sh", "-c", "echo 1; exit 3"], makeTempDir(), env)).toEqual({
+      ok: false,
+      reason: "exit code 3",
+    });
   });
 
   it("does not pass the caller's environment or home", async () => {
@@ -51,13 +54,19 @@ describe("runOnHost", () => {
   });
 
   it("times out", async () => {
-    expect(await runOnHost(["sh", "-c", "sleep 5"], makeTempDir(), env, 200)).toEqual({ ok: false, reason: "timed out" });
+    expect(await runOnHost(["sh", "-c", "sleep 5"], makeTempDir(), env, 200)).toEqual({
+      ok: false,
+      reason: "timed out",
+    });
   });
 
   it("kills a background child left behind by a command that timed out", async () => {
     const pidFile = join(makeTempDir(), "pids");
     const script = 'sleep 20 & echo "$$ $!" > "$1"; wait';
-    expect(await runOnHost(["sh", "-c", script, "sh", pidFile], makeTempDir(), env, 500)).toEqual({ ok: false, reason: "timed out" });
+    expect(await runOnHost(["sh", "-c", script, "sh", pidFile], makeTempDir(), env, 500)).toEqual({
+      ok: false,
+      reason: "timed out",
+    });
     const [, background] = await waitForPids(pidFile);
     expect(await waitDead(background as number)).toBe(true);
   });
@@ -65,7 +74,10 @@ describe("runOnHost", () => {
   it("kills a background child left behind by a command that exited", async () => {
     const pidFile = join(makeTempDir(), "pids");
     const script = 'sleep 20 & echo "$$ $!" > "$1"; echo 4';
-    expect(await runOnHost(["sh", "-c", script, "sh", pidFile], makeTempDir(), env, 5000)).toEqual({ ok: true, value: 4 });
+    expect(await runOnHost(["sh", "-c", script, "sh", pidFile], makeTempDir(), env, 5000)).toEqual({
+      ok: true,
+      value: 4,
+    });
     const [, background] = await waitForPids(pidFile);
     expect(await waitDead(background as number)).toBe(true);
   });
@@ -104,7 +116,11 @@ describe("docker runner", () => {
       expect(() => dockerArgs(["sh", "bench.sh"], "/repo", image, "omf-measure-1")).toThrow(/invalid image/);
     }
     const pinned = `node@sha256:${"a".repeat(64)}`;
-    expect(dockerArgs(["sh", "bench.sh"], "/repo", pinned, "omf-measure-1").slice(-3)).toEqual([pinned, "sh", "bench.sh"]);
+    expect(dockerArgs(["sh", "bench.sh"], "/repo", pinned, "omf-measure-1").slice(-3)).toEqual([
+      pinned,
+      "sh",
+      "bench.sh",
+    ]);
   });
 
   it("needs an image", async () => {
@@ -122,7 +138,10 @@ describe("docker runner", () => {
     writeFileSync(fake, '#!/bin/sh\nif [ "$1" = "rm" ]; then echo "$@" >> "$LOG"; exit 0; fi\nsleep 30\n');
     chmodSync(fake, 0o755);
     const env = { PATH: `${bin}:${process.env.PATH}`, LOG: log };
-    expect(await runInDocker(["sh", "-c", "echo 1"], makeTempDir(), "alpine:3.20", env, 300)).toEqual({ ok: false, reason: "timed out" });
+    expect(await runInDocker(["sh", "-c", "echo 1"], makeTempDir(), "alpine:3.20", env, 300)).toEqual({
+      ok: false,
+      reason: "timed out",
+    });
     expect(readFileSync(log, "utf8")).toMatch(/^rm --force omf-measure-[0-9a-f]{8}\n$/);
   });
 

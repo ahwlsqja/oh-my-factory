@@ -57,38 +57,86 @@ describe("W-decision-no-metric-leak", () => {
     const loc = f.fx.location;
     for (const [index, [name, text]] of PLANTS.entries()) {
       const id = `d-plant-${index}`;
-      expect(errorCode(() => runDecideAdd(loc, f.workId, { id, class: "other", question: `${text}?` }, "omf")), `add: ${name}`).toBe("leak");
       expect(
-        errorCode(() => runDecideResolve(loc, f.workId, "d-cache", { choice: "Keep the current behavior", rationale: text, rejected: [] }, HUMAN)),
+        errorCode(() => runDecideAdd(loc, f.workId, { id, class: "other", question: `${text}?` }, "omf")),
+        `add: ${name}`,
+      ).toBe("leak");
+      expect(
+        errorCode(() =>
+          runDecideResolve(
+            loc,
+            f.workId,
+            "d-cache",
+            { choice: "Keep the current behavior", rationale: text, rejected: [] },
+            HUMAN,
+          ),
+        ),
         `resolve: ${name}`,
       ).toBe("leak");
       expect(
         errorCode(() =>
-          runDecideDefer(loc, f.workId, "d-hold", { owner: "dev", reason: "Later.", revisit_trigger: "After review.", default: text, expires_at: "2099-01-01T00:00:00.000Z" }, HUMAN, NOW),
+          runDecideDefer(
+            loc,
+            f.workId,
+            "d-hold",
+            {
+              owner: "dev",
+              reason: "Later.",
+              revisit_trigger: "After review.",
+              default: text,
+              expires_at: "2099-01-01T00:00:00.000Z",
+            },
+            HUMAN,
+            NOW,
+          ),
         ),
         `defer: ${name}`,
       ).toBe("leak");
     }
     const events = decisionEvents(f);
     expect(events.filter((e) => e.type === "decision.rejected")).toHaveLength(PLANTS.length * 3);
-    expect(events.filter((e) => e.type === "decision.added" && String(e.payload.decision_id).startsWith("d-plant"))).toEqual([]);
-    expect(events.filter((e) => e.type === "decision.resolved" || e.type === "decision.deferred").length, "nothing was closed by a refused write").toBe(1);
+    expect(
+      events.filter((e) => e.type === "decision.added" && String(e.payload.decision_id).startsWith("d-plant")),
+    ).toEqual([]);
+    expect(
+      events.filter((e) => e.type === "decision.resolved" || e.type === "decision.deferred").length,
+      "nothing was closed by a refused write",
+    ).toBe(1);
 
     const measure = (threshold: number, id: string) =>
       runDecideAdd(
         loc,
         f.workId,
-        { id, class: "latency", question: "How fast must a lookup be?", response_measure: { metric: "cache lookup time", op: "<=", threshold, unit: "ms", percentile: null, window: null } },
+        {
+          id,
+          class: "latency",
+          question: "How fast must a lookup be?",
+          response_measure: {
+            metric: "cache lookup time",
+            op: "<=",
+            threshold,
+            unit: "ms",
+            percentile: null,
+            window: null,
+          },
+        },
         "omf",
       );
     for (const threshold of [3719.25, 3719, 4817.39, 4817]) {
-      expect(errorCode(() => measure(threshold, "d-latency-x")), `threshold ${threshold}`).toBe("leak");
+      expect(
+        errorCode(() => measure(threshold, "d-latency-x")),
+        `threshold ${threshold}`,
+      ).toBe("leak");
     }
     // Positive control: the same shape with a number that is neither the target nor a reading is a normal decision.
     expect(errorCode(() => measure(40, "d-latency"))).toBe("no error");
 
     // A planted id is refused before any decision event, and the rejection keeps only a hash of the id.
-    expect(errorCode(() => runDecideAdd(loc, f.workId, { id: "d-zebra-quokka", class: "other", question: "Is it needed?" }, "omf"))).toBe("leak");
+    expect(
+      errorCode(() =>
+        runDecideAdd(loc, f.workId, { id: "d-zebra-quokka", class: "other", question: "Is it needed?" }, "omf"),
+      ),
+    ).toBe("leak");
     const after = decisionEvents(f);
     expect(after.some((e) => e.type === "decision.added" && e.payload.decision_id === "d-zebra-quokka")).toBe(false);
     const byId = after.filter((e) => e.type === "decision.rejected" && "decision_id_sha12" in e.payload);
@@ -105,22 +153,56 @@ describe("W-decision-no-metric-leak", () => {
     const before = rejections().length;
 
     // add: a QAS field and the metric name of a measure
-    const qas = { source: "a caller", stimulus: "a lookup", environment: plant, artifact: "the cache", response: "an answer" };
-    expect(errorCode(() => runDecideAdd(loc, f.workId, { id: "d-qas", class: "other", question: "Is it needed?", qas }, "omf")), "add: QAS").toBe("leak");
+    const qas = {
+      source: "a caller",
+      stimulus: "a lookup",
+      environment: plant,
+      artifact: "the cache",
+      response: "an answer",
+    };
+    expect(
+      errorCode(() =>
+        runDecideAdd(loc, f.workId, { id: "d-qas", class: "other", question: "Is it needed?", qas }, "omf"),
+      ),
+      "add: QAS",
+    ).toBe("leak");
     const measure = { metric: plant, op: "<=" as const, threshold: 40, unit: "ms", percentile: null, window: null };
     expect(
-      errorCode(() => runDecideAdd(loc, f.workId, { id: "d-metric", class: "latency", question: "How fast must a lookup be?", response_measure: measure }, "omf")),
+      errorCode(() =>
+        runDecideAdd(
+          loc,
+          f.workId,
+          { id: "d-metric", class: "latency", question: "How fast must a lookup be?", response_measure: measure },
+          "omf",
+        ),
+      ),
       "add: measure metric",
     ).toBe("leak");
 
     // resolve: the measure again, and an interface argv element (the lint runs before the preconditions)
     expect(
-      errorCode(() => runDecideResolve(loc, f.workId, "d-cache", { choice: "Keep it", rationale: "Nothing changes.", rejected: [], response_measure: measure }, HUMAN)),
+      errorCode(() =>
+        runDecideResolve(
+          loc,
+          f.workId,
+          "d-cache",
+          { choice: "Keep it", rationale: "Nothing changes.", rejected: [], response_measure: measure },
+          HUMAN,
+        ),
+      ),
       "resolve: measure metric",
     ).toBe("leak");
     const leakyContract = { ...CONTRACT, run: ["node", "dist/cache.js", "--tag", "zebra quokka"] };
     expect(
-      errorCode(() => runDecideResolve(loc, f.workId, "d-interface", { choice: "A command line program", rationale: "Callers shell out.", rejected: [], interface: leakyContract }, HUMAN)),
+      errorCode(() =>
+        runDecideResolve(
+          loc,
+          f.workId,
+          "d-interface",
+          { choice: "A command line program", rationale: "Callers shell out.", rejected: [], interface: leakyContract },
+          HUMAN,
+        ),
+      ),
       "resolve: interface argv",
     ).toBe("leak");
 
@@ -145,7 +227,9 @@ describe("W-decision-no-metric-leak", () => {
 
     const surfaces: Record<string, string> = {
       "spec.md": readFileSync(specFile(f.item.dir), "utf8"),
-      "decision events": decisionEvents(f).map((e) => JSON.stringify(e.payload)).join("\n"),
+      "decision events": decisionEvents(f)
+        .map((e) => JSON.stringify(e.payload))
+        .join("\n"),
       "needs-human.json": readFileSync(needsHumanFile(f.item.dir), "utf8"),
       "refused add output": refusals.join("\n"),
       "lint output": lint.stdout + lint.stderr,
@@ -154,7 +238,9 @@ describe("W-decision-no-metric-leak", () => {
     for (const [name, text] of Object.entries(surfaces)) expect(canaryHits(text), name).toEqual([]);
 
     // Not vacuous: the canaries exist on the host, the decisions exist, and the rejections were recorded.
-    expect(canaryHits(readFileSync(goalFile(f.fx.location.dir, f.fx.goalId), "utf8"))).toEqual(expect.arrayContaining(["target"]));
+    expect(canaryHits(readFileSync(goalFile(f.fx.location.dir, f.fx.goalId), "utf8"))).toEqual(
+      expect.arrayContaining(["target"]),
+    );
     expect(canaryHits(payloadText(f.fx, "metric.measured"))).toEqual(expect.arrayContaining(["reading"]));
     expect(surfaces["spec.md"]).toContain("d-cache");
     expect(decisionEvents(f).filter((e) => e.type === "decision.rejected")).toHaveLength(PLANTS.length);
@@ -168,7 +254,13 @@ describe("W-decision-no-metric-leak", () => {
     const f = setupDecisionItem();
     closeInterface(f);
     addOpen(f, "d-cache");
-    runDecideResolve(f.fx.location, f.workId, "d-cache", { choice: "Keep 2500 entries", rationale: "That is the size callers use.", rejected: [] }, HUMAN);
+    runDecideResolve(
+      f.fx.location,
+      f.workId,
+      "d-cache",
+      { choice: "Keep 2500 entries", rationale: "That is the size callers use.", rejected: [] },
+      HUMAN,
+    );
     expect(readFileSync(specFile(f.item.dir), "utf8")).toContain("Keep 2500 entries");
 
     relockTarget(f, 2500);
@@ -176,6 +268,10 @@ describe("W-decision-no-metric-leak", () => {
     const spec = readFileSync(specFile(f.item.dir), "utf8");
     expect(spec).not.toContain("2500");
     expect(spec).toMatch(/record withheld \(leak\) #\d+/);
-    expect(reasonsOf(reportAt(f, NOW).gate)).toContainEqual({ code: "record_invalid", decision_id: "d-cache", problem: "leak" });
+    expect(reasonsOf(reportAt(f, NOW).gate)).toContainEqual({
+      code: "record_invalid",
+      decision_id: "d-cache",
+      problem: "leak",
+    });
   });
 });

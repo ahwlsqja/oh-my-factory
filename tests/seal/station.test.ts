@@ -4,7 +4,17 @@ import type { ScenarioRunner } from "../../src/scenario/runner.js";
 import { createCommandAuthor } from "../../src/seal/session.js";
 import { runS2Station, runS2ThenGate2 } from "../../src/seal/station.js";
 import { ledgerEvents } from "../helpers/enforcement-goal.js";
-import { ROUND2, appendWorkStarted, passDeps, plantCanary, prompts, sealDeps, sealStored, setupLine, writeYaml } from "../helpers/line-fixture.js";
+import {
+  ROUND2,
+  appendWorkStarted,
+  passDeps,
+  plantCanary,
+  prompts,
+  sealDeps,
+  sealStored,
+  setupLine,
+  writeYaml,
+} from "../helpers/line-fixture.js";
 
 describe("runS2Station", () => {
   it("stores a set and hands over to GATE-2", async () => {

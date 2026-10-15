@@ -15,7 +15,12 @@ import { fingerprintOf } from "../../src/work/fingerprint.js";
 import type { WorkItem } from "../../src/work/types.js";
 import { CANARY } from "./canary.js";
 import { omf } from "./cli.js";
-import { type EnforcementFixture, type EnforcementOptions, ledgerEvents, setupEnforcementGoal } from "./enforcement-goal.js";
+import {
+  type EnforcementFixture,
+  type EnforcementOptions,
+  ledgerEvents,
+  setupEnforcementGoal,
+} from "./enforcement-goal.js";
 import { createRecorded, makeNewItem } from "./work.js";
 
 /** A fixed clock for GATE-1 verdicts. Write verbs that compare against it take it as their `now`. */
@@ -55,7 +60,12 @@ export function setupDecisionItem(options: EnforcementOptions & { openQuestions?
 }
 
 export function addInterface(f: DecisionFixture): void {
-  runDecideAdd(f.fx.location, f.workId, { id: "d-interface", class: "interface", question: "How do callers use the cache?" }, "omf");
+  runDecideAdd(
+    f.fx.location,
+    f.workId,
+    { id: "d-interface", class: "interface", question: "How do callers use the cache?" },
+    "omf",
+  );
 }
 
 export function resolveInterface(f: DecisionFixture): void {
@@ -80,7 +90,13 @@ export function addOpen(f: DecisionFixture, id: string, cls: DecisionClass = "ot
 }
 
 export function resolveOpen(f: DecisionFixture, id: string): void {
-  runDecideResolve(f.fx.location, f.workId, id, { choice: "Keep the current behavior", rationale: "Nothing depends on a change.", rejected: [] }, HUMAN);
+  runDecideResolve(
+    f.fx.location,
+    f.workId,
+    id,
+    { choice: "Keep the current behavior", rationale: "Nothing depends on a change.", rejected: [] },
+    HUMAN,
+  );
 }
 
 /** Read-only fold, lint and GATE-1 verdict at `now`. */
@@ -116,7 +132,13 @@ export function writeJson(f: DecisionFixture, name: string, data: unknown): stri
 }
 
 /** Appends a decision event straight into the ledger, as someone with write access would. */
-export function forge(f: DecisionFixture, actor: string, type: string, decisionId: string, extra: Record<string, unknown>): LedgerEvent {
+export function forge(
+  f: DecisionFixture,
+  actor: string,
+  type: string,
+  decisionId: string,
+  extra: Record<string, unknown>,
+): LedgerEvent {
   return f.fx.ledger.append({
     actor,
     type,
@@ -157,5 +179,6 @@ export function relockTarget(f: DecisionFixture, value: number): void {
   const text = readFileSync(file, "utf8");
   if (!text.includes(`value: ${CANARY.target}`)) throw new Error("goal.md does not hold the canary target");
   writeFileSync(file, text.replace(`value: ${CANARY.target}`, `value: ${value}`));
-  if (!approveGoal(f.fx.location, f.fx.goalId, "human:dev").created) throw new Error("the re-approval wrote no new lock");
+  if (!approveGoal(f.fx.location, f.fx.goalId, "human:dev").created)
+    throw new Error("the re-approval wrote no new lock");
 }

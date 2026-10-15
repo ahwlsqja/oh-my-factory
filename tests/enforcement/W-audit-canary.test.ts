@@ -12,18 +12,24 @@ import { recordAndLoad } from "../helpers/audit-record.js";
 const fixture = () => auditFixture({ "src/a.ts": "1\n" }, { "src/a.ts": "2\n" });
 
 describe("W-audit-canary", () => {
-  it.each(SURFACE_KINDS)("W-audit-canary-hit: a canary on the %s surface is found on that surface alone", async (kind) => {
-    const report = await runAudit(auditInput(fixture(), { surfaces: surfacesWith(kind) }));
-    expect(report.canary).toMatchObject({ status: "scanned", hits: [{ surface: kind, count: 1 }], total: 1 });
+  it.each(SURFACE_KINDS)(
+    "W-audit-canary-hit: a canary on the %s surface is found on that surface alone",
+    async (kind) => {
+      const report = await runAudit(auditInput(fixture(), { surfaces: surfacesWith(kind) }));
+      expect(report.canary).toMatchObject({ status: "scanned", hits: [{ surface: kind, count: 1 }], total: 1 });
 
-    const rec = recordAndLoad(report);
-    expect(rec.payload).toMatchObject({ canary_status: "scanned", canary_hits: 1 });
-    expect(rec.loaded).not.toBeNull();
-    if (rec.loaded !== null) expect(auditSignals(rec.loaded).flawed).toContain("canary_hit");
-    for (const text of [readFileSync(rec.ledger.file, "utf8"), readFileSync(auditPath(rec.itemDir, SCOPE.run_id), "utf8")]) {
-      expect(text).not.toContain(CANARY_TEXT);
-    }
-  });
+      const rec = recordAndLoad(report);
+      expect(rec.payload).toMatchObject({ canary_status: "scanned", canary_hits: 1 });
+      expect(rec.loaded).not.toBeNull();
+      if (rec.loaded !== null) expect(auditSignals(rec.loaded).flawed).toContain("canary_hit");
+      for (const text of [
+        readFileSync(rec.ledger.file, "utf8"),
+        readFileSync(auditPath(rec.itemDir, SCOPE.run_id), "utf8"),
+      ]) {
+        expect(text).not.toContain(CANARY_TEXT);
+      }
+    },
+  );
 
   it("W-audit-canary-not-in-sut-output: a canary that only SUT or harness output holds is no audit hit", async () => {
     expect(SURFACE_KINDS).not.toContain("sut");

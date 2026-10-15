@@ -27,7 +27,14 @@ function initialized(): Fixture {
   const home = makeTempDir("omf-home-");
   const env = { OMF_HOME: join(home, ".omf") };
   const { projectDir } = initProject(repo, env);
-  return { repo, home, env, dir: projectDir, rel: `projects/${basename(projectDir)}`, outside: makeTempDir("omf-outside-") };
+  return {
+    repo,
+    home,
+    env,
+    dir: projectDir,
+    rel: `projects/${basename(projectDir)}`,
+    outside: makeTempDir("omf-outside-"),
+  };
 }
 
 /** The message of whatever `fn` throws, or "no error". */
@@ -115,7 +122,9 @@ describe("W-vault-symlink-refused (part A: the existing state tree)", () => {
     expect(requireProject(repo, env).initialized).toBe(true);
 
     symlinkSync(join(real, "target"), join(projectDir, "claim.lock"));
-    expect(messageOf(() => requireProject(repo, env))).toBe(refusedMessage(`projects/${basename(projectDir)}/claim.lock`));
+    expect(messageOf(() => requireProject(repo, env))).toBe(
+      refusedMessage(`projects/${basename(projectDir)}/claim.lock`),
+    );
   });
 
   it("omf init on an existing project refuses a planted link and writes nothing through it", () => {
@@ -189,7 +198,9 @@ vt.describe("W-vault-symlink-refused (part B: vault paths)", () => {
     // A Vault value opened before the swap is refused too, on every read and write.
     vt.expect(readScenarioSet(v.vault, ref(1))).toEqual({ ok: false, reason: "symlink_refused" });
     vt.expect(caught(() => writeScenarioSet(v.vault, ref(2), [storedScenario(2)]))).toBeInstanceOf(VaultSymlinkRefused);
-    vt.expect(nodeFs.readdirSync(nodePath.join(decoy, WORK_ID)), "nothing was written through the link").toEqual([sealId(1)]);
+    vt.expect(nodeFs.readdirSync(nodePath.join(decoy, WORK_ID)), "nothing was written through the link").toEqual([
+      sealId(1),
+    ]);
   });
 
   vt.it("refuses a symlinked set directory and returns none of the scenarios behind it", () => {
@@ -200,7 +211,10 @@ vt.describe("W-vault-symlink-refused (part B: vault paths)", () => {
     nodeFs.symlinkSync(setDir(v.vault, ref(2)), setDir(v.vault, ref(1)));
 
     vt.expect(readScenarioSet(v.vault, ref(1))).toEqual({ ok: false, reason: "symlink_refused" });
-    vt.expect(caught(() => writeScenarioSet(v.vault, ref(1), [storedScenario(3)])), "the name is taken by the link").toMatchObject({ code: "set_exists" });
+    vt.expect(
+      caught(() => writeScenarioSet(v.vault, ref(1), [storedScenario(3)])),
+      "the name is taken by the link",
+    ).toMatchObject({ code: "set_exists" });
   });
 
   vt.it("refuses a symlinked scenario file, and its canary is then unverified", () => {
@@ -214,7 +228,10 @@ vt.describe("W-vault-symlink-refused (part B: vault paths)", () => {
     nodeFs.symlinkSync(outside, file);
 
     vt.expect(readScenarioSet(v.vault, ref(1))).toEqual({ ok: false, reason: "symlink_refused" });
-    vt.expect(listVaultCanaries(v.vault, WORK_ID, [sealRecord(1, set_sha256)])).toEqual({ canaries: [], unverified: [sealId(1)] });
+    vt.expect(listVaultCanaries(v.vault, WORK_ID, [sealRecord(1, set_sha256)])).toEqual({
+      canaries: [],
+      unverified: [sealId(1)],
+    });
   });
 
   // Run in a child, as Task 1 does: `process.umask(mask)` throws in a worker thread and, in a forked worker, would change the
@@ -235,7 +252,16 @@ const ref = { work_id: workId, seal_id: sealId };
 vault.writeScenarioSet(v, ref, [JSON.parse(scenarioJson)]);
 console.log(JSON.stringify({ dir: v.dir, set: vault.setDir(v, ref) }));`;
     const dist = (file: string): string => nodeUrl.pathToFileURL(nodePath.resolve("dist", file)).href;
-    const run = await childHelpers.runChild(script, [dist("vault/vault.js"), dist("core/paths.js"), repo, home, mask, JSON.stringify(scenario), WORK_ID, sealId(1)]);
+    const run = await childHelpers.runChild(script, [
+      dist("vault/vault.js"),
+      dist("core/paths.js"),
+      repo,
+      home,
+      mask,
+      JSON.stringify(scenario),
+      WORK_ID,
+      sealId(1),
+    ]);
     vt.expect(run.code).toBe(0);
     const made = JSON.parse(run.out) as { dir: string; set: string };
     for (const path of [made.dir, nodePath.join(made.dir, WORK_ID), made.set]) {

@@ -82,7 +82,9 @@ interface RawConfig {
 
 function table(parent: Record<string, unknown> | undefined, key: string): Record<string, unknown> | undefined {
   const value = parent?.[key];
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 
 /**
@@ -101,7 +103,8 @@ export function parseConfig(text: string): OmfConfig {
   }
   const reconcilerTable = table(root, "reconciler");
   if (reconcilerTable?.kind === "codex") throw new ConfigError('reconciler.kind "codex" needs a container; M3');
-  if (reconcilerTable?.auth === "login_file") throw new ConfigError('reconciler.auth "login_file" needs a container; M3');
+  if (reconcilerTable?.auth === "login_file")
+    throw new ConfigError('reconciler.auth "login_file" needs a container; M3');
   if (table(table(root, "roles"), "reconciler")?.vendor === "codex") {
     throw new ConfigError('roles.reconciler.vendor "codex" needs a container; M3');
   }
@@ -116,7 +119,12 @@ export function parseConfig(text: string): OmfConfig {
   if (reconciler.kind === "command" && reconciler.command === null) {
     throw new ConfigError('reconciler.kind "command" requires reconciler.command');
   }
-  return { isolation: { ...CONFIG_DEFAULTS.isolation, ...raw.isolation }, roles, reconciler, w: { ...CONFIG_DEFAULTS.w, ...raw.w } };
+  return {
+    isolation: { ...CONFIG_DEFAULTS.isolation, ...raw.isolation },
+    roles,
+    reconciler,
+    w: { ...CONFIG_DEFAULTS.w, ...raw.w },
+  };
 }
 
 function configPath(projectDir: string): string {

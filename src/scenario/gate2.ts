@@ -20,7 +20,14 @@ import type { ScenarioProblem } from "./lint.js";
 import { runScenario } from "./runner.js";
 import type { FixtureId, ScenarioRunner, StepLimits } from "./runner.js";
 import { EXPOSURE_LIMIT, SCENARIO_SPLITS, isCanaryKind, scenarioRef } from "./types.js";
-import type { RefusalCode, ScenarioSplit, ScenarioStatus, SealFeedback, StepObservation, StoredScenario } from "./types.js";
+import type {
+  RefusalCode,
+  ScenarioSplit,
+  ScenarioStatus,
+  SealFeedback,
+  StepObservation,
+  StoredScenario,
+} from "./types.js";
 
 /**
  * GATE-2, the pure part (spec §5.3). A sealed scenario set is a judge only if it is not empty, has both splits, fails
@@ -132,7 +139,13 @@ export function scenarioAggregate(scenarios: readonly EffectiveScenario[]): Scen
 
 export type Gate2Result =
   | { status: "pass"; not_run: string[]; aggregate: ScenarioAggregate } // not_run: resolved quantitative decision ids (M3-D17); never success
-  | { status: "fail"; route: Gate2Route; reasons: Gate2Reason[]; not_run: string[]; aggregate: ScenarioAggregate | null };
+  | {
+      status: "fail";
+      route: Gate2Route;
+      reasons: Gate2Reason[];
+      not_run: string[];
+      aggregate: ScenarioAggregate | null;
+    };
 
 /** M3d supplies this (releases per split digest from its feedback.* events). M3c never counts exposure itself. */
 export type ExposureCount = (key: { split: ScenarioSplit; digest: string }) => number;
@@ -186,7 +199,8 @@ function indexByRef(list: readonly ProbeRun[] | undefined): Map<string, ProbeRun
   const out = new Map<string, ProbeRun>();
   for (const run of list ?? []) {
     const seen = out.get(run.scenario_ref);
-    if (seen === undefined || OUTCOME_BADNESS[run.outcome] > OUTCOME_BADNESS[seen.outcome]) out.set(run.scenario_ref, run);
+    if (seen === undefined || OUTCOME_BADNESS[run.outcome] > OUTCOME_BADNESS[seen.outcome])
+      out.set(run.scenario_ref, run);
   }
   return out;
 }
@@ -250,7 +264,8 @@ export function evaluateGate2(input: Gate2Input): Gate2Result {
   if (seal === null) {
     reasons.push({ code: "seal_missing" });
   } else {
-    if (input.order.ok === false && input.order.reason === "seal_after_start") reasons.push({ code: "seal_after_start" });
+    if (input.order.ok === false && input.order.reason === "seal_after_start")
+      reasons.push({ code: "seal_after_start" });
     if (set === null) reasons.push({ code: "set_missing" });
     else if (!set.ok) reasons.push({ code: SET_FAILURE_CODE[set.reason] });
     else if (set.set_sha256 !== seal.set_sha256) reasons.push({ code: "set_tampered" });
@@ -268,7 +283,8 @@ export function evaluateGate2(input: Gate2Input): Gate2Result {
       if (aggregate.behavior[split] === 0) reasons.push({ code: "split_missing", split });
     }
     // Standing rule: every set carries at least one active contradiction canary, so GATE-3's contradiction check is never vacuous.
-    if (aggregate.contradiction_canary.train + aggregate.contradiction_canary.test === 0) reasons.push({ code: "canary_missing" });
+    if (aggregate.contradiction_canary.train + aggregate.contradiction_canary.test === 0)
+      reasons.push({ code: "canary_missing" });
     const invalid = input.problems.filter((problem) => problem.code !== "contradiction").length;
     if (invalid > 0) reasons.push({ code: "scenario_invalid", count: invalid });
     const pairs = contradictions(scenarios).length;
@@ -338,7 +354,10 @@ export function gate2EventFor(
     },
     set_sha256: digests.set_sha256,
     decisions_digest: digests.decisions_digest,
-    feedback_counts: feedback === null ? null : { weak: feedback.weak, contradictions: feedback.contradictions, invalid: feedback.invalid },
+    feedback_counts:
+      feedback === null
+        ? null
+        : { weak: feedback.weak, contradictions: feedback.contradictions, invalid: feedback.invalid },
   });
 }
 
@@ -350,7 +369,8 @@ export function gate2EventFor(
  */
 export function sealFeedbackFor(result: Gate2Result): SealFeedback | null {
   if (result.status !== "fail" || result.route !== "back_to_S2") return null;
-  const reasonOf = (code: Gate2ReasonCode): Gate2Reason | undefined => result.reasons.find((reason) => reason.code === code);
+  const reasonOf = (code: Gate2ReasonCode): Gate2Reason | undefined =>
+    result.reasons.find((reason) => reason.code === code);
   return {
     unlinked_decision_ids: [...(reasonOf("unlinked_decisions")?.decision_ids ?? [])],
     weak: reasonOf("null_impl_passes")?.count ?? 0,
@@ -422,7 +442,12 @@ function watchRefusals(runner: ScenarioRunner, id: FixtureId, seen: ProbeWatch):
   };
 }
 
-async function probeOnce(runner: ScenarioRunner, id: FixtureId, scenario: StoredScenario, limits?: StepLimits): Promise<ProbeRun> {
+async function probeOnce(
+  runner: ScenarioRunner,
+  id: FixtureId,
+  scenario: StoredScenario,
+  limits?: StepLimits,
+): Promise<ProbeRun> {
   const seen: ProbeWatch = { code: null, deviated: false };
   try {
     const run = await runScenario(watchRefusals(runner, id, seen), { kind: "fixture", id }, scenario, limits);
@@ -443,7 +468,11 @@ async function probeOnce(runner: ScenarioRunner, id: FixtureId, scenario: Stored
  * little; a canary that anything passes means the judge is broken or gamed. The matching is `runScenario`'s, not the
  * adapter's, so a double and the real host adapter are judged the same way. Arrays keep the order of `active`.
  */
-export async function runGate2Probes(runner: ScenarioRunner, active: readonly StoredScenario[], limits?: StepLimits): Promise<Gate2Probes> {
+export async function runGate2Probes(
+  runner: ScenarioRunner,
+  active: readonly StoredScenario[],
+  limits?: StepLimits,
+): Promise<Gate2Probes> {
   assertFixtureRunner(runner);
   const jobs: { id: FixtureId; scenario: StoredScenario }[] = [];
   for (const scenario of active) {
@@ -489,11 +518,13 @@ export interface Gate2Context {
  */
 export async function runGate2(ctx: Gate2Context): Promise<Gate2Result> {
   const env = ctx.env ?? locationEnv(ctx.location);
-  (ctx.preflight ??
+  (
+    ctx.preflight ??
     (() => {
       assertStateTreeClean(ctx.location, env);
       assertNoSealedInRepo(ctx.location, env);
-    }))();
+    })
+  )();
   assertFixtureRunner(ctx.runner);
 
   const events = new Ledger(ctx.location.dir).readVerified();

@@ -6,7 +6,11 @@ describe("canaryHits", () => {
     expect(canaryHits(`it measured ${CANARY.reading}`)).toContain("reading");
     expect(canaryHits(`then ${CANARY.nextReading}`)).toContain("next reading");
     expect(canaryHits(`under ${CANARY.target} ms`)).toContain("target");
-    expect(canaryHits(`lower ${CANARY.metricId} please`)).toEqual(["metric id", "metric word zebra", "metric word quokka"]);
+    expect(canaryHits(`lower ${CANARY.metricId} please`)).toEqual([
+      "metric id",
+      "metric word zebra",
+      "metric word quokka",
+    ]);
     expect(canaryHits(`edit ${CANARY.watchedPath}`)).toEqual(["watched path"]);
   });
 

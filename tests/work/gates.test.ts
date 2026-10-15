@@ -44,7 +44,15 @@ const allPass = (): Record<GateId, GateStatus> => ({
 
 /** A context for a gate that needs no fixture. */
 const bareContext = (over: Partial<GateContext> = {}): GateContext =>
-  ({ runId: "run-1", round: 0, resumed: false, inputs: emptyEvidenceInputs(), events: [], now: NOW, ...over }) as unknown as GateContext;
+  ({
+    runId: "run-1",
+    round: 0,
+    resumed: false,
+    inputs: emptyEvidenceInputs(),
+    events: [],
+    now: NOW,
+    ...over,
+  }) as unknown as GateContext;
 
 /** A context over a real decision fixture, with the events read fresh each time. */
 const fixtureContext = (f: DecisionFixture): GateContext => ({
@@ -74,9 +82,20 @@ describe("line vocabulary", () => {
   it("starts every input as not produced, never as a pass", () => {
     const inputs = emptyEvidenceInputs();
     expect(inputs.isolation_level).toBe("unmeasured");
-    expect(inputs.audit).toEqual({ canary_hits: NOT_RUN, tests_edited: NOT_RUN, prove_test: NOT_RUN, judge_config_touched: NOT_RUN });
+    expect(inputs.audit).toEqual({
+      canary_hits: NOT_RUN,
+      tests_edited: NOT_RUN,
+      prove_test: NOT_RUN,
+      judge_config_touched: NOT_RUN,
+    });
     expect(inputs.sealed).toEqual({ train: NOT_RUN, test: NOT_RUN });
-    for (const key of ["high_risk_paths_touched", "noise_check", "gate_line", "plan_summary", "implementer_notes"] as const) {
+    for (const key of [
+      "high_risk_paths_touched",
+      "noise_check",
+      "gate_line",
+      "plan_summary",
+      "implementer_notes",
+    ] as const) {
       expect(inputs[key]).toBe(NOT_RUN);
     }
   });
@@ -195,7 +214,11 @@ describe("gate1 (the real adapter)", () => {
     const f = setupDecisionItem();
     closeInterface(f);
     addOpen(f, "d-cache");
-    expect(await gate1().evaluate(fixtureContext(f))).toEqual({ gate: "GATE-1", verdict: "fail", reasons: ["j2_open"] });
+    expect(await gate1().evaluate(fixtureContext(f))).toEqual({
+      gate: "GATE-1",
+      verdict: "fail",
+      reasons: ["j2_open"],
+    });
     expect(existsSync(needsHumanFile(f.item.dir))).toBe(true);
 
     resolveOpen(f, "d-cache");
@@ -207,14 +230,22 @@ describe("gate1 (the real adapter)", () => {
     const f = setupDecisionItem();
     closeInterface(f);
     rmSync(goalLockFile(f.fx.location.dir, f.fx.goalId));
-    expect(await gate1().evaluate(fixtureContext(f))).toEqual({ gate: "GATE-1", verdict: "not_run", reasons: ["gate_error"] });
+    expect(await gate1().evaluate(fixtureContext(f))).toEqual({
+      gate: "GATE-1",
+      verdict: "not_run",
+      reasons: ["gate_error"],
+    });
   });
 });
 
 describe("default gates", () => {
   it("the unimplemented gate is not_run not_implemented", async () => {
     for (const id of ["GATE-2", "GATE-3"] as const) {
-      expect(await unimplementedGate(id).evaluate(bareContext())).toEqual({ gate: id, verdict: "not_run", reasons: ["not_implemented"] });
+      expect(await unimplementedGate(id).evaluate(bareContext())).toEqual({
+        gate: id,
+        verdict: "not_run",
+        reasons: ["not_implemented"],
+      });
     }
   });
 
@@ -224,7 +255,11 @@ describe("default gates", () => {
     for (const [key, gate] of Object.entries(gates)) expect(gate.id).toBe(key);
     // GATE-2 is the real gate, not the placeholder: it does not answer not_implemented (the real one needs a real item, so it is only registered here).
     expect(gates["GATE-2"].evaluate.toString()).not.toBe(unimplementedGate("GATE-2").evaluate.toString());
-    expect(await gates["GATE-3"].evaluate(bareContext())).toEqual({ gate: "GATE-3", verdict: "not_run", reasons: ["not_implemented"] });
+    expect(await gates["GATE-3"].evaluate(bareContext())).toEqual({
+      gate: "GATE-3",
+      verdict: "not_run",
+      reasons: ["not_implemented"],
+    });
   });
 
   it("a GateResult can carry a stop route", () => {
@@ -234,9 +269,15 @@ describe("default gates", () => {
 
   it("lists exactly the gates that were replaced, in line order", () => {
     const defaults = defaultGates();
-    const stub = (id: "GATE-2" | "GATE-3"): Gate => ({ id, evaluate: () => ({ gate: id, verdict: "pass", reasons: [] }) });
+    const stub = (id: "GATE-2" | "GATE-3"): Gate => ({
+      id,
+      evaluate: () => ({ gate: id, verdict: "pass", reasons: [] }),
+    });
     expect(injectedGateIds({ ...defaults }, defaults)).toEqual([]);
     expect(injectedGateIds({ ...defaults, "GATE-3": stub("GATE-3") }, defaults)).toEqual(["GATE-3"]);
-    expect(injectedGateIds({ ...defaults, "GATE-3": stub("GATE-3"), "GATE-2": stub("GATE-2") }, defaults)).toEqual(["GATE-2", "GATE-3"]);
+    expect(injectedGateIds({ ...defaults, "GATE-3": stub("GATE-3"), "GATE-2": stub("GATE-2") }, defaults)).toEqual([
+      "GATE-2",
+      "GATE-3",
+    ]);
   });
 });

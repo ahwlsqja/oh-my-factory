@@ -24,13 +24,22 @@ const HOUR = 3_600_000;
 const MET: EnforcementOptions = { reading: 80, target: 100, wallTime: "30d", minObservation: "1h" };
 
 /** Ticks until `ticks` have run or the goal stops continuing, advancing the clock by `stepMs` after each. */
-async function observe(fx: EnforcementFixture, ticks: number, stepMs: number): Promise<{ results: TickResult[]; modelCalls: () => number }> {
+async function observe(
+  fx: EnforcementFixture,
+  ticks: number,
+  stepMs: number,
+): Promise<{ results: TickResult[]; modelCalls: () => number }> {
   const config = readConfig(fx.location.dir);
   const model = unusedModel();
   const results: TickResult[] = [];
   let at = Date.now();
   for (let i = 0; i < ticks; i++) {
-    const result = await tickGoal(fx.location, GOAL_ID, { runner: "host", reconciler: model.reconciler, config, now: () => new Date(at) });
+    const result = await tickGoal(fx.location, GOAL_ID, {
+      runner: "host",
+      reconciler: model.reconciler,
+      config,
+      now: () => new Date(at),
+    });
     results.push(result);
     if (result.status !== "continue") break;
     at += stepMs;
@@ -38,7 +47,8 @@ async function observe(fx: EnforcementFixture, ticks: number, stepMs: number): P
   return { results, modelCalls: model.calls };
 }
 
-const guardrailsOf = (fx: EnforcementFixture): unknown[] => ledgerEvents(fx, "goal.measured").map((e) => e.payload.guardrails);
+const guardrailsOf = (fx: EnforcementFixture): unknown[] =>
+  ledgerEvents(fx, "goal.measured").map((e) => e.payload.guardrails);
 
 describe("E4 unevaluated-is-undetermined", () => {
   it("never succeeds while the bands file exists but the baseline window holds too few points", async () => {
@@ -93,7 +103,11 @@ describe("E4 unevaluated-is-undetermined", () => {
       Array.from({ length: MIN_BASELINE_POINTS }, () => "guardrail_unevaluated"),
     );
     expect(results[MIN_BASELINE_POINTS]?.reason_code).toBe("consecutive");
-    expect(guardrailsOf(fx)).toEqual([...Array.from({ length: MIN_BASELINE_POINTS }, () => "unevaluated"), "pass", "pass"]);
+    expect(guardrailsOf(fx)).toEqual([
+      ...Array.from({ length: MIN_BASELINE_POINTS }, () => "unevaluated"),
+      "pass",
+      "pass",
+    ]);
     const candidate = ledgerEvents(fx, "goal.success_candidate");
     expect(candidate).toHaveLength(1);
     expect(candidate[0]?.payload).toMatchObject({ attribution: "before_after", correlational: true });

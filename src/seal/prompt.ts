@@ -2,7 +2,13 @@ import { canonicalize } from "../core/canonical-json.js";
 import { type LeakContext, lintDecisionStrings } from "../decision/leak-lint.js";
 import { renderSpec } from "../decision/spec-md.js";
 import { findDecision } from "../decision/state.js";
-import { DECISION_ID_PATTERN, INTERFACE_DECISION_ID, type DecisionState, type InterfaceContract, isQuantitative } from "../decision/types.js";
+import {
+  DECISION_ID_PATTERN,
+  INTERFACE_DECISION_ID,
+  type DecisionState,
+  type InterfaceContract,
+  isQuantitative,
+} from "../decision/types.js";
 import type { SealFeedback } from "../scenario/types.js";
 import { renderIntent } from "../work/intent-md.js";
 import { lintCandidate } from "../work/seed-lint.js";
@@ -26,7 +32,12 @@ export interface SealInputs {
   readonly feedback?: SealFeedback;
 }
 
-export type SealInputErrorCode = "forbidden_input" | "interface_missing" | "interface_not_supported" | "intent_leak" | "too_large";
+export type SealInputErrorCode =
+  | "forbidden_input"
+  | "interface_missing"
+  | "interface_not_supported"
+  | "intent_leak"
+  | "too_large";
 
 /** The message is the code and nothing else, so no intent text reaches a log through an error. */
 export class SealInputError extends Error {
@@ -39,7 +50,14 @@ export class SealInputError extends Error {
 /** Intent, spec and contract together. The cap only stops a runaway item; a real one is a few KB. */
 export const MAX_SEAL_INPUT_CHARS = 200_000;
 
-const INPUT_KEYS: readonly string[] = ["intent", "spec", "contract", "linkable_decision_ids", "quantitative_decision_ids", "feedback"];
+const INPUT_KEYS: readonly string[] = [
+  "intent",
+  "spec",
+  "contract",
+  "linkable_decision_ids",
+  "quantitative_decision_ids",
+  "feedback",
+];
 
 /** The YAML block at the top of `intent.md`: goal id, work id, fingerprint, rationale and affected paths. The author sees none of it. */
 const FRONT_MATTER = /^---\n[\s\S]*?\n---\n/;
@@ -55,7 +73,12 @@ const FRONT_MATTER = /^---\n[\s\S]*?\n---\n/;
  * - `too_large`.
  * GATE-1 has already passed when the stage calls this, so no resolved record is withheld from the spec.
  */
-export function sealInputsFor(item: WorkItem, state: DecisionState, leak: LeakContext, feedback?: SealFeedback): SealInputs {
+export function sealInputsFor(
+  item: WorkItem,
+  state: DecisionState,
+  leak: LeakContext,
+  feedback?: SealFeedback,
+): SealInputs {
   const record = findDecision(state, INTERFACE_DECISION_ID);
   const contract = record !== null && record.status === "resolved" ? record.interface : null;
   if (contract === null) throw new SealInputError("interface_missing");
@@ -68,15 +91,20 @@ export function sealInputsFor(item: WorkItem, state: DecisionState, leak: LeakCo
 
   const intent = renderIntent(item.intent).replace(FRONT_MATTER, "");
   const spec = renderSpec(state, { title: item.front.title }, leak);
-  if (intent.length + spec.length + canonicalize(contract).length > MAX_SEAL_INPUT_CHARS) throw new SealInputError("too_large");
+  if (intent.length + spec.length + canonicalize(contract).length > MAX_SEAL_INPUT_CHARS)
+    throw new SealInputError("too_large");
 
   const resolved = state.decisions.filter((decision) => decision.status === "resolved");
   return {
     intent,
     spec,
     contract,
-    linkable_decision_ids: resolved.filter((decision) => !isQuantitative(decision.class)).map((decision) => decision.id),
-    quantitative_decision_ids: resolved.filter((decision) => isQuantitative(decision.class)).map((decision) => decision.id),
+    linkable_decision_ids: resolved
+      .filter((decision) => !isQuantitative(decision.class))
+      .map((decision) => decision.id),
+    quantitative_decision_ids: resolved
+      .filter((decision) => isQuantitative(decision.class))
+      .map((decision) => decision.id),
     ...(feedback === undefined ? {} : { feedback }),
   };
 }
@@ -116,7 +144,10 @@ function idLines(ids: readonly string[]): string[] {
 /** Ids and counts only: anything else in a feedback object would carry scenario content into the next prompt. */
 function feedbackLines(feedback: SealFeedback): string[] {
   const counts = [feedback.weak, feedback.contradictions, feedback.invalid];
-  if (!feedback.unlinked_decision_ids.every((id) => DECISION_ID_PATTERN.test(id)) || !counts.every((n) => Number.isInteger(n) && n >= 0)) {
+  if (
+    !feedback.unlinked_decision_ids.every((id) => DECISION_ID_PATTERN.test(id)) ||
+    !counts.every((n) => Number.isInteger(n) && n >= 0)
+  ) {
     throw new SealInputError("forbidden_input");
   }
   return [

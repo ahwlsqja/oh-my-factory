@@ -4,7 +4,14 @@ import { describe, expect, it } from "vitest";
 import { parseConfig } from "../../src/core/config.js";
 import { Ledger } from "../../src/core/ledger.js";
 import { NotAGitRepoError, projectDir, resolveProject } from "../../src/core/paths.js";
-import { DEFAULT_CONFIG, PROJECT_SUBDIRS, initProject, projectProblem, readProjectStatus, requireProject } from "../../src/core/project.js";
+import {
+  DEFAULT_CONFIG,
+  PROJECT_SUBDIRS,
+  initProject,
+  projectProblem,
+  readProjectStatus,
+  requireProject,
+} from "../../src/core/project.js";
 import { makeGitRepo, makeTempDir } from "../helpers/tmp.js";
 
 describe("initProject", () => {
@@ -47,10 +54,7 @@ describe("initProject", () => {
     writeFileSync(join(dir, "ledger.jsonl"), '{"schema_version":1,"se');
     const result = initProject(repo, env);
     expect(result.created).toBe(true);
-    expect(new Ledger(dir).readVerified().map((e) => e.type)).toEqual([
-      "ledger.tail_discarded",
-      "project.initialized",
-    ]);
+    expect(new Ledger(dir).readVerified().map((e) => e.type)).toEqual(["ledger.tail_discarded", "project.initialized"]);
   });
 
   it("repairs a deleted directory on re-init", () => {

@@ -12,7 +12,8 @@ import { commitAll } from "../helpers/tmp.js";
 
 // Spec §4.6: tampering with metric code is a regime change that J1 must approve; a metric the person did
 // not approve is never measured; a lock that does not match the ledger stops the measurement.
-const measured = (dir: string): number => new Ledger(dir).readVerified().filter((e) => e.type === "metric.measured").length;
+const measured = (dir: string): number =>
+  new Ledger(dir).readVerified().filter((e) => e.type === "metric.measured").length;
 
 describe("E1 metric-tamper-stops", () => {
   it("never measures a metric that J1 did not approve", () => {

@@ -7,7 +7,14 @@ import { sealLockFile } from "../../src/seal/seal.js";
 import { s2Station } from "../../src/seal/s2-station.js";
 import { emptyEvidenceInputs } from "../../src/work/classify.js";
 import type { StationContext, StationResult } from "../../src/work/sequencer.js";
-import { commandAuthor, countingSession, fixedIds, sealFixture, startWork, type SealFixture } from "../helpers/seal-fixture.js";
+import {
+  commandAuthor,
+  countingSession,
+  fixedIds,
+  sealFixture,
+  startWork,
+  type SealFixture,
+} from "../helpers/seal-fixture.js";
 import { digest } from "../helpers/stored-scenario.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
@@ -28,7 +35,10 @@ function ctxFor(s: SealFixture): StationContext {
   };
 }
 
-async function runStation(s: SealFixture, session = commandAuthor("from_feedback", makeTempDir("omf-rec-"))): Promise<StationResult> {
+async function runStation(
+  s: SealFixture,
+  session = commandAuthor("from_feedback", makeTempDir("omf-rec-")),
+): Promise<StationResult> {
   const station = s2Station({ location: s.f.fx.location, session, ids: fixedIds() });
   expect(station.id).toBe("S2");
   return station.run(ctxFor(s));
@@ -85,7 +95,10 @@ describe("s2Station: each stop maps to its code", () => {
     }
 
     const slow = sealFixture();
-    expect(await runStation(slow, countingSession({ ok: false, code: "timeout", durationMs: 1 }))).toEqual({ kind: "blocked", reason_code: "gate_blocked" });
+    expect(await runStation(slow, countingSession({ ok: false, code: "timeout", durationMs: 1 }))).toEqual({
+      kind: "blocked",
+      reason_code: "gate_blocked",
+    });
 
     const hostile = sealFixture();
     writeFileSync(join(hostile.f.fx.repo, "notes.txt"), `left over: ${"omf-canary-"}${"a".repeat(32)}\n`);

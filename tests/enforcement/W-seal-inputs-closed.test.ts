@@ -15,7 +15,11 @@ import { countingSession, depsFor, sealFixture } from "../helpers/seal-fixture.j
 
 function inputsOf(s: ReturnType<typeof sealFixture>): SealInputs {
   const events = s.f.fx.ledger.readVerified();
-  return sealInputsFor(s.f.item, foldDecisions(events, s.f.scope), loadLeakContext(s.f.fx.location.dir, s.f.fx.goalId, events));
+  return sealInputsFor(
+    s.f.item,
+    foldDecisions(events, s.f.scope),
+    loadLeakContext(s.f.fx.location.dir, s.f.fx.goalId, events),
+  );
 }
 
 describe("W-seal-inputs-closed", () => {
@@ -53,7 +57,8 @@ describe("W-seal-inputs-closed", () => {
       expect(prompt, rule).toContain(rule);
     }
     expect(prompt).toContain("- d-interface");
-    for (const hidden of [s.f.fx.repo, s.f.fx.location.dir, s.f.workId, s.f.fx.goalId]) expect(prompt).not.toContain(hidden);
+    for (const hidden of [s.f.fx.repo, s.f.fx.location.dir, s.f.workId, s.f.fx.goalId])
+      expect(prompt).not.toContain(hidden);
   });
 
   it("renders the spec from the ledger: a forged spec.md and a plan.md change nothing", () => {
@@ -69,14 +74,29 @@ describe("W-seal-inputs-closed", () => {
   it("an http interface and a leaking intent end in blocked_input with the author never called", async () => {
     const http = sealFixture("http");
     const httpSession = countingSession();
-    expect(await runSealStage(depsFor(http, httpSession))).toEqual({ status: "blocked_input", code: "interface_not_supported" });
+    expect(await runSealStage(depsFor(http, httpSession))).toEqual({
+      status: "blocked_input",
+      code: "interface_not_supported",
+    });
 
     const leaky = sealFixture();
-    const item = { ...leaky.f.item, intent: { ...leaky.f.item.intent, candidate: { ...leaky.f.item.intent.candidate, problem: `Lower ${CANARY.metricId} across the page.` } } };
+    const item = {
+      ...leaky.f.item,
+      intent: {
+        ...leaky.f.item.intent,
+        candidate: { ...leaky.f.item.intent.candidate, problem: `Lower ${CANARY.metricId} across the page.` },
+      },
+    };
     const leakySession = countingSession();
-    expect(await runSealStage(depsFor(leaky, leakySession, { item }))).toEqual({ status: "blocked_input", code: "intent_leak" });
+    expect(await runSealStage(depsFor(leaky, leakySession, { item }))).toEqual({
+      status: "blocked_input",
+      code: "intent_leak",
+    });
 
-    for (const [s, session] of [[http, httpSession], [leaky, leakySession]] as const) {
+    for (const [s, session] of [
+      [http, httpSession],
+      [leaky, leakySession],
+    ] as const) {
       expect(session.calls).toHaveLength(0);
       expect(s.f.fx.ledger.readVerified().filter((event) => event.type.startsWith("seal."))).toEqual([]);
     }

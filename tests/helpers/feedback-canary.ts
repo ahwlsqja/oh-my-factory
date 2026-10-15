@@ -120,9 +120,13 @@ export function plantedScenario(
 
 /** Every value planted in one scenario, for substring checks. */
 export function plantedOf(scenario: FakeVaultScenario): string[] {
-  return [scenario.scenario_id, scenario.step.argv[1] ?? "", ...scenario.step.stdin.split(" "), scenario.step.expect_stdout, scenario.step.note].filter(
-    (value) => value !== "",
-  );
+  return [
+    scenario.scenario_id,
+    scenario.step.argv[1] ?? "",
+    ...scenario.step.stdin.split(" "),
+    scenario.step.expect_stdout,
+    scenario.step.note,
+  ].filter((value) => value !== "");
 }
 
 export function makeSet(
@@ -139,7 +143,9 @@ export function makeSet(
 
 /** Stands in for the vault's digest of the split: sha256 over the sorted opaque ids. A hex digest holds no id text. */
 export function digestOf(ids: readonly string[]): string {
-  return createHash("sha256").update([...ids].sort().join("\n")).digest("hex");
+  return createHash("sha256")
+    .update([...ids].sort().join("\n"))
+    .digest("hex");
 }
 
 /** k = 3 repetitions: `passing` indexes pass all three, `flaky` indexes disagree, the rest fail all three. */
@@ -177,6 +183,10 @@ export function toResults(scenarios: readonly FakeVaultScenario[], verdicts: rea
       return cls === undefined ? [] : [cls];
     });
     const passes = verdict.reps.filter(Boolean).length;
-    return { category: categoryOf(linked), passed: passes === verdict.reps.length, flaky: passes > 0 && passes < verdict.reps.length };
+    return {
+      category: categoryOf(linked),
+      passed: passes === verdict.reps.length,
+      flaky: passes > 0 && passes < verdict.reps.length,
+    };
   });
 }

@@ -10,7 +10,19 @@ export type GateId = (typeof GATE_IDS)[number];
 export type NodeId = StationId | GateId;
 
 /** The one legal order. S3 opens a round; S6 may ask for another (back to S3); a GATE-2 fail goes back to S2. */
-export const LINE_ORDER: readonly NodeId[] = ["S1", "GATE-1", "S2", "GATE-2", "S3", "S4", "S5", "GATE-3", "S6", "GATE-4", "S7"];
+export const LINE_ORDER: readonly NodeId[] = [
+  "S1",
+  "GATE-1",
+  "S2",
+  "GATE-2",
+  "S3",
+  "S4",
+  "S5",
+  "GATE-3",
+  "S6",
+  "GATE-4",
+  "S7",
+];
 
 /**
  * Round-scoped state is reset in the same step that opens a round (M3b2-D5), so a round-1 result can never satisfy

@@ -70,11 +70,19 @@ function readJson<T>(path: string, schema: string, what: string): T | null {
 }
 
 export function readProposal(projectDir: string, metricId: string): MetricProposal | null {
-  return readJson<MetricProposal>(proposalFile(projectDir, metricId), "metric-proposal.schema.json", `proposal for ${metricId}`);
+  return readJson<MetricProposal>(
+    proposalFile(projectDir, metricId),
+    "metric-proposal.schema.json",
+    `proposal for ${metricId}`,
+  );
 }
 
 export function readLock(projectDir: string, goalId: string, metricId: string): MetricLock | null {
-  return readJson<MetricLock>(lockFile(projectDir, goalId, metricId), "metric-lock.schema.json", `lock for ${metricId}`);
+  return readJson<MetricLock>(
+    lockFile(projectDir, goalId, metricId),
+    "metric-lock.schema.json",
+    `lock for ${metricId}`,
+  );
 }
 
 export function writeLock(projectDir: string, lock: MetricLock): void {
@@ -101,12 +109,21 @@ export function proposeMetric(
     throw new MetricError(`invalid metric id ${metric.metric_id}: use m-<lowercase-words>`);
   }
   if (!owner.startsWith("human:")) throw new MetricError(`only a person proposes a metric in v0.1; actor was ${owner}`);
-  const proposal: MetricProposal = { schema_version: 1, ...definitionOf(metric), owner, proposed_at: now.toISOString() };
+  const proposal: MetricProposal = {
+    schema_version: 1,
+    ...definitionOf(metric),
+    owner,
+    proposed_at: now.toISOString(),
+  };
   const check = validate("metric-proposal.schema.json", proposal);
   if (!check.ok) throw new MetricError(`invalid metric proposal: ${check.errors}`);
   ledger.appendWith(() => {
     writePrivateFile(proposalFile(projectDir, metric.metric_id), `${JSON.stringify(proposal, null, 2)}\n`);
-    return { actor: owner, type: "metric.proposed", payload: { metric_id: metric.metric_id, sha256: metricSha256(proposal) } };
+    return {
+      actor: owner,
+      type: "metric.proposed",
+      payload: { metric_id: metric.metric_id, sha256: metricSha256(proposal) },
+    };
   });
   return proposal;
 }
@@ -125,7 +142,8 @@ export function lockedSha256(
 ): string | null {
   let sha: string | null = null;
   for (const event of events) {
-    if (event.type !== "metric.locked" || event.payload.goal_id !== goalId || event.payload.metric_id !== metricId) continue;
+    if (event.type !== "metric.locked" || event.payload.goal_id !== goalId || event.payload.metric_id !== metricId)
+      continue;
     if (event.payload.regime !== regime) continue;
     if (typeof event.payload.sha256 === "string") sha = event.payload.sha256;
   }

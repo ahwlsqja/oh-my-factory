@@ -85,15 +85,26 @@ describe("bands files", () => {
         "",
       ].join("\n"),
     );
-    expect(readBands(dir, "g-a", "m-errors")).toMatchObject({ baseline: "rolling_30d", tiers: { "3sigma": { action: "propose" } } });
+    expect(readBands(dir, "g-a", "m-errors")).toMatchObject({
+      baseline: "rolling_30d",
+      tiers: { "3sigma": { action: "propose" } },
+    });
     expect(baselineWindowMs("rolling_30d")).toBe(30 * 86_400_000);
   });
 
   it("rejects a file for another metric or with an unknown action", () => {
     const dir = makeTempDir();
-    write(dir, "m-errors", "metric: m-other\nbaseline: rolling_30d\nrules: western_electric\ntiers:\n  1sigma: { action: log }\n");
+    write(
+      dir,
+      "m-errors",
+      "metric: m-other\nbaseline: rolling_30d\nrules: western_electric\ntiers:\n  1sigma: { action: log }\n",
+    );
     expect(() => readBands(dir, "g-a", "m-errors")).toThrow(/is for metric m-other/);
-    write(dir, "m-errors", "metric: m-errors\nbaseline: rolling_30d\nrules: western_electric\ntiers:\n  1sigma: { action: deploy }\n");
+    write(
+      dir,
+      "m-errors",
+      "metric: m-errors\nbaseline: rolling_30d\nrules: western_electric\ntiers:\n  1sigma: { action: deploy }\n",
+    );
     expect(() => readBands(dir, "g-a", "m-errors")).toThrow(BandsError);
   });
 });

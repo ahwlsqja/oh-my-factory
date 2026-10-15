@@ -5,12 +5,7 @@ import { sha256Hex } from "../../src/core/canonical-json.js";
 import { auditGoal } from "../../src/goal/audit.js";
 import { lockGoal } from "../../src/goal/goal-lock.js";
 import { lockFile } from "../../src/goal/metrics.js";
-import {
-  type Governance,
-  GovernanceError,
-  governanceDrift,
-  readGovernance,
-} from "../../src/work/governance.js";
+import { type Governance, GovernanceError, governanceDrift, readGovernance } from "../../src/work/governance.js";
 import { CANARY, canaryHits } from "../helpers/canary.js";
 import { type EnforcementFixture, setupEnforcementGoal } from "../helpers/enforcement-goal.js";
 import { type GoalFixture, type TickGoalFixture, setupGoal, setupTickGoal } from "../helpers/goal.js";
@@ -84,8 +79,18 @@ describe("readGovernance", () => {
   });
 
   it.each<[string, () => GoalFixture, (fx: GoalFixture) => void, string[]]>([
-    ["a missing config.toml", setupTickGoal, (fx) => rmSync(join(fx.location.dir, "config.toml")), ["config_unreadable"]],
-    ["config.toml that is not TOML", setupTickGoal, (fx) => writeFileSync(join(fx.location.dir, "config.toml"), "not = [valid"), ["config_unreadable"]],
+    [
+      "a missing config.toml",
+      setupTickGoal,
+      (fx) => rmSync(join(fx.location.dir, "config.toml")),
+      ["config_unreadable"],
+    ],
+    [
+      "config.toml that is not TOML",
+      setupTickGoal,
+      (fx) => writeFileSync(join(fx.location.dir, "config.toml"), "not = [valid"),
+      ["config_unreadable"],
+    ],
     ["a missing goal.md", setupTickGoal, (fx) => rmSync(fx.goalFile), ["goal_unreadable"]],
     ["a goal that was never approved", setupGoal, () => undefined, ["goal_not_approved"]],
     [
@@ -106,17 +111,32 @@ describe("readGovernance", () => {
       ["tampered"],
     ],
     ["a corrupt ledger", setupTickGoal, corruptLedger, ["ledger_corrupt"]],
-    ["a goal blocked on a person (J6)", setupTickGoal, (fx) => appendEscalation(fx.ledger, G, "J6", "no_progress"), ["goal_stopped"]],
+    [
+      "a goal blocked on a person (J6)",
+      setupTickGoal,
+      (fx) => appendEscalation(fx.ledger, G, "J6", "no_progress"),
+      ["goal_stopped"],
+    ],
     [
       "a failed goal",
       setupTickGoal,
-      (fx) => appendGoalEvent(fx.ledger, "goal.terminated", G, "omf", { tick_id: null, state: "failed", reason_code: "test" }),
+      (fx) =>
+        appendGoalEvent(fx.ledger, "goal.terminated", G, "omf", {
+          tick_id: null,
+          state: "failed",
+          reason_code: "test",
+        }),
       ["goal_stopped"],
     ],
     [
       "a finished goal",
       setupTickGoal,
-      (fx) => appendGoalEvent(fx.ledger, "goal.terminated", G, "omf", { tick_id: null, state: "finish", reason_code: "test" }),
+      (fx) =>
+        appendGoalEvent(fx.ledger, "goal.terminated", G, "omf", {
+          tick_id: null,
+          state: "finish",
+          reason_code: "test",
+        }),
       ["goal_stopped"],
     ],
   ])("stops with a closed code on %s", (_name, make, arrange, expected) => {
@@ -186,14 +206,19 @@ describe("GovernanceError leaks nothing from the goal or the audit", () => {
   /** The audit really does mention the canaries here, so an empty result below is not vacuous. */
   function auditMentionsCanary(fx: EnforcementFixture): boolean {
     const report = auditGoal(fx.location, fx.goalId, new Date());
-    return canaryHits(JSON.stringify([report.problems, report.regime_changes, report.watched_paths_changed])).length > 0;
+    return (
+      canaryHits(JSON.stringify([report.problems, report.regime_changes, report.watched_paths_changed])).length > 0
+    );
   }
 
   it("for a regime change on a watched path and a changed target", () => {
     const fx = setupEnforcementGoal();
     writeFileSync(join(fx.repo, CANARY.watchedPath), "cat bench/reading.txt # edited\n");
     commitAll(fx.repo, "edit the watched script");
-    writeFileSync(fx.goalPath + "/goal.md", readFileSync(fx.goalPath + "/goal.md", "utf8").replace(CANARY.target, "1234.5"));
+    writeFileSync(
+      fx.goalPath + "/goal.md",
+      readFileSync(fx.goalPath + "/goal.md", "utf8").replace(CANARY.target, "1234.5"),
+    );
     expect(auditMentionsCanary(fx)).toBe(true);
     const surface = surfaceOf(fx);
     expect(surface).toContain("needs_reapproval");

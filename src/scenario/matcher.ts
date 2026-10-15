@@ -14,7 +14,13 @@ import type { Expect, JsonScalar, StepObservation } from "./types.js";
  * repeats, back-references, lookaround or flags: they are refused at compile time, so a nested-quantifier
  * pattern never exists to be evaluated.
  */
-export type PatternError = "not_anchored" | "unsupported_construct" | "bad_escape" | "bad_class" | "too_long" | "empty_class";
+export type PatternError =
+  | "not_anchored"
+  | "unsupported_construct"
+  | "bad_escape"
+  | "bad_class"
+  | "too_long"
+  | "empty_class";
 export const MAX_PATTERN_LENGTH = 512;
 /** Characters (UTF-16 units). Longer input never matches, so a step costs a bounded amount. */
 export const MAX_MATCH_INPUT = 1024 * 1024;
@@ -41,7 +47,8 @@ type Parsed<T> = ({ ok: true; next: number } & T) | { ok: false; error: PatternE
 
 function escapeMatches(c: ClassEscape, cp: number): boolean {
   if (c === "d") return cp >= 0x30 && cp <= 0x39;
-  if (c === "w") return (cp >= 0x30 && cp <= 0x39) || (cp >= 0x41 && cp <= 0x5a) || (cp >= 0x61 && cp <= 0x7a) || cp === 0x5f;
+  if (c === "w")
+    return (cp >= 0x30 && cp <= 0x39) || (cp >= 0x41 && cp <= 0x5a) || (cp >= 0x61 && cp <= 0x7a) || cp === 0x5f;
   return cp === 0x20 || (cp >= 0x09 && cp <= 0x0d);
 }
 
@@ -54,7 +61,8 @@ function atomMatches(atom: Atom, cp: number): boolean {
     case "esc":
       return escapeMatches(atom.c, cp) !== atom.neg;
     case "class": {
-      const listed = atom.ranges.some(([lo, hi]) => cp >= lo && cp <= hi) || atom.escs.some((c) => escapeMatches(c, cp));
+      const listed =
+        atom.ranges.some(([lo, hi]) => cp >= lo && cp <= hi) || atom.escs.some((c) => escapeMatches(c, cp));
       return listed !== atom.neg;
     }
   }
@@ -119,7 +127,8 @@ function parseClass(cps: readonly string[], start: number): Parsed<{ atom: Atom 
 /** Parses one atom starting at `i` (not '$', which the caller handles). */
 function parseAtom(cps: readonly string[], i: number): Parsed<{ atom: Atom }> {
   const ch = cps[i] as string;
-  if (FORBIDDEN.has(ch) || ch === "^" || ch === "*" || ch === "+" || ch === "?") return { ok: false, error: "unsupported_construct" };
+  if (FORBIDDEN.has(ch) || ch === "^" || ch === "*" || ch === "+" || ch === "?")
+    return { ok: false, error: "unsupported_construct" };
   if (ch === "[") return parseClass(cps, i);
   if (ch === ".") return { ok: true, next: i + 1, atom: { t: "any" } };
   if (ch === "\\") {
@@ -135,7 +144,9 @@ function parseAtom(cps: readonly string[], i: number): Parsed<{ atom: Atom }> {
   return { ok: true, next: i + 1, atom: { t: "lit", cp: ch.codePointAt(0) as number } };
 }
 
-export function compilePattern(pattern: string): { ok: true; program: PatternProgram } | { ok: false; error: PatternError } {
+export function compilePattern(
+  pattern: string,
+): { ok: true; program: PatternProgram } | { ok: false; error: PatternError } {
   if (pattern.length > MAX_PATTERN_LENGTH) return { ok: false, error: "too_long" };
   const cps = Array.from(pattern);
   if (cps[0] !== "^") return { ok: false, error: "not_anchored" };
@@ -226,7 +237,8 @@ export function compileJsonPath(path: string): { ok: true; segments: readonly (s
       let j = i + 1;
       while (j < path.length && isDigit(path[j] as string)) j++;
       const digits = path.slice(i + 1, j);
-      if (path[j] !== "]" || digits === "" || digits.length > 6 || (digits.length > 1 && digits[0] === "0")) return { ok: false };
+      if (path[j] !== "]" || digits === "" || digits.length > 6 || (digits.length > 1 && digits[0] === "0"))
+        return { ok: false };
       segments.push(Number(digits));
       i = j + 1;
     } else {
@@ -237,14 +249,18 @@ export function compileJsonPath(path: string): { ok: true; segments: readonly (s
 }
 
 /** Own properties and in-range indexes only, so `$.toString` or `$.a.length` is never found. */
-export function evaluateJsonPath(doc: unknown, segments: readonly (string | number)[]): { found: true; value: unknown } | { found: false } {
+export function evaluateJsonPath(
+  doc: unknown,
+  segments: readonly (string | number)[],
+): { found: true; value: unknown } | { found: false } {
   let value: unknown = doc;
   for (const segment of segments) {
     if (typeof segment === "number") {
       if (!Array.isArray(value) || segment >= value.length) return { found: false };
       value = value[segment];
     } else {
-      if (value === null || typeof value !== "object" || Array.isArray(value) || !Object.hasOwn(value, segment)) return { found: false };
+      if (value === null || typeof value !== "object" || Array.isArray(value) || !Object.hasOwn(value, segment))
+        return { found: false };
       value = (value as Record<string, unknown>)[segment];
     }
   }
@@ -288,7 +304,8 @@ export function evaluateExpect(expectation: Expect, observation: StepObservation
       }
     }
     if (!parsed) failed.push("json_parse");
-    else if (!Object.entries(expectation.json_path).every(([path, expected]) => jsonPathHolds(doc, path, expected))) failed.push("json_path");
+    else if (!Object.entries(expectation.json_path).every(([path, expected]) => jsonPathHolds(doc, path, expected)))
+      failed.push("json_path");
   }
   return failed.length === 0 ? { pass: true } : { pass: false, failed };
 }

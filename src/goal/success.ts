@@ -10,7 +10,14 @@ export type SuccessVerdict =
   | { kind: "candidate"; first_met_at: string; consecutive: number; attribution: "before_after" }
   | {
       kind: "undetermined";
-      missing: ("target_not_met" | "guardrail_breach" | "guardrail_unevaluated" | "regime_pending" | "consecutive" | "min_observation")[];
+      missing: (
+        | "target_not_met"
+        | "guardrail_breach"
+        | "guardrail_unevaluated"
+        | "regime_pending"
+        | "consecutive"
+        | "min_observation"
+      )[];
     };
 
 type GuardrailsReading = "pass" | "breach" | "unevaluated" | "none";
@@ -50,9 +57,7 @@ function measuredIn(events: readonly LedgerEvent[], goalId: string, regime: numb
 /** Met, no pending regime change, and every guardrail either passes or there are none. */
 function qualifies(point: Measured): boolean {
   return (
-    point.target_met === true &&
-    !point.needs_reapproval &&
-    (point.guardrails === "pass" || point.guardrails === "none")
+    point.target_met === true && !point.needs_reapproval && (point.guardrails === "pass" || point.guardrails === "none")
   );
 }
 

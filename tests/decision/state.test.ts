@@ -116,7 +116,9 @@ describe("foldDecisions", () => {
     );
     const state = foldDecisions(events, SCOPE);
     expect(state.anomalies).toEqual([]);
-    expect(state.decisions.map((record) => [record.id, record.status, record.added_seq])).toEqual([["d-cache", "open", 6]]);
+    expect(state.decisions.map((record) => [record.id, record.status, record.added_seq])).toEqual([
+      ["d-cache", "open", 6],
+    ]);
     expect(foldDecisions(events, OTHER_SCOPE).decisions[0]?.status).toBe("resolved");
   });
 
@@ -185,7 +187,11 @@ describe("foldDecisions", () => {
     );
     expect(state.anomalies).toEqual([{ code: "already_closed", decision_id: "d-d", seq: 13 }]);
     expect(findDecision(state, "d-a")).toMatchObject({ status: "resolved", closed_seq: 9, deferral: null });
-    expect(findDecision(state, "d-b")).toMatchObject({ status: "deferred", closed_seq: 10, deferral: { default: "cache nothing" } });
+    expect(findDecision(state, "d-b")).toMatchObject({
+      status: "deferred",
+      closed_seq: 10,
+      deferral: { default: "cache nothing" },
+    });
     expect(findDecision(state, "d-c")).toMatchObject({ status: "na", closed_seq: 11, deferral: null });
     expect(findDecision(state, "d-d")).toMatchObject({ status: "resolved", closed_seq: 12 });
   });

@@ -65,7 +65,9 @@ describe("E2 canary-no-leak, goal-loop side", () => {
 
     // Not vacuous: the canaries exist on the host, the model was called, and the permitted summary was sent.
     const reports = joinTree(readTree(join(fx.goalPath, "reports")));
-    expect(canaryHits(reports), "host reports hold the real values").toEqual(expect.arrayContaining(["reading", "target"]));
+    expect(canaryHits(reports), "host reports hold the real values").toEqual(
+      expect.arrayContaining(["reading", "target"]),
+    );
     expect(readTree(join(fx.goalPath, "work")).size, "a work item was written").toBeGreaterThanOrEqual(2);
     const inputs = reconcileInputs(fx);
     expect(inputs).toHaveLength(1);
@@ -186,7 +188,8 @@ describe("E2 canary-no-leak, goal-loop side", () => {
       expect(result.created).toHaveLength(1);
       expect(joinTree(readTree(join(fx.goalPath, "work")))).toContain(CLEAN_TITLE);
       expect(result.rejected.map((r) => r.index)).toEqual([1, 2, 3, 4]);
-      for (const rejection of result.rejected) expect(["schema", "seed_lint"], `candidate ${rejection.index}`).toContain(rejection.filter);
+      for (const rejection of result.rejected)
+        expect(["schema", "seed_lint"], `candidate ${rejection.index}`).toContain(rejection.filter);
 
       // Positive control: the model really said them, and the raw output is kept on the host.
       expect(canaryHits(reconcileTexts(fx, "output").join("\n"))).toEqual(
@@ -210,7 +213,14 @@ describe("E2 canary-no-leak, goal-loop side", () => {
       const rejected = ledgerEvents(fx, "candidate.rejected");
       expect(rejected).toHaveLength(4);
       for (const event of rejected) {
-        expect(Object.keys(event.payload).sort()).toEqual(["filter", "fingerprint", "goal_id", "index", "reason_code", "tick_id"]);
+        expect(Object.keys(event.payload).sort()).toEqual([
+          "filter",
+          "fingerprint",
+          "goal_id",
+          "index",
+          "reason_code",
+          "tick_id",
+        ]);
       }
     });
 
@@ -225,8 +235,11 @@ describe("E2 canary-no-leak, goal-loop side", () => {
       expect(result.created).toHaveLength(1);
       expect(joinTree(readTree(join(fx.goalPath, "work")))).toContain(CLEAN_TITLE);
       expect(result.rejected.map((r) => r.index)).toEqual([1, 2]);
-      for (const rejection of result.rejected) expect(["schema", "seed_lint"], `candidate ${rejection.index}`).toContain(rejection.filter);
-      expect(canaryHits(reconcileTexts(fx, "output").join("\n"))).toEqual(expect.arrayContaining(["reading", "metric id"]));
+      for (const rejection of result.rejected)
+        expect(["schema", "seed_lint"], `candidate ${rejection.index}`).toContain(rejection.filter);
+      expect(canaryHits(reconcileTexts(fx, "output").join("\n"))).toEqual(
+        expect.arrayContaining(["reading", "metric id"]),
+      );
       expectNoCanary(surfacesOf(fx, run));
     });
 
@@ -252,7 +265,9 @@ describe("E2 canary-no-leak, goal-loop side", () => {
 
     it("holds a candidate aimed at the watched path for a person; the event names the rule, not the path", () => {
       const fx = setupEnforcementGoal();
-      useCandidates(fx, [{ ...CLEAN_CANDIDATE, title: "Rewrite the measurement script", affected_paths: [CANARY.watchedPath] }]);
+      useCandidates(fx, [
+        { ...CLEAN_CANDIDATE, title: "Rewrite the measurement script", affected_paths: [CANARY.watchedPath] },
+      ]);
 
       const run = tickCli(fx, ["--json"]);
       expect(run.code, run.stderr).toBe(1);
@@ -264,7 +279,11 @@ describe("E2 canary-no-leak, goal-loop side", () => {
 
       const created = ledgerEvents(fx, "work.created");
       expect(created).toHaveLength(1);
-      expect(created[0]?.payload).toMatchObject({ state: "awaiting_approval", risk_class: "high", risk_rules: ["watched-path"] });
+      expect(created[0]?.payload).toMatchObject({
+        state: "awaiting_approval",
+        risk_class: "high",
+        risk_rules: ["watched-path"],
+      });
       expectNoCanary({
         "cli stdout": run.stdout,
         "cli stderr": run.stderr,

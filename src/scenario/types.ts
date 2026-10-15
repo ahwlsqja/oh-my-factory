@@ -73,7 +73,13 @@ export type StepObservation =
   | { outcome: "timeout" | "output_limit" | "error" }
   | { outcome: "refused"; code: RefusalCode };
 
-export type AuthorFailureCode = "timeout" | "spawn_failed" | "nonzero_exit" | "no_output" | "output_limit" | "misconfigured";
+export type AuthorFailureCode =
+  | "timeout"
+  | "spawn_failed"
+  | "nonzero_exit"
+  | "no_output"
+  | "output_limit"
+  | "misconfigured";
 /** Ids and plain counts only; no scenario id, ref or text can be expressed in this type. */
 export interface SealFeedback {
   unlinked_decision_ids: readonly string[];

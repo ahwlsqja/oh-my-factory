@@ -20,7 +20,9 @@ describe("M2b design addendum", () => {
   });
 
   it("names only repository paths that exist", () => {
-    const named = [...text().matchAll(/`((?:src|tests|schemas|examples|scripts)\/[A-Za-z0-9_./-]+)`/g)].map((m) => m[1] ?? "");
+    const named = [...text().matchAll(/`((?:src|tests|schemas|examples|scripts)\/[A-Za-z0-9_./-]+)`/g)].map(
+      (m) => m[1] ?? "",
+    );
     expect(named.length).toBeGreaterThan(10);
     expect(named.filter((path) => !existsSync(new URL(path, ROOT)))).toEqual([]);
   });

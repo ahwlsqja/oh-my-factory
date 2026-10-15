@@ -1,69 +1,79 @@
 import type { StateStore } from "../adapters/state-markdown.js";
 import type { Ledger, LedgerEvent } from "../core/ledger.js";
 import { OPEN_STATES } from "../work/types.js";
-import { type Escalation, type JCode, type RunState, type Termination, isFinal, runStateFromEvents } from "./run-state.js";
+import {
+  type Escalation,
+  type JCode,
+  type RunState,
+  type Termination,
+  isFinal,
+  runStateFromEvents,
+} from "./run-state.js";
 
 /**
  * What each stop asks of a person (spec §6, D10). The default is always `stay stopped`: a stopped goal
  * refuses ticks until a person acts (J6). Questions are fixed text so nothing from a model or a metric
  * can reach the ledger through them.
  */
-export const ESCALATIONS: Readonly<Record<string, { j: JCode; question: string; options: string[]; default: string }>> = {
-  goal_not_approved: {
-    j: "J1",
-    question: "The goal has no approval yet. Review its metrics and approve it?",
-    options: ["approve the goal", "stay stopped"],
-    default: "stay stopped",
-  },
-  reapproval_required: {
-    j: "J1",
-    question: "The goal, a locked metric or a watched path changed since the approval. Approve the new version?",
-    options: ["re-approve the goal", "revert the change", "stay stopped"],
-    default: "stay stopped",
-  },
-  stale_goal: {
-    j: "J1",
-    question: "The goal looks stale (its age, the commits since, or the target moving away). Re-approve it as it is?",
-    options: ["re-approve the goal", "change the goal, then re-approve", "stay stopped"],
-    default: "stay stopped",
-  },
-  approach_unusable: {
-    j: "J1",
-    question: "The objective or the approach text holds a number or a metric name, so it cannot be shown to the model. Fix the text?",
-    options: ["edit goal.md, then resume", "stay stopped"],
-    default: "stay stopped",
-  },
-  wall_time_exceeded: {
-    j: "J8",
-    question: "The wall-time budget is used up. Raise it?",
-    options: ["raise the wall time, then resume", "stay stopped"],
-    default: "stay stopped",
-  },
-  rounds_exhausted: {
-    j: "J8",
-    question: "The rounds budget is used up. Raise it?",
-    options: ["raise the rounds, then resume", "stay stopped"],
-    default: "stay stopped",
-  },
-  disclosure_exhausted: {
-    j: "J8",
-    question: "The disclosure budget is used up. Raise it?",
-    options: ["raise the disclosure budget, then resume", "stay stopped"],
-    default: "stay stopped",
-  },
-  no_progress: {
-    j: "J6",
-    question: "The last model answer changed nothing that can be observed. Decide on the open work items and continue, or stop?",
-    options: ["decide on the open items, then resume", "cancel the goal", "stay stopped"],
-    default: "stay stopped",
-  },
-  repeated_signature: {
-    j: "J6",
-    question: "The same outcome repeated three times. Fix the cause and continue, or stop?",
-    options: ["fix the cause, then resume", "cancel the goal", "stay stopped"],
-    default: "stay stopped",
-  },
-};
+export const ESCALATIONS: Readonly<Record<string, { j: JCode; question: string; options: string[]; default: string }>> =
+  {
+    goal_not_approved: {
+      j: "J1",
+      question: "The goal has no approval yet. Review its metrics and approve it?",
+      options: ["approve the goal", "stay stopped"],
+      default: "stay stopped",
+    },
+    reapproval_required: {
+      j: "J1",
+      question: "The goal, a locked metric or a watched path changed since the approval. Approve the new version?",
+      options: ["re-approve the goal", "revert the change", "stay stopped"],
+      default: "stay stopped",
+    },
+    stale_goal: {
+      j: "J1",
+      question: "The goal looks stale (its age, the commits since, or the target moving away). Re-approve it as it is?",
+      options: ["re-approve the goal", "change the goal, then re-approve", "stay stopped"],
+      default: "stay stopped",
+    },
+    approach_unusable: {
+      j: "J1",
+      question:
+        "The objective or the approach text holds a number or a metric name, so it cannot be shown to the model. Fix the text?",
+      options: ["edit goal.md, then resume", "stay stopped"],
+      default: "stay stopped",
+    },
+    wall_time_exceeded: {
+      j: "J8",
+      question: "The wall-time budget is used up. Raise it?",
+      options: ["raise the wall time, then resume", "stay stopped"],
+      default: "stay stopped",
+    },
+    rounds_exhausted: {
+      j: "J8",
+      question: "The rounds budget is used up. Raise it?",
+      options: ["raise the rounds, then resume", "stay stopped"],
+      default: "stay stopped",
+    },
+    disclosure_exhausted: {
+      j: "J8",
+      question: "The disclosure budget is used up. Raise it?",
+      options: ["raise the disclosure budget, then resume", "stay stopped"],
+      default: "stay stopped",
+    },
+    no_progress: {
+      j: "J6",
+      question:
+        "The last model answer changed nothing that can be observed. Decide on the open work items and continue, or stop?",
+      options: ["decide on the open items, then resume", "cancel the goal", "stay stopped"],
+      default: "stay stopped",
+    },
+    repeated_signature: {
+      j: "J6",
+      question: "The same outcome repeated three times. Fix the cause and continue, or stop?",
+      options: ["fix the cause, then resume", "cancel the goal", "stay stopped"],
+      default: "stay stopped",
+    },
+  };
 
 /**
  * Stops the goal for a person: goal.escalated, then goal.terminated(blocked_on_user). The two appends are not
@@ -200,7 +210,13 @@ export function nextSteps(e: Escalation, goalId: string): string[] {
     case "disclosure_exhausted":
       return [`omf budget raise ${goalId} disclosure <n>`, resume];
     case "no_progress":
-      return [`omf work list ${goalId}`, "omf work approve <work_id>", "omf veto <work_id>", resume, `omf goal cancel ${goalId}`];
+      return [
+        `omf work list ${goalId}`,
+        "omf work approve <work_id>",
+        "omf veto <work_id>",
+        resume,
+        `omf goal cancel ${goalId}`,
+      ];
     case "repeated_signature":
       // An audit stop is repaired by approving again, which also restarts the breaker window.
       if (e.signature?.startsWith("audit|")) return [`omf goal audit ${goalId}`, `omf goal approve ${goalId}`, resume];

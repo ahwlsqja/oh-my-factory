@@ -13,9 +13,25 @@ const terminated = (ledger: Ledger, state: string, actor = "omf") =>
 describe("runStateFromEvents", () => {
   it("is running with no loop events, and counts goal.tick_started of this goal only", () => {
     const ledger = newLedger();
-    expect(stateOf(ledger)).toEqual({ status: "running", since: null, reason_code: null, open_escalation: null, ticks: 0 });
-    appendGoalEvent(ledger, "goal.tick_started", G, "omf", { tick_id: "t-1", regime: 1, runner: "host", config_sha256: "x" });
-    appendGoalEvent(ledger, "goal.tick_started", "g-other", "omf", { tick_id: "t-2", regime: 1, runner: "host", config_sha256: "x" });
+    expect(stateOf(ledger)).toEqual({
+      status: "running",
+      since: null,
+      reason_code: null,
+      open_escalation: null,
+      ticks: 0,
+    });
+    appendGoalEvent(ledger, "goal.tick_started", G, "omf", {
+      tick_id: "t-1",
+      regime: 1,
+      runner: "host",
+      config_sha256: "x",
+    });
+    appendGoalEvent(ledger, "goal.tick_started", "g-other", "omf", {
+      tick_id: "t-2",
+      regime: 1,
+      runner: "host",
+      config_sha256: "x",
+    });
     expect(stateOf(ledger).ticks).toBe(1);
   });
 

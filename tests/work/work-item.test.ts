@@ -30,9 +30,17 @@ const front: WorkItemFront = {
 describe("work item schema", () => {
   it("accepts a well-formed front matter, with and without an approval and a veto", () => {
     expect(validate("work-item.schema.json", front)).toEqual({ ok: true });
-    const approved = { ...front, state: "ready", approval: { approved_by: "human:dev", approved_at: front.created_at } };
+    const approved = {
+      ...front,
+      state: "ready",
+      approval: { approved_by: "human:dev", approved_at: front.created_at },
+    };
     expect(validate("work-item.schema.json", approved).ok).toBe(true);
-    const vetoed = { ...front, state: "vetoed", veto: { vetoed_by: "human:dev", vetoed_at: front.created_at, reason: "no" } };
+    const vetoed = {
+      ...front,
+      state: "vetoed",
+      veto: { vetoed_by: "human:dev", vetoed_at: front.created_at, reason: "no" },
+    };
     expect(validate("work-item.schema.json", vetoed).ok).toBe(true);
   });
 

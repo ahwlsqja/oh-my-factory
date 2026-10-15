@@ -117,7 +117,8 @@ function questionFor(workId: string, reasons: readonly Gate1Reason[]): string {
   });
   const ids: string[] = [];
   for (const reason of reasons) {
-    if ("decision_id" in reason && reason.decision_id !== null && !ids.includes(reason.decision_id)) ids.push(reason.decision_id);
+    if ("decision_id" in reason && reason.decision_id !== null && !ids.includes(reason.decision_id))
+      ids.push(reason.decision_id);
   }
   const decisions = ids.length === 0 ? "" : ` Decisions: ${ids.join(", ")}.`;
   return `Work item ${workId} cannot pass GATE-1: ${reasons.length} reason(s) need a person (J2). Reasons: ${counts.join(", ")}.${decisions}`;

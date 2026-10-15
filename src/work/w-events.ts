@@ -148,7 +148,10 @@ export function classifyWEvent(event: LedgerEvent): Classified {
 const STATE_BEARING: ReadonlySet<string> = new Set(["work.started", "work.submitted", "work.failed", "work.parked"]);
 
 /** The last started, submitted, failed or parked event of the item, or null. Repaired, reclaimed and resumed say nothing about state. */
-export function lastStateEvent(events: readonly LedgerEvent[], workId: string): Extract<Classified, { kind: "w" }> | null {
+export function lastStateEvent(
+  events: readonly LedgerEvent[],
+  workId: string,
+): Extract<Classified, { kind: "w" }> | null {
   for (let index = events.length - 1; index >= 0; index--) {
     const event = events[index];
     if (event === undefined) continue;

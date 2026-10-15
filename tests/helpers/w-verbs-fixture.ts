@@ -5,7 +5,12 @@ import { Ledger, type LedgerEvent } from "../../src/core/ledger.js";
 import type { LockOwner } from "../../src/core/lock.js";
 import type { ProjectLocation } from "../../src/core/paths.js";
 import { claimItem } from "../../src/work/claim.js";
-import { type ItemVerdict, type VerifiedItems, verifiedItems, verifyItemAgainstLedger } from "../../src/work/ledger-verify.js";
+import {
+  type ItemVerdict,
+  type VerifiedItems,
+  verifiedItems,
+  verifyItemAgainstLedger,
+} from "../../src/work/ledger-verify.js";
 import type { WorkItem, WorkState } from "../../src/work/types.js";
 import { type WEvent, wEvent } from "../../src/work/w-events.js";
 import { WError, type WContext } from "../../src/work/w-verbs.js";

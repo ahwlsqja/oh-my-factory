@@ -22,7 +22,10 @@ describe("W-small-category-merge: no released category is below 5", () => {
       expect(sum(merged), `iteration ${i}: totals, passes and flaky counts are preserved`).toEqual(sum(raw));
       expect(sum(merged).total).toBe(total);
       for (const category of merged) {
-        expect(category.total, `iteration ${i}: ${category.category} is below ${MIN_CATEGORY_SIZE}`).toBeGreaterThanOrEqual(MIN_CATEGORY_SIZE);
+        expect(
+          category.total,
+          `iteration ${i}: ${category.category} is below ${MIN_CATEGORY_SIZE}`,
+        ).toBeGreaterThanOrEqual(MIN_CATEGORY_SIZE);
         expect(DECISION_CLASSES).toContain(category.category);
       }
       expect(new Set(merged.map((c) => c.category)).size).toBe(merged.length);

@@ -18,13 +18,18 @@ function fixture(options: { email?: boolean } = {}): GoalFixture & { store: Retu
   return { ...fx, store: createMarkdownStore(fx.location.dir) };
 }
 
-const eventsOf = (fx: GoalFixture, type: string) => new Ledger(fx.location.dir).readVerified().filter((e) => e.type === type);
+const eventsOf = (fx: GoalFixture, type: string) =>
+  new Ledger(fx.location.dir).readVerified().filter((e) => e.type === type);
 
 describe("omf work list", () => {
   it("lists a goal's items, filters by state and prints JSON", () => {
     const fx = fixture();
     const ready = createRecorded(fx.ledger, fx.store, makeNewItem({ title: "Cache the render path" }));
-    const gated = createRecorded(fx.ledger, fx.store, makeNewItem({ title: "Update the CI workflow", risk: HIGH_RISK }));
+    const gated = createRecorded(
+      fx.ledger,
+      fx.store,
+      makeNewItem({ title: "Update the CI workflow", risk: HIGH_RISK }),
+    );
     const all = omf(["work", "list", "g-fast"], fx.repo, fx.home);
     expect(all.code).toBe(0);
     expect(all.stdout).toContain(`${ready.front.work_id}  ready`);
@@ -125,9 +130,17 @@ describe("runWorkApprove", () => {
   it("records the approval in the ledger first, then opens the item, and the result verifies", () => {
     const fx = fixture();
     const gated = createRecorded(fx.ledger, fx.store, makeNewItem({ risk: HIGH_RISK }));
-    const approved = runWorkApprove(fx.location, gated.front.work_id, "human:dev@example.com", new Date("2026-10-12T12:00:00.000Z"));
+    const approved = runWorkApprove(
+      fx.location,
+      gated.front.work_id,
+      "human:dev@example.com",
+      new Date("2026-10-12T12:00:00.000Z"),
+    );
     expect(approved.front.state).toBe("ready");
-    expect(approved.front.approval).toEqual({ approved_by: "human:dev@example.com", approved_at: "2026-10-12T12:00:00.000Z" });
+    expect(approved.front.approval).toEqual({
+      approved_by: "human:dev@example.com",
+      approved_at: "2026-10-12T12:00:00.000Z",
+    });
     const [event] = eventsOf(fx, "work.approved");
     expect(event).toMatchObject({
       actor: "human:dev@example.com",
@@ -152,7 +165,11 @@ describe("runWorkApprove", () => {
   it("refuses a non-person, an item that is not waiting, and an item the ledger does not account for, appending nothing", () => {
     const fx = fixture();
     const ready = createRecorded(fx.ledger, fx.store, makeNewItem({ title: "Cache the render path" }));
-    const gated = createRecorded(fx.ledger, fx.store, makeNewItem({ title: "Update the CI workflow", risk: HIGH_RISK }));
+    const gated = createRecorded(
+      fx.ledger,
+      fx.store,
+      makeNewItem({ title: "Update the CI workflow", risk: HIGH_RISK }),
+    );
     const before = new Ledger(fx.location.dir).readVerified().length;
     expect(() => runWorkApprove(fx.location, gated.front.work_id, "omf")).toThrow(/human actor/);
     expect(() => runWorkApprove(fx.location, ready.front.work_id, "human:dev")).toThrow(/only awaiting_approval/);
@@ -277,7 +294,9 @@ describe("a repairable item (ledger one W edge ahead of item.md)", () => {
       malformed: { work_id: string; reason: string }[];
     };
     expect(json.items).toEqual([]);
-    expect(json.malformed.map((entry) => [entry.work_id, entry.reason])).toEqual([[item.front.work_id, "w_repairable"]]);
+    expect(json.malformed.map((entry) => [entry.work_id, entry.reason])).toEqual([
+      [item.front.work_id, "w_repairable"],
+    ]);
   });
 
   it("is labelled by work show, which still exits 0", () => {

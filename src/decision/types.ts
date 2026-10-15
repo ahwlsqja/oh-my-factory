@@ -25,7 +25,13 @@ export type DecisionClass = (typeof DECISION_CLASSES)[number];
  * Classes that need a numeric response_measure when resolved (spec §5.2). Not linkable to CLI scenarios in v0.1
  * (M3-D17). The spec does not list the set: this list is an M3a choice, and `durability` is the contestable member.
  */
-export const QUANTITATIVE_CLASSES: readonly DecisionClass[] = ["latency", "throughput", "memory", "durability", "queue_bound"];
+export const QUANTITATIVE_CLASSES: readonly DecisionClass[] = [
+  "latency",
+  "throughput",
+  "memory",
+  "durability",
+  "queue_bound",
+];
 
 export function isQuantitative(cls: DecisionClass): boolean {
   return QUANTITATIVE_CLASSES.includes(cls);

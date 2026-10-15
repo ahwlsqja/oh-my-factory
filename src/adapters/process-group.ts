@@ -81,7 +81,12 @@ export function runProcessGroup(argv: readonly string[], options: ProcessOptions
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(program, args, { cwd: options.cwd, env: options.env, detached: true, stdio: ["pipe", "pipe", "pipe"] });
+      child = spawn(program, args, {
+        cwd: options.cwd,
+        env: options.env,
+        detached: true,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
     } catch (err) {
       resolve({ kind: "error", code: (err as NodeJS.ErrnoException).code ?? null, message: (err as Error).message });
       return;
@@ -111,18 +116,20 @@ export function runProcessGroup(argv: readonly string[], options: ProcessOptions
       resolve(result);
     }
 
-    const collect = (sink: Buffer[]) => (chunk: Buffer): void => {
-      if (settled) return;
-      const room = options.maxOutputBytes - total;
-      if (chunk.length > room) {
-        sink.push(chunk.subarray(0, room));
-        total = options.maxOutputBytes;
-        finish({ kind: "output_limit", ...text() });
-        return;
-      }
-      sink.push(chunk);
-      total += chunk.length;
-    };
+    const collect =
+      (sink: Buffer[]) =>
+      (chunk: Buffer): void => {
+        if (settled) return;
+        const room = options.maxOutputBytes - total;
+        if (chunk.length > room) {
+          sink.push(chunk.subarray(0, room));
+          total = options.maxOutputBytes;
+          finish({ kind: "output_limit", ...text() });
+          return;
+        }
+        sink.push(chunk);
+        total += chunk.length;
+      };
     child.stdout?.on("data", collect(stdout));
     child.stderr?.on("data", collect(stderr));
     child.stdout?.on("error", () => {});
@@ -131,7 +138,9 @@ export function runProcessGroup(argv: readonly string[], options: ProcessOptions
     child.stdin?.on("error", () => {});
     child.stdin?.end(options.stdin);
 
-    child.once("error", (err: NodeJS.ErrnoException) => finish({ kind: "error", code: err.code ?? null, message: err.message }));
+    child.once("error", (err: NodeJS.ErrnoException) =>
+      finish({ kind: "error", code: err.code ?? null, message: err.message }),
+    );
     // "exit" rather than "close": a background child holds the pipes open, so "close" would wait for it.
     child.once("exit", (status, signal) => {
       exit = { status, signal };

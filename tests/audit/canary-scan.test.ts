@@ -18,7 +18,8 @@ const CANARY = "CNRY-7f3a91c2e8b4d605"; // 21 characters, above MIN_CANARY_LENGT
 const OTHER = "OTHR-0b6c2d9e41a8f735";
 
 /** All six required kinds, each with innocent text, except those in `over`. */
-const surfaces = (over: Partial<Record<SurfaceKind, string>> = {}): AuditSurface[] => SURFACE_KINDS.map((kind) => textSurface(kind, over[kind] ?? "nothing to see here"));
+const surfaces = (over: Partial<Record<SurfaceKind, string>> = {}): AuditSurface[] =>
+  SURFACE_KINDS.map((kind) => textSurface(kind, over[kind] ?? "nothing to see here"));
 const without = (kind: SurfaceKind): AuditSurface[] => surfaces().filter((s) => s.kind !== kind);
 /** A surface that yields the parts as separate chunks. */
 const chunked = (kind: SurfaceKind, parts: string[]): AuditSurface => ({
@@ -51,13 +52,22 @@ describe("scanCanaries", () => {
 
   it("finds a canary that is split across two chunks, at every split position", async () => {
     for (let at = 1; at < CANARY.length; at += 1) {
-      const scan = await scanCanaries([CANARY], [...without("implementer_log"), chunked("implementer_log", [`xx${CANARY.slice(0, at)}`, `${CANARY.slice(at)}yy`])]);
+      const scan = await scanCanaries(
+        [CANARY],
+        [
+          ...without("implementer_log"),
+          chunked("implementer_log", [`xx${CANARY.slice(0, at)}`, `${CANARY.slice(at)}yy`]),
+        ],
+      );
       expect(scan.total, `split at ${at}`).toBe(1);
     }
   });
 
   it("finds a canary that is split across three chunks", async () => {
-    const scan = await scanCanaries([CANARY], [...without("feedback"), chunked("feedback", [CANARY.slice(0, 5), CANARY.slice(5, 12), CANARY.slice(12)])]);
+    const scan = await scanCanaries(
+      [CANARY],
+      [...without("feedback"), chunked("feedback", [CANARY.slice(0, 5), CANARY.slice(5, 12), CANARY.slice(12)])],
+    );
     expect(scan.total).toBe(1);
   });
 
@@ -70,7 +80,10 @@ describe("scanCanaries", () => {
   });
 
   it("merges two surfaces of one kind", async () => {
-    const scan = await scanCanaries([CANARY, OTHER], [...surfaces(), textSurface("diff", CANARY), textSurface("diff", OTHER)]);
+    const scan = await scanCanaries(
+      [CANARY, OTHER],
+      [...surfaces(), textSurface("diff", CANARY), textSurface("diff", OTHER)],
+    );
     expect(scan.hits).toEqual([{ surface: "diff", count: 2 }]);
   });
 
@@ -93,7 +106,14 @@ describe("scanCanaries", () => {
   });
 
   it("is not_run, with nothing scanned, when there are no canaries", async () => {
-    expect(await scanCanaries([], surfaces({ diff: CANARY }))).toEqual({ status: "not_run", surfaces_scanned: [], hits: [], total: 0, symlinks_skipped: 0, truncated: false });
+    expect(await scanCanaries([], surfaces({ diff: CANARY }))).toEqual({
+      status: "not_run",
+      surfaces_scanned: [],
+      hits: [],
+      total: 0,
+      symlinks_skipped: 0,
+      truncated: false,
+    });
   });
 
   it("is not_run when a required surface was not supplied, and still reports the hits it found", async () => {
@@ -102,7 +122,10 @@ describe("scanCanaries", () => {
       expect(scan.status, kind).toBe("not_run");
       expect(scan.surfaces_scanned, kind).not.toContain(kind);
     }
-    const partial = await scanCanaries([CANARY], [...without("worktree").filter((s) => s.kind !== "diff"), textSurface("diff", CANARY)]);
+    const partial = await scanCanaries(
+      [CANARY],
+      [...without("worktree").filter((s) => s.kind !== "diff"), textSurface("diff", CANARY)],
+    );
     expect(partial).toMatchObject({ status: "not_run", total: 1 });
   });
 
@@ -121,7 +144,12 @@ describe("scanCanaries", () => {
       },
     };
     const scan = await scanCanaries([CANARY], [...without("implementer_log"), flaky]);
-    expect(scan).toMatchObject({ status: "not_run", truncated: true, total: 1, hits: [{ surface: "implementer_log", count: 1 }] });
+    expect(scan).toMatchObject({
+      status: "not_run",
+      truncated: true,
+      total: 1,
+      hits: [{ surface: "implementer_log", count: 1 }],
+    });
     expect(scan.surfaces_scanned).not.toContain("implementer_log");
   });
 

@@ -58,7 +58,12 @@ function claudeConfig(): ReconcilerConfig {
   return { ...CONFIG_DEFAULTS.reconciler, kind: "claude" };
 }
 
-function commandConfig(r: Rig, mode: string, fixture?: string, extra: Partial<ReconcilerConfig> = {}): ReconcilerConfig {
+function commandConfig(
+  r: Rig,
+  mode: string,
+  fixture?: string,
+  extra: Partial<ReconcilerConfig> = {},
+): ReconcilerConfig {
   const command = [process.execPath, STUB, mode, r.record, ...(fixture === undefined ? [] : [fixture])];
   return { ...CONFIG_DEFAULTS.reconciler, kind: "command", command, ...extra };
 }
@@ -127,7 +132,11 @@ describe("createReconciler: command kind", () => {
     const empty = await createReconciler(r.project, commandConfig(r, "empty"), r.env).run(request());
     expect(empty).toMatchObject({ ok: false, code: "no_output", reason: "the reconciler printed nothing" });
 
-    const missing: ReconcilerConfig = { ...CONFIG_DEFAULTS.reconciler, kind: "command", command: ["/nonexistent/omf-reconciler"] };
+    const missing: ReconcilerConfig = {
+      ...CONFIG_DEFAULTS.reconciler,
+      kind: "command",
+      command: ["/nonexistent/omf-reconciler"],
+    };
     const spawnFailed = await createReconciler(r.project, missing, r.env).run(request());
     expect(spawnFailed).toMatchObject({ ok: false, code: "spawn_failed" });
   });
@@ -141,7 +150,11 @@ describe("createReconciler: command kind", () => {
   it("times out a hanging process and leaves no background child", async () => {
     const r = rig();
     const outcome = await createReconciler(r.project, commandConfig(r, "sleep"), r.env).run(request("hello", 2000));
-    expect(outcome).toMatchObject({ ok: false, code: "timeout", reason: "the reconciler did not answer within the time limit" });
+    expect(outcome).toMatchObject({
+      ok: false,
+      code: "timeout",
+      reason: "the reconciler did not answer within the time limit",
+    });
     const pid = Number(readFileSync(join(r.record, "child.pid"), "utf8"));
     expect(await isDead(pid)).toBe(true);
   });
@@ -213,8 +226,14 @@ describe("createReconciler: claude kind", () => {
     for (const key of [undefined, ""]) {
       const r = rig();
       installFakeClaude(r, writeFixture(r, envelope({ structured_output: {} })));
-      const outcome = await createReconciler(r.project, claudeConfig(), { ...r.env, ANTHROPIC_API_KEY: key }).run(request());
-      expect(outcome).toMatchObject({ ok: false, code: "auth_missing", reason: "ANTHROPIC_API_KEY is not set for the reconciler" });
+      const outcome = await createReconciler(r.project, claudeConfig(), { ...r.env, ANTHROPIC_API_KEY: key }).run(
+        request(),
+      );
+      expect(outcome).toMatchObject({
+        ok: false,
+        code: "auth_missing",
+        reason: "ANTHROPIC_API_KEY is not set for the reconciler",
+      });
       expect(existsSync(join(r.record, "argv.json"))).toBe(false);
     }
   });

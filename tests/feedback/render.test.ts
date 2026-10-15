@@ -5,7 +5,12 @@ import { FeedbackError } from "../../src/feedback/types.js";
 import type { ReleasedCategory } from "../../src/feedback/types.js";
 
 /** A released line whose pass count is derived from the percent, so pass <= n holds. */
-function cat(category: string, score_pct: number, n: number, kind: ReleasedCategory["kind"] = "first"): ReleasedCategory {
+function cat(
+  category: string,
+  score_pct: number,
+  n: number,
+  kind: ReleasedCategory["kind"] = "first",
+): ReleasedCategory {
   return { category, n, pass: Math.floor((score_pct * n) / 100), score_pct, kind } as unknown as ReleasedCategory;
 }
 
@@ -28,7 +33,9 @@ const codeOf = (fn: () => unknown): { code: unknown; message: string } | null =>
   try {
     fn();
   } catch (err) {
-    return err instanceof FeedbackError ? { code: err.code, message: err.message } : { code: "not a FeedbackError", message: String(err) };
+    return err instanceof FeedbackError
+      ? { code: err.code, message: err.message }
+      : { code: "not a FeedbackError", message: String(err) };
   }
   return null;
 };
@@ -37,12 +44,7 @@ describe("renderFeedback", () => {
   it("renders the exact fixed template for a two-category release", () => {
     const text = renderFeedback([cat("interface", 66, 12), cat("security", 100, 5)]);
     expect(text).toBe(
-      [
-        HEADER,
-        "- interface: 66% of 12 scenarios",
-        "- security: 100% of 5 scenarios",
-        FOOTER,
-      ].join("\n"),
+      [HEADER, "- interface: 66% of 12 scenarios", "- security: 100% of 5 scenarios", FOOTER].join("\n"),
     );
   });
 
@@ -95,7 +97,9 @@ describe("isAllowlistedFeedback", () => {
 
   it("refuses one added line, a trailing id, a trailing newline and an empty text", () => {
     const lines = good.split("\n");
-    expect(isAllowlistedFeedback([...lines.slice(0, -1), "- scenario-ab12: 0% of 1 scenarios", FOOTER].join("\n"))).toBe(false);
+    expect(
+      isAllowlistedFeedback([...lines.slice(0, -1), "- scenario-ab12: 0% of 1 scenarios", FOOTER].join("\n")),
+    ).toBe(false);
     expect(isAllowlistedFeedback([...lines, "see s-7731"].join("\n"))).toBe(false);
     expect(isAllowlistedFeedback(`${good}\n`)).toBe(false);
     expect(isAllowlistedFeedback("")).toBe(false);
@@ -126,12 +130,21 @@ describe("isAllowlistedFeedback", () => {
     const next = prng(20261012);
     for (let i = 0; i < 200; i += 1) {
       const chosen = DECISION_CLASSES.filter(() => next() < 0.4);
-      const picks = chosen.length > 0 ? chosen : [DECISION_CLASSES[Math.floor(next() * DECISION_CLASSES.length)] as (typeof DECISION_CLASSES)[number]];
+      const picks =
+        chosen.length > 0
+          ? chosen
+          : [DECISION_CLASSES[Math.floor(next() * DECISION_CLASSES.length)] as (typeof DECISION_CLASSES)[number]];
       const released: ReleasedCategory[] = picks.map((category) => {
         const n = 1 + Math.floor(next() * 200);
         const pass = Math.floor(next() * (n + 1));
         const kinds = ["first", "new", "repeat"] as const;
-        return { category, n, pass, score_pct: Math.floor((100 * pass) / n), kind: kinds[Math.floor(next() * 3)] as ReleasedCategory["kind"] };
+        return {
+          category,
+          n,
+          pass,
+          score_pct: Math.floor((100 * pass) / n),
+          kind: kinds[Math.floor(next() * 3)] as ReleasedCategory["kind"],
+        };
       });
       const text = renderFeedback(released);
       expect(isAllowlistedFeedback(text)).toBe(true);

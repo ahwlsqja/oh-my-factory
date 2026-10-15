@@ -142,10 +142,14 @@ function requireShown(
   bands: BandsLockInfo,
 ): void {
   const shown = Object.entries(expected.metrics).sort(([a], [b]) => a.localeCompare(b));
-  const current = proposals.map((proposal) => [proposal.metric_id, metricSha256(proposal)] as const).sort(([a], [b]) => a.localeCompare(b));
+  const current = proposals
+    .map((proposal) => [proposal.metric_id, metricSha256(proposal)] as const)
+    .sort(([a], [b]) => a.localeCompare(b));
   const bandsMoved = expected.bands_sha256 !== undefined && expected.bands_sha256 !== bands.sha256;
   if (semanticHash(front) !== expected.semantic_sha256 || canonicalize(shown) !== canonicalize(current) || bandsMoved) {
-    throw new ApprovalError("the goal, a metric or a bands file changed after it was shown; nothing was approved. Review it and approve again");
+    throw new ApprovalError(
+      "the goal, a metric or a bands file changed after it was shown; nothing was approved. Review it and approve again",
+    );
   }
 }
 
@@ -294,7 +298,11 @@ function lockGoalSerialized(
       sha256,
       regime,
     });
-    ledger.append({ actor, type: "metric.locked", payload: { goal_id: goalId, metric_id: proposal.metric_id, sha256, regime } });
+    ledger.append({
+      actor,
+      type: "metric.locked",
+      payload: { goal_id: goalId, metric_id: proposal.metric_id, sha256, regime },
+    });
   }
 
   const semantic = semanticOf(goal.front);

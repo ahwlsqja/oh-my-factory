@@ -1,7 +1,13 @@
 import { chmodSync, existsSync, readdirSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { HARDENED_GIT_CONFIG, HostGitError, createScratchGitDir, hardenedGitEnv, runHostGit } from "../../src/git/hardened.js";
+import {
+  HARDENED_GIT_CONFIG,
+  HostGitError,
+  createScratchGitDir,
+  hardenedGitEnv,
+  runHostGit,
+} from "../../src/git/hardened.js";
 import { type GitFixture, gitFixture } from "../helpers/git-fixture.js";
 import { makeEmptyQuarantine } from "../helpers/ops-fixture.js";
 import { gitIn, makeTempDir } from "../helpers/tmp.js";
@@ -15,11 +21,32 @@ afterEach(() => vi.unstubAllEnvs());
 describe("HARDENED_GIT_CONFIG", () => {
   it("is the pinned list, byte for byte", () => {
     expect([...HARDENED_GIT_CONFIG]).toEqual([
-      "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false",
-      "-c", "core.attributesFile=/dev/null", "-c", "core.excludesFile=/dev/null", "-c", "core.pager=cat",
-      "-c", "protocol.file.allow=never", "-c", "protocol.allow=never",
-      "-c", "transfer.fsckObjects=true", "-c", "fetch.fsckObjects=true", "-c", "receive.fsckObjects=true",
-      "-c", "gc.auto=0", "-c", "maintenance.auto=false",
+      "-c",
+      "core.hooksPath=/dev/null",
+      "-c",
+      "core.fsmonitor=false",
+      "-c",
+      "core.untrackedCache=false",
+      "-c",
+      "core.attributesFile=/dev/null",
+      "-c",
+      "core.excludesFile=/dev/null",
+      "-c",
+      "core.pager=cat",
+      "-c",
+      "protocol.file.allow=never",
+      "-c",
+      "protocol.allow=never",
+      "-c",
+      "transfer.fsckObjects=true",
+      "-c",
+      "fetch.fsckObjects=true",
+      "-c",
+      "receive.fsckObjects=true",
+      "-c",
+      "gc.auto=0",
+      "-c",
+      "maintenance.auto=false",
     ]);
   });
 });
@@ -27,8 +54,15 @@ describe("HARDENED_GIT_CONFIG", () => {
 describe("hardenedGitEnv", () => {
   it("keeps PATH only, drops every GIT_* and other variable, and sets the seven fixed ones", () => {
     const env = hardenedGitEnv({
-      PATH: "/usr/bin", HOME: "/home/x", XDG_CONFIG_HOME: "/x", GIT_DIR: "/evil", GIT_WORK_TREE: "/evil", GIT_INDEX_FILE: "/evil",
-      GIT_CONFIG_COUNT: "1", GIT_EXEC_PATH: "/evil", LC_ALL: "de_DE.UTF-8",
+      PATH: "/usr/bin",
+      HOME: "/home/x",
+      XDG_CONFIG_HOME: "/x",
+      GIT_DIR: "/evil",
+      GIT_WORK_TREE: "/evil",
+      GIT_INDEX_FILE: "/evil",
+      GIT_CONFIG_COUNT: "1",
+      GIT_EXEC_PATH: "/evil",
+      LC_ALL: "de_DE.UTF-8",
     });
     expect(env).toEqual({
       PATH: "/usr/bin",
@@ -50,16 +84,24 @@ describe("hardenedGitEnv", () => {
 describe("runHostGit target checks", () => {
   it("refuses a relative path in any of the three target fields", async () => {
     await expect(runHostGit({ gitDir: "relative/.git" }, ["status"])).rejects.toMatchObject({ code: "not_absolute" });
-    await expect(runHostGit({ ...fx.quarantine, workTree: "rel" }, ["status"])).rejects.toMatchObject({ code: "not_absolute" });
-    await expect(runHostGit({ ...fx.quarantine, indexFile: "rel/index" }, ["status"])).rejects.toMatchObject({ code: "not_absolute" });
+    await expect(runHostGit({ ...fx.quarantine, workTree: "rel" }, ["status"])).rejects.toMatchObject({
+      code: "not_absolute",
+    });
+    await expect(runHostGit({ ...fx.quarantine, indexFile: "rel/index" }, ["status"])).rejects.toMatchObject({
+      code: "not_absolute",
+    });
   });
 
   it("refuses a symlinked git dir, a directory without HEAD and a missing one", async () => {
     const link = join(makeTempDir("omf-link-"), "link.git");
     symlinkSync(fx.quarantine.gitDir, link);
     await expect(runHostGit({ gitDir: link }, ["rev-parse", "HEAD"])).rejects.toMatchObject({ code: "gitdir_invalid" });
-    await expect(runHostGit({ gitDir: makeTempDir("omf-empty-") }, ["rev-parse", "HEAD"])).rejects.toMatchObject({ code: "gitdir_invalid" });
-    await expect(runHostGit({ gitDir: join(makeTempDir("omf-none-"), "none.git") }, ["rev-parse", "HEAD"])).rejects.toMatchObject({
+    await expect(runHostGit({ gitDir: makeTempDir("omf-empty-") }, ["rev-parse", "HEAD"])).rejects.toMatchObject({
+      code: "gitdir_invalid",
+    });
+    await expect(
+      runHostGit({ gitDir: join(makeTempDir("omf-none-"), "none.git") }, ["rev-parse", "HEAD"]),
+    ).rejects.toMatchObject({
       code: "gitdir_invalid",
     });
   });
@@ -114,7 +156,9 @@ function fakeGit(script: string): void {
 
 describe("runHostGit limits and errors", () => {
   it("stops at the output cap", async () => {
-    await expect(runHostGit(fx.quarantine, ["cat-file", "-p", fx.head], { maxOutputBytes: 10 })).rejects.toMatchObject({ code: "output_limit" });
+    await expect(runHostGit(fx.quarantine, ["cat-file", "-p", fx.head], { maxOutputBytes: 10 })).rejects.toMatchObject({
+      code: "output_limit",
+    });
   });
 
   it("stops at the timeout", async () => {
@@ -132,7 +176,10 @@ describe("runHostGit limits and errors", () => {
     const scratch = await createScratchGitDir(parent);
     const work = makeTempDir("omf-apply-");
     const patch = "diff --git a/src/x.ts b/src/x.ts\n--- a/src/x.ts\n+++ b/src/x.ts\n@@ -1 +1 @@\n-a\n+b\n";
-    const failure = await runHostGit({ gitDir: scratch, workTree: work }, ["apply", "--check", "-"], { input: patch, cwd: work }).then(
+    const failure = await runHostGit({ gitDir: scratch, workTree: work }, ["apply", "--check", "-"], {
+      input: patch,
+      cwd: work,
+    }).then(
       () => null,
       (error: unknown) => error,
     );
@@ -163,12 +210,23 @@ describe("createScratchGitDir", () => {
     const home = makeTempDir("omf-home-");
     vi.stubEnv("HOME", home);
     await expect(createScratchGitDir(join(home, ".claude", "scratch"))).rejects.toThrow(/must not live inside/);
-    await expect(createScratchGitDir(join(fx.repo, "inside"), fx.repo)).rejects.toThrow(/must live outside the repository/);
+    await expect(createScratchGitDir(join(fx.repo, "inside"), fx.repo)).rejects.toThrow(
+      /must live outside the repository/,
+    );
   });
 });
 
 describe("runHostGit refuses a repository whose own config defines a driver", () => {
-  const keys = ["filter.evil.smudge", "filter.evil.clean", "filter.evil.process", "diff.evil.textconv", "diff.evil.command", "diff.external", "include.path", "includeIf.gitdir:/x/.path"];
+  const keys = [
+    "filter.evil.smudge",
+    "filter.evil.clean",
+    "filter.evil.process",
+    "diff.evil.textconv",
+    "diff.evil.command",
+    "diff.external",
+    "include.path",
+    "includeIf.gitdir:/x/.path",
+  ];
   for (const key of keys) {
     it(`${key} -> gitdir_invalid`, async () => {
       const q = makeEmptyQuarantine();

@@ -113,7 +113,10 @@ async function sealLocked(deps: SealDeps): Promise<SealStageResult> {
   const events = ledger.readVerified();
   const seals = foldSeals(events, scope);
   const started = events.some(
-    (event) => event.type === WORK_STARTED_EVENT && event.payload.goal_id === scope.goal_id && event.payload.work_id === scope.work_id,
+    (event) =>
+      event.type === WORK_STARTED_EVENT &&
+      event.payload.goal_id === scope.goal_id &&
+      event.payload.work_id === scope.work_id,
   );
   if (started) {
     // Any actor's work.started counts here: a forged one makes the order check fail closed instead of re-sealing.
@@ -124,7 +127,10 @@ async function sealLocked(deps: SealDeps): Promise<SealStageResult> {
 
   const state = foldDecisions(events, scope);
   const leak = loadLeakContext(location.dir, scope.goal_id, events);
-  const gate1 = evaluateGate1(state, now, { leak, intentQuestionIds: intentQuestionIds(item.intent.candidate.open_questions.length) });
+  const gate1 = evaluateGate1(state, now, {
+    leak,
+    intentQuestionIds: intentQuestionIds(item.intent.candidate.open_questions.length),
+  });
   if (gate1.status !== "pass") return { status: "blocked_gate1", reasons: gate1.reasons };
 
   let prompt: string;
@@ -155,7 +161,12 @@ async function sealLocked(deps: SealDeps): Promise<SealStageResult> {
   };
   if (!outcome.ok) return fail(outcome.code, outcome.durationMs);
 
-  const author: AuthorStamp = { vendor: session.vendor, model: session.model, at: now.toISOString(), isolation: session.isolation };
+  const author: AuthorStamp = {
+    vendor: session.vendor,
+    model: session.model,
+    at: now.toISOString(),
+    isolation: session.isolation,
+  };
   const intake = intakeAuthored(outcome.output, { workId: scope.work_id, author, ids: deps.ids });
   if (intake.stored.length === 0) return fail("no_valid_scenarios", outcome.durationMs);
 
@@ -168,7 +179,8 @@ async function sealLocked(deps: SealDeps): Promise<SealStageResult> {
     return fail("write_failed", outcome.durationMs);
   }
 
-  const count = (match: (scenario: (typeof intake.stored)[number]) => boolean): number => intake.stored.filter(match).length;
+  const count = (match: (scenario: (typeof intake.stored)[number]) => boolean): number =>
+    intake.stored.filter(match).length;
   const counts: SealCounts = {
     authored: intake.authored,
     stored: intake.stored.length,
@@ -191,5 +203,12 @@ async function sealLocked(deps: SealDeps): Promise<SealStageResult> {
       rejected_by_code: intake.rejected,
     }),
   );
-  return { status: "stored", round: Number(written.payload.round), seal_id: sealId, set_sha256: setSha256, counts, author };
+  return {
+    status: "stored",
+    round: Number(written.payload.round),
+    seal_id: sealId,
+    set_sha256: setSha256,
+    counts,
+    author,
+  };
 }

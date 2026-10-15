@@ -81,10 +81,17 @@ describe("runIsolation", () => {
   });
 
   it("takes the lowest stage as the run level", () => {
-    const all = ISOLATION_STAGES.map((stage) => measurement(stage, stage === "sut" ? "L1" : "L2", stage === "sut" ? ["host_network"] : []));
+    const all = ISOLATION_STAGES.map((stage) =>
+      measurement(stage, stage === "sut" ? "L1" : "L2", stage === "sut" ? ["host_network"] : []),
+    );
     const result = runIsolation(RUN, all);
     expect(result.level).toBe("L1");
-    expect(result.stages.sut).toEqual({ level: "L1", measurements: 1, violations: ["host_network"], facts_sha256s: ["a".repeat(64)] });
+    expect(result.stages.sut).toEqual({
+      level: "L1",
+      measurements: 1,
+      violations: ["host_network"],
+      facts_sha256s: ["a".repeat(64)],
+    });
   });
 
   it("keeps the minimum over rounds: an L1 container in round 1 is not healed by an L2 container in round 2", () => {
@@ -94,7 +101,10 @@ describe("runIsolation", () => {
       measurement("sut", "L1", ["cap_added"], "3"),
       measurement("sut", "L2", [], "2"),
     ];
-    const all = [...rounds, ...ISOLATION_STAGES.filter((stage) => stage !== "sut").map((stage) => measurement(stage, "L2"))];
+    const all = [
+      ...rounds,
+      ...ISOLATION_STAGES.filter((stage) => stage !== "sut").map((stage) => measurement(stage, "L2")),
+    ];
     const sut = runIsolation(RUN, all).stages.sut;
     expect(sut).toEqual({
       level: "L1",
@@ -107,7 +117,10 @@ describe("runIsolation", () => {
 
 describe("runIsolation with a recorded level the record does not support", () => {
   const everyStageL2 = (): StageMeasurement[] => ISOLATION_STAGES.map((stage) => measurement(stage, "L2"));
-  const withSut = (replacement: StageMeasurement): StageMeasurement[] => [...everyStageL2().filter((m) => m.stage !== "sut"), replacement];
+  const withSut = (replacement: StageMeasurement): StageMeasurement[] => [
+    ...everyStageL2().filter((m) => m.stage !== "sut"),
+    replacement,
+  ];
 
   it("does not trust L2 recorded next to a violation", () => {
     const result = runIsolation(RUN, withSut(measurement("sut", "L2", ["privileged"])));
@@ -157,7 +170,9 @@ describe("isolation.schema.json", () => {
 
   it("rejects an unknown violation code, a bad level, an extra key and a missing stage", () => {
     const badCode = document();
-    (badCode.stages as Record<string, StageMeasurement[]>).sut = [{ ...measurement("sut", "L1"), violations: ["made_up"] as unknown as ViolationCode[] }];
+    (badCode.stages as Record<string, StageMeasurement[]>).sut = [
+      { ...measurement("sut", "L1"), violations: ["made_up"] as unknown as ViolationCode[] },
+    ];
     expect(validate("isolation.schema.json", badCode).ok).toBe(false);
     expect(validate("isolation.schema.json", { ...document(), level: "L9" }).ok).toBe(false);
     expect(validate("isolation.schema.json", { ...document(), note: "hi" }).ok).toBe(false);
@@ -180,33 +195,63 @@ describe("isolation.schema.json", () => {
 const AT = new Date("2026-10-12T00:00:00.000Z");
 
 /** The violations for the golden container with `facts` and `checks` patched. */
-function codes(facts: Partial<ContainerFacts> = {}, checks: Partial<ContainerChecks> = {}, golden: StageGolden = GOLDEN_STAGE): ViolationCode[] {
+function codes(
+  facts: Partial<ContainerFacts> = {},
+  checks: Partial<ContainerChecks> = {},
+  golden: StageGolden = GOLDEN_STAGE,
+): ViolationCode[] {
   const base = goldenObserved();
-  return evaluateStage("implementer", { facts: { ...base.facts, ...facts }, checks: { ...base.checks, ...checks } }, golden, AT).violations;
+  return evaluateStage(
+    "implementer",
+    { facts: { ...base.facts, ...facts }, checks: { ...base.checks, ...checks } },
+    golden,
+    AT,
+  ).violations;
 }
 
-const bind = (source: string, destination: string, read_only = false): MountFact => ({ type: "bind", source, destination, read_only });
+const bind = (source: string, destination: string, read_only = false): MountFact => ({
+  type: "bind",
+  source,
+  destination,
+  read_only,
+});
 /** The golden mounts without the one at `destination`, so a test can replace it. */
-const mountsExcept = (destination: string): MountFact[] => goldenObserved().facts.mounts.filter((mount) => mount.destination !== destination);
+const mountsExcept = (destination: string): MountFact[] =>
+  goldenObserved().facts.mounts.filter((mount) => mount.destination !== destination);
 
 describe("evaluateStage", () => {
   it("gives L2 and no violation for the golden container, including worktree and scenario mounts under the OMF home", () => {
     const measurement = evaluateStage("implementer", goldenObserved(), GOLDEN_STAGE, AT);
-    expect(measurement).toMatchObject({ stage: "implementer", mode: "container", level: "L2", violations: [], measured_at: AT.toISOString() });
-    expect(measurement.facts).toEqual(goldenObserved().facts);
-    expect(measurement.facts_sha256).toBe(measurementHash("implementer", "container", measurement.facts, measurement.checks));
-    expect(validate("isolation.schema.json", {
-      schema_version: 1,
-      run_id: RUN,
-      stages: { author: [], implementer: [measurement], sut: [], harness: [] },
+    expect(measurement).toMatchObject({
+      stage: "implementer",
+      mode: "container",
       level: "L2",
-    })).toEqual({ ok: true });
+      violations: [],
+      measured_at: AT.toISOString(),
+    });
+    expect(measurement.facts).toEqual(goldenObserved().facts);
+    expect(measurement.facts_sha256).toBe(
+      measurementHash("implementer", "container", measurement.facts, measurement.checks),
+    );
+    expect(
+      validate("isolation.schema.json", {
+        schema_version: 1,
+        run_id: RUN,
+        stages: { author: [], implementer: [measurement], sut: [], harness: [] },
+        level: "L2",
+      }),
+    ).toEqual({ ok: true });
   });
 
   it("hashes the facts, not the clock", () => {
     const first = evaluateStage("implementer", goldenObserved(), GOLDEN_STAGE, AT);
     const later = evaluateStage("implementer", goldenObserved(), GOLDEN_STAGE, new Date("2027-01-01T00:00:00.000Z"));
-    const other = evaluateStage("implementer", { ...goldenObserved(), facts: { ...goldenObserved().facts, image: "other:2" } }, GOLDEN_STAGE, AT);
+    const other = evaluateStage(
+      "implementer",
+      { ...goldenObserved(), facts: { ...goldenObserved().facts, image: "other:2" } },
+      GOLDEN_STAGE,
+      AT,
+    );
     expect(later.facts_sha256).toBe(first.facts_sha256);
     expect(other.facts_sha256).not.toBe(first.facts_sha256);
   });
@@ -222,22 +267,47 @@ describe("evaluateStage", () => {
     ["empty user is root", { user: "" }, {}, "root_user"],
     ["uid 0 is root", { user: "0:0" }, {}, "root_user"],
     ["writable rootfs", { read_only_rootfs: false }, {}, "rootfs_writable"],
-    ["extra env name", { env_names: ["HOME", "OMF_STAGE", "PATH", "AWS_SECRET_ACCESS_KEY"] }, {}, "unexpected_env_name"],
+    [
+      "extra env name",
+      { env_names: ["HOME", "OMF_STAGE", "PATH", "AWS_SECRET_ACCESS_KEY"] },
+      {},
+      "unexpected_env_name",
+    ],
     ["vendor binary", {}, { vendor_binaries: ["codex"] }, "vendor_binary_present"],
     ["credential path", {}, { credential_paths: ["/home/agent/.codex/auth.json"] }, "credential_present"],
     ["socket found in the container", {}, { docker_socket_present: true }, "docker_socket_present"],
     ["no-new-privileges missing", { security_opt: [] }, {}, "no_new_privileges_missing"],
     ["no-new-privileges set false", { security_opt: ["no-new-privileges:false"] }, {}, "no_new_privileges_missing"],
-    ["seccomp unconfined", { security_opt: ["no-new-privileges", "seccomp=unconfined"] }, {}, "security_opt_unconfined"],
-    ["apparmor unconfined", { security_opt: ["no-new-privileges", "apparmor:unconfined"] }, {}, "security_opt_unconfined"],
+    [
+      "seccomp unconfined",
+      { security_opt: ["no-new-privileges", "seccomp=unconfined"] },
+      {},
+      "security_opt_unconfined",
+    ],
+    [
+      "apparmor unconfined",
+      { security_opt: ["no-new-privileges", "apparmor:unconfined"] },
+      {},
+      "security_opt_unconfined",
+    ],
     ["device mapped", { devices: ["/dev/fuse"] }, {}, "device_mapped"],
     ["pid joined to another container", { pid_mode: "container:abc" }, {}, "host_pid"],
     ["ipc joined to another container", { ipc_mode: "container:abc" }, {}, "host_ipc"],
     ["zero-padded uid 0 is root", { user: "00" }, {}, "root_user"],
     ["signed uid 0 is root", { user: "+0:0" }, {}, "root_user"],
-    ["systempaths unconfined", { security_opt: ["no-new-privileges", "systempaths=unconfined"] }, {}, "security_opt_unconfined"],
+    [
+      "systempaths unconfined",
+      { security_opt: ["no-new-privileges", "systempaths=unconfined"] },
+      {},
+      "security_opt_unconfined",
+    ],
     ["label disabled", { security_opt: ["no-new-privileges", "label=disable"] }, {}, "security_opt_unconfined"],
-    ["custom seccomp profile", { security_opt: ["no-new-privileges", "seccomp=/tmp/open.json"] }, {}, "security_opt_unconfined"],
+    [
+      "custom seccomp profile",
+      { security_opt: ["no-new-privileges", "seccomp=/tmp/open.json"] },
+      {},
+      "security_opt_unconfined",
+    ],
     ["host ipc", { ipc_mode: "host" }, {}, "host_ipc"],
     ["host uts", { uts_mode: "host" }, {}, "host_uts"],
     ["host user namespace", { userns_mode: "host" }, {}, "userns_host"],
@@ -255,7 +325,11 @@ describe("evaluateStage", () => {
   });
 
   it("reports several deviations in contract order, each once", () => {
-    expect(codes({ privileged: true, cap_add: ["SYS_ADMIN"], network_mode: "host" })).toEqual(["privileged", "cap_added", "host_network"]);
+    expect(codes({ privileged: true, cap_add: ["SYS_ADMIN"], network_mode: "host" })).toEqual([
+      "privileged",
+      "cap_added",
+      "host_network",
+    ]);
   });
 
   it("flags the docker socket as a mount", () => {
@@ -264,8 +338,12 @@ describe("evaluateStage", () => {
   });
 
   it("flags an extra mount and a writable scenario mount", () => {
-    expect(codes({ mounts: [...goldenObserved().facts.mounts, bind("/srv/cache", "/cache")] })).toEqual(["unexpected_mount"]);
-    expect(codes({ mounts: [...mountsExcept("/scenarios"), bind(SCENARIOS, "/scenarios", false)] })).toEqual(["mount_not_read_only"]);
+    expect(codes({ mounts: [...goldenObserved().facts.mounts, bind("/srv/cache", "/cache")] })).toEqual([
+      "unexpected_mount",
+    ]);
+    expect(codes({ mounts: [...mountsExcept("/scenarios"), bind(SCENARIOS, "/scenarios", false)] })).toEqual([
+      "mount_not_read_only",
+    ]);
   });
 
   it("flags a source that differs from the pinned one, even at an allowed destination", () => {
@@ -276,25 +354,37 @@ describe("evaluateStage", () => {
 
   it("flags an ANCESTOR of a forbidden path bound at an allowed destination", () => {
     for (const ancestor of [HOME, `${OMF_HOME}/projects/p-1`, "/"]) {
-      expect(codes({ mounts: [...mountsExcept("/work"), bind(ancestor, "/work")] })).toEqual(["unexpected_mount", "forbidden_mount_source"]);
+      expect(codes({ mounts: [...mountsExcept("/work"), bind(ancestor, "/work")] })).toEqual([
+        "unexpected_mount",
+        "forbidden_mount_source",
+      ]);
     }
   });
 
   it("flags a source equal to or under a forbidden path", () => {
     for (const source of [`${HOME}/repo`, `${HOME}/repo/.git`, `${HOME}/.claude/projects`]) {
-      expect(codes({ mounts: [...mountsExcept("/work"), bind(source, "/work")] })).toEqual(["unexpected_mount", "forbidden_mount_source"]);
+      expect(codes({ mounts: [...mountsExcept("/work"), bind(source, "/work")] })).toEqual([
+        "unexpected_mount",
+        "forbidden_mount_source",
+      ]);
     }
   });
 
   it("does not treat a sibling that shares a name prefix as forbidden", () => {
     const golden = { ...GOLDEN_STAGE, forbidden_paths: ["/srv/a/b"] };
-    expect(codes({ mounts: [...goldenObserved().facts.mounts, bind("/srv/a/bc", "/x")] }, {}, golden)).toEqual(["unexpected_mount"]);
-    expect(codes({ mounts: [...goldenObserved().facts.mounts, bind("/srv/a/b/c", "/x")] }, {}, golden)).toEqual(["unexpected_mount", "forbidden_mount_source"]);
+    expect(codes({ mounts: [...goldenObserved().facts.mounts, bind("/srv/a/bc", "/x")] }, {}, golden)).toEqual([
+      "unexpected_mount",
+    ]);
+    expect(codes({ mounts: [...goldenObserved().facts.mounts, bind("/srv/a/b/c", "/x")] }, {}, golden)).toEqual([
+      "unexpected_mount",
+      "forbidden_mount_source",
+    ]);
   });
 
   it("compares case-insensitively on macOS only", () => {
     const spelled = `${HOME.toUpperCase()}`;
-    const expected: ViolationCode[] = process.platform === "darwin" ? ["unexpected_mount", "forbidden_mount_source"] : ["unexpected_mount"];
+    const expected: ViolationCode[] =
+      process.platform === "darwin" ? ["unexpected_mount", "forbidden_mount_source"] : ["unexpected_mount"];
     expect(codes({ mounts: [...mountsExcept("/work"), bind(spelled, "/work")] })).toEqual(expected);
   });
 });

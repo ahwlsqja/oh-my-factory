@@ -147,7 +147,12 @@ function levelIsConsistent(entry: StageMeasurement): boolean {
  * violations or mode do not support is shown as L1 and counts as `unmeasured` for the run.
  */
 export function runIsolation(runId: string, measurements: readonly StageMeasurement[]): RunIsolation {
-  const stages: Record<IsolationStage, StageSummary | null> = { author: null, implementer: null, sut: null, harness: null };
+  const stages: Record<IsolationStage, StageSummary | null> = {
+    author: null,
+    implementer: null,
+    sut: null,
+    harness: null,
+  };
   const untrusted = new Set<IsolationStage>();
   for (const stage of ISOLATION_STAGES) {
     const [first, ...rest] = measurements.filter((entry) => entry.stage === stage);
@@ -173,7 +178,9 @@ export function runIsolation(runId: string, measurements: readonly StageMeasurem
       facts_sha256s: hashes,
     };
   }
-  const levels = ISOLATION_STAGES.map((stage): MeasuredLevel => (untrusted.has(stage) ? "unmeasured" : (stages[stage]?.level ?? "unmeasured")));
+  const levels = ISOLATION_STAGES.map(
+    (stage): MeasuredLevel => (untrusted.has(stage) ? "unmeasured" : (stages[stage]?.level ?? "unmeasured")),
+  );
   return {
     run_id: runId,
     stages,

@@ -92,21 +92,24 @@ describe("omf goal resume and omf goal cancel", () => {
     expect(fx.ledger.verify()).toEqual(before);
   });
 
-  it.each(["resume", "cancel"])("%s exits 2 with `a tick is running; retry` while another process holds tick.lock, and writes nothing", (verb) => {
-    const fx = setupGoal();
-    approveGoal(fx.location, G, "human:dev");
-    escalate(fx.ledger, G, TICK, "no_progress", null);
-    const before = fx.ledger.verify();
-    acquireLock(tickLockFile(fx.location, G));
-    try {
-      const result = omf(["goal", verb, G], fx.repo, fx.home);
-      expect(result.code).toBe(2);
-      expect(result.stderr).toContain("a tick is running; retry");
-    } finally {
-      releaseLock(tickLockFile(fx.location, G));
-    }
-    expect(fx.ledger.verify()).toEqual(before);
-  });
+  it.each(["resume", "cancel"])(
+    "%s exits 2 with `a tick is running; retry` while another process holds tick.lock, and writes nothing",
+    (verb) => {
+      const fx = setupGoal();
+      approveGoal(fx.location, G, "human:dev");
+      escalate(fx.ledger, G, TICK, "no_progress", null);
+      const before = fx.ledger.verify();
+      acquireLock(tickLockFile(fx.location, G));
+      try {
+        const result = omf(["goal", verb, G], fx.repo, fx.home);
+        expect(result.code).toBe(2);
+        expect(result.stderr).toContain("a tick is running; retry");
+      } finally {
+        releaseLock(tickLockFile(fx.location, G));
+      }
+      expect(fx.ledger.verify()).toEqual(before);
+    },
+  );
 
   it.each(["resume", "cancel"])("%s exits 2 for an unknown goal", (verb) => {
     const fx = setupGoal();
@@ -132,7 +135,16 @@ describe("nextSteps name commands that exist", () => {
       const entry = ESCALATIONS[code]!;
       for (const signature of [null, "audit|stopped|x"]) {
         const steps = nextSteps(
-          { tick_id: TICK, j: entry.j, reason_code: code, signature, question: entry.question, options: entry.options, default: entry.default, at: "2026-10-12T00:00:00.000Z" },
+          {
+            tick_id: TICK,
+            j: entry.j,
+            reason_code: code,
+            signature,
+            question: entry.question,
+            options: entry.options,
+            default: entry.default,
+            at: "2026-10-12T00:00:00.000Z",
+          },
           D,
         );
         for (const step of steps.filter((s) => s.startsWith("omf "))) {

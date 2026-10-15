@@ -3,7 +3,11 @@ import type { IntentCandidate } from "./types.js";
 
 /** NFKC, lowercase, every run of non-letters and non-digits becomes one space, trimmed. */
 export function normalizeTitle(title: string): string {
-  return title.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  return title
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
 }
 
 /** Posix form: backslashes become slashes, empty and `.` segments (`./x`, `a//b`, `a/./b`, a trailing `/`) disappear. */

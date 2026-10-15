@@ -77,7 +77,12 @@ describe("seal and gate2 event builders", () => {
       expect(text, "no scenario text reaches an event").not.toContain(secret);
     }
     expect(text).toContain(scenarioRef(planted.scenario_id));
-    expect(events[0]!.payload["feedback"]).toEqual({ unlinked_decision_count: 2, weak: 1, contradictions: 0, invalid: 2 });
+    expect(events[0]!.payload["feedback"]).toEqual({
+      unlinked_decision_count: 2,
+      weak: 1,
+      contradictions: 0,
+      invalid: 2,
+    });
     expect(events[0]!.payload["author"], "the request names vendor, model and isolation, not a time").toEqual({
       vendor: "command",
       model: "stub",
@@ -87,8 +92,12 @@ describe("seal and gate2 event builders", () => {
   });
 
   it("refuses a payload that does not validate", () => {
-    expect(() => sealFailedEvent(SCOPE, { round: 0, code: "timeout", duration_ms: 1 })).toThrow(/invalid seal\.failed payload/);
-    expect(() => sealCompletedEvent(SCOPE, { ...COMPLETED_BODY, seal_id: "../escape" })).toThrow(/invalid seal\.completed payload/);
+    expect(() => sealFailedEvent(SCOPE, { round: 0, code: "timeout", duration_ms: 1 })).toThrow(
+      /invalid seal\.failed payload/,
+    );
+    expect(() => sealCompletedEvent(SCOPE, { ...COMPLETED_BODY, seal_id: "../escape" })).toThrow(
+      /invalid seal\.completed payload/,
+    );
     expect(
       () => sealCompletedEvent(SCOPE, { ...COMPLETED_BODY, rejected_by_code: { "free text here": 1 } }),
       "a rejection key is a code, never prose",
@@ -156,31 +165,54 @@ describe("scenario status", () => {
   it("comes from omf ledger events only, and moves away from active once", () => {
     const ledger = newLedger();
     ledger.append(completed(1, 1));
-    const [first, second, third] = [storedScenario(1), storedScenario(2), storedScenario(3)] as [StoredScenario, StoredScenario, StoredScenario];
+    const [first, second, third] = [storedScenario(1), storedScenario(2), storedScenario(3)] as [
+      StoredScenario,
+      StoredScenario,
+      StoredScenario,
+    ];
 
     markScenarioStatus(ledger, SCOPE, sealId(1), first.scenario_id, "retired", "person_retired");
     markScenarioStatus(ledger, SCOPE, sealId(1), second.scenario_id, "contaminated", "canary_hit");
     const written = ledger.readVerified().length;
-    expect(statusCode(() => markScenarioStatus(ledger, SCOPE, sealId(1), first.scenario_id, "contaminated", "canary_hit"))).toBe("already_moved");
-    expect(statusCode(() => markScenarioStatus(ledger, SCOPE, sealId(9), third.scenario_id, "retired", "person_retired"))).toBe("unknown_seal");
+    expect(
+      statusCode(() => markScenarioStatus(ledger, SCOPE, sealId(1), first.scenario_id, "contaminated", "canary_hit")),
+    ).toBe("already_moved");
+    expect(
+      statusCode(() => markScenarioStatus(ledger, SCOPE, sealId(9), third.scenario_id, "retired", "person_retired")),
+    ).toBe("unknown_seal");
     expect(ledger.readVerified().length, "a refused move appends nothing").toBe(written);
 
     // Someone else appending the event does not move a status.
     ledger.append({
       actor: "agent:worker",
       type: "scenario.status_changed",
-      payload: { ...SCOPE, seal_id: sealId(1), scenario_ref: scenarioRef(third.scenario_id), status: "retired", reason: "person_retired" },
+      payload: {
+        ...SCOPE,
+        seal_id: sealId(1),
+        scenario_ref: scenarioRef(third.scenario_id),
+        status: "retired",
+        reason: "person_retired",
+      },
     });
     // A second omf move of an already moved scenario is an anomaly, and the first move stands.
     ledger.append(
-      scenarioStatusChangedEvent(SCOPE, { seal_id: sealId(1), scenario_id: first.scenario_id, status: "contaminated", reason: "canary_hit" }),
+      scenarioStatusChangedEvent(SCOPE, {
+        seal_id: sealId(1),
+        scenario_id: first.scenario_id,
+        status: "contaminated",
+        reason: "canary_hit",
+      }),
     );
 
     const events = ledger.readVerified();
     const { statuses, anomalies } = foldStatuses(events, SCOPE, sealId(1));
     expect(anomalies).toBe(1);
     expect(statuses.get(scenarioRef(first.scenario_id))).toBe("retired");
-    expect(effectiveScenarios([first, second, third], statuses).map((e) => e.status)).toEqual(["retired", "contaminated", "active"]);
+    expect(effectiveScenarios([first, second, third], statuses).map((e) => e.status)).toEqual([
+      "retired",
+      "contaminated",
+      "active",
+    ]);
     expect(foldStatuses(events, SCOPE, sealId(2)).statuses.size, "status is per seal").toBe(0);
     expect(foldStatuses(events, OTHER_SCOPE, sealId(1)).statuses.size, "status is per item").toBe(0);
   });
@@ -188,7 +220,11 @@ describe("scenario status", () => {
   it("counts an invalid omf scenario event as an anomaly", () => {
     const ledger = newLedger();
     const scoped = { goal_id: SCOPE.goal_id, work_id: SCOPE.work_id };
-    ledger.append({ actor: "omf", type: "scenario.status_changed", payload: { ...scoped, seal_id: sealId(1), status: "retired" } });
+    ledger.append({
+      actor: "omf",
+      type: "scenario.status_changed",
+      payload: { ...scoped, seal_id: sealId(1), status: "retired" },
+    });
     ledger.append({ actor: "omf", type: "scenario.exposed", payload: { ...scoped } });
     expect(foldStatuses(ledger.readVerified(), SCOPE, sealId(1)).anomalies).toBe(2);
   });
@@ -216,11 +252,23 @@ describe("authorPrecedesStart", () => {
   it.each([
     ["no seal and no start", () => [], { ok: true }],
     ["a seal, then the start", () => [completed(1, 1), started()], { ok: true }],
-    ["a start of another item is not this item's start", () => [started("omf", OTHER_SCOPE), completed(1, 1)], { ok: true }],
+    [
+      "a start of another item is not this item's start",
+      () => [started("omf", OTHER_SCOPE), completed(1, 1)],
+      { ok: true },
+    ],
     ["a start and no seal at all", () => [started()], { ok: false, reason: "no_seal" }],
     ["the start, then a seal", () => [started(), completed(1, 1)], { ok: false, reason: "seal_after_start" }],
-    ["a reseal after the start", () => [completed(1, 1), started(), completed(2, 2)], { ok: false, reason: "seal_after_start" }],
-    ["a forged start by a person before the seal fails closed", () => [started("human:dev@example.invalid"), completed(1, 1)], { ok: false, reason: "seal_after_start" }],
+    [
+      "a reseal after the start",
+      () => [completed(1, 1), started(), completed(2, 2)],
+      { ok: false, reason: "seal_after_start" },
+    ],
+    [
+      "a forged start by a person before the seal fails closed",
+      () => [started("human:dev@example.invalid"), completed(1, 1)],
+      { ok: false, reason: "seal_after_start" },
+    ],
   ])("%s", (_name, events, expected) => {
     expect(orderOf(events())).toEqual(expected);
   });
@@ -249,8 +297,19 @@ describe("sealFeedbackFromEvents", () => {
   };
 
   it("rebuilds the feedback of the latest back_to_S2 evaluation after the latest completed seal", () => {
-    expect(read([completed(1, 1), evaluated()])).toEqual({ unlinked_decision_ids: ["d-cache"], weak: 1, contradictions: 0, invalid: 2 });
-    expect(read([completed(1, 1), evaluated(), evaluated({ unlinked_decision_ids: ["d-queue"], feedback_counts: { weak: 0, contradictions: 3, invalid: 0 } })])).toEqual({
+    expect(read([completed(1, 1), evaluated()])).toEqual({
+      unlinked_decision_ids: ["d-cache"],
+      weak: 1,
+      contradictions: 0,
+      invalid: 2,
+    });
+    expect(
+      read([
+        completed(1, 1),
+        evaluated(),
+        evaluated({ unlinked_decision_ids: ["d-queue"], feedback_counts: { weak: 0, contradictions: 3, invalid: 0 } }),
+      ]),
+    ).toEqual({
       unlinked_decision_ids: ["d-queue"],
       weak: 0,
       contradictions: 3,
@@ -265,18 +324,41 @@ describe("sealFeedbackFromEvents", () => {
   it("is null for an evaluation that precedes the latest seal, for a pass and for other routes", () => {
     expect(read([completed(1, 1), evaluated(), completed(2, 2)])).toBeNull();
     expect(read([completed(1, 1)])).toBeNull();
-    expect(read([completed(1, 1), evaluated({ status: "pass", route: null, reason_codes: [], unlinked_decision_ids: [], feedback_counts: null })])).toBeNull();
-    expect(read([completed(1, 1), evaluated({ route: "J3", reason_codes: ["probe_error"], unlinked_decision_ids: [], feedback_counts: null })])).toBeNull();
+    expect(
+      read([
+        completed(1, 1),
+        evaluated({ status: "pass", route: null, reason_codes: [], unlinked_decision_ids: [], feedback_counts: null }),
+      ]),
+    ).toBeNull();
+    expect(
+      read([
+        completed(1, 1),
+        evaluated({ route: "J3", reason_codes: ["probe_error"], unlinked_decision_ids: [], feedback_counts: null }),
+      ]),
+    ).toBeNull();
   });
 
   it("canary_missing adds no field: the counts stay three integers", () => {
-    const missing = evaluated({ reason_codes: ["canary_missing"], unlinked_decision_ids: [], feedback_counts: { weak: 0, contradictions: 0, invalid: 0 } });
-    expect(read([completed(1, 1), missing])).toEqual({ unlinked_decision_ids: [], weak: 0, contradictions: 0, invalid: 0 });
+    const missing = evaluated({
+      reason_codes: ["canary_missing"],
+      unlinked_decision_ids: [],
+      feedback_counts: { weak: 0, contradictions: 0, invalid: 0 },
+    });
+    expect(read([completed(1, 1), missing])).toEqual({
+      unlinked_decision_ids: [],
+      weak: 0,
+      contradictions: 0,
+      invalid: 0,
+    });
   });
 
   it("ignores another item, a non-omf actor and a payload that fails the schema", () => {
     const forged = { ...evaluated(), actor: "human:dev@example.invalid" };
-    const broken: NewEvent = { actor: "omf", type: "gate2.evaluated", payload: { goal_id: SCOPE.goal_id, work_id: SCOPE.work_id, round: "x" } };
+    const broken: NewEvent = {
+      actor: "omf",
+      type: "gate2.evaluated",
+      payload: { goal_id: SCOPE.goal_id, work_id: SCOPE.work_id, round: "x" },
+    };
     expect(read([completed(1, 1), evaluated({}, OTHER_SCOPE), forged, broken])).toBeNull();
   });
 });

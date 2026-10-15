@@ -43,7 +43,10 @@ const doctorSealed = (f: Fixture): string[] =>
   runDoctor(f.repo, f.env).problems.filter((problem) => problem.startsWith(SEALED_PROBLEM));
 
 const REPO_PLANTS: Array<[string, (f: Fixture) => void]> = [
-  ["a scenario file under vault/scenarios", (f) => put(f.repo, "vault/scenarios/w-1/seal-1/s-1.yaml", "kind: behavior\n")],
+  [
+    "a scenario file under vault/scenarios",
+    (f) => put(f.repo, "vault/scenarios/w-1/seal-1/s-1.yaml", "kind: behavior\n"),
+  ],
   [
     "a canary string in a committed file",
     (f) => {
@@ -59,7 +62,10 @@ const REPO_PLANTS: Array<[string, (f: Fixture) => void]> = [
 const WORKTREE_PLANTS: Array<[string, (f: Fixture) => void]> = [
   ["a vault path", (f) => put(f.worktree, "vault/metrics/m-x.json", "{}\n")],
   ["a lock file", (f) => put(f.worktree, "claim.lock", "{}\n")],
-  ["a symlink that escapes the worktree into the state root", (f) => symlinkSync(f.location.dir, join(f.worktree, "state"))],
+  [
+    "a symlink that escapes the worktree into the state root",
+    (f) => symlinkSync(f.location.dir, join(f.worktree, "state")),
+  ],
 ];
 
 describe("W-pokayoke-sealed-in-repo", () => {
@@ -122,8 +128,14 @@ describe("W-pokayoke-sealed-in-repo", () => {
 
 describe("W-pokayoke-sealed-in-repo: GATE-2 refuses before it does anything", () => {
   it.each([
-    ["a scenario file inside the repository", (s: SealedItem) => plant(join(s.f.fx.repo, "vault", "scenarios", "w.yaml"), "x\n")],
-    ["a canary string in a repository file", (s: SealedItem) => plant(join(s.f.fx.repo, "notes.txt"), `see ${s.scenarios[0]?.canary}\n`)],
+    [
+      "a scenario file inside the repository",
+      (s: SealedItem) => plant(join(s.f.fx.repo, "vault", "scenarios", "w.yaml"), "x\n"),
+    ],
+    [
+      "a canary string in a repository file",
+      (s: SealedItem) => plant(join(s.f.fx.repo, "notes.txt"), `see ${s.scenarios[0]?.canary}\n`),
+    ],
   ])("%s", async (_name, arrange) => {
     const s = seedSealedItem();
     arrange(s);

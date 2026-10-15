@@ -40,8 +40,7 @@ const accepts = (type: string, payload: object): boolean => validate("work-event
 interface SchemaDoc {
   $defs: Record<string, { enum?: string[]; properties?: Record<string, Record<string, unknown>> }>;
 }
-const schemaDoc = (): SchemaDoc =>
-  JSON.parse(readFileSync(schemaUrl("work-event.schema.json"), "utf8")) as SchemaDoc;
+const schemaDoc = (): SchemaDoc => JSON.parse(readFileSync(schemaUrl("work-event.schema.json"), "utf8")) as SchemaDoc;
 
 describe("W events", () => {
   it("has one sample for each of the seven event types", () => {
@@ -59,13 +58,19 @@ describe("W events", () => {
   }
 
   it("refuses to build an event whose ids are malformed", () => {
-    expect(() => wEvent({ type: "work.resumed", payload: { ...scope, work_id: "w-1" } })).toThrow(/invalid work.resumed event/);
+    expect(() => wEvent({ type: "work.resumed", payload: { ...scope, work_id: "w-1" } })).toThrow(
+      /invalid work.resumed event/,
+    );
   });
 
   it("ignores a W type written by anyone but omf, and any other type", () => {
     const ledger = newLedger();
     const forged = ledger.append({ actor: "human:dev", type: "work.started", payload: { ...scope, from: "ready" } });
-    const agent = ledger.append({ actor: "agent:codex", type: "work.failed", payload: { ...scope, outcome: "blocked", reason_code: "station_error" } });
+    const agent = ledger.append({
+      actor: "agent:codex",
+      type: "work.failed",
+      payload: { ...scope, outcome: "blocked", reason_code: "station_error" },
+    });
     const approved = ledger.append({ actor: "omf", type: "work.approved", payload: { ...scope } });
     for (const event of [forged, agent, approved]) expect(classifyWEvent(event)).toEqual({ kind: "none" });
   });
@@ -73,8 +78,16 @@ describe("W events", () => {
   it("classifies an omf W event with a missing or extra field as invalid and names the ids", () => {
     const ledger = newLedger();
     const missing = ledger.append({ actor: "omf", type: "work.started", payload: { ...scope } });
-    const extra = ledger.append({ actor: "omf", type: "work.started", payload: { ...scope, from: "ready", note: "x" } });
-    const garbled = ledger.append({ actor: "omf", type: "work.resumed", payload: { goal_id: "G X", work_id: "nope", run_id: 1 } });
+    const extra = ledger.append({
+      actor: "omf",
+      type: "work.started",
+      payload: { ...scope, from: "ready", note: "x" },
+    });
+    const garbled = ledger.append({
+      actor: "omf",
+      type: "work.resumed",
+      payload: { goal_id: "G X", work_id: "nope", run_id: 1 },
+    });
     expect(classifyWEvent(missing)).toEqual({ kind: "invalid", goal_id: "g-fast", work_id: "w-0123456789ab" });
     expect(classifyWEvent(extra)).toEqual({ kind: "invalid", goal_id: "g-fast", work_id: "w-0123456789ab" });
     expect(classifyWEvent(garbled)).toEqual({ kind: "invalid", goal_id: null, work_id: null });
@@ -108,7 +121,9 @@ describe("W events", () => {
   it("lets claim_reclaimed say the previous owner was unreadable", () => {
     expect(accepts("work.claim_reclaimed", { ...scope, previous_pid: null, previous_acquired_at: "" })).toBe(true);
     expect(accepts("work.claim_reclaimed", { ...scope, previous_pid: 0, previous_acquired_at: "" })).toBe(false);
-    expect(accepts("work.claim_reclaimed", { ...scope, previous_pid: 9, previous_acquired_at: "yesterday" })).toBe(false);
+    expect(accepts("work.claim_reclaimed", { ...scope, previous_pid: 9, previous_acquired_at: "yesterday" })).toBe(
+      false,
+    );
   });
 
   it("makes run ids that match the pattern, and refuses a generator that does not", () => {
@@ -139,10 +154,20 @@ describe("W events", () => {
     ledger.append(wEvent(SAMPLES[4] as WEvent));
     ledger.append(wEvent(SAMPLES[5] as WEvent));
     ledger.append(wEvent(SAMPLES[6] as WEvent));
-    expect(lastStateEvent(ledger.readVerified(), scope.work_id)).toMatchObject({ seq: started.seq, event: { type: "work.started" } });
+    expect(lastStateEvent(ledger.readVerified(), scope.work_id)).toMatchObject({
+      seq: started.seq,
+      event: { type: "work.started" },
+    });
     const parked = ledger.append(wEvent(SAMPLES[3] as WEvent));
-    ledger.append({ actor: "human:dev", type: "work.failed", payload: { ...scope, outcome: "blocked", reason_code: "station_error" } });
-    expect(lastStateEvent(ledger.readVerified(), scope.work_id)).toMatchObject({ seq: parked.seq, event: { type: "work.parked" } });
+    ledger.append({
+      actor: "human:dev",
+      type: "work.failed",
+      payload: { ...scope, outcome: "blocked", reason_code: "station_error" },
+    });
+    expect(lastStateEvent(ledger.readVerified(), scope.work_id)).toMatchObject({
+      seq: parked.seq,
+      event: { type: "work.parked" },
+    });
   });
 
   it("carries no key a metric value or query could hide under, and no free-text string", () => {
@@ -158,7 +183,14 @@ describe("W events", () => {
   });
 });
 
-const M3B1_CODES = ["j2_open", "gate_blocked", "budget_exhausted", "infra_failure", "manual_required", "station_error"] as const;
+const M3B1_CODES = [
+  "j2_open",
+  "gate_blocked",
+  "budget_exhausted",
+  "infra_failure",
+  "manual_required",
+  "station_error",
+] as const;
 /** The twelve codes M3b2 adds (D19): each one is the reason of exactly one classifier row or handoff route. */
 const M3B2_CODES = [
   "visit_cap",
@@ -207,7 +239,12 @@ describe("M3b2 reason codes", () => {
 
 describe("M3d reason codes", () => {
   it("accepts the four reason codes M3d adds (test split, reseal, noise, exhausted scenarios)", () => {
-    for (const reason_code of ["test_run_incomplete", "test_reseal_required", "noise_unverified", "scenarios_exhausted"]) {
+    for (const reason_code of [
+      "test_run_incomplete",
+      "test_reseal_required",
+      "noise_unverified",
+      "scenarios_exhausted",
+    ]) {
       expect(accepts("work.parked", { ...scope, outcome: "blocked", reason_code }), reason_code).toBe(true);
       expect(accepts("work.failed", { ...scope, outcome: "blocked", reason_code }), reason_code).toBe(true);
     }

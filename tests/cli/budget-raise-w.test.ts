@@ -29,7 +29,13 @@ function setup(): { fx: GoalFixture; workId: string; store: ReturnType<typeof cr
   fx.ledger.append({
     actor: "omf",
     type: "work.limits_set",
-    payload: { goal_id: item.front.goal_id, work_id: item.front.work_id, run_id: RUN, max_rounds: 3, max_model_micro_usd: 5_000_000 },
+    payload: {
+      goal_id: item.front.goal_id,
+      work_id: item.front.work_id,
+      run_id: RUN,
+      max_rounds: 3,
+      max_model_micro_usd: 5_000_000,
+    },
   });
   return { fx, workId: item.front.work_id, store };
 }
@@ -64,7 +70,13 @@ describe("parseBudgetRaiseArgs", () => {
   });
 
   it("parses --rounds and --usd for a work id into the units the ledger stores", () => {
-    expect(parseBudgetRaiseArgs({ id: WID, rounds: "2" })).toEqual({ form: "work", workId: WID, kind: "rounds", amount: 2, display: "2" });
+    expect(parseBudgetRaiseArgs({ id: WID, rounds: "2" })).toEqual({
+      form: "work",
+      workId: WID,
+      kind: "rounds",
+      amount: 2,
+      display: "2",
+    });
     expect(parseBudgetRaiseArgs({ id: WID, usd: "0.1" })).toEqual({
       form: "work",
       workId: WID,
@@ -135,7 +147,9 @@ describe("workLimitRaiseFlow", () => {
     const { fx, workId } = setup();
     const term = fakeTerminal();
     const lines: string[] = [];
-    const flow = workLimitRaiseFlow(fx.location, workRaise({ id: workId, rounds: "2" }), ACTOR, term.io, TTY, (line) => lines.push(line));
+    const flow = workLimitRaiseFlow(fx.location, workRaise({ id: workId, rounds: "2" }), ACTOR, term.io, TTY, (line) =>
+      lines.push(line),
+    );
     term.io.input.write(`${workId}\n`);
     await expect(flow).resolves.toBe(0);
 
@@ -155,18 +169,34 @@ describe("workLimitRaiseFlow", () => {
   it("raises model spend in micro-USD from --usd", async () => {
     const { fx, workId } = setup();
     const term = fakeTerminal();
-    const flow = workLimitRaiseFlow(fx.location, workRaise({ id: workId, usd: "0.25" }), ACTOR, term.io, TTY, () => undefined);
+    const flow = workLimitRaiseFlow(
+      fx.location,
+      workRaise({ id: workId, usd: "0.25" }),
+      ACTOR,
+      term.io,
+      TTY,
+      () => undefined,
+    );
     term.io.input.write(`${workId}\n`);
     await expect(flow).resolves.toBe(0);
     expect(budgetOf(fx, workId).raised).toEqual({ rounds: 0, model_micro_usd: 250_000 });
-    expect(workLimitLines(fx.location, workId)).toContain("model spend: limit 5.250000 USD (raised 0.250000), spent 0.000000 USD");
+    expect(workLimitLines(fx.location, workId)).toContain(
+      "model spend: limit 5.250000 USD (raised 0.250000), spent 0.000000 USD",
+    );
   });
 
   it("returns 1 and writes nothing when the person does not retype the id", async () => {
     const { fx, workId } = setup();
     const before = ledgerText(fx);
     const term = fakeTerminal();
-    const flow = workLimitRaiseFlow(fx.location, workRaise({ id: workId, rounds: "2" }), ACTOR, term.io, TTY, () => undefined);
+    const flow = workLimitRaiseFlow(
+      fx.location,
+      workRaise({ id: workId, rounds: "2" }),
+      ACTOR,
+      term.io,
+      TTY,
+      () => undefined,
+    );
     term.io.input.write("no\n");
     await expect(flow).resolves.toBe(1);
     expect(ledgerText(fx)).toBe(before);
@@ -177,7 +207,14 @@ describe("workLimitRaiseFlow", () => {
     const before = ledgerText(fx);
     const term = fakeTerminal();
     await expect(
-      workLimitRaiseFlow(fx.location, workRaise({ id: workId, rounds: "2" }), ACTOR, term.io, { stdin: {}, stdout: {} }, () => undefined),
+      workLimitRaiseFlow(
+        fx.location,
+        workRaise({ id: workId, rounds: "2" }),
+        ACTOR,
+        term.io,
+        { stdin: {}, stdout: {} },
+        () => undefined,
+      ),
     ).rejects.toThrow("needs an interactive terminal");
     expect(ledgerText(fx)).toBe(before);
     expect(term.shown()).toBe("");
@@ -186,9 +223,13 @@ describe("workLimitRaiseFlow", () => {
   it("refuses an item without limits and an item that is not open, with no prompt and nothing written", async () => {
     const { fx, store } = setup();
     const noLimits = createRecorded(fx.ledger, store, makeNewItem({ title: "Trim the cache keys" })).front.work_id;
-    const gated = createRecorded(fx.ledger, store, makeNewItem({ title: "Update the CI workflow", risk: HIGH_RISK })).front.work_id;
+    const gated = createRecorded(fx.ledger, store, makeNewItem({ title: "Update the CI workflow", risk: HIGH_RISK }))
+      .front.work_id;
     const before = ledgerText(fx);
-    for (const [workId, code] of [[noLimits, "no_limits"], [gated, "wrong_state"]] as const) {
+    for (const [workId, code] of [
+      [noLimits, "no_limits"],
+      [gated, "wrong_state"],
+    ] as const) {
       const term = fakeTerminal();
       await expect(
         workLimitRaiseFlow(fx.location, workRaise({ id: workId, rounds: "1" }), ACTOR, term.io, TTY, () => undefined),

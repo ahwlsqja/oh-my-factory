@@ -120,14 +120,16 @@ const TRACKED = [
 
 const NO_RECENT: RecentOutcomes = { success: 0, flawed: 0, blocked: 0, manual: 0 };
 
-function inputFor(overrides: {
-  front?: GoalDoc["front"];
-  body?: string;
-  items?: WorkItem[];
-  cap?: number;
-  repairableOpen?: number;
-  recent?: RecentOutcomes;
-} = {}): ReturnType<typeof buildReconcilerInput> {
+function inputFor(
+  overrides: {
+    front?: GoalDoc["front"];
+    body?: string;
+    items?: WorkItem[];
+    cap?: number;
+    repairableOpen?: number;
+    recent?: RecentOutcomes;
+  } = {},
+): ReturnType<typeof buildReconcilerInput> {
   const doc = canaryGoal();
   const front = overrides.front ?? doc.front;
   return buildReconcilerInput({
@@ -146,7 +148,9 @@ function inputFor(overrides: {
 
 describe("approachOf", () => {
   it("takes the section up to the next level-two heading and keeps its sub-headings", () => {
-    expect(approachOf(canaryGoal().body)).toBe("Trim the work done while rendering a page.\n\n### Out of scope\n\nAnything about checkout.");
+    expect(approachOf(canaryGoal().body)).toBe(
+      "Trim the work done while rendering a page.\n\n### Out of scope\n\nAnything about checkout.",
+    );
   });
 
   it("is empty when there is no Approach heading", () => {
@@ -168,7 +172,18 @@ describe("buildReconcilerInput", () => {
     // The goal id is free text a person picked (it may name the metric), so the model never sees it.
     expect(input).not.toHaveProperty("goal_id");
     const text = JSON.stringify(input);
-    for (const canary of ["3719.25", "4817.39", "3719", "4817", "furlongs", "m-zebra-quokka", "zebra", "quokka", "canary-qwerty", "secretbench"]) {
+    for (const canary of [
+      "3719.25",
+      "4817.39",
+      "3719",
+      "4817",
+      "furlongs",
+      "m-zebra-quokka",
+      "zebra",
+      "quokka",
+      "canary-qwerty",
+      "secretbench",
+    ]) {
       expect(text).not.toContain(canary);
     }
     // The disclosure is there, so the check above is not vacuous.
@@ -285,7 +300,10 @@ const GOAL = "g-fast";
 const SECOND_TICK = "t-20261012T090100Z-0002";
 
 const eventsOf = (fx: TickGoalFixture): LedgerEvent[] => fx.ledger.readVerified();
-const typesAfter = (fx: TickGoalFixture, before: number): string[] => eventsOf(fx).slice(before).map((e) => e.type);
+const typesAfter = (fx: TickGoalFixture, before: number): string[] =>
+  eventsOf(fx)
+    .slice(before)
+    .map((e) => e.type);
 const ofType = (fx: TickGoalFixture, type: string): LedgerEvent[] => eventsOf(fx).filter((e) => e.type === type);
 const roundsOf = (fx: TickGoalFixture) => budgetStateFromEvents(eventsOf(fx), GOAL, "rounds");
 const reconcileDir = (fx: TickGoalFixture): string => join(goalDir(fx.location.dir, GOAL), "reconcile");
@@ -319,11 +337,18 @@ describe("reconcileGoal: spending and recording", () => {
     const reconciler = fakeReconciler(okResponse([makeCandidate("Reuse rendered fragments", ["src/render"])]));
     const result = await reconcileGoal(reconcileContext(fx, reconciler));
     expect(result.outcome).toBe("dispatched");
-    expect(result.created.map((item) => [item.front.title, item.front.state])).toEqual([["Reuse rendered fragments", "ready"]]);
+    expect(result.created.map((item) => [item.front.title, item.front.state])).toEqual([
+      ["Reuse rendered fragments", "ready"],
+    ]);
     expect(result.rejected).toEqual([]);
     expect(result.failure).toBeNull();
     expect(result.stage_ms.reconcile).toBe(5);
-    expect(typesAfter(fx, before)).toEqual(["budget.consumed", "reconcile.requested", "reconcile.responded", "work.created"]);
+    expect(typesAfter(fx, before)).toEqual([
+      "budget.consumed",
+      "reconcile.requested",
+      "reconcile.responded",
+      "work.created",
+    ]);
     expect(roundsOf(fx)).toMatchObject({ declared: 10, consumed: 1, remaining: 9 });
     expect(reconciler.calls).toHaveLength(1);
     expect(reconciler.calls[0]?.prompt).toContain("untrusted data");
@@ -346,7 +371,11 @@ describe("reconcileGoal: spending and recording", () => {
       max_candidates: 2,
     });
     expect(requested?.payload.input_sha256).toBe(sha256Hex(readFileSync(inputFile, "utf8")));
-    expect(JSON.parse(readFileSync(inputFile, "utf8"))).toMatchObject({ trigger: "gap", gap: MEDIUM_GAP.gap, max_candidates: 2 });
+    expect(JSON.parse(readFileSync(inputFile, "utf8"))).toMatchObject({
+      trigger: "gap",
+      gap: MEDIUM_GAP.gap,
+      max_candidates: 2,
+    });
     const responded = ofType(fx, "reconcile.responded")[0];
     expect(responded?.payload).toMatchObject({ goal_id: GOAL, tick_id: TICK, candidates: 1, duration_ms: 5 });
     expect(responded?.payload.output_sha256).toBe(sha256Hex(readFileSync(outputFile, "utf8")));
@@ -367,14 +396,20 @@ describe("reconcileGoal: spending and recording", () => {
 
   it("reads the cap from the locked goal, not from goal.md", async () => {
     const fx = setupTickGoal();
-    writeFileSync(fx.goalFile, readFileSync(fx.goalFile, "utf8").replace("max_open_work_items: 2", "max_open_work_items: 9"));
+    writeFileSync(
+      fx.goalFile,
+      readFileSync(fx.goalFile, "utf8").replace("max_open_work_items: 2", "max_open_work_items: 9"),
+    );
     await reconcileGoal(reconcileContext(fx, fakeReconciler(okResponse([]))));
     expect(ofType(fx, "reconcile.requested")[0]?.payload.max_candidates).toBe(2);
   });
 
   it("spends nothing when the objective is unusable, and never calls the model", async () => {
     const fx = setupTickGoal();
-    writeFileSync(fx.goalFile, readFileSync(fx.goalFile, "utf8").replace("The outcome you want, in plain words", "Get the p95 under 250 ms"));
+    writeFileSync(
+      fx.goalFile,
+      readFileSync(fx.goalFile, "utf8").replace("The outcome you want, in plain words", "Get the p95 under 250 ms"),
+    );
     const before = eventsOf(fx).length;
     const reconciler = fakeReconciler(okResponse([]));
     const result = await reconcileGoal(reconcileContext(fx, reconciler));
@@ -404,7 +439,12 @@ describe("reconcileGoal: spending and recording", () => {
     const reconciler = fakeReconciler(okResponse([]));
     await reconcileGoal(reconcileContext(fx, reconciler));
     const first = eventsOf(fx).slice(before);
-    expect(first.map((e) => e.type)).toEqual(["budget.consumed", "budget.consumed", "reconcile.requested", "reconcile.responded"]);
+    expect(first.map((e) => e.type)).toEqual([
+      "budget.consumed",
+      "budget.consumed",
+      "reconcile.requested",
+      "reconcile.responded",
+    ]);
     expect(first.slice(0, 2).map((e) => e.payload.kind)).toEqual(["rounds", "disclosure"]);
 
     const again = await reconcileGoal(reconcileContext(fx, reconciler, { tickId: SECOND_TICK }));
@@ -423,7 +463,11 @@ describe("reconcileGoal: spending and recording", () => {
       const events = fx.ledger.readVerified();
       if (!raced) {
         raced = true;
-        const results = Array.from({ length: 10 }, (_, i) => ({ category: "interface" as const, passed: i < 3, flaky: false }));
+        const results = Array.from({ length: 10 }, (_, i) => ({
+          category: "interface" as const,
+          passed: i < 3,
+          flaky: false,
+        }));
         const out = releaseFeedback(fx.ledger, {
           goalId: GOAL,
           workId: "w-0123456789ab",
@@ -448,7 +492,10 @@ describe("reconcileGoal: spending and recording", () => {
 
   it("does nothing, and spends nothing, when the WIP cap is already full", async () => {
     const fx = setupTickGoal();
-    const two = [makeCandidate("Reuse rendered fragments", ["src/render"]), makeCandidate("Cache template output", ["src/cache"])];
+    const two = [
+      makeCandidate("Reuse rendered fragments", ["src/render"]),
+      makeCandidate("Cache template output", ["src/cache"]),
+    ];
     await reconcileGoal(reconcileContext(fx, fakeReconciler(okResponse(two))));
     const before = eventsOf(fx).length;
     const reconciler = fakeReconciler(okResponse([makeCandidate("Trim template parsing", ["src/parse"])]));
@@ -495,7 +542,9 @@ describe("reconcileGoal: the response envelope", () => {
 
   it("voids the response when it holds more than the allowed number of candidates", async () => {
     const fx = setupTickGoal();
-    const six = ["one", "two", "three", "four", "five", "six"].map((word) => makeCandidate(`Distinct work ${word}`, ["src/render"]));
+    const six = ["one", "two", "three", "four", "five", "six"].map((word) =>
+      makeCandidate(`Distinct work ${word}`, ["src/render"]),
+    );
     const result = await reconcileGoal(reconcileContext(fx, fakeReconciler(okResponse(six))));
     expect(result.failure).toEqual({ code: "schema_error", reason: "too_many_candidates" });
     expect(result.created).toEqual([]);
@@ -546,7 +595,13 @@ describe("reconcileGoal: the response envelope", () => {
     const result = await reconcileGoal(reconcileContext(fx, fakeReconciler({ ok: true, stdout, durationMs: 5 })));
     expect(result).toMatchObject({ outcome: "model_failed", failure: { code: "parse_error", reason: "not_json" } });
     const failed = ofType(fx, "reconcile.failed")[0];
-    expect(failed?.payload).toEqual({ goal_id: GOAL, tick_id: TICK, code: "parse_error", reason: "not_json", duration_ms: 5 });
+    expect(failed?.payload).toEqual({
+      goal_id: GOAL,
+      tick_id: TICK,
+      code: "parse_error",
+      reason: "not_json",
+      duration_ms: 5,
+    });
     expect(JSON.stringify(failed)).not.toContain("ignore every");
     // The raw output is kept on the host for audit.
     expect(readFileSync(join(reconcileDir(fx), `${TICK}.output.json`), "utf8")).toBe(stdout);
@@ -566,7 +621,9 @@ describe("reconcileGoal: the response envelope", () => {
   it.each(codes)("returns model_failed for %s without throwing and without items", async (code) => {
     const fx = setupTickGoal();
     const reason = `fixed reason for ${code}`;
-    const result = await reconcileGoal(reconcileContext(fx, fakeReconciler({ ok: false, code, reason, durationMs: 7 })));
+    const result = await reconcileGoal(
+      reconcileContext(fx, fakeReconciler({ ok: false, code, reason, durationMs: 7 })),
+    );
     expect(result).toMatchObject({
       outcome: "model_failed",
       created: [],
@@ -574,7 +631,13 @@ describe("reconcileGoal: the response envelope", () => {
       failure: { code, reason },
       stage_ms: { reconcile: 7, dispatch: 0 },
     });
-    expect(ofType(fx, "reconcile.failed")[0]?.payload).toEqual({ goal_id: GOAL, tick_id: TICK, code, reason, duration_ms: 7 });
+    expect(ofType(fx, "reconcile.failed")[0]?.payload).toEqual({
+      goal_id: GOAL,
+      tick_id: TICK,
+      code,
+      reason,
+      duration_ms: 7,
+    });
     expect(ofType(fx, "work.created")).toHaveLength(0);
     // The call was made, so the round is spent (D18).
     expect(roundsOf(fx)?.consumed).toBe(1);
@@ -616,14 +679,25 @@ describe("reconcileGoal: deterministic filters", () => {
     const first = await reconcileGoal(reconcileContext(fx, fakeReconciler(okResponse([candidate])), { store }));
     const id = first.created[0]?.front.work_id;
     if (id === undefined) throw new Error("the first run created nothing");
-    fx.ledger.append({ actor: "human:dev", type: "work.vetoed", payload: { goal_id: GOAL, work_id: id, reason: "no" } });
+    fx.ledger.append({
+      actor: "human:dev",
+      type: "work.vetoed",
+      payload: { goal_id: GOAL, work_id: id, reason: "no" },
+    });
     store.vetoWorkItem(id, "human:dev", "no", new Date());
 
     const reworded = { ...candidate, title: "REUSE rendered   fragments!" };
-    const second = await reconcileGoal(reconcileContext(fx, fakeReconciler(okResponse([reworded])), { store, tickId: SECOND_TICK }));
+    const second = await reconcileGoal(
+      reconcileContext(fx, fakeReconciler(okResponse([reworded])), { store, tickId: SECOND_TICK }),
+    );
     expect(second.outcome).toBe("no_candidates");
     expect(second.rejected).toEqual([
-      { index: 0, filter: "fingerprint", reason_code: "duplicate_existing", fingerprint: fingerprintOf(GOAL, candidate) },
+      {
+        index: 0,
+        filter: "fingerprint",
+        reason_code: "duplicate_existing",
+        fingerprint: fingerprintOf(GOAL, candidate),
+      },
     ]);
   });
 
@@ -634,12 +708,21 @@ describe("reconcileGoal: deterministic filters", () => {
     const fingerprint = fingerprintOf(GOAL, candidate);
     // An item.md with no work.created event: what a hand-made file looks like (D27).
     store.createWorkItem(
-      { goal_id: GOAL, tick_id: TICK, trigger: "gap", candidate, fingerprint, risk: { class: "normal", rules: [], paths: ["src/render"] } },
+      {
+        goal_id: GOAL,
+        tick_id: TICK,
+        trigger: "gap",
+        candidate,
+        fingerprint,
+        risk: { class: "normal", rules: [], paths: ["src/render"] },
+      },
       new Date(),
     );
     const result = await reconcileGoal(reconcileContext(fx, fakeReconciler(okResponse([candidate])), { store }));
     expect(result.created).toEqual([]);
-    expect(result.rejected).toEqual([{ index: 0, filter: "fingerprint", reason_code: "duplicate_existing", fingerprint }]);
+    expect(result.rejected).toEqual([
+      { index: 0, filter: "fingerprint", reason_code: "duplicate_existing", fingerprint },
+    ]);
     expect(ofType(fx, "work.created")).toHaveLength(0);
     const verified = verifiedItems(store, eventsOf(fx), GOAL);
     expect(verified.items).toEqual([]);
@@ -653,13 +736,20 @@ describe("reconcileGoal: deterministic filters", () => {
     const result = await reconcileGoal(reconcileContext(fx, fakeReconciler(okResponse([candidate, again]))));
     expect(result.created).toHaveLength(1);
     expect(result.rejected).toEqual([
-      { index: 1, filter: "fingerprint", reason_code: "duplicate_in_batch", fingerprint: fingerprintOf(GOAL, candidate) },
+      {
+        index: 1,
+        filter: "fingerprint",
+        reason_code: "duplicate_in_batch",
+        fingerprint: fingerprintOf(GOAL, candidate),
+      },
     ]);
   });
 
   it("enforces the WIP cap against open items plus the ones created in this batch", async () => {
     const fx = setupTickGoal();
-    await reconcileGoal(reconcileContext(fx, fakeReconciler(okResponse([makeCandidate("Reuse rendered fragments", ["src/render"])]))));
+    await reconcileGoal(
+      reconcileContext(fx, fakeReconciler(okResponse([makeCandidate("Reuse rendered fragments", ["src/render"])]))),
+    );
     const more = [
       makeCandidate("Cache template output", ["src/cache"]),
       makeCandidate("Trim template parsing", ["src/parse"]),
@@ -680,7 +770,10 @@ describe("reconcileGoal: deterministic filters", () => {
     const fixed = makeCandidate("Reuse rendered fragments", ["src/render"]);
     const other = makeCandidate("Cache template output", ["src/cache"]);
     const result = await reconcileGoal(reconcileContext(fx, fakeReconciler(okResponse([broken, fixed, other]))));
-    expect(result.created.map((item) => item.front.title)).toEqual(["Reuse rendered fragments", "Cache template output"]);
+    expect(result.created.map((item) => item.front.title)).toEqual([
+      "Reuse rendered fragments",
+      "Cache template output",
+    ]);
     expect(result.rejected.map((r) => [r.index, r.filter])).toEqual([[0, "seed_lint"]]);
   });
 });
@@ -745,12 +838,16 @@ describe("reconcileGoal: risk and dispatch", () => {
     const crashing = wrapStore(createMarkdownStore(fx.location.dir), () => {
       throw new Error("disk full");
     });
-    await expect(reconcileGoal(reconcileContext(fx, fakeReconciler(okResponse([candidate])), { store: crashing }))).rejects.toThrow("disk full");
+    await expect(
+      reconcileGoal(reconcileContext(fx, fakeReconciler(okResponse([candidate])), { store: crashing })),
+    ).rejects.toThrow("disk full");
     expect(ofType(fx, "work.created")).toHaveLength(1);
 
     const store = createMarkdownStore(fx.location.dir);
     expect(store.fetchAllWorkItems(GOAL)).toEqual([]);
-    const healed = await reconcileGoal(reconcileContext(fx, fakeReconciler(okResponse([candidate])), { store, tickId: SECOND_TICK }));
+    const healed = await reconcileGoal(
+      reconcileContext(fx, fakeReconciler(okResponse([candidate])), { store, tickId: SECOND_TICK }),
+    );
     expect(healed.created.map((item) => item.front.title)).toEqual(["Reuse rendered fragments"]);
     expect(ofType(fx, "work.created")).toHaveLength(1);
     const verified = verifiedItems(store, eventsOf(fx), GOAL);
@@ -786,14 +883,26 @@ describe("reconcileGoal: recent outcomes", () => {
     recordW(fx.ledger, "work.started", behind);
     recordW(fx.ledger, "work.failed", behind, { outcome: "blocked", reason_code: "infra_failure" });
     rewriteItem(behind, { state: "in_progress" });
-    expect(verifiedItems(store, eventsOf(fx), GOAL).repairable.map((entry) => entry.work_id)).toEqual([behind.front.work_id]);
+    expect(verifiedItems(store, eventsOf(fx), GOAL).repairable.map((entry) => entry.work_id)).toEqual([
+      behind.front.work_id,
+    ]);
 
     await reconcileGoal(reconcileContext(fx, fakeReconciler(okResponse([])), { store }));
 
-    const stored = JSON.parse(readFileSync(join(reconcileDir(fx), `${TICK}.input.json`), "utf8")) as Record<string, unknown>;
+    const stored = JSON.parse(readFileSync(join(reconcileDir(fx), `${TICK}.input.json`), "utf8")) as Record<
+      string,
+      unknown
+    >;
     expect(stored.recent_outcomes).toEqual({ success: 0, flawed: 1, blocked: 1, manual: 0 });
     const text = JSON.stringify(stored);
-    for (const secret of ["Drop the stale cache", "Split the render module", "src/cache", "src/split", failed.front.work_id, behind.front.work_id]) {
+    for (const secret of [
+      "Drop the stale cache",
+      "Split the render module",
+      "src/cache",
+      "src/split",
+      failed.front.work_id,
+      behind.front.work_id,
+    ]) {
       expect(text).not.toContain(secret);
     }
   });

@@ -58,9 +58,29 @@
     }
   },
   "oneOf": [
-    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "work.limits_set" }, "payload": { "$ref": "#/$defs/limits_set_payload" } } },
-    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "work.limit_raised" }, "payload": { "$ref": "#/$defs/limit_raised_payload" } } },
-    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "work.round" }, "payload": { "$ref": "#/$defs/round_payload" } } },
-    { "type": "object", "additionalProperties": false, "required": ["type", "payload"], "properties": { "type": { "const": "work.spend" }, "payload": { "$ref": "#/$defs/spend_payload" } } }
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": { "type": { "const": "work.limits_set" }, "payload": { "$ref": "#/$defs/limits_set_payload" } }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": { "type": { "const": "work.limit_raised" }, "payload": { "$ref": "#/$defs/limit_raised_payload" } }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": { "type": { "const": "work.round" }, "payload": { "$ref": "#/$defs/round_payload" } }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": { "type": { "const": "work.spend" }, "payload": { "$ref": "#/$defs/spend_payload" } }
+    }
   ]
 }

@@ -1,5 +1,14 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, lstatSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { gitEnv } from "../../src/core/paths.js";
@@ -97,7 +106,12 @@ describe("W-hostile-tree-git", () => {
     const evil = join(root, "evil");
     mkdirSync(evil);
     gitIn(evil, "init", "-q");
-    setConfig(join(evil, ".git", "config"), { ...traps, "filter.evil.clean": trap, "filter.evil.smudge": trap, "diff.evil.textconv": trap });
+    setConfig(join(evil, ".git", "config"), {
+      ...traps,
+      "filter.evil.clean": trap,
+      "filter.evil.smudge": trap,
+      "diff.evil.textconv": trap,
+    });
     writeFileSync(join(tree, ".git"), `gitdir: ${join(evil, ".git")}\n`);
     const nested = join(tree, "nested");
     mkdirSync(nested);
@@ -106,14 +120,24 @@ describe("W-hostile-tree-git", () => {
     copyFileSync(trap, join(nested, ".git", "hooks", "pre-commit"));
     chmodSync(join(nested, ".git", "hooks", "pre-commit"), 0o755);
 
-    const clean = await call("isDirClean", () => ops.isDirClean({ ...quarantine, indexFile: join(root, "index") }, head, tree));
+    const clean = await call("isDirClean", () =>
+      ops.isDirClean({ ...quarantine, indexFile: join(root, "index") }, head, tree),
+    );
     mkdirSync(join(root, "scratch-parent"));
     const scratch = await createScratchGitDir(join(root, "scratch-parent"));
     const applied = await call("applyPatchToDir", () => ops.applyPatchToDir(scratch, tree, patch, { reverse: true }));
     const escapePatch = [
-      "diff --git a/vault/secret.txt b/vault/secret.txt", "--- a/vault/secret.txt", "+++ b/vault/secret.txt", "@@ -1 +1 @@", `-${CANARY}`, "+overwritten", "",
+      "diff --git a/vault/secret.txt b/vault/secret.txt",
+      "--- a/vault/secret.txt",
+      "+++ b/vault/secret.txt",
+      "@@ -1 +1 @@",
+      `-${CANARY}`,
+      "+overwritten",
+      "",
     ].join("\n");
-    const escaped = await call("applyPatchToDir", () => ops.applyPatchToDir(scratch, tree, escapePatch, { reverse: false }));
+    const escaped = await call("applyPatchToDir", () =>
+      ops.applyPatchToDir(scratch, tree, escapePatch, { reverse: false }),
+    );
 
     w = { sentinels, fakeVault, tree, home: realTempDir("omf-home-"), quarantine, head, seen, applied, escaped, clean };
   });
@@ -139,15 +163,28 @@ describe("W-hostile-tree-git", () => {
   // Positive controls: the traps are live, so the zero above is the module's doing and not an inert fixture.
   it("control: bare git status in the same tree runs the planted fsmonitor", () => {
     const before = sentinelCount();
-    spawnSync("git", ["status"], { cwd: w.tree, env: { ...gitEnv(), HOME: w.home, GIT_CONFIG_NOSYSTEM: "1" }, stdio: "ignore" });
+    spawnSync("git", ["status"], {
+      cwd: w.tree,
+      env: { ...gitEnv(), HOME: w.home, GIT_CONFIG_NOSYSTEM: "1" },
+      stdio: "ignore",
+    });
     expect(sentinelCount()).toBeGreaterThan(before);
   });
 
   it("control: update-index without the hardened prefix runs the quarantine's poisoned fsmonitor", () => {
     const before = sentinelCount();
-    const env = { ...gitEnv(), HOME: w.home, GIT_CONFIG_NOSYSTEM: "1", GIT_INDEX_FILE: join(realTempDir("omf-control-"), "index") };
+    const env = {
+      ...gitEnv(),
+      HOME: w.home,
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_INDEX_FILE: join(realTempDir("omf-control-"), "index"),
+    };
     const run = (...args: string[]): void => {
-      spawnSync("git", [`--git-dir=${w.quarantine.gitDir}`, `--work-tree=${w.tree}`, ...args], { cwd: w.tree, env, stdio: "ignore" });
+      spawnSync("git", [`--git-dir=${w.quarantine.gitDir}`, `--work-tree=${w.tree}`, ...args], {
+        cwd: w.tree,
+        env,
+        stdio: "ignore",
+      });
     };
     run("read-tree", w.head);
     run("update-index", "-q", "--refresh");
@@ -167,10 +204,16 @@ describe("W-hostile-tree-git", () => {
       const q = makeEmptyQuarantine();
       gitIn(q.gitDir, "config", key, trap);
       await expect(ops.resolveCommit(q, w.head)).rejects.toMatchObject({ code: "gitdir_invalid" });
-      await expect(ops.archiveTar(q, w.head, join(root, `${key}.tar`))).rejects.toMatchObject({ code: "gitdir_invalid" });
+      await expect(ops.archiveTar(q, w.head, join(root, `${key}.tar`))).rejects.toMatchObject({
+        code: "gitdir_invalid",
+      });
       mkdirSync(join(root, `export-${key}`));
-      await expect(ops.exportTree(q, w.head, join(root, `export-${key}`))).rejects.toMatchObject({ code: "gitdir_invalid" });
-      await expect(ops.isDirClean({ ...q, indexFile: join(root, `index-${key}`) }, w.head, w.tree)).rejects.toMatchObject({ code: "gitdir_invalid" });
+      await expect(ops.exportTree(q, w.head, join(root, `export-${key}`))).rejects.toMatchObject({
+        code: "gitdir_invalid",
+      });
+      await expect(
+        ops.isDirClean({ ...q, indexFile: join(root, `index-${key}`) }, w.head, w.tree),
+      ).rejects.toMatchObject({ code: "gitdir_invalid" });
     }
     expect(readdirSync(sentinels)).toEqual([]);
   });

@@ -44,10 +44,16 @@ export function makeGitRepo(): string {
   writeFileSync(join(dir, "README.md"), "# fixture\n");
   git("add", "README.md");
   git(
-    "-c", "user.name=omf-test",
-    "-c", "user.email=omf-test@example.invalid",
-    "-c", "commit.gpgsign=false",
-    "commit", "-q", "-m", "init",
+    "-c",
+    "user.name=omf-test",
+    "-c",
+    "user.email=omf-test@example.invalid",
+    "-c",
+    "commit.gpgsign=false",
+    "commit",
+    "-q",
+    "-m",
+    "init",
   );
   return dir;
 }
@@ -61,7 +67,12 @@ function testGitEnv(): NodeJS.ProcessEnv {
 
 /** Runs git in `repo` and returns stdout. Throws with git's stderr on failure. */
 export function gitIn(repo: string, ...args: string[]): string {
-  return execFileSync("git", args, { cwd: repo, encoding: "utf8", env: testGitEnv(), stdio: ["ignore", "pipe", "pipe"] });
+  return execFileSync("git", args, {
+    cwd: repo,
+    encoding: "utf8",
+    env: testGitEnv(),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 }
 
 /** Stages everything and commits it with a fixed test identity. */
@@ -69,9 +80,15 @@ export function commitAll(repo: string, message: string): void {
   gitIn(repo, "add", "-A");
   gitIn(
     repo,
-    "-c", "user.name=omf-test",
-    "-c", "user.email=omf-test@example.invalid",
-    "-c", "commit.gpgsign=false",
-    "commit", "-q", "-m", message,
+    "-c",
+    "user.name=omf-test",
+    "-c",
+    "user.email=omf-test@example.invalid",
+    "-c",
+    "commit.gpgsign=false",
+    "commit",
+    "-q",
+    "-m",
+    message,
   );
 }

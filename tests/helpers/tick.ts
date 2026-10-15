@@ -44,7 +44,10 @@ function tickIds(): (at: Date) => string {
   let n = 0;
   return (at: Date): string => {
     n += 1;
-    const stamp = at.toISOString().replace(/\.\d{3}Z$/, "Z").replace(/[-:]/g, "");
+    const stamp = at
+      .toISOString()
+      .replace(/\.\d{3}Z$/, "Z")
+      .replace(/[-:]/g, "");
     return `t-${stamp}-${n.toString(16).padStart(4, "0")}`;
   };
 }
@@ -227,7 +230,8 @@ export function seedWorkItem(
     const item = { front: { goal_id: TICK_GOAL, work_id: workId } };
     if (state === "in_progress" || state === "awaiting_review" || state === "failed") {
       recordW(fx.ledger, "work.started", item);
-      if (state === "awaiting_review") recordW(fx.ledger, "work.submitted", item, { outcome: "flawed", recommendation: "not_recommended" });
+      if (state === "awaiting_review")
+        recordW(fx.ledger, "work.submitted", item, { outcome: "flawed", recommendation: "not_recommended" });
       if (state === "failed") recordW(fx.ledger, "work.failed", item);
     }
     const file = join(workItemDir(fx.location.dir, TICK_GOAL, workId), "item.md");

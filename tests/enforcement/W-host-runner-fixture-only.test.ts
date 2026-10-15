@@ -30,7 +30,11 @@ function sourceOf(id: FixtureId): string {
 /** What the first step of a session on `target` reports, with a recording exec; `calls` shows whether anything was spawned. */
 async function firstStep(target: RunTarget, fixturesOverride?: string) {
   const { exec, calls } = recordingExec();
-  const runner = createHostFixtureRunner({ exec, scratchRoot: makeTempDir("omf-scratch-"), fixturesDir: fixturesOverride });
+  const runner = createHostFixtureRunner({
+    exec,
+    scratchRoot: makeTempDir("omf-scratch-"),
+    fixturesDir: fixturesOverride,
+  });
   const session = await runner.openScenario(target);
   const observation = await session.runStep(STEP, DEFAULT_STEP_LIMITS);
   await session.close();
@@ -56,7 +60,10 @@ describe("W-host-runner-fixture-only", () => {
     const control = await firstStep({ kind: "fixture", id: "echo-everything" }, dir);
     expect(control.calls).toHaveLength(1);
 
-    writeFileSync(join(dir, "null-error.mjs"), `${readFileSync(join(dir, "null-error.mjs"), "utf8")}process.exit(0);\n`);
+    writeFileSync(
+      join(dir, "null-error.mjs"),
+      `${readFileSync(join(dir, "null-error.mjs"), "utf8")}process.exit(0);\n`,
+    );
     const modified = await firstStep({ kind: "fixture", id: "null-error" }, dir);
     expect(modified.observation).toEqual({ outcome: "refused", code: "fixture_hash_mismatch" });
     expect(modified.calls).toEqual([]);
@@ -84,7 +91,14 @@ describe("W-host-runner-fixture-only", () => {
     const session = await runner.openScenario({ kind: "fixture", id: "echo-everything" });
     await session.runStep({ argv: hostile, stdin: "" }, DEFAULT_STEP_LIMITS);
     await session.close();
-    expect(calls[0]?.argv).toEqual([process.execPath, "--input-type=module", "-e", sourceOf("echo-everything"), "--", ...hostile]);
+    expect(calls[0]?.argv).toEqual([
+      process.execPath,
+      "--input-type=module",
+      "-e",
+      sourceOf("echo-everything"),
+      "--",
+      ...hostile,
+    ]);
   });
 
   it("does not run a payload argv: with the real process a shell command and rm are only echoed", async () => {
@@ -94,7 +108,10 @@ describe("W-host-runner-fixture-only", () => {
     writeFileSync(keep, "still here");
     const runner = createHostFixtureRunner({ scratchRoot });
     const session = await runner.openScenario({ kind: "fixture", id: "echo-everything" });
-    for (const argv of [["/bin/sh", "-c", `touch ${marker}`], ["rm", "-f", keep]]) {
+    for (const argv of [
+      ["/bin/sh", "-c", `touch ${marker}`],
+      ["rm", "-f", keep],
+    ]) {
       expect(await session.runStep({ argv, stdin: "" }, DEFAULT_STEP_LIMITS)).toEqual({
         outcome: "exited",
         exit_code: 0,

@@ -5,7 +5,9 @@ import { projectDir } from "../../src/core/paths.js";
 import { omf, omfWithUmask } from "../helpers/cli.js";
 import { makeGitRepo, makeTempDir } from "../helpers/tmp.js";
 
-const packageVersion = (JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { version: string }).version;
+const packageVersion = (
+  JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { version: string }
+).version;
 
 describe("omf CLI", () => {
   it("lists its commands", () => {

@@ -85,7 +85,11 @@ function requireWellFormed(input: ReleaseInput): number {
 }
 
 /** The digest does not pin the layout, so a release must match the layout already recorded under it. */
-function sameLayout(layout: NonNullable<LadderState["layout"]>, workId: string, merged: readonly CategoryTally[]): boolean {
+function sameLayout(
+  layout: NonNullable<LadderState["layout"]>,
+  workId: string,
+  merged: readonly CategoryTally[],
+): boolean {
   return (
     layout.work_id === workId &&
     layout.categories.length === merged.length &&
@@ -107,7 +111,8 @@ function sameLayout(layout: NonNullable<LadderState["layout"]>, workId: string, 
 export function releaseFeedback(ledger: Ledger, input: ReleaseInput): ReleaseResult {
   const limit = requireWellFormed(input);
   const results = parseScenarioResults(input.results);
-  if (results.length === 0) throw new FeedbackError("no_train_scenarios", "the train split has no scenarios; zero is never a pass");
+  if (results.length === 0)
+    throw new FeedbackError("no_train_scenarios", "the train split has no scenarios; zero is never a pass");
   if (results.length < MIN_CATEGORY_SIZE) return { status: "withheld", reason: "too_few_scenarios" };
   const merged = mergeSmallCategories(tallyResults(results));
 
@@ -116,11 +121,17 @@ export function releaseFeedback(ledger: Ledger, input: ReleaseInput): ReleaseRes
     ledger.appendWithMany((events) => {
       const budget = budgetStateFromEvents(events, input.goalId, "disclosure");
       if (budget === null) {
-        throw new FeedbackError("not_declared", "no disclosure budget is declared for this goal; a person declares one (J8)");
+        throw new FeedbackError(
+          "not_declared",
+          "no disclosure budget is declared for this goal; a person declares one (J8)",
+        );
       }
       const ladder = ladderStateFromEvents(events, input.goalId, input.trainDigest);
       if (ladder.layout !== null && !sameLayout(ladder.layout, input.workId, merged)) {
-        throw new FeedbackError("invalid_input", "the train set layout differs from the one already released under this digest");
+        throw new FeedbackError(
+          "invalid_input",
+          "the train set layout differs from the one already released under this digest",
+        );
       }
       const categories = decideRelease(ladder.best, merged);
       const units: 0 | 1 = categories.every((c) => c.kind === "repeat") ? 0 : 1;
@@ -142,7 +153,8 @@ export function releaseFeedback(ledger: Ledger, input: ReleaseInput): ReleaseRes
         "omf",
       );
       const text = renderFeedback(categories);
-      if (!isAllowlistedFeedback(text)) throw new FeedbackError("invalid_input", "rendered feedback is outside the allowlist");
+      if (!isAllowlistedFeedback(text))
+        throw new FeedbackError("invalid_input", "rendered feedback is outside the allowlist");
       Object.assign(outcome, { round, categories, units, text });
       if (units === 0) return [released];
       if (exposureUnitsOf(events, input.goalId, input.workId) >= limit) throw new Withheld("exposure_limit");
@@ -153,7 +165,12 @@ export function releaseFeedback(ledger: Ledger, input: ReleaseInput): ReleaseRes
     if (error instanceof Withheld) return { status: "withheld", reason: error.reason };
     throw error;
   }
-  if (outcome.round === undefined || outcome.categories === undefined || outcome.units === undefined || outcome.text === undefined) {
+  if (
+    outcome.round === undefined ||
+    outcome.categories === undefined ||
+    outcome.units === undefined ||
+    outcome.text === undefined
+  ) {
     throw new Error("unreachable: the release was not computed");
   }
   return {

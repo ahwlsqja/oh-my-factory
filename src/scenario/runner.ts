@@ -44,7 +44,12 @@ export interface ScenarioSession {
 }
 
 /** `scenario_ref` is the only scenario handle that may reach the ledger. */
-export type ScenarioRun = { scenario_ref: string; outcome: "pass" | "fail" | "error"; steps_passed: number; steps_total: number };
+export type ScenarioRun = {
+  scenario_ref: string;
+  outcome: "pass" | "fail" | "error";
+  steps_passed: number;
+  steps_total: number;
+};
 
 /**
  * Runs one scenario in one session and stops at the first failing step. "error" means a step was refused,
@@ -82,5 +87,10 @@ export async function runScenario(
   } finally {
     await session.close();
   }
-  return { scenario_ref: scenarioRef(scenario.scenario_id), outcome, steps_passed: passed, steps_total: scenario.steps.length };
+  return {
+    scenario_ref: scenarioRef(scenario.scenario_id),
+    outcome,
+    steps_passed: passed,
+    steps_total: scenario.steps.length,
+  };
 }

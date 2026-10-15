@@ -23,7 +23,11 @@ describe("W-ledger-requires-w-event", () => {
   it("a hand-edited W state, done included, is malformed and absent from the verified items", () => {
     const { store, ledger } = fixture();
     const items = WORK_STATES.map((state, index) => {
-      const item = createRecorded(ledger, store, makeNewItem({ goalId: "g-fast", title: `Hand edited to ${state} ${index}` }));
+      const item = createRecorded(
+        ledger,
+        store,
+        makeNewItem({ goalId: "g-fast", title: `Hand edited to ${state} ${index}` }),
+      );
       rewriteItem(item, { state });
       return item;
     });
@@ -45,7 +49,9 @@ describe("W-ledger-requires-w-event", () => {
       });
     }
     rewriteItem(item, { state: "in_progress" });
-    expect(verifiedItems(store, ledger.readVerified(), "g-fast").malformed.map((entry) => entry.reason)).toEqual(["w_event_missing"]);
+    expect(verifiedItems(store, ledger.readVerified(), "g-fast").malformed.map((entry) => entry.reason)).toEqual([
+      "w_event_missing",
+    ]);
   });
 
   it("the same file with an omf event is verified (the control that makes the cases above mean something)", () => {
@@ -67,7 +73,8 @@ describe("W-ledger-requires-w-event", () => {
     expect((await forged.tick()).outcome).not.toBe("back_pressure");
 
     const honest = setupTick();
-    for (const title of ["Honest alpha", "Honest beta", "Honest gamma"]) seedWorkItem(honest, { title, state: "awaiting_review" });
+    for (const title of ["Honest alpha", "Honest beta", "Honest gamma"])
+      seedWorkItem(honest, { title, state: "awaiting_review" });
     expect((await honest.tick()).outcome).toBe("back_pressure");
   });
 });
@@ -118,7 +125,9 @@ describe("W verbs on an item whose file and ledger disagree", () => {
       expect([
         wCodeOf(() => startItem(fx.ctx, fx.claim, fx.workId, W_RUN)),
         wCodeOf(() => submitForReview(fx.ctx, fx.claim, fx.workId, W_RUN, "success")),
-        wCodeOf(() => failItem(fx.ctx, fx.claim, fx.workId, W_RUN, { outcome: "flawed", reason_code: "station_error" })),
+        wCodeOf(() =>
+          failItem(fx.ctx, fx.claim, fx.workId, W_RUN, { outcome: "flawed", reason_code: "station_error" }),
+        ),
       ]).toEqual(["malformed", "malformed", "malformed"]);
       expect(fx.ledgerText()).toBe(before);
 
@@ -150,7 +159,10 @@ describe("W verbs on an item whose file and ledger disagree", () => {
       name: "item.md was edited to awaiting_review although the ledger says failed",
       prepare: (fx) => {
         startItem(fx.ctx, fx.claim, fx.workId, W_RUN);
-        fx.appendOnly({ type: "work.failed", payload: { ...fx.scope, outcome: "flawed", reason_code: "budget_exhausted" } });
+        fx.appendOnly({
+          type: "work.failed",
+          payload: { ...fx.scope, outcome: "flawed", reason_code: "budget_exhausted" },
+        });
         fx.handEdit("awaiting_review");
       },
     },

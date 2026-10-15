@@ -114,8 +114,10 @@ export function evaluateGate4(input: Gate4Input): Gate4Result {
   if (visits.in_round > VISITS_PER_STATION_PER_ROUND) reasons.push("visit_cap");
   if (limit !== null && visits.total > totalVisitCap(limit.max_rounds)) reasons.push("total_visit_cap");
   if (stall.rework && stall.current !== null && stall.current === budget.previous_signature) reasons.push("stalled");
-  if (reentry.same_reason >= REENTRY_SAME_REASON_MAX || reentry.kills >= REENTRY_KILLS_MAX) reasons.push("reentry_loop");
-  if (limit !== null && input.next_round_wanted && budget.rounds_started >= limit.max_rounds) reasons.push("rounds_exhausted");
+  if (reentry.same_reason >= REENTRY_SAME_REASON_MAX || reentry.kills >= REENTRY_KILLS_MAX)
+    reasons.push("reentry_loop");
+  if (limit !== null && input.next_round_wanted && budget.rounds_started >= limit.max_rounds)
+    reasons.push("rounds_exhausted");
   if (limit !== null) {
     const spent = budget.spend.micro_usd;
     if (spent > limit.max_model_micro_usd || (input.next_round_wanted && spent >= limit.max_model_micro_usd)) {

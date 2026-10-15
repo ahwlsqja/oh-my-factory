@@ -130,8 +130,16 @@ export function isolationMeasuredEvent(
  * route matches the kind of condition. A result that breaks these ties fails here, at the writer, instead of becoming
  * a ledger event.
  */
-export function gate3EvaluatedEvent(scope: { goal_id: string; work_id: string; run_id: string }, result: Gate3Result): NewEvent {
-  const payload: Record<string, unknown> = { ...scope, passed: result.passed, failed: [...result.failed], route: result.route };
+export function gate3EvaluatedEvent(
+  scope: { goal_id: string; work_id: string; run_id: string },
+  result: Gate3Result,
+): NewEvent {
+  const payload: Record<string, unknown> = {
+    ...scope,
+    passed: result.passed,
+    failed: [...result.failed],
+    route: result.route,
+  };
   const check = validate("gate-event.schema.json", { type: "gate3.evaluated", payload });
   if (!check.ok) throw new Error(`invalid gate3.evaluated event: ${check.errors}`);
   return { actor: "omf", type: "gate3.evaluated", payload };

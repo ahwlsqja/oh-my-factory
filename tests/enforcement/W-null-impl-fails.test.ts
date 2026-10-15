@@ -3,8 +3,15 @@ import { createHostFixtureRunner } from "../../src/scenario/fixtures.js";
 import { runGate2 } from "../../src/scenario/gate2.js";
 import { intakeAuthored, type Ids } from "../../src/scenario/intake.js";
 import {
-  CANARY_SPEC, FAKE_AUTHOR, STRONG_EXPECT, type SealedItem, type SeedExpect, type SeedSpec,
-  gate2Reasons, sealedCtx, seedSealedItem,
+  CANARY_SPEC,
+  FAKE_AUTHOR,
+  STRONG_EXPECT,
+  type SealedItem,
+  type SeedExpect,
+  type SeedSpec,
+  gate2Reasons,
+  sealedCtx,
+  seedSealedItem,
 } from "../helpers/scenario-fixture.js";
 
 // Spec §5.3 and the kill criterion: a seeded weak judge is rejected. A behavior scenario that the null implementation
@@ -15,7 +22,10 @@ import {
 const real = (s: SealedItem) => sealedCtx(s, { runner: createHostFixtureRunner() });
 
 const WEAK: { name: string; expect: SeedExpect }[] = [
-  { name: "exit 1 with an exact empty stdout (passes null-error)", expect: { exit_code: 1, stdout_matches: { kind: "exact", text: "" } } },
+  {
+    name: "exit 1 with an exact empty stdout (passes null-error)",
+    expect: { exit_code: 1, stdout_matches: { kind: "exact", text: "" } },
+  },
   { name: "only exit 0 (passes null-empty)", expect: { exit_code: 0 } },
   { name: "only an exact empty stdout (passes both)", expect: { stdout_matches: { kind: "exact", text: "" } } },
   { name: "only the anchored ^$ (passes both)", expect: { stdout_matches: { kind: "anchored", pattern: "^$" } } },
@@ -29,7 +39,11 @@ describe("W-null-impl-fails", () => {
   });
 
   it.each(WEAK)("rejects a weak scenario that expects $name", async ({ expect: weak }) => {
-    const specs: SeedSpec[] = [{ split: "train", refs: ["d-interface"], expect: weak }, strong("test", "d-cache"), CANARY_SPEC];
+    const specs: SeedSpec[] = [
+      { split: "train", refs: ["d-interface"], expect: weak },
+      strong("test", "d-cache"),
+      CANARY_SPEC,
+    ];
     const result = await runGate2(real(seedSealedItem(specs)));
     expect(result.status).toBe("fail");
     expect(result.status === "fail" ? result.route : null).toBe("back_to_S2");
@@ -38,8 +52,11 @@ describe("W-null-impl-fails", () => {
 
   it("one weak scenario among many still fails, and every weak one is counted", async () => {
     const specs: SeedSpec[] = [
-      strong("train", "d-interface"), strong("train", "d-interface"), strong("train", "d-interface"),
-      strong("test", "d-cache"), strong("test", "d-cache"),
+      strong("train", "d-interface"),
+      strong("train", "d-interface"),
+      strong("train", "d-interface"),
+      strong("test", "d-cache"),
+      strong("test", "d-cache"),
       { split: "test", refs: ["d-cache"], expect: { exit_code: 0 } },
       { split: "train", refs: ["d-interface"], expect: { stdout_matches: { kind: "anchored", pattern: "^$" } } },
       CANARY_SPEC,

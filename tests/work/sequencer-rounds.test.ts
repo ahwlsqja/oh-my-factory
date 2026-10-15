@@ -7,7 +7,17 @@ import type { StationId } from "../../src/work/line-types.js";
 import { foldWorkBudget, microUsd, raiseWorkLimit } from "../../src/work/w-budget.js";
 import { newRunId, wEvent } from "../../src/work/w-events.js";
 import { HUMAN } from "../helpers/decision-fixture.js";
-import { OK, type LineFixture, type StationBody, fakeGate, fillClean, finished, passGates, setupLine, stationsOf } from "../helpers/line.js";
+import {
+  OK,
+  type LineFixture,
+  type StationBody,
+  fakeGate,
+  fillClean,
+  finished,
+  passGates,
+  setupLine,
+  stationsOf,
+} from "../helpers/line.js";
 
 // Spec 4.4 (loop guards, visit caps) and 5.0 (GATE-4). No model is called: stations and GATE-2/GATE-3 are
 // scripted here, GATE-1 is the real one over the closed interface decision of the line fixture.
@@ -17,7 +27,11 @@ const hex = (n: number): string => n.toString(16).padStart(64, "0");
 /** How many times a node has run so far. The helper stations log their id before their body runs, so inside a body this is "my call number". */
 const nth = (log: string[], id: string): number => log.filter((entry) => entry === id).length;
 
-function line(f: LineFixture, log: string[], bodies: Partial<Record<StationId, StationBody>> = {}): Promise<LineResult> {
+function line(
+  f: LineFixture,
+  log: string[],
+  bodies: Partial<Record<StationId, StationBody>> = {},
+): Promise<LineResult> {
   return f.go({ stations: stationsOf(log, bodies), gates: passGates(log) });
 }
 
@@ -55,7 +69,8 @@ function reworkOnce(f: LineFixture, log: string[], second: StationBody = () => O
 }
 
 const roundsOf = (f: LineFixture): unknown[][] =>
-  f.events()
+  f
+    .events()
     .filter((event) => event.type === "work.round")
     .map((event) => [event.payload.round, event.payload.prev_signature]);
 
@@ -75,7 +90,10 @@ describe("rework opens a new round", () => {
     expect(result.reason_code).toBe("evidence_incomplete");
     expect(result.evidence.audit.canary_hits).toBe("not run");
     expect(result.evidence.sealed.train).toBe("not run");
-    expect(result.evidence.gates.history.filter((h) => h.gate === "GATE-4").map((h) => h.verdict)).toEqual(["pass", "pass"]);
+    expect(result.evidence.gates.history.filter((h) => h.gate === "GATE-4").map((h) => h.verdict)).toEqual([
+      "pass",
+      "pass",
+    ]);
     expect(f.stateOf()).toBe("in_progress");
   });
 
@@ -86,8 +104,19 @@ describe("rework opens a new round", () => {
 
     expect(roundsOf(f)).toHaveLength(2);
     expect(result.reason_code).toBe("infra_failure");
-    expect(result.evidence.gates.per_gate).toEqual({ "GATE-1": "pass", "GATE-2": "pass", "GATE-3": "not_visited", "GATE-4": "not_visited" });
-    expect(result.evidence.stations).toMatchObject({ S3: "ok", S4: "blocked", S5: "not_run", S6: "not_run", S7: "not_run" });
+    expect(result.evidence.gates.per_gate).toEqual({
+      "GATE-1": "pass",
+      "GATE-2": "pass",
+      "GATE-3": "not_visited",
+      "GATE-4": "not_visited",
+    });
+    expect(result.evidence.stations).toMatchObject({
+      S3: "ok",
+      S4: "blocked",
+      S5: "not_run",
+      S6: "not_run",
+      S7: "not_run",
+    });
     // The round-1 check stays in the history; the guards that passed at node entry never appear.
     expect(result.evidence.gates.history.map((h) => h.gate)).toEqual(["GATE-1", "GATE-2", "GATE-3", "GATE-4"]);
   });
@@ -122,7 +151,10 @@ describe("the S2/GATE-2 loop", () => {
     const result = finished(
       await f.go({
         stations: stationsOf(log),
-        gates: { "GATE-2": fakeGate("GATE-2", { log, verdict: "fail", reasons: ["seal_gap"] }), "GATE-3": fakeGate("GATE-3", { log }) },
+        gates: {
+          "GATE-2": fakeGate("GATE-2", { log, verdict: "fail", reasons: ["seal_gap"] }),
+          "GATE-3": fakeGate("GATE-3", { log }),
+        },
       }),
     );
 
@@ -184,9 +216,16 @@ describe("rounds and spend are limits a person can raise (J8)", () => {
 
     expect(result.reason_code).toBe("budget_exhausted");
     expect(log).not.toContain("S4");
-    const spends = f.events().filter((event) => event.type === "work.spend").map((event) => [event.payload.station, event.payload.micro_usd]);
+    const spends = f
+      .events()
+      .filter((event) => event.type === "work.spend")
+      .map((event) => [event.payload.station, event.payload.micro_usd]);
     expect(spends).toEqual([["S3", 2_000_000]]);
-    expect(result.evidence.gates.history.at(-1)).toEqual({ gate: "GATE-4", verdict: "fail", reasons: ["spend_exhausted"] });
+    expect(result.evidence.gates.history.at(-1)).toEqual({
+      gate: "GATE-4",
+      verdict: "fail",
+      reasons: ["spend_exhausted"],
+    });
   });
 
   it("spend at the limit before S3 opens no round; the next entry stops before S1; a raise reopens the line", async () => {
@@ -205,7 +244,11 @@ describe("rounds and spend are limits a person can raise (J8)", () => {
     expect(first.reason_code).toBe("budget_exhausted");
     expect(f.trail()).toEqual(["work.limits_set", "work.spend", "work.parked"]); // no work.round, no work.started
     expect(f.stateOf()).toBe("ready");
-    expect(first.evidence.gates.history.at(-1)).toEqual({ gate: "GATE-4", verdict: "fail", reasons: ["spend_exhausted"] });
+    expect(first.evidence.gates.history.at(-1)).toEqual({
+      gate: "GATE-4",
+      verdict: "fail",
+      reasons: ["spend_exhausted"],
+    });
 
     const second = finished(await go());
     expect(second.reason_code).toBe("budget_exhausted");
@@ -223,7 +266,9 @@ describe("re-entry loop", () => {
     const f = setupLine();
     const log: string[] = [];
     const go = (): Promise<LineResult> =>
-      line(f, log, { S1: (): StationResult => (nth(log, "S1") <= 3 ? { kind: "blocked", reason_code: "infra_failure" } : OK) });
+      line(f, log, {
+        S1: (): StationResult => (nth(log, "S1") <= 3 ? { kind: "blocked", reason_code: "infra_failure" } : OK),
+      });
     for (let run = 0; run < 3; run += 1) expect(finished(await go()).reason_code).toBe("infra_failure");
     expect(f.stateOf()).toBe("ready");
 

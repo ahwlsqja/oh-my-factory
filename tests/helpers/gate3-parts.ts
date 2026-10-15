@@ -26,7 +26,14 @@ export function cleanAudit(over: Partial<WorkAudit> = {}): WorkAudit {
     tests_edited: [],
     tests_edited_count: 0,
     tests_added: 1,
-    canary: { status: "scanned", surfaces_scanned: [...SURFACE_KINDS], hits: [], total: 0, symlinks_skipped: 0, truncated: false },
+    canary: {
+      status: "scanned",
+      surfaces_scanned: [...SURFACE_KINDS],
+      hits: [],
+      total: 0,
+      symlinks_skipped: 0,
+      truncated: false,
+    },
     judge_config_touched: false,
     judge_files_checked: 2,
     projections_touched: [],
@@ -60,7 +67,12 @@ export function measurement(stage: IsolationStage, level: IsolationLevel, n = 0)
   };
 }
 
-export const ALL_L2: Readonly<Record<IsolationStage, IsolationLevel>> = { author: "L2", implementer: "L2", sut: "L2", harness: "L2" };
+export const ALL_L2: Readonly<Record<IsolationStage, IsolationLevel>> = {
+  author: "L2",
+  implementer: "L2",
+  sut: "L2",
+  harness: "L2",
+};
 
 /** The run isolation of the stages named in `levels`; a stage that is not named was never measured. */
 export function isolationFor(levels: Partial<Record<IsolationStage, IsolationLevel>>): RunIsolation {

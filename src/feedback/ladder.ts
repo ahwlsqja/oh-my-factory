@@ -52,7 +52,8 @@ export function decideRelease(best: LadderBest, merged: readonly CategoryTally[]
     if (previous === undefined) {
       return { category: actual.category, n, pass: actual.pass, score_pct: scorePct(actual.pass, n), kind: "first" };
     }
-    if (previous.n !== n) throw new FeedbackError("invalid_input", "the best released score covers a different scenario count");
+    if (previous.n !== n)
+      throw new FeedbackError("invalid_input", "the best released score covers a different scenario count");
     if (meetsMargin(actual.pass - previous.pass, n)) {
       return { category: actual.category, n, pass: actual.pass, score_pct: scorePct(actual.pass, n), kind: "new" };
     }

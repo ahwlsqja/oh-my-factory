@@ -14,7 +14,9 @@ const LINE = "OMF_GATES: fast=pass full=pass deep=skip";
 
 describe("formatGateLine and parseGateLine", () => {
   it("writes the three gates in the order fast, full, deep whatever the key order of the input", () => {
-    expect(formatGateLine({ deep: "skip", full: "pass", fast: "fail" })).toBe("OMF_GATES: fast=fail full=pass deep=skip");
+    expect(formatGateLine({ deep: "skip", full: "pass", fast: "fail" })).toBe(
+      "OMF_GATES: fast=fail full=pass deep=skip",
+    );
   });
 
   it("round-trips every one of the 64 value combinations", () => {
@@ -29,11 +31,20 @@ describe("formatGateLine and parseGateLine", () => {
   });
 
   it("finds the line among other output", () => {
-    expect(parseGateLine(`build ok\n${LINE}\ndone\n`)).toEqual({ kind: "ok", values: { fast: "pass", full: "pass", deep: "skip" } });
+    expect(parseGateLine(`build ok\n${LINE}\ndone\n`)).toEqual({
+      kind: "ok",
+      values: { fast: "pass", full: "pass", deep: "skip" },
+    });
   });
 
   it("reads text without a candidate line as absent", () => {
-    for (const text of ["", "nothing here\n", "OMF_GATE: fast=pass full=pass deep=skip", ` ${LINE}`, "omf_gates: fast=pass full=pass deep=skip"]) {
+    for (const text of [
+      "",
+      "nothing here\n",
+      "OMF_GATE: fast=pass full=pass deep=skip",
+      ` ${LINE}`,
+      "omf_gates: fast=pass full=pass deep=skip",
+    ]) {
       expect(parseGateLine(text), JSON.stringify(text)).toEqual({ kind: "absent" });
     }
   });
@@ -73,30 +84,156 @@ const v = (fast: string, full: string, deep: string): GateLineValues => ({ fast,
 const BOTH: GateName[] = ["fast", "full"];
 
 describe("evaluateGateLine", () => {
-  const ROWS: Array<{ name: string; values: GateLineValues; required: GateName[]; status: string; failing: GateName[]; misconfigured: GateName[]; reasons: string[] }> = [
-    { name: "all required pass", values: v("pass", "pass", "skip"), required: BOTH, status: "GREEN", failing: [], misconfigured: [], reasons: [] },
-    { name: "a required skip", values: v("pass", "skip", "skip"), required: BOTH, status: "MISCONFIGURED", failing: [], misconfigured: ["full"], reasons: ["required_skipped"] },
-    { name: "a required empty", values: v("pass", "empty", "skip"), required: BOTH, status: "MISCONFIGURED", failing: [], misconfigured: ["full"], reasons: ["required_empty"] },
-    { name: "a required fail", values: v("fail", "pass", "skip"), required: BOTH, status: "RED", failing: ["fast"], misconfigured: [], reasons: [] },
-    { name: "MISCONFIGURED beats RED", values: v("fail", "skip", "skip"), required: BOTH, status: "MISCONFIGURED", failing: ["fast"], misconfigured: ["full"], reasons: ["required_skipped"] },
-    { name: "a skip and an empty together", values: v("skip", "empty", "pass"), required: BOTH, status: "MISCONFIGURED", failing: [], misconfigured: ["fast", "full"], reasons: ["required_skipped", "required_empty"] },
-    { name: "no required gate", values: v("pass", "pass", "pass"), required: [], status: "MISCONFIGURED", failing: [], misconfigured: [], reasons: ["no_required_gates"] },
-    { name: "no required gate and a fail", values: v("fail", "pass", "pass"), required: [], status: "MISCONFIGURED", failing: ["fast"], misconfigured: [], reasons: ["no_required_gates"] },
-    { name: "a non-required skip is ignored", values: v("pass", "pass", "skip"), required: ["fast"], status: "GREEN", failing: [], misconfigured: [], reasons: [] },
-    { name: "a non-required empty is ignored", values: v("pass", "pass", "empty"), required: ["fast"], status: "GREEN", failing: [], misconfigured: [], reasons: [] },
-    { name: "a non-required fail is RED", values: v("pass", "pass", "fail"), required: ["fast"], status: "RED", failing: ["deep"], misconfigured: [], reasons: [] },
-    { name: "required listed out of gate order", values: v("skip", "skip", "pass"), required: ["full", "fast"], status: "MISCONFIGURED", failing: [], misconfigured: ["fast", "full"], reasons: ["required_skipped"] },
+  const ROWS: Array<{
+    name: string;
+    values: GateLineValues;
+    required: GateName[];
+    status: string;
+    failing: GateName[];
+    misconfigured: GateName[];
+    reasons: string[];
+  }> = [
+    {
+      name: "all required pass",
+      values: v("pass", "pass", "skip"),
+      required: BOTH,
+      status: "GREEN",
+      failing: [],
+      misconfigured: [],
+      reasons: [],
+    },
+    {
+      name: "a required skip",
+      values: v("pass", "skip", "skip"),
+      required: BOTH,
+      status: "MISCONFIGURED",
+      failing: [],
+      misconfigured: ["full"],
+      reasons: ["required_skipped"],
+    },
+    {
+      name: "a required empty",
+      values: v("pass", "empty", "skip"),
+      required: BOTH,
+      status: "MISCONFIGURED",
+      failing: [],
+      misconfigured: ["full"],
+      reasons: ["required_empty"],
+    },
+    {
+      name: "a required fail",
+      values: v("fail", "pass", "skip"),
+      required: BOTH,
+      status: "RED",
+      failing: ["fast"],
+      misconfigured: [],
+      reasons: [],
+    },
+    {
+      name: "MISCONFIGURED beats RED",
+      values: v("fail", "skip", "skip"),
+      required: BOTH,
+      status: "MISCONFIGURED",
+      failing: ["fast"],
+      misconfigured: ["full"],
+      reasons: ["required_skipped"],
+    },
+    {
+      name: "a skip and an empty together",
+      values: v("skip", "empty", "pass"),
+      required: BOTH,
+      status: "MISCONFIGURED",
+      failing: [],
+      misconfigured: ["fast", "full"],
+      reasons: ["required_skipped", "required_empty"],
+    },
+    {
+      name: "no required gate",
+      values: v("pass", "pass", "pass"),
+      required: [],
+      status: "MISCONFIGURED",
+      failing: [],
+      misconfigured: [],
+      reasons: ["no_required_gates"],
+    },
+    {
+      name: "no required gate and a fail",
+      values: v("fail", "pass", "pass"),
+      required: [],
+      status: "MISCONFIGURED",
+      failing: ["fast"],
+      misconfigured: [],
+      reasons: ["no_required_gates"],
+    },
+    {
+      name: "a non-required skip is ignored",
+      values: v("pass", "pass", "skip"),
+      required: ["fast"],
+      status: "GREEN",
+      failing: [],
+      misconfigured: [],
+      reasons: [],
+    },
+    {
+      name: "a non-required empty is ignored",
+      values: v("pass", "pass", "empty"),
+      required: ["fast"],
+      status: "GREEN",
+      failing: [],
+      misconfigured: [],
+      reasons: [],
+    },
+    {
+      name: "a non-required fail is RED",
+      values: v("pass", "pass", "fail"),
+      required: ["fast"],
+      status: "RED",
+      failing: ["deep"],
+      misconfigured: [],
+      reasons: [],
+    },
+    {
+      name: "required listed out of gate order",
+      values: v("skip", "skip", "pass"),
+      required: ["full", "fast"],
+      status: "MISCONFIGURED",
+      failing: [],
+      misconfigured: ["fast", "full"],
+      reasons: ["required_skipped"],
+    },
   ];
   it.each(ROWS)("$name", (row) => {
     const verdict = evaluateGateLine(parseGateLine(formatGateLine(row.values)), row.required);
-    expect(verdict).toEqual({ status: row.status, line: formatGateLine(row.values), failing: row.failing, misconfigured: row.misconfigured, reasons: row.reasons });
+    expect(verdict).toEqual({
+      status: row.status,
+      line: formatGateLine(row.values),
+      failing: row.failing,
+      misconfigured: row.misconfigured,
+      reasons: row.reasons,
+    });
   });
 
   it("a line that is absent, duplicated or malformed is MISCONFIGURED and names every required gate", () => {
-    expect(evaluateGateLine(parseGateLine("nothing"), BOTH)).toEqual({ status: "MISCONFIGURED", line: null, failing: [], misconfigured: BOTH, reasons: ["line_absent"] });
-    expect(evaluateGateLine(parseGateLine(`${LINE}\n${LINE}`), ["fast"])).toMatchObject({ status: "MISCONFIGURED", misconfigured: ["fast"], reasons: ["line_duplicated"] });
-    expect(evaluateGateLine(parseGateLine("OMF_GATES: fast=pass"), ["fast"])).toMatchObject({ status: "MISCONFIGURED", line: null, reasons: ["line_malformed"] });
-    expect(evaluateGateLine(parseGateLine("nothing"), [])).toMatchObject({ reasons: ["line_absent", "no_required_gates"] });
+    expect(evaluateGateLine(parseGateLine("nothing"), BOTH)).toEqual({
+      status: "MISCONFIGURED",
+      line: null,
+      failing: [],
+      misconfigured: BOTH,
+      reasons: ["line_absent"],
+    });
+    expect(evaluateGateLine(parseGateLine(`${LINE}\n${LINE}`), ["fast"])).toMatchObject({
+      status: "MISCONFIGURED",
+      misconfigured: ["fast"],
+      reasons: ["line_duplicated"],
+    });
+    expect(evaluateGateLine(parseGateLine("OMF_GATES: fast=pass"), ["fast"])).toMatchObject({
+      status: "MISCONFIGURED",
+      line: null,
+      reasons: ["line_malformed"],
+    });
+    expect(evaluateGateLine(parseGateLine("nothing"), [])).toMatchObject({
+      reasons: ["line_absent", "no_required_gates"],
+    });
   });
 
   it("only GREEN passes", () => {
@@ -112,7 +249,14 @@ describe("evaluateGateLine", () => {
   });
 
   it("lists every reason in the closed order", () => {
-    expect([...MISCONFIGURED_REASONS]).toEqual(["line_absent", "line_duplicated", "line_malformed", "required_skipped", "required_empty", "no_required_gates"]);
+    expect([...MISCONFIGURED_REASONS]).toEqual([
+      "line_absent",
+      "line_duplicated",
+      "line_malformed",
+      "required_skipped",
+      "required_empty",
+      "no_required_gates",
+    ]);
     expect(GATE_NAMES).toEqual(["fast", "full", "deep"]);
   });
 });

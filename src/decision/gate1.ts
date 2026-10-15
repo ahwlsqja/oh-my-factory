@@ -15,9 +15,7 @@ export type Gate1Reason =
   | { code: "record_invalid"; decision_id: string | null; problem: LintProblemCode }
   | { code: "ledger_anomaly"; decision_id: string | null; anomaly: AnomalyCode };
 
-export type Gate1Result =
-  | { status: "pass" }
-  | { status: "blocked_on_user"; j: "J2"; reasons: Gate1Reason[] };
+export type Gate1Result = { status: "pass" } | { status: "blocked_on_user"; j: "J2"; reasons: Gate1Reason[] };
 
 export interface Gate1Context {
   leak: LeakContext;

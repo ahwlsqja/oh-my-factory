@@ -37,7 +37,16 @@ export interface LeakFinding {
  * shape number (p95), not a measurement. `id` is deliberately not here: an id is free text a person chooses
  * and it reaches `spec.md` (A16b).
  */
-const OMF_SET_KEYS: ReadonlySet<string> = new Set(["class", "by", "at", "signed_by", "expires_at", "op", "kind", "percentile"]);
+const OMF_SET_KEYS: ReadonlySet<string> = new Set([
+  "class",
+  "by",
+  "at",
+  "signed_by",
+  "expires_at",
+  "op",
+  "kind",
+  "percentile",
+]);
 
 /**
  * One number in running text: `12`, `12.0`, `3,719.25`, `250ms`. A token is not part of a longer number
@@ -70,7 +79,11 @@ export function leakContextFor(semantic: GoalSemantic, measured: readonly number
  */
 export function loadLeakContext(projectDir: string, goalId: string, events: readonly LedgerEvent[]): LeakContext {
   const lock = readGoalLock(projectDir, goalId);
-  if (lock === null) throw new DecisionError("goal_not_locked", `goal ${goalId} has no lock; approve it (J1) before recording decisions`);
+  if (lock === null)
+    throw new DecisionError(
+      "goal_not_locked",
+      `goal ${goalId} has no lock; approve it (J1) before recording decisions`,
+    );
   const readings: { seq: number; value: number }[] = [];
   for (const event of events) {
     if (event.type !== "metric.measured" || event.payload.goal_id !== goalId) continue;
@@ -124,7 +137,11 @@ function sameNumber(value: number, reference: number): boolean {
 
 function numberLeaks(value: number, ctx: LeakContext): boolean {
   if (!Number.isFinite(value)) return false;
-  if (ctx.targetNumbers.some((target) => (isLoneDigit(value) ? Math.abs(value) === Math.abs(target) : sameNumber(value, target)))) {
+  if (
+    ctx.targetNumbers.some((target) =>
+      isLoneDigit(value) ? Math.abs(value) === Math.abs(target) : sameNumber(value, target),
+    )
+  ) {
     return true;
   }
   if (isLoneDigit(value)) return false;

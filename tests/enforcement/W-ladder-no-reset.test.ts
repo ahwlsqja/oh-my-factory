@@ -2,12 +2,27 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { BudgetError, budgetConsumedEvent, declareBudget, raiseBudget } from "../../src/core/budget.js";
 import { Ledger } from "../../src/core/ledger.js";
-import { type FeedbackEvent, exposureUnitsOf, feedbackEvent, ladderStateFromEvents } from "../../src/feedback/events.js";
+import {
+  type FeedbackEvent,
+  exposureUnitsOf,
+  feedbackEvent,
+  ladderStateFromEvents,
+} from "../../src/feedback/events.js";
 import { FeedbackError } from "../../src/feedback/types.js";
 import { releaseFeedback } from "../../src/feedback/release.js";
 import { runChild } from "../helpers/child.js";
 import { ledgerEvents, setupEnforcementGoal, tickCli, useCleanModel } from "../helpers/enforcement-goal.js";
-import { DIGEST, GOAL, RUN, WORK, counts, declaredLedger, eventsOf, releaseInput, remaining } from "../helpers/release-fixture.js";
+import {
+  DIGEST,
+  GOAL,
+  RUN,
+  WORK,
+  counts,
+  declaredLedger,
+  eventsOf,
+  releaseInput,
+  remaining,
+} from "../helpers/release-fixture.js";
 
 // Spec §5.7: releases are counted per goal in the host ledger and bounded by the `disclosure` budget (J8). The W twin of
 // E3: a restart, a new process, another work item, a changed train digest or a G re-seed cannot reset the count, the
@@ -64,7 +79,8 @@ describe("W-ladder-no-reset", () => {
     const ledger = declaredLedger(3);
     const a = { workId: "w-aaaaaaaaaaaa", trainDigest: "a".repeat(64) };
     const b = { workId: "w-bbbbbbbbbbbb", trainDigest: "b".repeat(64) };
-    const at = (item: typeof a, pass: number) => releaseFeedback(ledger, releaseInput(counts({ interface: [pass, 10] }), item));
+    const at = (item: typeof a, pass: number) =>
+      releaseFeedback(ledger, releaseInput(counts({ interface: [pass, 10] }), item));
     expect(at(a, 0).status).toBe("released");
     expect(at(b, 0).status).toBe("released");
     expect(at(a, 4).status).toBe("released");
@@ -89,7 +105,10 @@ describe("W-ladder-no-reset", () => {
 
     ledger.append(
       feedbackEvent(
-        { type: "feedback.test_reseal_authorized", payload: { goal_id: GOAL, work_id: WORK, consumed_test_digest: "c".repeat(64), basis: "J6" } },
+        {
+          type: "feedback.test_reseal_authorized",
+          payload: { goal_id: GOAL, work_id: WORK, consumed_test_digest: "c".repeat(64), basis: "J6" },
+        },
         "human:dev",
       ),
     );
@@ -98,7 +117,10 @@ describe("W-ladder-no-reset", () => {
 
     ledger.append(
       feedbackEvent(
-        { type: "feedback.test_reseal_authorized", payload: { goal_id: GOAL, work_id: WORK, consumed_test_digest: null, basis: "J3" } },
+        {
+          type: "feedback.test_reseal_authorized",
+          payload: { goal_id: GOAL, work_id: WORK, consumed_test_digest: null, basis: "J3" },
+        },
         "human:dev",
       ),
     );
@@ -130,7 +152,10 @@ describe("W-ladder-no-reset: one disclosure pool for the goal loop and the W loo
 
     const tick = tickCli(fx, ["--json"]);
     expect(tick.code).toBe(1);
-    expect((JSON.parse(tick.stdout) as { escalation: unknown }).escalation).toMatchObject({ j: "J8", reason_code: "disclosure_exhausted" });
+    expect((JSON.parse(tick.stdout) as { escalation: unknown }).escalation).toMatchObject({
+      j: "J8",
+      reason_code: "disclosure_exhausted",
+    });
     expect(ledgerEvents(fx, "reconcile.requested")).toHaveLength(0);
   });
 

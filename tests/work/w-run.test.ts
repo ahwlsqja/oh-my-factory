@@ -124,7 +124,9 @@ describe("finish", () => {
   it("refuses an outcome the table has no row for, and still releases the claim", () => {
     const fx = fixture();
     const run = fx.begin();
-    expect(codeOf(() => run.finish({ outcome: "success", exhausted: true, reason_code: null }))).toBe("outcome_invalid");
+    expect(codeOf(() => run.finish({ outcome: "success", exhausted: true, reason_code: null }))).toBe(
+      "outcome_invalid",
+    );
     expect(claimStatus(fx.item.dir).held).toBe(false);
   });
 });

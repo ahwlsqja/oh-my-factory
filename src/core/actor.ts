@@ -17,6 +17,7 @@ export function humanActor(repo: string, env: NodeJS.ProcessEnv = process.env): 
   } catch {
     email = "";
   }
-  if (email === "" || /\s/.test(email)) throw new Error("set git config user.email; OMF records people as human:<email>");
+  if (email === "" || /\s/.test(email))
+    throw new Error("set git config user.email; OMF records people as human:<email>");
   return `human:${email}`;
 }

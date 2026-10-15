@@ -51,7 +51,11 @@ export function omf(
   home: string,
   extraEnv: NodeJS.ProcessEnv = {},
 ): { code: number; stdout: string; stderr: string } {
-  const result = spawnSync(process.execPath, [CLI, ...args], { cwd, env: harnessEnv(home, extraEnv), encoding: "utf8" });
+  const result = spawnSync(process.execPath, [CLI, ...args], {
+    cwd,
+    env: harnessEnv(home, extraEnv),
+    encoding: "utf8",
+  });
   return { code: result.status ?? -1, stdout: result.stdout, stderr: result.stderr };
 }
 
@@ -78,7 +82,11 @@ export function omfAsync(
   extraEnv: NodeJS.ProcessEnv = {},
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((done, fail) => {
-    const child = spawn(process.execPath, [CLI, ...args], { cwd, env: harnessEnv(home, extraEnv), stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(process.execPath, [CLI, ...args], {
+      cwd,
+      env: harnessEnv(home, extraEnv),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8").on("data", (chunk: string) => void (stdout += chunk));

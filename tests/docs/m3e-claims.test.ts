@@ -13,7 +13,8 @@ const CLAIM_FILES = [PAGE, "src/core/doctor.ts", "src/cli/main.ts"] as const;
 /** A line that says a level was measured (`measured: L2`) or that something is sealed must say "not enforced" on the same line. */
 const CLAIM = /measured:\s*"?L[123]\b|\bsealed\b/i;
 const QUALIFIER = /not enforced/i;
-const unqualifiedClaims = (text: string): string[] => text.split("\n").filter((line) => CLAIM.test(line) && !QUALIFIER.test(line));
+const unqualifiedClaims = (text: string): string[] =>
+  text.split("\n").filter((line) => CLAIM.test(line) && !QUALIFIER.test(line));
 
 const read = (path: string): string => readFileSync(new URL(path, ROOT), "utf8");
 

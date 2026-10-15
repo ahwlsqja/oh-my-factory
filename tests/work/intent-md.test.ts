@@ -85,7 +85,7 @@ describe("intent.md", () => {
       ...doc,
       candidate: {
         ...doc.candidate,
-        title: "Fix: the \"quoted\" # thing --- really",
+        title: 'Fix: the "quoted" # thing --- really',
         rationale: "line one\n---\nline: three\n  - four\n# five",
         open_questions: ["# not a heading?", "\\ or an escape?"],
       },

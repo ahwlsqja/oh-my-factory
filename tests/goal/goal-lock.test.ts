@@ -6,7 +6,14 @@ import { budgetState, declareBudget } from "../../src/core/budget.js";
 import { Ledger } from "../../src/core/ledger.js";
 import { bandsLockInfo } from "../../src/goal/bands.js";
 import { semanticHash } from "../../src/goal/goal-file.js";
-import { ApprovalError, GoalLockError, goalLockFile, latestApproval, lockGoal, readGoalLock } from "../../src/goal/goal-lock.js";
+import {
+  ApprovalError,
+  GoalLockError,
+  goalLockFile,
+  latestApproval,
+  lockGoal,
+  readGoalLock,
+} from "../../src/goal/goal-lock.js";
 import { lockFile, metricSha256, readLock, readProposal } from "../../src/goal/metrics.js";
 import { setupGoal, writeBands } from "../helpers/goal.js";
 import { makeTempDir } from "../helpers/tmp.js";
@@ -24,7 +31,12 @@ describe("lockGoal", () => {
     expect((statSync(goalLockFile(fx.location.dir, "g-fast")).mode & 0o777).toString(8)).toBe("600");
 
     const p95 = readLock(fx.location.dir, "g-fast", "m-p95");
-    expect(p95).toMatchObject({ goal_id: "g-fast", regime: 1, approved_by: "human:dev", command: ["sh", "bench/p95.sh"] });
+    expect(p95).toMatchObject({
+      goal_id: "g-fast",
+      regime: 1,
+      approved_by: "human:dev",
+      command: ["sh", "bench/p95.sh"],
+    });
     expect(p95?.sha256).toBe(metricSha256(readProposal(fx.location.dir, "m-p95")!));
     expect((statSync(lockFile(fx.location.dir, "g-fast", "m-p95")).mode & 0o777).toString(8)).toBe("600");
 
@@ -52,7 +64,9 @@ describe("lockGoal", () => {
 
     const unit = setupGoal();
     writeFileSync(unit.goalFile, readFileSync(unit.goalFile, "utf8").replace("unit: ms", "unit: s"));
-    expect(() => lockGoal(unit.location, "g-fast", "human:dev")).toThrow(/target unit s does not match metric m-p95 unit ms/);
+    expect(() => lockGoal(unit.location, "g-fast", "human:dev")).toThrow(
+      /target unit s does not match metric m-p95 unit ms/,
+    );
     expect(latestApproval(new Ledger(unit.location.dir).readVerified(), "g-fast")).toBeNull();
   });
 
@@ -70,7 +84,13 @@ describe("lockGoal", () => {
     fx.ledger.append({
       actor: "agent:claude",
       type: "goal.approved",
-      payload: { goal_id: "g-fast", regime: 1, semantic_sha256: "a".repeat(64), head_commit: "b".repeat(40), metrics: ["m-p95"] },
+      payload: {
+        goal_id: "g-fast",
+        regime: 1,
+        semantic_sha256: "a".repeat(64),
+        head_commit: "b".repeat(40),
+        metrics: ["m-p95"],
+      },
     });
     expect(() => latestApproval(fx.ledger.readVerified(), "g-fast")).toThrow(/goal.approved by agent:claude/);
   });
@@ -257,13 +277,25 @@ describe("lockGoal bands and wall time", () => {
     fx.ledger.append({
       actor: "human:dev",
       type: "goal.approved",
-      payload: { goal_id: "g-fast", regime: 1, semantic_sha256: "a".repeat(64), head_commit: "b".repeat(40), metrics: ["m-p95"] },
+      payload: {
+        goal_id: "g-fast",
+        regime: 1,
+        semantic_sha256: "a".repeat(64),
+        head_commit: "b".repeat(40),
+        metrics: ["m-p95"],
+      },
     });
     expect(latestApproval(fx.ledger.readVerified(), "g-fast")).toMatchObject({ bands_sha256: null, wall_time: null });
   });
 
   it("stops on an approval with a malformed bands hash or wall time", () => {
-    const base = { goal_id: "g-fast", regime: 1, semantic_sha256: "a".repeat(64), head_commit: "b".repeat(40), metrics: ["m-p95"] };
+    const base = {
+      goal_id: "g-fast",
+      regime: 1,
+      semantic_sha256: "a".repeat(64),
+      head_commit: "b".repeat(40),
+      metrics: ["m-p95"],
+    };
     const hash = setupGoal();
     hash.ledger.append({ actor: "human:dev", type: "goal.approved", payload: { ...base, bands_sha256: "nope" } });
     expect(() => latestApproval(hash.ledger.readVerified(), "g-fast")).toThrow(/malformed bands_sha256/);

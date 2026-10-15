@@ -228,7 +228,11 @@ describe("feedbackEventsOf", () => {
 
   it("stops the line of the goal that owns a bad event, and only that goal", () => {
     const ledger = newLedger();
-    ledger.append({ actor: "human:dev", type: "feedback.released", payload: { ...payloadOf(RELEASED), goal_id: "g-other" } });
+    ledger.append({
+      actor: "human:dev",
+      type: "feedback.released",
+      payload: { ...payloadOf(RELEASED), goal_id: "g-other" },
+    });
     const events = ledger.readVerified();
     expect(feedbackEventsOf(events, GOAL)).toEqual([]);
     const err = failure(() => feedbackEventsOf(events, "g-other"));
@@ -247,11 +251,19 @@ describe("feedbackEventsOf", () => {
     expect(failure(() => feedbackEventsOf(resealByOmf.readVerified(), GOAL)).code).toBe("invalid_event");
 
     const extraKey = newLedger();
-    extraKey.append({ actor: "omf", type: "feedback.test_run_consumed", payload: { ...payloadOf(CONSUMED), input: "x" } });
+    extraKey.append({
+      actor: "omf",
+      type: "feedback.test_run_consumed",
+      payload: { ...payloadOf(CONSUMED), input: "x" },
+    });
     expect(failure(() => feedbackEventsOf(extraKey.readVerified(), GOAL)).code).toBe("invalid_event");
 
     const badCounts = newLedger();
-    badCounts.append({ actor: "omf", type: "feedback.test_run_completed", payload: { ...payloadOf(COMPLETED), flaky: 3 } });
+    badCounts.append({
+      actor: "omf",
+      type: "feedback.test_run_completed",
+      payload: { ...payloadOf(COMPLETED), flaky: 3 },
+    });
     expect(failure(() => feedbackEventsOf(badCounts.readVerified(), GOAL)).code).toBe("invalid_event");
   });
 });
@@ -302,7 +314,11 @@ function release(ledger: Ledger, r: Release): void {
       disclosure_units: units,
     },
   };
-  const unit: NewEvent = { actor: "omf", type: "budget.consumed", payload: { goal_id: goal, kind: "disclosure", amount: 1 } };
+  const unit: NewEvent = {
+    actor: "omf",
+    type: "budget.consumed",
+    payload: { goal_id: goal, kind: "disclosure", amount: 1 },
+  };
   ledger.appendWithMany(() => ((r.paid ?? units === 1) ? [unit, event] : [event]));
 }
 
@@ -318,7 +334,10 @@ describe("ladderStateFromEvents", () => {
     release(ledger, { round: 1, categories: FIRST });
     release(ledger, { round: 2, categories: REPEAT });
     // interface 4 -> 8 of 10: d = 4, 10*4 >= 10 and 4*4 >= 10, so new; security stays a repeat.
-    release(ledger, { round: 3, categories: [category("interface", 10, 8, "new"), category("security", 5, 2, "repeat")] });
+    release(ledger, {
+      round: 3,
+      categories: [category("interface", 10, 8, "new"), category("security", 5, 2, "repeat")],
+    });
     const state = stateOf(ledger);
     expect(state.releases).toBe(3);
     expect([...state.best]).toEqual([
@@ -377,14 +396,20 @@ describe("ladderStateFromEvents", () => {
       "a new score that is a decrease",
       (l) => {
         release(l, { round: 1, categories: FIRST });
-        release(l, { round: 2, categories: [category("interface", 10, 2, "new"), category("security", 5, 2, "repeat")] });
+        release(l, {
+          round: 2,
+          categories: [category("interface", 10, 2, "new"), category("security", 5, 2, "repeat")],
+        });
       },
     ],
     [
       "a repeat with a different pass",
       (l) => {
         release(l, { round: 1, categories: FIRST });
-        release(l, { round: 2, categories: [category("interface", 10, 5, "repeat"), category("security", 5, 2, "repeat")] });
+        release(l, {
+          round: 2,
+          categories: [category("interface", 10, 5, "repeat"), category("security", 5, 2, "repeat")],
+        });
       },
     ],
     [
@@ -405,7 +430,11 @@ describe("ladderStateFromEvents", () => {
       "disclosure_units 0 on a release with a new score",
       (l) => {
         release(l, { round: 1, categories: FIRST });
-        release(l, { round: 2, categories: [category("interface", 10, 8, "new"), category("security", 5, 2, "repeat")], units: 0 });
+        release(l, {
+          round: 2,
+          categories: [category("interface", 10, 8, "new"), category("security", 5, 2, "repeat")],
+          units: 0,
+        });
       },
     ],
     ["a new score without its consumption", (l) => release(l, { round: 1, categories: FIRST, paid: false })],
@@ -435,7 +464,10 @@ describe("ladderStateFromEvents", () => {
       "a different n under one digest",
       (l) => {
         release(l, { round: 1, categories: FIRST });
-        release(l, { round: 2, categories: [category("interface", 11, 4, "repeat"), category("security", 5, 2, "repeat")] });
+        release(l, {
+          round: 2,
+          categories: [category("interface", 11, 4, "repeat"), category("security", 5, 2, "repeat")],
+        });
       },
     ],
   ];
@@ -451,7 +483,10 @@ describe("ladderStateFromEvents", () => {
 describe("exposureUnitsOf", () => {
   const reseal = (basis: "J3" | "J6", consumed: string | null): NewEvent =>
     feedbackEvent(
-      { type: "feedback.test_reseal_authorized", payload: { goal_id: GOAL, work_id: WORK, consumed_test_digest: consumed, basis } },
+      {
+        type: "feedback.test_reseal_authorized",
+        payload: { goal_id: GOAL, work_id: WORK, consumed_test_digest: consumed, basis },
+      },
       "human:dev",
     );
   const count = (ledger: Ledger, work = WORK): number => exposureUnitsOf(ledger.readVerified(), GOAL, work);
@@ -479,7 +514,11 @@ describe("exposureUnitsOf", () => {
     expect(count(ledger)).toBe(0);
     expect(count(ledger, OTHER_WORK)).toBe(1);
 
-    release(ledger, { round: 2, categories: [category("interface", 10, 8, "new"), category("security", 5, 2, "repeat")], digest: TRAIN_2 });
+    release(ledger, {
+      round: 2,
+      categories: [category("interface", 10, 8, "new"), category("security", 5, 2, "repeat")],
+      digest: TRAIN_2,
+    });
     expect(count(ledger)).toBe(1);
   });
 
@@ -493,7 +532,10 @@ describe("exposureUnitsOf", () => {
 describe("exposureCountFor", () => {
   const reseal = (basis: "J3" | "J6", consumed: string | null): NewEvent =>
     feedbackEvent(
-      { type: "feedback.test_reseal_authorized", payload: { goal_id: GOAL, work_id: WORK, consumed_test_digest: consumed, basis } },
+      {
+        type: "feedback.test_reseal_authorized",
+        payload: { goal_id: GOAL, work_id: WORK, consumed_test_digest: consumed, basis },
+      },
       "human:dev",
     );
 

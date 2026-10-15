@@ -6,7 +6,10 @@
     "goal_id": { "type": "string", "pattern": "^g-[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },
     "work_id": { "type": "string", "pattern": "^w-[0-9a-f]{12}$" },
     "run_id": { "type": "string", "pattern": "^r-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}$" },
-    "timestamp": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$" },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+    },
     "decision_id": { "type": "string", "pattern": "^d-[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },
     "code": { "type": "string", "pattern": "^[a-z0-9_]+$", "maxLength": 60 },
     "text": { "type": "string", "maxLength": 4000 },
@@ -20,8 +23,14 @@
     "gate_status": { "enum": ["pass", "fail", "not_run", "not_visited"] },
     "unverified_code": {
       "enum": [
-        "decision_unmeasured", "model_spend_unverifiable", "noise_check_not_run", "noise_check_not_evaluated",
-        "high_risk_paths_not_run", "high_risk_paths_touched", "decisions_masked", "injected_gate"
+        "decision_unmeasured",
+        "model_spend_unverifiable",
+        "noise_check_not_run",
+        "noise_check_not_evaluated",
+        "high_risk_paths_not_run",
+        "high_risk_paths_touched",
+        "decisions_masked",
+        "injected_gate"
       ]
     },
     "unverified_area": {
@@ -37,7 +46,11 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["pass", "total", "flaky"],
-      "properties": { "pass": { "$ref": "#/$defs/count" }, "total": { "$ref": "#/$defs/count" }, "flaky": { "$ref": "#/$defs/count" } }
+      "properties": {
+        "pass": { "$ref": "#/$defs/count" },
+        "total": { "$ref": "#/$defs/count" },
+        "flaky": { "$ref": "#/$defs/count" }
+      }
     },
     "tally_test": {
       "type": "object",
@@ -49,10 +62,29 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema_version", "work_id", "goal_id", "run_id", "outcome", "recommendation", "recommendation_reasons",
-    "unverified_areas", "decisions", "gates", "gate_line", "stations", "sealed", "audit", "isolation_level",
-    "high_risk_paths_touched", "noise_check", "label", "self_metrics", "untrusted_fields", "plan_summary",
-    "implementer_notes", "created_at"
+    "schema_version",
+    "work_id",
+    "goal_id",
+    "run_id",
+    "outcome",
+    "recommendation",
+    "recommendation_reasons",
+    "unverified_areas",
+    "decisions",
+    "gates",
+    "gate_line",
+    "stations",
+    "sealed",
+    "audit",
+    "isolation_level",
+    "high_risk_paths_touched",
+    "noise_check",
+    "label",
+    "self_metrics",
+    "untrusted_fields",
+    "plan_summary",
+    "implementer_notes",
+    "created_at"
   ],
   "properties": {
     "schema_version": { "const": 1 },

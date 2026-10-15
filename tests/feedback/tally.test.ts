@@ -59,16 +59,19 @@ describe("parseScenarioResults", () => {
     expect(err.message).toContain(reason);
   });
 
-  it.each(PLANTED_KEYS.map((key, i) => [key, PLANTED[i]] as const))("refuses the extra key %s without echoing it", (key, value) => {
-    const err = refusal([
-      { category: "security", passed: true, flaky: false },
-      { category: "security", passed: true, flaky: false, [key]: value },
-    ]);
-    expect(err.code).toBe("invalid_input");
-    expect(err.message).toContain("scenario result 1");
-    expect(err.message).toContain("extra_key");
-    for (const secret of [...PLANTED, ...PLANTED_KEYS]) expect(err.message).not.toContain(secret);
-  });
+  it.each(PLANTED_KEYS.map((key, i) => [key, PLANTED[i]] as const))(
+    "refuses the extra key %s without echoing it",
+    (key, value) => {
+      const err = refusal([
+        { category: "security", passed: true, flaky: false },
+        { category: "security", passed: true, flaky: false, [key]: value },
+      ]);
+      expect(err.code).toBe("invalid_input");
+      expect(err.message).toContain("scenario result 1");
+      expect(err.message).toContain("extra_key");
+      for (const secret of [...PLANTED, ...PLANTED_KEYS]) expect(err.message).not.toContain(secret);
+    },
+  );
 
   it("does not echo a planted class name either", () => {
     const err = refusal([{ category: PLANTED[3], passed: true, flaky: false }]);
@@ -108,7 +111,9 @@ describe("tallyResults", () => {
   });
 
   it("counts a flaky scenario as not passed and as flaky", () => {
-    expect(tallyResults(scenarios("interface", 2, 1, 2))).toEqual([{ category: "interface", pass: 2, total: 5, flaky: 2 }]);
+    expect(tallyResults(scenarios("interface", 2, 1, 2))).toEqual([
+      { category: "interface", pass: 2, total: 5, flaky: 2 },
+    ]);
   });
 
   it("returns nothing for no results", () => {
@@ -118,12 +123,20 @@ describe("tallyResults", () => {
 
 describe("mergeSmallCategories", () => {
   it("adds categories of 4 and 3 into the largest and keeps its name", () => {
-    const merged = mergeSmallCategories([tally("compatibility", 5, 7, 1), tally("security", 2, 4), tally("other", 1, 3, 1)]);
+    const merged = mergeSmallCategories([
+      tally("compatibility", 5, 7, 1),
+      tally("security", 2, 4),
+      tally("other", 1, 3, 1),
+    ]);
     expect(merged).toEqual([{ category: "compatibility", pass: 8, total: 14, flaky: 2 }]);
   });
 
   it("keeps a category of exactly 5 and merges only the small ones", () => {
-    const merged = mergeSmallCategories([tally("interface", 6, 7), tally("compatibility", 3, 5), tally("data_model", 1, 4)]);
+    const merged = mergeSmallCategories([
+      tally("interface", 6, 7),
+      tally("compatibility", 3, 5),
+      tally("data_model", 1, 4),
+    ]);
     expect(merged).toEqual([tally("interface", 7, 11), tally("compatibility", 3, 5)]);
     expect(MIN_CATEGORY_SIZE).toBe(5);
   });
@@ -155,7 +168,11 @@ describe("mergeSmallCategories", () => {
 
 describe("trainCounts", () => {
   it("counts passed, total and flaky for the evidence field", () => {
-    expect(trainCounts([...scenarios("interface", 2, 1, 1), ...scenarios("security", 1, 0)])).toEqual({ pass: 3, total: 5, flaky: 1 });
+    expect(trainCounts([...scenarios("interface", 2, 1, 1), ...scenarios("security", 1, 0)])).toEqual({
+      pass: 3,
+      total: 5,
+      flaky: 1,
+    });
     expect(trainCounts([])).toEqual({ pass: 0, total: 0, flaky: 0 });
   });
 });

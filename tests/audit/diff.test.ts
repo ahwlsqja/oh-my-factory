@@ -3,7 +3,12 @@ import { assessDiffRisk, classifyDiff } from "../../src/audit/diff.js";
 import type { RawDiffEntry } from "../../src/git/ops.js";
 import type { RiskAssessment } from "../../src/work/types.js";
 
-const entry = (status: RawDiffEntry["status"], path: string, old_mode = "100644", new_mode = "100644"): RawDiffEntry => ({
+const entry = (
+  status: RawDiffEntry["status"],
+  path: string,
+  old_mode = "100644",
+  new_mode = "100644",
+): RawDiffEntry => ({
   status,
   path,
   old_mode: status === "A" ? "000000" : old_mode,
@@ -13,7 +18,14 @@ const entry = (status: RawDiffEntry["status"], path: string, old_mode = "100644"
 describe("classifyDiff", () => {
   it("separates edited tests from added tests (M3e-D10) and lists every touched path", () => {
     const facts = classifyDiff(
-      [entry("M", "src/a.ts"), entry("M", "tests/a.test.ts"), entry("D", "tests/old.test.ts"), entry("T", "tests/t.test.ts"), entry("A", "tests/new.test.ts"), entry("A", "src/new.ts")],
+      [
+        entry("M", "src/a.ts"),
+        entry("M", "tests/a.test.ts"),
+        entry("D", "tests/old.test.ts"),
+        entry("T", "tests/t.test.ts"),
+        entry("A", "tests/new.test.ts"),
+        entry("A", "src/new.ts"),
+      ],
       [],
       [],
     );
@@ -41,7 +53,12 @@ describe("classifyDiff", () => {
 
   it("counts symlink and gitlink entries by mode, in the old or the new mode", () => {
     const facts = classifyDiff(
-      [entry("M", "l.txt", "100644", "120000"), entry("M", "vendor/lib", "160000", "160000"), entry("D", "gone-link", "120000"), entry("A", "plain.txt")],
+      [
+        entry("M", "l.txt", "100644", "120000"),
+        entry("M", "vendor/lib", "160000", "160000"),
+        entry("D", "gone-link", "120000"),
+        entry("A", "plain.txt"),
+      ],
       [],
       [],
     );
@@ -49,19 +66,36 @@ describe("classifyDiff", () => {
   });
 
   it("matches projections case-insensitively and normalised, and only at the listed path", () => {
-    const facts = classifyDiff([entry("M", "spec.md"), entry("M", "INTENT.MD"), entry("M", "docs/spec.md"), entry("M", "src/a.ts")], [], ["spec.md", "./intent.md"]);
+    const facts = classifyDiff(
+      [entry("M", "spec.md"), entry("M", "INTENT.MD"), entry("M", "docs/spec.md"), entry("M", "src/a.ts")],
+      [],
+      ["spec.md", "./intent.md"],
+    );
     expect(facts.projections_touched).toEqual(["INTENT.MD", "spec.md"]);
   });
 
   it("an empty diff is empty with zero counts", () => {
-    expect(classifyDiff([], [], ["spec.md"])).toEqual({ files: 0, empty: true, paths: [], tests_edited: [], tests_added: 0, special_entries: 0, projections_touched: [] });
+    expect(classifyDiff([], [], ["spec.md"])).toEqual({
+      files: 0,
+      empty: true,
+      paths: [],
+      tests_edited: [],
+      tests_added: 0,
+      special_entries: 0,
+      projections_touched: [],
+    });
   });
 });
 
 describe("assessDiffRisk", () => {
   const declaredNormal: RiskAssessment = { class: "normal", rules: [], paths: [] };
   const none = { watchedGlobs: [], extraGlobs: [] };
-  const facts = (...paths: string[]) => classifyDiff(paths.map((path) => entry("M", path)), [], []);
+  const facts = (...paths: string[]) =>
+    classifyDiff(
+      paths.map((path) => entry("M", path)),
+      [],
+      [],
+    );
 
   it("an empty diff skips the recompute: classifyRisk would say `undeclared` for zero paths, which is no finding about the diff (M3e-D12)", () => {
     const declared: RiskAssessment = { class: "high", rules: ["auth"], paths: ["src/auth/x.ts"] };
@@ -77,7 +111,11 @@ describe("assessDiffRisk", () => {
 
   it("a normal diff leaves a normal declaration alone", () => {
     const outcome = assessDiffRisk(facts("src/a.ts"), declaredNormal, none);
-    expect(outcome).toEqual({ recomputed: { class: "normal", rules: [], paths: [] }, effective: declaredNormal, raised: false });
+    expect(outcome).toEqual({
+      recomputed: { class: "normal", rules: [], paths: [] },
+      effective: declaredNormal,
+      raised: false,
+    });
   });
 
   it("adds a rule to a high declaration and reports it as raised, but never lowers it", () => {
@@ -89,7 +127,10 @@ describe("assessDiffRisk", () => {
   });
 
   it("uses the watched and extra globs", () => {
-    const outcome = assessDiffRisk(facts("src/secret/x.ts", "docs/y.md"), declaredNormal, { watchedGlobs: ["src/secret/**"], extraGlobs: ["docs/**"] });
+    const outcome = assessDiffRisk(facts("src/secret/x.ts", "docs/y.md"), declaredNormal, {
+      watchedGlobs: ["src/secret/**"],
+      extraGlobs: ["docs/**"],
+    });
     expect(outcome.effective.rules).toEqual(["extra", "watched-path"]);
   });
 
@@ -100,11 +141,20 @@ describe("assessDiffRisk", () => {
   });
 
   it("Next.js route paths with brackets or parentheses are not a finding", () => {
-    expect(assessDiffRisk(facts("app/posts/[id]/page.tsx", "app/(group)/x/page.tsx"), declaredNormal, none).effective).toEqual(declaredNormal);
+    expect(
+      assessDiffRisk(facts("app/posts/[id]/page.tsx", "app/(group)/x/page.tsx"), declaredNormal, none).effective,
+    ).toEqual(declaredNormal);
   });
 
   it("a backslash or a control character cannot be judged: high, unclassifiable, listed", () => {
-    expect(assessDiffRisk(facts("src/a\\b.ts"), declaredNormal, none).effective).toEqual({ class: "high", rules: ["unclassifiable"], paths: ["src/a\\b.ts"] });
-    expect(assessDiffRisk(facts("src/a\nb.ts"), declaredNormal, none).effective).toMatchObject({ class: "high", rules: ["unclassifiable"] });
+    expect(assessDiffRisk(facts("src/a\\b.ts"), declaredNormal, none).effective).toEqual({
+      class: "high",
+      rules: ["unclassifiable"],
+      paths: ["src/a\\b.ts"],
+    });
+    expect(assessDiffRisk(facts("src/a\nb.ts"), declaredNormal, none).effective).toMatchObject({
+      class: "high",
+      rules: ["unclassifiable"],
+    });
   });
 });

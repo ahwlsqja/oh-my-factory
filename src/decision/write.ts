@@ -56,7 +56,8 @@ function checkInput(def: string, input: unknown): void {
  * anomaly that blocks GATE-1 for good, so it is refused before anything is appended. The id is not echoed.
  */
 function requireDecisionId(decisionId: string): void {
-  if (!DECISION_ID_PATTERN.test(decisionId)) throw new DecisionError("invalid_input", "not a valid decision id (d-<slug>)");
+  if (!DECISION_ID_PATTERN.test(decisionId))
+    throw new DecisionError("invalid_input", "not a valid decision id (d-<slug>)");
 }
 
 /** Cross-field rule the schema cannot state: every gate the contract requires must have a command. */
@@ -79,7 +80,8 @@ export function seedEvents(state: DecisionState, scope: DecisionScope, intentQue
   intentQuestions.forEach((text, index) => {
     const id = `${INTENT_QUESTION_ID_PREFIX}${index + 1}`;
     if (findDecision(state, id) !== null) return;
-    const question = text.trim() === "" ? "(empty open question)" : Array.from(text).slice(0, SEED_QUESTION_MAX).join("");
+    const question =
+      text.trim() === "" ? "(empty open question)" : Array.from(text).slice(0, SEED_QUESTION_MAX).join("");
     seeds.push({
       actor: "omf",
       type: "decision.added",
@@ -126,7 +128,13 @@ function openRecord(state: DecisionState, decisionId: string, interfaceClosable:
  * Records a refusal and throws. The rejection names the op, the rule and the field, never the matched text
  * (spec §4.6: the ledger is a log G could one day see). A leaking id is recorded by hash only (A16b).
  */
-function reject(ledger: Ledger, scope: DecisionScope, op: Op, decisionId: string, findings: readonly LeakFinding[]): never {
+function reject(
+  ledger: Ledger,
+  scope: DecisionScope,
+  op: Op,
+  decisionId: string,
+  findings: readonly LeakFinding[],
+): never {
   const idLeaks = findings.some((finding) => finding.field === "id");
   // ev_rejected allows at most 50 findings; sorted first so the kept ones do not depend on the walk order.
   const kept = [...findings]
@@ -145,7 +153,10 @@ function reject(ledger: Ledger, scope: DecisionScope, op: Op, decisionId: string
   if (!checked.ok) throw new DecisionError("invalid_input", `the refusal cannot be recorded: ${checked.errors}`);
   ledger.append({ actor: "omf", type: "decision.rejected", payload });
   const where = kept.map(({ rule, field }) => `${rule} in ${field}`).join(", ");
-  throw new DecisionError("leak", `refused: the text carries what the goal keeps from the agent (${where}); rewrite it`);
+  throw new DecisionError(
+    "leak",
+    `refused: the text carries what the goal keeps from the agent (${where}); rewrite it`,
+  );
 }
 
 /**
@@ -183,13 +194,23 @@ function commit(
 }
 
 /** Any valid actor may pose a question; it grants nothing. A duplicate id, or a class/id mismatch for the interface, is refused. */
-export function addDecision(ledger: Ledger, scope: DecisionScope, input: AddInput, actor: string, ctx: WriteContext): LedgerEvent {
+export function addDecision(
+  ledger: Ledger,
+  scope: DecisionScope,
+  input: AddInput,
+  actor: string,
+  ctx: WriteContext,
+): LedgerEvent {
   checkInput("add_input", input);
   if ((input.class === "interface") !== (input.id === INTERFACE_DECISION_ID)) {
-    throw new DecisionError("invalid_input", `class interface goes with the id ${INTERFACE_DECISION_ID}, and only with it`);
+    throw new DecisionError(
+      "invalid_input",
+      `class interface goes with the id ${INTERFACE_DECISION_ID}, and only with it`,
+    );
   }
   return commit(ledger, scope, "add", input.id, { ...input }, ctx, (state) => {
-    if (findDecision(state, input.id) !== null) throw new DecisionError("duplicate_id", `decision ${input.id} already exists`);
+    if (findDecision(state, input.id) !== null)
+      throw new DecisionError("duplicate_id", `decision ${input.id} already exists`);
     return {
       actor,
       type: "decision.added",
@@ -225,12 +246,16 @@ export function resolveDecision(
   return commit(ledger, scope, "resolve", decisionId, { ...input }, ctx, (state) => {
     const record = openRecord(state, decisionId, true);
     if (record.class === "interface") {
-      if (input.interface === undefined) throw new DecisionError("interface_required", "resolving the interface decision needs its contract");
+      if (input.interface === undefined)
+        throw new DecisionError("interface_required", "resolving the interface decision needs its contract");
     } else if (input.interface !== undefined) {
       throw new DecisionError("invalid_input", "only the interface decision carries a contract");
     }
     if (isQuantitative(record.class) && (input.response_measure ?? record.response_measure) === null) {
-      throw new DecisionError("invalid_input", `a ${record.class} decision needs a response_measure with a numeric threshold`);
+      throw new DecisionError(
+        "invalid_input",
+        `a ${record.class} decision needs a response_measure with a numeric threshold`,
+      );
     }
     return {
       actor,

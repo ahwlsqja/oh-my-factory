@@ -6,7 +6,9 @@ import { liveGroupCount, runProcessGroup } from "../../src/adapters/process-grou
 import { waitDead, waitForPids } from "../helpers/process.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
-const options = (overrides: Partial<Parameters<typeof runProcessGroup>[1]> = {}): Parameters<typeof runProcessGroup>[1] => ({
+const options = (
+  overrides: Partial<Parameters<typeof runProcessGroup>[1]> = {},
+): Parameters<typeof runProcessGroup>[1] => ({
   cwd: makeTempDir(),
   env: { PATH: process.env.PATH },
   timeoutMs: 10_000,
@@ -30,7 +32,10 @@ describe("runProcessGroup", () => {
   });
 
   it("uses the given environment verbatim", async () => {
-    const result = await runProcessGroup(["sh", "-c", 'echo "$MARK:${HOME-unset}"'], options({ env: { PATH: process.env.PATH, MARK: "1" } }));
+    const result = await runProcessGroup(
+      ["sh", "-c", 'echo "$MARK:${HOME-unset}"'],
+      options({ env: { PATH: process.env.PATH, MARK: "1" } }),
+    );
     expect(result).toMatchObject({ kind: "exited", stdout: "1:unset\n" });
   });
 
@@ -52,7 +57,10 @@ describe("runProcessGroup", () => {
 
   it("kills the whole group on timeout, including a background child", async () => {
     const pidFile = join(makeTempDir(), "pids");
-    const result = await runProcessGroup(["sh", "-c", BACKGROUND_THEN_HANG, "sh", pidFile], options({ timeoutMs: 500 }));
+    const result = await runProcessGroup(
+      ["sh", "-c", BACKGROUND_THEN_HANG, "sh", pidFile],
+      options({ timeoutMs: 500 }),
+    );
     expect(result.kind).toBe("timeout");
     const [shell, background] = await waitForPids(pidFile);
     expect(await waitDead(shell as number)).toBe(true);
@@ -120,7 +128,10 @@ function childScript(): string {
 
 describe("runProcessGroup signal cleanup", () => {
   it("installs its handlers once, however many commands run", () => {
-    const result = spawnSync(process.execPath, [childScript(), DIST_URL, "", "once"], { encoding: "utf8", cwd: makeTempDir() });
+    const result = spawnSync(process.execPath, [childScript(), DIST_URL, "", "once"], {
+      encoding: "utf8",
+      cwd: makeTempDir(),
+    });
     expect(result.status).toBe(0);
     const seen = JSON.parse(result.stdout) as {
       before: Record<string, number>;
@@ -133,22 +144,32 @@ describe("runProcessGroup signal cleanup", () => {
     expect(seen.live).toBe(0);
   });
 
-  it.each(["SIGTERM", "SIGINT"] as const)("a %s to the process kills the running group and keeps the signal status", async (signal) => {
-    const pidFile = join(makeTempDir(), "pids");
-    const child = spawn(process.execPath, [childScript(), DIST_URL, pidFile, "hang"], { stdio: "ignore", cwd: makeTempDir() });
-    const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
-      child.once("exit", (code, sig) => resolve({ code, signal: sig }));
-    });
-    const [shell, background] = await waitForPids(pidFile);
-    child.kill(signal);
-    expect(await exited).toEqual({ code: null, signal });
-    expect(await waitDead(shell as number)).toBe(true);
-    expect(await waitDead(background as number)).toBe(true);
-  });
+  it.each(["SIGTERM", "SIGINT"] as const)(
+    "a %s to the process kills the running group and keeps the signal status",
+    async (signal) => {
+      const pidFile = join(makeTempDir(), "pids");
+      const child = spawn(process.execPath, [childScript(), DIST_URL, pidFile, "hang"], {
+        stdio: "ignore",
+        cwd: makeTempDir(),
+      });
+      const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+        child.once("exit", (code, sig) => resolve({ code, signal: sig }));
+      });
+      const [shell, background] = await waitForPids(pidFile);
+      child.kill(signal);
+      expect(await exited).toEqual({ code: null, signal });
+      expect(await waitDead(shell as number)).toBe(true);
+      expect(await waitDead(background as number)).toBe(true);
+    },
+  );
 
   it("a second signal still kills the group of a later command when the process survived the first", async () => {
     const pidFile = join(makeTempDir(), "pids");
-    const result = spawnSync(process.execPath, [childScript(), DIST_URL, pidFile, "survive"], { encoding: "utf8", cwd: makeTempDir(), timeout: 15_000 });
+    const result = spawnSync(process.execPath, [childScript(), DIST_URL, pidFile, "survive"], {
+      encoding: "utf8",
+      cwd: makeTempDir(),
+      timeout: 15_000,
+    });
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({ sleepBAlive: false });
     const [shellA, sleepA] = await waitForPids(pidFile + ".a");

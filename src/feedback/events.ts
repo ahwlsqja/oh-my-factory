@@ -164,7 +164,11 @@ export interface LadderState {
  * Per-event rules (pass <= n, score_pct, class order, units match kinds) are already checked by
  * feedbackEventsOf. Any breach throws FeedbackError("invalid_event") and stops the line.
  */
-export function ladderStateFromEvents(events: readonly LedgerEvent[], goalId: string, trainDigest: string): LadderState {
+export function ladderStateFromEvents(
+  events: readonly LedgerEvent[],
+  goalId: string,
+  trainDigest: string,
+): LadderState {
   const bySeq = new Map<number, LedgerEvent>(events.map((event) => [event.seq, event]));
   const state: LadderState = { best: new Map(), releases: 0, layout: null };
   for (const record of feedbackEventsOf(events, goalId)) {

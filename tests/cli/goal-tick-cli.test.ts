@@ -41,7 +41,13 @@ describe("omf goal tick: output and exit codes", () => {
     const result = tick(fx, ["--json"]);
     expect(result.code).toBe(0);
     const json = JSON.parse(result.stdout) as Record<string, unknown> & { created: Record<string, unknown>[] };
-    expect(json).toMatchObject({ goal_id: GOAL, status: "continue", outcome: "dispatched", reconciled: true, awaiting_approval: [] });
+    expect(json).toMatchObject({
+      goal_id: GOAL,
+      status: "continue",
+      outcome: "dispatched",
+      reconciled: true,
+      awaiting_approval: [],
+    });
     expect(json.created).toHaveLength(1);
     expect(Object.keys(json.created[0] ?? {}).sort()).toEqual(["risk", "state", "work_id"]);
     expect(String(json.report)).toMatch(/-tick\.md$/);

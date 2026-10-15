@@ -23,16 +23,40 @@
   },
   "$defs": {
     "run_id": { "type": "string", "pattern": "^r-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}$" },
-    "timestamp": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$" },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+    },
     "short_text": { "type": "string", "maxLength": 4096 },
     "text_list": { "type": "array", "maxItems": 256, "items": { "$ref": "#/$defs/short_text" } },
     "violation_code": {
       "enum": [
-        "no_container", "docker_socket_mounted", "docker_socket_present", "privileged", "cap_added", "caps_not_dropped",
-        "host_network", "network_not_none", "host_pid", "root_user", "rootfs_writable", "unexpected_mount", "mount_not_read_only",
-        "forbidden_mount_source", "unexpected_env_name", "vendor_binary_present", "credential_present",
-        "no_new_privileges_missing", "security_opt_unconfined", "device_mapped", "host_ipc", "host_uts", "userns_host", "volumes_from",
-        "sysctl_set", "runtime_unexpected"
+        "no_container",
+        "docker_socket_mounted",
+        "docker_socket_present",
+        "privileged",
+        "cap_added",
+        "caps_not_dropped",
+        "host_network",
+        "network_not_none",
+        "host_pid",
+        "root_user",
+        "rootfs_writable",
+        "unexpected_mount",
+        "mount_not_read_only",
+        "forbidden_mount_source",
+        "unexpected_env_name",
+        "vendor_binary_present",
+        "credential_present",
+        "no_new_privileges_missing",
+        "security_opt_unconfined",
+        "device_mapped",
+        "host_ipc",
+        "host_uts",
+        "userns_host",
+        "volumes_from",
+        "sysctl_set",
+        "runtime_unexpected"
       ]
     },
     "mount_fact": {
@@ -50,9 +74,26 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "container_id", "image", "mounts", "env_names", "cap_add", "cap_drop", "privileged", "network_mode", "pid_mode", "user",
-        "read_only_rootfs", "security_opt", "devices", "ipc_mode", "uts_mode", "userns_mode", "cgroupns_mode", "volumes_from",
-        "sysctls", "runtime"
+        "container_id",
+        "image",
+        "mounts",
+        "env_names",
+        "cap_add",
+        "cap_drop",
+        "privileged",
+        "network_mode",
+        "pid_mode",
+        "user",
+        "read_only_rootfs",
+        "security_opt",
+        "devices",
+        "ipc_mode",
+        "uts_mode",
+        "userns_mode",
+        "cgroupns_mode",
+        "volumes_from",
+        "sysctls",
+        "runtime"
       ],
       "properties": {
         "container_id": { "$ref": "#/$defs/short_text" },
@@ -98,11 +139,24 @@
         "facts": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/container_facts" }] },
         "checks": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/container_checks" }] },
         "level": { "enum": ["L1", "L2"] },
-        "violations": { "type": "array", "uniqueItems": true, "maxItems": 64, "items": { "$ref": "#/$defs/violation_code" } },
+        "violations": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/violation_code" }
+        },
         "facts_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
       },
       "allOf": [
-        { "if": { "properties": { "level": { "const": "L2" } }, "required": ["level"] }, "then": { "properties": { "violations": { "type": "array", "maxItems": 0 }, "mode": { "type": "string", "const": "container" } } } }
+        {
+          "if": { "properties": { "level": { "const": "L2" } }, "required": ["level"] },
+          "then": {
+            "properties": {
+              "violations": { "type": "array", "maxItems": 0 },
+              "mode": { "type": "string", "const": "container" }
+            }
+          }
+        }
       ]
     },
     "measurement_list": { "type": "array", "maxItems": 1000, "items": { "$ref": "#/$defs/stage_measurement" } }

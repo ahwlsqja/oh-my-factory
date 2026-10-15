@@ -25,7 +25,15 @@ export const sealId = (n: number): string => `seal-${hex(n, 16)}`;
 
 /** A completed-seal record as `foldSeals` returns it. */
 export function sealRecord(n: number, setSha256: string): SealRecord {
-  return { seq: n, round: n, seal_id: sealId(n), author: AUTHOR, decisions_digest: digest("a"), set_sha256: setSha256, counts: COUNTS };
+  return {
+    seq: n,
+    round: n,
+    seal_id: sealId(n),
+    author: AUTHOR,
+    decisions_digest: digest("a"),
+    set_sha256: setSha256,
+    counts: COUNTS,
+  };
 }
 
 /** A schema-valid stored scenario. The canary is built here at run time, never written as a literal. */

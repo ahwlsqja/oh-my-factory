@@ -36,7 +36,8 @@ export interface WorkLimits {
 export function microUsd(usd: number): number {
   if (!Number.isFinite(usd) || usd <= 0) throw new RangeError("usd must be a positive finite number");
   const micro = Math.round(usd * 1e6);
-  if (micro < 1 || !Number.isSafeInteger(micro)) throw new RangeError("usd is outside the range of whole micro-dollars");
+  if (micro < 1 || !Number.isSafeInteger(micro))
+    throw new RangeError("usd is outside the range of whole micro-dollars");
   return micro;
 }
 
@@ -142,7 +143,13 @@ export function foldWorkBudget(events: readonly LedgerEvent[], workId: string): 
   return { limits, raised, effective, rounds_started: roundsStarted, previous_signature: previous, spend, anomalies };
 }
 
-export type WorkBudgetErrorCode = "forbidden" | "invalid_amount" | "wrong_state" | "no_limits" | "malformed" | "claim_lost";
+export type WorkBudgetErrorCode =
+  | "forbidden"
+  | "invalid_amount"
+  | "wrong_state"
+  | "no_limits"
+  | "malformed"
+  | "claim_lost";
 
 /** Messages are built from codes and validated ids only: nothing a model, a file or the audit wrote (M3b1-D3). */
 export class WorkBudgetError extends Error {
@@ -295,7 +302,10 @@ export function openItemBudget(
   }
   const state = foldWorkBudget(events, workId);
   if (state.limits === null) {
-    throw new WorkBudgetError("no_limits", `work item ${workId} has no recorded limits yet; they are recorded when its first run starts`);
+    throw new WorkBudgetError(
+      "no_limits",
+      `work item ${workId} has no recorded limits yet; they are recorded when its first run starts`,
+    );
   }
   return { item, state };
 }

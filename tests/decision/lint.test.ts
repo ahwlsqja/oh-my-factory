@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { lintDecisions, scenarioLinkCoverage } from "../../src/decision/lint.js";
 import type { DecisionLinks } from "../../src/decision/lint.js";
 import type { LeakContext } from "../../src/decision/leak-lint.js";
-import type { Anomaly, DecisionRecord, DecisionState, InterfaceContract, ResponseMeasure } from "../../src/decision/types.js";
+import type {
+  Anomaly,
+  DecisionRecord,
+  DecisionState,
+  InterfaceContract,
+  ResponseMeasure,
+} from "../../src/decision/types.js";
 import { CANARY } from "../helpers/canary.js";
 
 const HUMAN = "human:dev@example.com";
@@ -91,7 +97,11 @@ describe("lintDecisions: per-record problems", () => {
   });
 
   it("flags class interface under another id and a resolved interface with no body", () => {
-    const wrongId = lintDecisions(stateOf([record("d-api", { class: "interface", interface: CONTRACT })]), CLEAN_LEAK, []);
+    const wrongId = lintDecisions(
+      stateOf([record("d-api", { class: "interface", interface: CONTRACT })]),
+      CLEAN_LEAK,
+      [],
+    );
     expect(codes(wrongId)).toContain("interface_wrong_class");
     const noBody = lintDecisions(stateOf([interfaceRecord({ interface: null })]), CLEAN_LEAK, []);
     expect(codes(noBody)).toContain("interface_body_missing");

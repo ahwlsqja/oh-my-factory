@@ -21,9 +21,21 @@ export interface FixtureEntry {
  * test recomputes these from fixtures/, so changing a fixture or adding one is a reviewed change to this list.
  */
 export const FIXTURE_ALLOWLIST: readonly FixtureEntry[] = [
-  { id: "null-error", file: "null-error.mjs", sha256: "ef8b36e05e60fc2fca3c517376e6c503594c5ff5da127ece2f95b97c528d81e7" },
-  { id: "null-empty", file: "null-empty.mjs", sha256: "271b9e38d87f8d367122ff6bf1fa9efd3c798f5bae49a82e9e5b8b3e911e785c" },
-  { id: "echo-everything", file: "echo-everything.mjs", sha256: "5fb041d12b5ebc1c0fa4e6da82b619bc95f4191f149e7fd78ce906ef5a6ccfbe" },
+  {
+    id: "null-error",
+    file: "null-error.mjs",
+    sha256: "ef8b36e05e60fc2fca3c517376e6c503594c5ff5da127ece2f95b97c528d81e7",
+  },
+  {
+    id: "null-empty",
+    file: "null-empty.mjs",
+    sha256: "271b9e38d87f8d367122ff6bf1fa9efd3c798f5bae49a82e9e5b8b3e911e785c",
+  },
+  {
+    id: "echo-everything",
+    file: "echo-everything.mjs",
+    sha256: "5fb041d12b5ebc1c0fa4e6da82b619bc95f4191f149e7fd78ce906ef5a6ccfbe",
+  },
 ];
 
 /** `<package>/fixtures`, two levels above both `src/scenario` and `dist/scenario` (like `schemaUrl`). Never throws. */
@@ -69,7 +81,8 @@ export function verifyFixture(id: string, dir?: string): FixtureCheck {
   } catch {
     return { ok: false, code: "fixture_missing" };
   }
-  if (createHash("sha256").update(bytes).digest("hex") !== entry.sha256) return { ok: false, code: "fixture_hash_mismatch" };
+  if (createHash("sha256").update(bytes).digest("hex") !== entry.sha256)
+    return { ok: false, code: "fixture_hash_mismatch" };
   return { ok: true, id: entry.id, realPath: real, source: bytes.toString("utf8") };
 }
 

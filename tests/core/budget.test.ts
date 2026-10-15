@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { BudgetError, budgetConsumedEvent, budgetState, consumeBudget, declareBudget, raiseBudget } from "../../src/core/budget.js";
+import {
+  BudgetError,
+  budgetConsumedEvent,
+  budgetState,
+  consumeBudget,
+  declareBudget,
+  raiseBudget,
+} from "../../src/core/budget.js";
 import { Ledger } from "../../src/core/ledger.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
@@ -16,8 +23,20 @@ describe("budgets", () => {
     declareBudget(ledger, "g-b", "rounds", 1, "human:dev");
     consumeBudget(ledger, "g-a", "rounds");
     raiseBudget(ledger, "g-a", "rounds", 2, "human:dev");
-    expect(budgetState(ledger, "g-a", "rounds")).toEqual({ kind: "rounds", declared: 3, raised: 2, consumed: 1, remaining: 4 });
-    expect(budgetState(ledger, "g-b", "rounds")).toEqual({ kind: "rounds", declared: 1, raised: 0, consumed: 0, remaining: 1 });
+    expect(budgetState(ledger, "g-a", "rounds")).toEqual({
+      kind: "rounds",
+      declared: 3,
+      raised: 2,
+      consumed: 1,
+      remaining: 4,
+    });
+    expect(budgetState(ledger, "g-b", "rounds")).toEqual({
+      kind: "rounds",
+      declared: 1,
+      raised: 0,
+      consumed: 0,
+      remaining: 1,
+    });
   });
 
   it("only people declare budgets", () => {
@@ -37,14 +56,22 @@ describe("budgets", () => {
   it("stops on a raise written by a non-person", () => {
     const ledger = newLedger();
     declareBudget(ledger, "g-a", "rounds", 3, "human:dev");
-    ledger.append({ actor: "agent:codex", type: "budget.raised", payload: { goal_id: "g-a", kind: "rounds", amount: 5 } });
+    ledger.append({
+      actor: "agent:codex",
+      type: "budget.raised",
+      payload: { goal_id: "g-a", kind: "rounds", amount: 5 },
+    });
     expect(() => budgetState(ledger, "g-a", "rounds")).toThrow(/budget.raised by agent:codex/);
   });
 
   it("stops on a second declaration written directly", () => {
     const ledger = newLedger();
     declareBudget(ledger, "g-a", "rounds", 3, "human:dev");
-    ledger.append({ actor: "human:dev", type: "budget.declared", payload: { goal_id: "g-a", kind: "rounds", amount: 9 } });
+    ledger.append({
+      actor: "human:dev",
+      type: "budget.declared",
+      payload: { goal_id: "g-a", kind: "rounds", amount: 9 },
+    });
     expect(() => budgetState(ledger, "g-a", "rounds")).toThrow(/declared twice/);
   });
 
@@ -82,7 +109,13 @@ describe("budget kinds and codes", () => {
     declareBudget(ledger, "g-a", "rounds", 3, "human:dev");
     declareBudget(ledger, "g-a", "disclosure", 2, "human:dev");
     consumeBudget(ledger, "g-a", "disclosure");
-    expect(budgetState(ledger, "g-a", "rounds")).toEqual({ kind: "rounds", declared: 3, raised: 0, consumed: 0, remaining: 3 });
+    expect(budgetState(ledger, "g-a", "rounds")).toEqual({
+      kind: "rounds",
+      declared: 3,
+      raised: 0,
+      consumed: 0,
+      remaining: 3,
+    });
     expect(budgetState(ledger, "g-a", "disclosure")).toEqual({
       kind: "disclosure",
       declared: 2,

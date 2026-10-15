@@ -105,11 +105,15 @@ describe("renderSpec", () => {
 
     expect(renderSpec(MIXED, HEADER, CLEAN)).toBe(text);
     expect(renderSpec({ ...MIXED, decisions: [...MIXED.decisions].reverse() }, HEADER, CLEAN)).toBe(text);
-    expect(text.startsWith("# Cache the render\n\n<!-- projection of the decision ledger; edits are overwritten -->\n")).toBe(true);
+    expect(
+      text.startsWith("# Cache the render\n\n<!-- projection of the decision ledger; edits are overwritten -->\n"),
+    ).toBe(true);
     expect(text.endsWith("\n")).toBe(true);
     expect(text.endsWith("\n\n")).toBe(false);
 
-    const headings = ["## Interface", "## Resolved", "## Deferred", "## Open", "## Not applicable"].map((h) => text.indexOf(h));
+    const headings = ["## Interface", "## Resolved", "## Deferred", "## Open", "## Not applicable"].map((h) =>
+      text.indexOf(h),
+    );
     expect(headings.every((at) => at >= 0)).toBe(true);
     expect([...headings].sort((a, b) => a - b)).toEqual(headings);
 
@@ -136,7 +140,13 @@ describe("renderSpec", () => {
   it("withholds a record that fails recordProblems, naming only its sequence number and problem code", () => {
     const state = stateOf(
       interfaceRecord(1),
-      record(2, { id: "d-a", question: "Use a zebra quokka cache?", status: "resolved", resolution: resolution("yes"), closed_seq: 30 }),
+      record(2, {
+        id: "d-a",
+        question: "Use a zebra quokka cache?",
+        status: "resolved",
+        resolution: resolution("yes"),
+        closed_seq: 30,
+      }),
       record(3, { id: "d-zebra-quokka" }),
       record(4, { id: "d-b", class: "latency", status: "resolved", resolution: resolution("memory"), closed_seq: 31 }),
     );

@@ -6,7 +6,20 @@
     "count": { "type": "integer", "minimum": 0 },
     "path_list": { "type": "array", "maxItems": 200, "items": { "type": "string", "maxLength": 1024 } },
     "surface_kind": { "enum": ["worktree", "diff", "commit_messages", "implementer_log", "prompt", "feedback"] },
-    "risk_rule": { "enum": ["ci", "auth", "migration", "test", "goal-factory", "lockfile", "watched-path", "extra", "undeclared", "unclassifiable"] },
+    "risk_rule": {
+      "enum": [
+        "ci",
+        "auth",
+        "migration",
+        "test",
+        "goal-factory",
+        "lockfile",
+        "watched-path",
+        "extra",
+        "undeclared",
+        "unclassifiable"
+      ]
+    },
     "assessment": {
       "type": "object",
       "additionalProperties": false,
@@ -30,7 +43,10 @@
             "type": "object",
             "additionalProperties": false,
             "required": ["surface", "count"],
-            "properties": { "surface": { "$ref": "#/$defs/surface_kind" }, "count": { "type": "integer", "minimum": 1 } }
+            "properties": {
+              "surface": { "$ref": "#/$defs/surface_kind" },
+              "count": { "type": "integer", "minimum": 1 }
+            }
           }
         },
         "total": { "$ref": "#/$defs/count" },
@@ -46,8 +62,17 @@
         "status": { "enum": ["PROVEN", "FAILED", "MISCONFIGURED"] },
         "reason": {
           "enum": [
-            "test-passed-without-fix", "working-tree-not-clean", "invalid-base-ref", "base-not-ancestor", "no-non-test-change",
-            "empty-revert-patch", "revert-failed", "baseline-test-failed", "test-command-unrunnable", "interrupted", null
+            "test-passed-without-fix",
+            "working-tree-not-clean",
+            "invalid-base-ref",
+            "base-not-ancestor",
+            "no-non-test-change",
+            "empty-revert-patch",
+            "revert-failed",
+            "baseline-test-failed",
+            "test-command-unrunnable",
+            "interrupted",
+            null
           ]
         },
         "test_exit": { "oneOf": [{ "type": "null" }, { "type": "integer" }] },
@@ -59,8 +84,19 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema_version", "diff", "tests_edited", "tests_edited_count", "tests_added", "canary", "judge_config_touched", "judge_files_checked",
-    "projections_touched", "risk", "high_risk_paths_touched", "high_risk_paths_count", "prove_test"
+    "schema_version",
+    "diff",
+    "tests_edited",
+    "tests_edited_count",
+    "tests_added",
+    "canary",
+    "judge_config_touched",
+    "judge_files_checked",
+    "projections_touched",
+    "risk",
+    "high_risk_paths_touched",
+    "high_risk_paths_count",
+    "prove_test"
   ],
   "properties": {
     "schema_version": { "const": 1 },
@@ -68,7 +104,11 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["files", "empty", "special_entries"],
-      "properties": { "files": { "$ref": "#/$defs/count" }, "empty": { "type": "boolean" }, "special_entries": { "$ref": "#/$defs/count" } }
+      "properties": {
+        "files": { "$ref": "#/$defs/count" },
+        "empty": { "type": "boolean" },
+        "special_entries": { "$ref": "#/$defs/count" }
+      }
     },
     "tests_edited": { "$ref": "#/$defs/path_list" },
     "tests_edited_count": { "$ref": "#/$defs/count" },

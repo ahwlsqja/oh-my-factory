@@ -2,7 +2,13 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { type TreeReadErrorCode, TreeLimitError, TreeReadError, readTreeFile, walkTree } from "../../src/git/tree-walk.js";
+import {
+  type TreeReadErrorCode,
+  TreeLimitError,
+  TreeReadError,
+  readTreeFile,
+  walkTree,
+} from "../../src/git/tree-walk.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
 /** A tree with a file, an executable, a directory, a `.git` directory and a symlink to a directory that holds a secret. */

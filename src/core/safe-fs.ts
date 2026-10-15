@@ -34,7 +34,13 @@ export class SymlinkRefusedError extends Error {
   }
 }
 
-export type UnsafePathCode = "outside_root" | "no_follow_unsupported" | "not_regular_file" | "too_large" | "exists" | "missing";
+export type UnsafePathCode =
+  | "outside_root"
+  | "no_follow_unsupported"
+  | "not_regular_file"
+  | "too_large"
+  | "exists"
+  | "missing";
 
 /** Raised for every other refusal. `detail` never contains an absolute path. */
 export class UnsafePathError extends Error {
@@ -97,7 +103,10 @@ export function stateRoot(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 /** `root` = `stateRoot(env)`; `dir` = the project dir expressed under that real root. */
-export function realProjectDir(location: ProjectLocation, env: NodeJS.ProcessEnv = process.env): { root: string; dir: string } {
+export function realProjectDir(
+  location: ProjectLocation,
+  env: NodeJS.ProcessEnv = process.env,
+): { root: string; dir: string } {
   const root = stateRoot(env);
   return { root, dir: join(root, relative(resolve(omfHome(env)), resolve(location.dir))) };
 }

@@ -18,7 +18,8 @@ export interface NoiseCheck {
 }
 
 function requireInteger(value: number, min: number, what: string): void {
-  if (!Number.isInteger(value) || value < min) throw new FeedbackError("invalid_input", `${what} must be an integer of at least ${min}`);
+  if (!Number.isInteger(value) || value < min)
+    throw new FeedbackError("invalid_input", `${what} must be an integer of at least ${min}`);
 }
 
 /**

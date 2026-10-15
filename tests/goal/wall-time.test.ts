@@ -17,7 +17,9 @@ describe("raiseWallTime", () => {
   it("is human only and writes nothing otherwise", () => {
     const fx = setupGoal();
     lockGoal(fx.location, "g-fast", "human:dev");
-    expect(() => raiseWallTime(fx.ledger, "g-fast", "2h", "omf")).toThrow(/only a person raises wall time \(J8\); actor was omf/);
+    expect(() => raiseWallTime(fx.ledger, "g-fast", "2h", "omf")).toThrow(
+      /only a person raises wall time \(J8\); actor was omf/,
+    );
     expect(() => raiseWallTime(fx.ledger, "g-fast", "2h", "agent:claude")).toThrow(/only a person/);
     expect(raised(fx)).toBe(0);
   });
@@ -35,7 +37,11 @@ describe("raiseWallTime", () => {
     lockGoal(fx.location, "g-fast", "human:dev");
     raiseWallTime(fx.ledger, "g-fast", "2h", "human:dev");
     const event = new Ledger(fx.location.dir).readVerified().at(-1);
-    expect(event).toMatchObject({ actor: "human:dev", type: "goal.wall_time_raised", payload: { goal_id: "g-fast", by: "2h" } });
+    expect(event).toMatchObject({
+      actor: "human:dev",
+      type: "goal.wall_time_raised",
+      payload: { goal_id: "g-fast", by: "2h" },
+    });
   });
 });
 
@@ -74,12 +80,20 @@ describe("wallTimeLimitMs", () => {
   it("stops the line on a raise written by a non-person or with a bad duration", () => {
     const forged = setupGoal();
     lockGoal(forged.location, "g-fast", "human:dev");
-    forged.ledger.append({ actor: "agent:claude", type: "goal.wall_time_raised", payload: { goal_id: "g-fast", by: "24h" } });
+    forged.ledger.append({
+      actor: "agent:claude",
+      type: "goal.wall_time_raised",
+      payload: { goal_id: "g-fast", by: "24h" },
+    });
     expect(() => limit(forged)).toThrow(/invalid goal\.wall_time_raised event at seq \d+/);
 
     const bad = setupGoal();
     lockGoal(bad.location, "g-fast", "human:dev");
-    bad.ledger.append({ actor: "human:dev", type: "goal.wall_time_raised", payload: { goal_id: "g-fast", by: "soon" } });
+    bad.ledger.append({
+      actor: "human:dev",
+      type: "goal.wall_time_raised",
+      payload: { goal_id: "g-fast", by: "soon" },
+    });
     expect(() => limit(bad)).toThrow(/invalid goal\.wall_time_raised event/);
   });
 

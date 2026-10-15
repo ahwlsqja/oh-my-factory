@@ -13,8 +13,14 @@ const RUN = "r-20261014T000000Z-ab12";
 describe("W-gate4-budget", () => {
   it("an exhausted round limit parks the item; a J8 raise lets the next entry run one more round on the same count", async () => {
     const line = setupLine({ maxRounds: 1 });
-    const first = finished((await line.exec({ gates: injectedGates(), scripts: { S6: () => ({ kind: "rework" }) } })).result);
-    expect(first).toMatchObject({ outcome: "blocked", reason_code: "budget_exhausted", disposition: { action: "park" } });
+    const first = finished(
+      (await line.exec({ gates: injectedGates(), scripts: { S6: () => ({ kind: "rework" }) } })).result,
+    );
+    expect(first).toMatchObject({
+      outcome: "blocked",
+      reason_code: "budget_exhausted",
+      disposition: { action: "park" },
+    });
     expect(first.handoff?.decision_required.j).toBe("J8");
     expect(line.state()).toBe("in_progress");
 
@@ -51,7 +57,10 @@ describe("W-gate4-budget", () => {
     const infra: Script = () => ({ kind: "blocked", reason_code: "infra_failure" });
     for (let entry = 1; entry <= 3; entry += 1) {
       const run = await line.exec({ scripts: { S1: infra } });
-      expect(finished(run.result), `entry ${entry}`).toMatchObject({ outcome: "blocked", reason_code: "infra_failure" });
+      expect(finished(run.result), `entry ${entry}`).toMatchObject({
+        outcome: "blocked",
+        reason_code: "infra_failure",
+      });
     }
     const stopped = await line.exec({ scripts: { S1: infra } });
     const done = finished(stopped.result);
@@ -90,7 +99,12 @@ describe("W-gate4-budget", () => {
   it.each<[string, string, string, Record<string, unknown>]>([
     ["work.spend by an agent", "agent:rogue", "work.spend", { run_id: RUN, station: "S3", micro_usd: 0 }],
     ["work.limit_raised by omf", "omf", "work.limit_raised", { kind: "rounds", amount: 50 }],
-    ["work.limits_set by an agent", "agent:rogue", "work.limits_set", { run_id: RUN, max_rounds: 100, max_model_micro_usd: 1 }],
+    [
+      "work.limits_set by an agent",
+      "agent:rogue",
+      "work.limits_set",
+      { run_id: RUN, max_rounds: 100, max_model_micro_usd: 1 },
+    ],
     ["work.round with a gap", "omf", "work.round", { run_id: RUN, round: 7, prev_signature: null }],
   ])("a forged %s fails GATE-4 closed before S1", async (_name, actor, type, extra) => {
     const line = setupLine();

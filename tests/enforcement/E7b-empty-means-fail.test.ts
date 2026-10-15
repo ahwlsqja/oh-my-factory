@@ -9,8 +9,15 @@ import { EXPOSURE_LIMIT } from "../../src/scenario/types.js";
 import { renderScenarioFile, setDir } from "../../src/vault/vault.js";
 import { addOpen, resolveOpen } from "../helpers/decision-fixture.js";
 import {
-  DEFAULT_SPECS, type SealedItem, type SealedOptions, type SeedSpec,
-  fakeFixtureRunner, gate2Reasons, scenarioFile, sealedCtx, seedSealedItem,
+  DEFAULT_SPECS,
+  type SealedItem,
+  type SealedOptions,
+  type SeedSpec,
+  fakeFixtureRunner,
+  gate2Reasons,
+  scenarioFile,
+  sealedCtx,
+  seedSealedItem,
 } from "../helpers/scenario-fixture.js";
 import { makeTempDir } from "../helpers/tmp.js";
 import { baselineScenarios, passingInput, rebuild, sha } from "../helpers/gate2-input.js";
@@ -32,37 +39,64 @@ const ROWS: Row[] = [
     name: "all scenarios retired",
     code: "no_active_scenarios",
     route: "back_to_S2",
-    make: () => rebuild(passingInput(), baselineScenarios().map((e) => ({ ...e, status: "retired" as const }))),
+    make: () =>
+      rebuild(
+        passingInput(),
+        baselineScenarios().map((e) => ({ ...e, status: "retired" as const })),
+      ),
   },
   {
     name: "all scenarios contaminated",
     code: "no_active_scenarios",
     route: "back_to_S2",
-    make: () => rebuild(passingInput(), baselineScenarios().map((e) => ({ ...e, status: "contaminated" as const }))),
+    make: () =>
+      rebuild(
+        passingInput(),
+        baselineScenarios().map((e) => ({ ...e, status: "contaminated" as const })),
+      ),
   },
   {
     name: "only a train split",
     code: "split_missing",
     route: "back_to_S2",
-    make: () => rebuild(passingInput(), baselineScenarios().filter((e) => e.scenario.split === "train")),
+    make: () =>
+      rebuild(
+        passingInput(),
+        baselineScenarios().filter((e) => e.scenario.split === "train"),
+      ),
   },
   {
     name: "only a test split",
     code: "split_missing",
     route: "back_to_S2",
-    make: () => rebuild(passingInput(), baselineScenarios().filter((e) => e.scenario.split === "test")),
+    make: () =>
+      rebuild(
+        passingInput(),
+        baselineScenarios().filter((e) => e.scenario.split === "test"),
+      ),
   },
   {
     name: "no contradiction canary",
     code: "canary_missing",
     route: "back_to_S2",
-    make: () => rebuild(passingInput(), baselineScenarios().filter((e) => e.scenario.kind !== "contradiction_canary")),
+    make: () =>
+      rebuild(
+        passingInput(),
+        baselineScenarios().filter((e) => e.scenario.kind !== "contradiction_canary"),
+      ),
   },
   {
     name: "no seal.completed",
     code: "seal_missing",
     route: "back_to_S2",
-    make: () => ({ ...passingInput(), seal: null, set: null, effective: [], probes: null, order: { ok: false, reason: "no_seal" } }),
+    make: () => ({
+      ...passingInput(),
+      seal: null,
+      set: null,
+      effective: [],
+      probes: null,
+      order: { ok: false, reason: "no_seal" },
+    }),
   },
   {
     name: "seal.completed whose set dir is gone",
@@ -134,14 +168,27 @@ interface SealedRow {
   code: Gate2ReasonCode | Gate2ReasonCode[];
 }
 
-const retireAll = (status: "retired" | "contaminated", reason: "person_retired" | "canary_hit") => (s: SealedItem): void => {
-  for (const scenario of s.scenarios) markScenarioStatus(s.f.fx.ledger, s.f.scope, s.sealId, scenario.scenario_id, status, reason);
-};
+const retireAll =
+  (status: "retired" | "contaminated", reason: "person_retired" | "canary_hit") =>
+  (s: SealedItem): void => {
+    for (const scenario of s.scenarios)
+      markScenarioStatus(s.f.fx.ledger, s.f.scope, s.sealId, scenario.scenario_id, status, reason);
+  };
 
 const SEALED_ROWS: SealedRow[] = [
   { name: "zero scenarios", specs: [], route: "back_to_S2", code: "no_active_scenarios" },
-  { name: "all retired", arrange: retireAll("retired", "person_retired"), route: "back_to_S2", code: "no_active_scenarios" },
-  { name: "all contaminated", arrange: retireAll("contaminated", "canary_hit"), route: "back_to_S2", code: "no_active_scenarios" },
+  {
+    name: "all retired",
+    arrange: retireAll("retired", "person_retired"),
+    route: "back_to_S2",
+    code: "no_active_scenarios",
+  },
+  {
+    name: "all contaminated",
+    arrange: retireAll("contaminated", "canary_hit"),
+    route: "back_to_S2",
+    code: "no_active_scenarios",
+  },
   { name: "only a train split", specs: [DEFAULT_SPECS[0] as SeedSpec], route: "back_to_S2", code: "split_missing" },
   { name: "only a test split", specs: [DEFAULT_SPECS[1] as SeedSpec], route: "back_to_S2", code: "split_missing" },
   {
@@ -152,14 +199,25 @@ const SEALED_ROWS: SealedRow[] = [
   },
   { name: "no seal.completed", options: { seal: false }, route: "back_to_S2", code: "seal_missing" },
   { name: "a set file removed", arrange: (s) => rmSync(scenarioFile(s, 1)), route: "J3", code: "set_tampered" },
-  { name: "a seal.completed whose set dir is missing", arrange: (s) => rmSync(setDir(s.vault, s.ref), { recursive: true }), route: "J3", code: "set_missing" },
+  {
+    name: "a seal.completed whose set dir is missing",
+    arrange: (s) => rmSync(setDir(s.vault, s.ref), { recursive: true }),
+    route: "J3",
+    code: "set_missing",
+  },
   {
     name: "a tampered file",
     arrange: (s) => {
       const scenario = s.scenarios[0];
       const step = scenario?.steps[0];
       if (scenario === undefined || step === undefined) throw new Error("seeded set is empty");
-      writeFileSync(scenarioFile(s, 0), renderScenarioFile({ ...scenario, steps: [{ ...step, expect: { ...step.expect, note: `${step.expect.note} edited` } }] }));
+      writeFileSync(
+        scenarioFile(s, 0),
+        renderScenarioFile({
+          ...scenario,
+          steps: [{ ...step, expect: { ...step.expect, note: `${step.expect.note} edited` } }],
+        }),
+      );
     },
     route: "J3",
     code: "set_tampered",
@@ -173,14 +231,23 @@ const SEALED_ROWS: SealedRow[] = [
   },
   {
     name: "a decision changed after the seal",
-    arrange: (s) => { addOpen(s.f, "d-late"); resolveOpen(s.f, "d-late"); },
+    arrange: (s) => {
+      addOpen(s.f, "d-late");
+      resolveOpen(s.f, "d-late");
+    },
     route: "back_to_S2",
     code: "decisions_drifted",
   },
   { name: "a seal after work.started", options: { startBeforeSeal: true }, route: "J3", code: "seal_after_start" },
   {
     name: "an anomalous omf event",
-    arrange: (s) => { s.f.fx.ledger.append({ actor: "omf", type: "seal.failed", payload: { goal_id: s.f.scope.goal_id, work_id: s.f.scope.work_id } }); },
+    arrange: (s) => {
+      s.f.fx.ledger.append({
+        actor: "omf",
+        type: "seal.failed",
+        payload: { goal_id: s.f.scope.goal_id, work_id: s.f.scope.work_id },
+      });
+    },
     route: "J3",
     code: "ledger_anomaly",
   },
@@ -212,7 +279,10 @@ describe("E7b: sealed items fail closed through runGate2", () => {
     if (result.status !== "fail") return;
     expect(result.route).toBe(row.route);
     const wanted = Array.isArray(row.code) ? row.code : [row.code];
-    expect(gate2Reasons(result).some((reason) => wanted.includes(reason.code)), `reasons: ${JSON.stringify(gate2Reasons(result))}`).toBe(true);
+    expect(
+      gate2Reasons(result).some((reason) => wanted.includes(reason.code)),
+      `reasons: ${JSON.stringify(gate2Reasons(result))}`,
+    ).toBe(true);
   });
 
   it("a fixture whose hash does not match is a J7 probe_error that names the refusal", async () => {
@@ -222,6 +292,8 @@ describe("E7b: sealed items fail closed through runGate2", () => {
     const s = seedSealedItem(DEFAULT_SPECS);
     const result = await runGate2(sealedCtx(s, { runner: createHostFixtureRunner({ fixturesDir: copy }) }));
     expect(result.status === "fail" ? result.route : null).toBe("J7");
-    expect(gate2Reasons(result)).toContainEqual(expect.objectContaining({ code: "probe_error", refusal_codes: ["fixture_hash_mismatch"] }));
+    expect(gate2Reasons(result)).toContainEqual(
+      expect.objectContaining({ code: "probe_error", refusal_codes: ["fixture_hash_mismatch"] }),
+    );
   });
 });

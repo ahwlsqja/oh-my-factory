@@ -57,7 +57,18 @@ describe("scenario types", () => {
 
 describe("compilePattern", () => {
   it("accepts the whole grammar", () => {
-    for (const pattern of ["^$", "^abc$", "^a.c$", "^\\d+$", "^[a-c]+x?$", "^[^0-9]*$", "^a\\.b$", "^a\\$$", "^[\\d_-]+$", "^\\D\\W\\S$"]) {
+    for (const pattern of [
+      "^$",
+      "^abc$",
+      "^a.c$",
+      "^\\d+$",
+      "^[a-c]+x?$",
+      "^[^0-9]*$",
+      "^a\\.b$",
+      "^a\\$$",
+      "^[\\d_-]+$",
+      "^\\D\\W\\S$",
+    ]) {
       expect(compilePattern(pattern).ok, pattern).toBe(true);
     }
   });
@@ -138,7 +149,18 @@ describe("json_path", () => {
     expect(compileJsonPath("$.a[0].b_1")).toEqual({ ok: true, segments: ["a", 0, "b_1"] });
     expect(compileJsonPath("$")).toEqual({ ok: true, segments: [] });
     expect(compileJsonPath(`$${".a".repeat(16)}`).ok).toBe(true);
-    for (const path of ["a", "$.", "$.1a", "$[ ]", "$[-1]", "$[01]", "$['a']", "$..a", "$.a b", `$${".a".repeat(17)}`]) {
+    for (const path of [
+      "a",
+      "$.",
+      "$.1a",
+      "$[ ]",
+      "$[-1]",
+      "$[01]",
+      "$['a']",
+      "$..a",
+      "$.a b",
+      `$${".a".repeat(17)}`,
+    ]) {
       expect(compileJsonPath(path).ok, path).toBe(false);
     }
   });
@@ -157,7 +179,13 @@ describe("json_path", () => {
   });
 });
 
-const only = (over: Partial<Expect>): Expect => ({ exit_code: null, stdout_matches: null, json_path: null, note: "n", ...over });
+const only = (over: Partial<Expect>): Expect => ({
+  exit_code: null,
+  stdout_matches: null,
+  json_path: null,
+  note: "n",
+  ...over,
+});
 const exited = (stdout: string, exit_code = 0): StepObservation => ({ outcome: "exited", exit_code, stdout });
 
 describe("evaluateExpect", () => {
@@ -198,17 +226,25 @@ describe("evaluateExpect", () => {
 
   it("fails stdout above the cap even when the exact text equals it", () => {
     const big = "a".repeat(MAX_MATCH_INPUT + 1);
-    expect(evaluateExpect(only({ stdout_matches: { kind: "exact", text: big } }), exited(big))).toEqual({ pass: false, failed: ["stdout"] });
+    expect(evaluateExpect(only({ stdout_matches: { kind: "exact", text: big } }), exited(big))).toEqual({
+      pass: false,
+      failed: ["stdout"],
+    });
   });
 
   it("checks json_path entries by strict equality", () => {
     const stdout = JSON.stringify({ a: { b: [1, "x"] }, ok: true });
     const paths = (json_path: Expect["json_path"]): Expect => only({ json_path });
-    expect(evaluateExpect(paths({ "$.a.b[0]": 1, "$.a.b[1]": "x", "$.ok": true }), exited(stdout))).toEqual({ pass: true });
+    expect(evaluateExpect(paths({ "$.a.b[0]": 1, "$.a.b[1]": "x", "$.ok": true }), exited(stdout))).toEqual({
+      pass: true,
+    });
     expect(evaluateExpect(paths({ "$.a.b[0]": "1" }), exited(stdout))).toEqual({ pass: false, failed: ["json_path"] });
     expect(evaluateExpect(paths({ "$.missing": 1 }), exited(stdout))).toEqual({ pass: false, failed: ["json_path"] });
     expect(evaluateExpect(paths({ "$..a": 1 }), exited(stdout))).toEqual({ pass: false, failed: ["json_path"] });
-    expect(evaluateExpect(paths({ "$.ok": true }), exited("not json"))).toEqual({ pass: false, failed: ["json_parse"] });
+    expect(evaluateExpect(paths({ "$.ok": true }), exited("not json"))).toEqual({
+      pass: false,
+      failed: ["json_parse"],
+    });
   });
 
   it("lists every failed part, and an empty expectation passes here (intake and lint refuse it, the null probes catch it)", () => {

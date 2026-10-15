@@ -30,7 +30,9 @@ export interface PokaYokeFinding {
 
 export class PokaYokeError extends Error {
   constructor(readonly findings: readonly PokaYokeFinding[]) {
-    super(`refusing to run: sealed material inside the repository or an OMF worktree (${findings.length} finding(s)); run \`omf doctor\` to list them`);
+    super(
+      `refusing to run: sealed material inside the repository or an OMF worktree (${findings.length} finding(s)); run \`omf doctor\` to list them`,
+    );
     this.name = "PokaYokeError";
   }
 }
@@ -67,7 +69,14 @@ const DEFAULT_MAX_FILE_BYTES = 1024 * 1024;
 /** Fixed dependency and cache directories, skipped at any depth. Nothing else is skipped. */
 const SKIP_NAMES: ReadonlySet<string> = new Set([".git", "node_modules", ".venv", "venv", "__pycache__"]);
 const VAULT_DIRS: ReadonlySet<string> = new Set(["scenarios", "metrics"]);
-const LEDGER_FILES: ReadonlySet<string> = new Set(["claim.lock", "item.lock", "approve.lock", "seal.lock", "ledger.lock", "ledger.jsonl"]);
+const LEDGER_FILES: ReadonlySet<string> = new Set([
+  "claim.lock",
+  "item.lock",
+  "approve.lock",
+  "seal.lock",
+  "ledger.lock",
+  "ledger.jsonl",
+]);
 /** Mirrors METRIC_ID_PATTERN in src/goal/goal-file.ts; a metric lock is named `${metricId}.lock.json` (src/goal/metrics.ts). */
 const METRIC_LOCK = /^m-[a-z0-9]+(-[a-z0-9]+)*\.lock\.json$/;
 /** Global twin of CANARY_SEARCH, for collecting every canary in a worktree file. */

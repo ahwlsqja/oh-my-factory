@@ -31,7 +31,9 @@ function requireSha(label: string, value: string): void {
 
 /** Runs git with the working directory set away from the user's repository: the work tree when there is one, else the git dir. */
 function git(target: GitTarget, args: readonly string[], options: HostGitOptions = {}): Promise<Buffer> {
-  return runHostGit(target, args, { cwd: target.workTree ?? target.gitDir, ...options }).then((result) => result.stdout);
+  return runHostGit(target, args, { cwd: target.workTree ?? target.gitDir, ...options }).then(
+    (result) => result.stdout,
+  );
 }
 
 /** The exit status of a git that ran and exited non-zero; null for any other failure (timeout, output limit, bad git dir), which callers rethrow. */
@@ -147,8 +149,17 @@ export async function revertPatch(
   const patches: string[] = [];
   for (const chunk of chunked(sorted, chunkPaths, chunkBytes)) {
     const out = await git(target, [
-      "--literal-pathspecs", "diff", "--binary", "--full-index", "--no-renames", "--no-ext-diff", "--no-textconv",
-      base, head, "--", ...chunk,
+      "--literal-pathspecs",
+      "diff",
+      "--binary",
+      "--full-index",
+      "--no-renames",
+      "--no-ext-diff",
+      "--no-textconv",
+      base,
+      head,
+      "--",
+      ...chunk,
     ]);
     patches.push(out.toString("latin1"));
   }
@@ -162,7 +173,16 @@ export async function revertPatch(
 export async function unifiedDiff(target: GitTarget, base: string, head: string): Promise<Buffer> {
   requireSha("base", base);
   requireSha("head", head);
-  return git(target, ["diff", "--binary", "--full-index", "--no-renames", "--no-ext-diff", "--no-textconv", base, head]);
+  return git(target, [
+    "diff",
+    "--binary",
+    "--full-index",
+    "--no-renames",
+    "--no-ext-diff",
+    "--no-textconv",
+    base,
+    head,
+  ]);
 }
 
 /**
@@ -173,7 +193,10 @@ export async function unifiedDiff(target: GitTarget, base: string, head: string)
 export async function commitMessages(target: GitTarget, base: string, head: string): Promise<string> {
   requireSha("base", base);
   requireSha("head", head);
-  const listed = (await git(target, ["rev-list", `${base}..${head}`])).toString("utf8").split("\n").filter((line) => line.length > 0);
+  const listed = (await git(target, ["rev-list", `${base}..${head}`]))
+    .toString("utf8")
+    .split("\n")
+    .filter((line) => line.length > 0);
   if (listed.length === 0) return "";
   const raw = await git(target, ["cat-file", "--batch"], { input: `${listed.join("\n")}\n` });
   const parts: string[] = [];
@@ -183,7 +206,8 @@ export async function commitMessages(target: GitTarget, base: string, head: stri
     if (eol < 0) throw new Error("unexpected git cat-file output");
     const header = raw.subarray(offset, eol).toString("utf8").split(" ");
     const size = Number(header[2]);
-    if (header[1] !== "commit" || !Number.isInteger(size) || size < 0) throw new Error("unexpected git cat-file output");
+    if (header[1] !== "commit" || !Number.isInteger(size) || size < 0)
+      throw new Error("unexpected git cat-file output");
     const object = raw.subarray(eol + 1, eol + 1 + size);
     const blank = object.indexOf("\n\n");
     parts.push(`${blank < 0 ? "" : object.subarray(blank + 2).toString("utf8")}\0`);
@@ -196,7 +220,9 @@ export async function commitMessages(target: GitTarget, base: string, head: stri
 export async function treePaths(target: GitTarget, sha: string): Promise<string[]> {
   requireSha("sha", sha);
   const out = await git(target, ["ls-tree", "-r", "-z", "--name-only", "--full-tree", sha]);
-  return decodeUtf8Strict(out).split("\0").filter((path) => path.length > 0);
+  return decodeUtf8Strict(out)
+    .split("\0")
+    .filter((path) => path.length > 0);
 }
 
 function requireAbsolute(label: string, path: string): void {
@@ -257,7 +283,12 @@ export async function exportTree(target: GitTarget, sha: string, destDir: string
     await git(scoped, ["read-tree", sha]);
     const listing = await git(scoped, ["ls-files", "-z"]);
     await git(scoped, ["checkout-index", "-a"]);
-    return { files: listing.toString("utf8").split("\0").filter((path) => path.length > 0).length };
+    return {
+      files: listing
+        .toString("utf8")
+        .split("\0")
+        .filter((path) => path.length > 0).length,
+    };
   });
 }
 
@@ -289,7 +320,12 @@ export async function archiveTar(target: GitTarget, sha: string, outFile: string
  * it write outside `dir`. False when git refuses or the patch does not apply (nothing is changed: apply is atomic);
  * an empty patch is refused too. A timeout or a bad git directory throws.
  */
-export async function applyPatchToDir(scratchGitDir: string, dir: string, patch: string, options: { reverse: boolean }): Promise<boolean> {
+export async function applyPatchToDir(
+  scratchGitDir: string,
+  dir: string,
+  patch: string,
+  options: { reverse: boolean },
+): Promise<boolean> {
   requireAbsolute("directory", dir);
   const args = ["apply", ...(options.reverse ? ["-R"] : []), "--whitespace=nowarn"];
   try {
@@ -317,7 +353,8 @@ export async function isDirClean(target: GitTarget, sha: string, dir: string): P
   requireSha("sha", sha);
   requireAbsolute("directory", dir);
   if (target.indexFile === undefined) throw new Error("isDirClean needs a private target.indexFile");
-  if (resolve(target.indexFile) === resolve(target.gitDir, "index")) throw new Error("indexFile must not be the repository's own index");
+  if (resolve(target.indexFile) === resolve(target.gitDir, "index"))
+    throw new Error("indexFile must not be the repository's own index");
   const scoped: GitTarget = { gitDir: target.gitDir, workTree: dir, indexFile: target.indexFile };
   await git(scoped, ["read-tree", sha]);
   try {

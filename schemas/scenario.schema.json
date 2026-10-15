@@ -10,11 +10,16 @@
     "ev_decision_id": { "type": "string", "pattern": "^d-[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },
     "ev_count": { "type": "integer", "minimum": 0, "maximum": 1000000 },
     "ev_round": { "type": "integer", "minimum": 1, "maximum": 1000 },
-    "ev_timestamp": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$" },
+    "ev_timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+    },
     "ev_label": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$" },
     "ev_isolation": { "enum": ["host_command", "container"] },
     "ev_author_ref": {
-      "type": "object", "additionalProperties": false, "required": ["vendor", "model", "isolation"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vendor", "model", "isolation"],
       "properties": {
         "vendor": { "$ref": "#/$defs/ev_label" },
         "model": { "$ref": "#/$defs/ev_label" },
@@ -22,7 +27,9 @@
       }
     },
     "ev_author": {
-      "type": "object", "additionalProperties": false, "required": ["vendor", "model", "at", "isolation"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vendor", "model", "at", "isolation"],
       "properties": {
         "vendor": { "$ref": "#/$defs/ev_label" },
         "model": { "$ref": "#/$defs/ev_label" },
@@ -31,7 +38,9 @@
       }
     },
     "ev_seal_requested": {
-      "type": "object", "additionalProperties": false, "required": ["goal_id", "work_id", "round", "author", "input_sha256", "decisions_digest", "feedback"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "round", "author", "input_sha256", "decisions_digest", "feedback"],
       "properties": {
         "goal_id": { "$ref": "#/$defs/ev_goal_id" },
         "work_id": { "$ref": "#/$defs/ev_work_id" },
@@ -39,11 +48,38 @@
         "author": { "$ref": "#/$defs/ev_author_ref" },
         "input_sha256": { "$ref": "#/$defs/ev_digest" },
         "decisions_digest": { "$ref": "#/$defs/ev_digest" },
-        "feedback": { "anyOf": [{ "type": "null" }, { "type": "object", "additionalProperties": false, "required": ["unlinked_decision_count", "weak", "contradictions", "invalid"], "properties": { "unlinked_decision_count": { "$ref": "#/$defs/ev_count" }, "weak": { "$ref": "#/$defs/ev_count" }, "contradictions": { "$ref": "#/$defs/ev_count" }, "invalid": { "$ref": "#/$defs/ev_count" } } }] }
+        "feedback": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["unlinked_decision_count", "weak", "contradictions", "invalid"],
+              "properties": {
+                "unlinked_decision_count": { "$ref": "#/$defs/ev_count" },
+                "weak": { "$ref": "#/$defs/ev_count" },
+                "contradictions": { "$ref": "#/$defs/ev_count" },
+                "invalid": { "$ref": "#/$defs/ev_count" }
+              }
+            }
+          ]
+        }
       }
     },
     "ev_seal_completed": {
-      "type": "object", "additionalProperties": false, "required": ["goal_id", "work_id", "round", "seal_id", "author", "decisions_digest", "set_sha256", "counts", "rejected_by_code"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goal_id",
+        "work_id",
+        "round",
+        "seal_id",
+        "author",
+        "decisions_digest",
+        "set_sha256",
+        "counts",
+        "rejected_by_code"
+      ],
       "properties": {
         "goal_id": { "$ref": "#/$defs/ev_goal_id" },
         "work_id": { "$ref": "#/$defs/ev_work_id" },
@@ -52,22 +88,65 @@
         "author": { "$ref": "#/$defs/ev_author" },
         "decisions_digest": { "$ref": "#/$defs/ev_digest" },
         "set_sha256": { "$ref": "#/$defs/ev_digest" },
-        "counts": { "type": "object", "additionalProperties": false, "required": ["authored", "stored", "behavior", "contradiction_canary", "train", "test", "rejected", "ignored_fields"], "properties": { "authored": { "$ref": "#/$defs/ev_count" }, "stored": { "$ref": "#/$defs/ev_count" }, "behavior": { "$ref": "#/$defs/ev_count" }, "contradiction_canary": { "$ref": "#/$defs/ev_count" }, "train": { "$ref": "#/$defs/ev_count" }, "test": { "$ref": "#/$defs/ev_count" }, "rejected": { "$ref": "#/$defs/ev_count" }, "ignored_fields": { "$ref": "#/$defs/ev_count" } } },
-        "rejected_by_code": { "type": "object", "maxProperties": 20, "propertyNames": { "pattern": "^[a-z][a-z_]{0,39}$" }, "additionalProperties": { "$ref": "#/$defs/ev_count" } }
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "authored",
+            "stored",
+            "behavior",
+            "contradiction_canary",
+            "train",
+            "test",
+            "rejected",
+            "ignored_fields"
+          ],
+          "properties": {
+            "authored": { "$ref": "#/$defs/ev_count" },
+            "stored": { "$ref": "#/$defs/ev_count" },
+            "behavior": { "$ref": "#/$defs/ev_count" },
+            "contradiction_canary": { "$ref": "#/$defs/ev_count" },
+            "train": { "$ref": "#/$defs/ev_count" },
+            "test": { "$ref": "#/$defs/ev_count" },
+            "rejected": { "$ref": "#/$defs/ev_count" },
+            "ignored_fields": { "$ref": "#/$defs/ev_count" }
+          }
+        },
+        "rejected_by_code": {
+          "type": "object",
+          "maxProperties": 20,
+          "propertyNames": { "pattern": "^[a-z][a-z_]{0,39}$" },
+          "additionalProperties": { "$ref": "#/$defs/ev_count" }
+        }
       }
     },
     "ev_seal_failed": {
-      "type": "object", "additionalProperties": false, "required": ["goal_id", "work_id", "round", "code", "duration_ms"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "round", "code", "duration_ms"],
       "properties": {
         "goal_id": { "$ref": "#/$defs/ev_goal_id" },
         "work_id": { "$ref": "#/$defs/ev_work_id" },
         "round": { "$ref": "#/$defs/ev_round" },
-        "code": { "enum": ["timeout", "spawn_failed", "nonzero_exit", "no_output", "output_limit", "misconfigured", "no_valid_scenarios", "write_failed"] },
+        "code": {
+          "enum": [
+            "timeout",
+            "spawn_failed",
+            "nonzero_exit",
+            "no_output",
+            "output_limit",
+            "misconfigured",
+            "no_valid_scenarios",
+            "write_failed"
+          ]
+        },
         "duration_ms": { "$ref": "#/$defs/ev_count" }
       }
     },
     "ev_scenario_status_changed": {
-      "type": "object", "additionalProperties": false, "required": ["goal_id", "work_id", "seal_id", "scenario_ref", "status", "reason"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "seal_id", "scenario_ref", "status", "reason"],
       "properties": {
         "goal_id": { "$ref": "#/$defs/ev_goal_id" },
         "work_id": { "$ref": "#/$defs/ev_work_id" },
@@ -78,7 +157,23 @@
       }
     },
     "ev_gate2_evaluated": {
-      "type": "object", "additionalProperties": false, "required": ["goal_id", "work_id", "round", "seal_id", "status", "route", "reason_codes", "unlinked_decision_ids", "not_run_decision_ids", "counts", "set_sha256", "decisions_digest", "feedback_counts"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goal_id",
+        "work_id",
+        "round",
+        "seal_id",
+        "status",
+        "route",
+        "reason_codes",
+        "unlinked_decision_ids",
+        "not_run_decision_ids",
+        "counts",
+        "set_sha256",
+        "decisions_digest",
+        "feedback_counts"
+      ],
       "properties": {
         "goal_id": { "$ref": "#/$defs/ev_goal_id" },
         "work_id": { "$ref": "#/$defs/ev_work_id" },
@@ -86,13 +181,65 @@
         "seal_id": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/ev_seal_id" }] },
         "status": { "enum": ["pass", "fail"] },
         "route": { "anyOf": [{ "type": "null" }, { "enum": ["J2", "J3", "J7", "back_to_S2"] }] },
-        "reason_codes": { "type": "array", "maxItems": 18, "uniqueItems": true, "items": { "enum": ["gate1_not_passing", "ledger_anomaly", "seal_missing", "seal_after_start", "set_missing", "set_unreadable", "set_tampered", "decisions_drifted", "no_active_scenarios", "split_missing", "canary_missing", "scenario_invalid", "exposure_exhausted", "null_impl_passes", "contradiction", "judge_broken_or_gamed", "probe_error", "unlinked_decisions"] } },
+        "reason_codes": {
+          "type": "array",
+          "maxItems": 18,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "gate1_not_passing",
+              "ledger_anomaly",
+              "seal_missing",
+              "seal_after_start",
+              "set_missing",
+              "set_unreadable",
+              "set_tampered",
+              "decisions_drifted",
+              "no_active_scenarios",
+              "split_missing",
+              "canary_missing",
+              "scenario_invalid",
+              "exposure_exhausted",
+              "null_impl_passes",
+              "contradiction",
+              "judge_broken_or_gamed",
+              "probe_error",
+              "unlinked_decisions"
+            ]
+          }
+        },
         "unlinked_decision_ids": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/ev_decision_id" } },
         "not_run_decision_ids": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/ev_decision_id" } },
-        "counts": { "type": "object", "additionalProperties": false, "required": ["active", "behavior_train", "behavior_test", "canaries", "contaminated", "retired"], "properties": { "active": { "$ref": "#/$defs/ev_count" }, "behavior_train": { "$ref": "#/$defs/ev_count" }, "behavior_test": { "$ref": "#/$defs/ev_count" }, "canaries": { "$ref": "#/$defs/ev_count" }, "contaminated": { "$ref": "#/$defs/ev_count" }, "retired": { "$ref": "#/$defs/ev_count" } } },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["active", "behavior_train", "behavior_test", "canaries", "contaminated", "retired"],
+          "properties": {
+            "active": { "$ref": "#/$defs/ev_count" },
+            "behavior_train": { "$ref": "#/$defs/ev_count" },
+            "behavior_test": { "$ref": "#/$defs/ev_count" },
+            "canaries": { "$ref": "#/$defs/ev_count" },
+            "contaminated": { "$ref": "#/$defs/ev_count" },
+            "retired": { "$ref": "#/$defs/ev_count" }
+          }
+        },
         "set_sha256": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/ev_digest" }] },
         "decisions_digest": { "$ref": "#/$defs/ev_digest" },
-        "feedback_counts": { "anyOf": [{ "type": "null" }, { "type": "object", "additionalProperties": false, "required": ["weak", "contradictions", "invalid"], "properties": { "weak": { "$ref": "#/$defs/ev_count" }, "contradictions": { "$ref": "#/$defs/ev_count" }, "invalid": { "$ref": "#/$defs/ev_count" } } }] }
+        "feedback_counts": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["weak", "contradictions", "invalid"],
+              "properties": {
+                "weak": { "$ref": "#/$defs/ev_count" },
+                "contradictions": { "$ref": "#/$defs/ev_count" },
+                "invalid": { "$ref": "#/$defs/ev_count" }
+              }
+            }
+          ]
+        }
       }
     },
     "decision_id": { "type": "string", "pattern": "^d-[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },
@@ -103,7 +250,12 @@
       "type": "array",
       "minItems": 1,
       "maxItems": 64,
-      "items": { "type": "string", "minLength": 1, "maxLength": 1000, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$" }
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1000,
+        "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$"
+      }
     },
     "cli_invoke": {
       "type": "object",
@@ -136,7 +288,10 @@
           "type": "object",
           "additionalProperties": false,
           "required": ["kind", "pattern"],
-          "properties": { "kind": { "const": "anchored" }, "pattern": { "type": "string", "minLength": 1, "maxLength": 512 } }
+          "properties": {
+            "kind": { "const": "anchored" },
+            "pattern": { "type": "string", "minLength": 1, "maxLength": 512 }
+          }
         }
       ]
     },
@@ -146,7 +301,12 @@
       "maxProperties": 8,
       "propertyNames": { "type": "string", "minLength": 1, "maxLength": 200 },
       "additionalProperties": {
-        "anyOf": [{ "type": "string", "maxLength": 2000 }, { "type": "number" }, { "type": "boolean" }, { "type": "null" }]
+        "anyOf": [
+          { "type": "string", "maxLength": 2000 },
+          { "type": "number" },
+          { "type": "boolean" },
+          { "type": "null" }
+        ]
       }
     },
     "expect": {
@@ -156,7 +316,11 @@
         "exit_code": { "anyOf": [{ "type": "integer", "minimum": 0, "maximum": 255 }, { "type": "null" }] },
         "stdout_matches": { "anyOf": [{ "$ref": "#/$defs/stdout_match" }, { "type": "null" }] },
         "json_path": { "anyOf": [{ "$ref": "#/$defs/json_path_map" }, { "type": "null" }] },
-        "note": { "type": "string", "maxLength": 500, "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]*$" }
+        "note": {
+          "type": "string",
+          "maxLength": 500,
+          "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]*$"
+        }
       }
     },
     "authored_step": {
@@ -173,7 +337,12 @@
       "additionalProperties": false,
       "required": ["kind", "split", "interface", "steps"],
       "properties": {
-        "decision_refs": { "type": "array", "uniqueItems": true, "maxItems": 20, "items": { "$ref": "#/$defs/decision_id" } },
+        "decision_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/decision_id" }
+        },
         "kind": { "enum": ["behavior", "nfr", "contradiction_canary"] },
         "split": { "enum": ["train", "test"] },
         "interface": { "enum": ["cli", "http"] },
@@ -218,11 +387,19 @@
             "exit_code": { "anyOf": [{ "type": "integer", "minimum": 0, "maximum": 255 }, { "type": "null" }] },
             "stdout_matches": { "anyOf": [{ "$ref": "#/$defs/stdout_match" }, { "type": "null" }] },
             "json_path": { "anyOf": [{ "$ref": "#/$defs/json_path_map" }, { "type": "null" }] },
-            "note": { "type": "string", "maxLength": 560, "pattern": "^omf-canary-[0-9a-f]{32}( [^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]*)?$" }
+            "note": {
+              "type": "string",
+              "maxLength": 560,
+              "pattern": "^omf-canary-[0-9a-f]{32}( [^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]*)?$"
+            }
           },
           "not": {
             "type": "object",
-            "properties": { "exit_code": { "type": "null" }, "stdout_matches": { "type": "null" }, "json_path": { "type": "null" } }
+            "properties": {
+              "exit_code": { "type": "null" },
+              "stdout_matches": { "type": "null" },
+              "json_path": { "type": "null" }
+            }
           }
         }
       }
@@ -230,13 +407,29 @@
     "stored_scenario": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schema_version", "scenario_id", "work_id", "author", "decision_refs", "kind", "split", "interface", "steps", "canary"],
+      "required": [
+        "schema_version",
+        "scenario_id",
+        "work_id",
+        "author",
+        "decision_refs",
+        "kind",
+        "split",
+        "interface",
+        "steps",
+        "canary"
+      ],
       "properties": {
         "schema_version": { "const": 1 },
         "scenario_id": { "$ref": "#/$defs/scenario_id" },
         "work_id": { "type": "string", "pattern": "^w-[0-9a-f]{12}$" },
         "author": { "$ref": "#/$defs/author_stamp" },
-        "decision_refs": { "type": "array", "uniqueItems": true, "maxItems": 20, "items": { "$ref": "#/$defs/decision_id" } },
+        "decision_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/decision_id" }
+        },
         "kind": { "enum": ["behavior", "contradiction_canary"] },
         "split": { "enum": ["train", "test"] },
         "interface": { "const": "cli" },

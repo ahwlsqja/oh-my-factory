@@ -161,7 +161,11 @@ function standing(goalId: string, tickId: string, run: RunState): TickResult {
  * the tick never does (D29). Every dispatched item gets its veto command (spec §4.4 step 5).
  */
 export function renderTickReport(result: TickResult, human: HumanLines): string {
-  const lines = [`# Tick ${result.tick_id} for ${result.goal_id}`, "", `- Outcome: ${result.outcome} (${result.status})`];
+  const lines = [
+    `# Tick ${result.tick_id} for ${result.goal_id}`,
+    "",
+    `- Outcome: ${result.outcome} (${result.status})`,
+  ];
   if (result.reason_code !== null) lines.push(`- Reason: ${result.reason_code}`);
   if (human.target !== null) lines.push(`- Target: ${human.target}`);
   if (human.gapLine !== null) lines.push(`- Gap: ${human.gapLine}`);
@@ -216,7 +220,8 @@ function interruptedTick(prior: readonly LedgerEvent[], goalId: string): string 
   let latest: string | null = null;
   for (const event of prior) {
     const tickId = event.payload.tick_id;
-    if (event.type === "goal.tick_started" && event.payload.goal_id === goalId && typeof tickId === "string") latest = tickId;
+    if (event.type === "goal.tick_started" && event.payload.goal_id === goalId && typeof tickId === "string")
+      latest = tickId;
   }
   if (latest === null) return null;
   const closed = prior.some(
@@ -320,7 +325,8 @@ async function runTick(location: ProjectLocation, goalId: string, options: TickO
     terminated: false,
   };
   // A predecessor that crashed after goal.tick_started counts as a failure for the breaker, once (design §6).
-  if (interrupted !== null) st.outcomes.push({ station: "dispatch", outcome_class: "failed", reason: "tick.interrupted" });
+  if (interrupted !== null)
+    st.outcomes.push({ station: "dispatch", outcome_class: "failed", reason: "tick.interrupted" });
   let human: HumanLines = { target: null, gapLine: null };
 
   const escalateTick = (code: string, signature: string | null): void => {
@@ -343,7 +349,9 @@ async function runTick(location: ProjectLocation, goalId: string, options: TickO
       if (hit !== null) escalateTick("repeated_signature", hit);
     }
     const items = verifiedItems(store, ledger.readVerified(), goalId);
-    const awaiting = items.items.filter((item) => item.front.state === "awaiting_approval").map((item) => item.front.work_id);
+    const awaiting = items.items
+      .filter((item) => item.front.state === "awaiting_approval")
+      .map((item) => item.front.work_id);
     const steps = new Set<string>(st.escalation === null ? [] : nextSteps(st.escalation, goalId));
     for (const id of awaiting) steps.add(`omf work approve ${id}`);
     if (items.malformed.length > 0) steps.add(`omf work list ${goalId}`);
@@ -612,7 +620,13 @@ async function runTick(location: ProjectLocation, goalId: string, options: TickO
         ledger.append({
           actor: "omf",
           type: "goal.stale",
-          payload: { goal_id: goalId, tick_id: tickId, regime: approval.regime, tripped: verdict.tripped, signals: verdict.signals },
+          payload: {
+            goal_id: goalId,
+            tick_id: tickId,
+            regime: approval.regime,
+            tripped: verdict.tripped,
+            signals: verdict.signals,
+          },
         });
       }
     }

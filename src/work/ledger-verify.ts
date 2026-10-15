@@ -71,7 +71,11 @@ export function verifyItemAgainstLedger(front: WorkItemFront, events: readonly L
     if (event.type === "work.created") {
       const state = text(event.payload, "state");
       const risk = text(event.payload, "risk_class");
-      if (created === null && (state === "ready" || state === "awaiting_approval") && (risk === "normal" || risk === "high")) {
+      if (
+        created === null &&
+        (state === "ready" || state === "awaiting_approval") &&
+        (risk === "normal" || risk === "high")
+      ) {
         created = { state, risk };
         fold = state;
       }
@@ -104,7 +108,11 @@ export function verifyItemAgainstLedger(front: WorkItemFront, events: readonly L
           last = { from, to: to as RepairTarget, seq: classified.seq };
           fold = to;
         }
-      } else if (type === "work.parked" ? fold !== "ready" && fold !== "in_progress" : type === "work.resumed" && fold !== "in_progress") {
+      } else if (
+        type === "work.parked"
+          ? fold !== "ready" && fold !== "in_progress"
+          : type === "work.resumed" && fold !== "in_progress"
+      ) {
         trailBad = true;
       }
     }
@@ -145,7 +153,12 @@ export interface VerifiedItems {
    * stay in `malformed` so every existing consumer still excludes them; the tick, reconcile and `goal status`
    * read this list to count them (M3b1-D5): by `repair_to` for STOP_IF, by `file_state` for the WIP cap.
    */
-  repairable: { work_id: string; dir: string; file_state: WorkItemFront["state"]; repair_to: RepairVerdict["repair_to"] }[];
+  repairable: {
+    work_id: string;
+    dir: string;
+    file_state: WorkItemFront["state"];
+    repair_to: RepairVerdict["repair_to"];
+  }[];
 }
 
 /**
@@ -164,7 +177,12 @@ export function verifiedItems(store: StateStore, events: readonly LedgerEvent[],
     else {
       malformed.push({ work_id: item.front.work_id, dir: item.dir, reason: verdict.reason });
       if (verdict.reason === "w_repairable") {
-        repairable.push({ work_id: item.front.work_id, dir: item.dir, file_state: item.front.state, repair_to: verdict.repair_to });
+        repairable.push({
+          work_id: item.front.work_id,
+          dir: item.dir,
+          file_state: item.front.state,
+          repair_to: verdict.repair_to,
+        });
       }
     }
   }

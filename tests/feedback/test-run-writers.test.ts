@@ -16,7 +16,16 @@ import {
 } from "../helpers/test-run.js";
 
 const BEGIN_A = { goalId: GOAL, workId: WORK, runId: RUN_1, testDigest: DIGEST_A, candidateSha: SHA_1, testTotal: 10 };
-const COMPLETE_A = { goalId: GOAL, workId: WORK, runId: RUN_1, testDigest: DIGEST_A, candidateSha: SHA_1, pass: 8, total: 10, flaky: 1 };
+const COMPLETE_A = {
+  goalId: GOAL,
+  workId: WORK,
+  runId: RUN_1,
+  testDigest: DIGEST_A,
+  candidateSha: SHA_1,
+  pass: 8,
+  total: 10,
+  flaky: 1,
+};
 const RESEAL = { goalId: GOAL, workId: WORK, basis: "J3" as const };
 
 describe("beginTestRun", () => {
@@ -38,7 +47,9 @@ describe("beginTestRun", () => {
     const ledger = newLedger();
     beginTestRun(ledger, BEGIN_A);
     const length = ledger.readVerified().length;
-    expect(codeOf(() => beginTestRun(ledger, { ...BEGIN_A, runId: RUN_2, testDigest: DIGEST_B }))).toBe("reseal_not_authorized");
+    expect(codeOf(() => beginTestRun(ledger, { ...BEGIN_A, runId: RUN_2, testDigest: DIGEST_B }))).toBe(
+      "reseal_not_authorized",
+    );
     expect(codeOf(() => beginTestRun(newLedger(), { ...BEGIN_A, testTotal: 0 }))).toBe("invalid_input");
     expect(ledger.readVerified()).toHaveLength(length);
   });
@@ -52,8 +63,15 @@ describe("completeTestRun", () => {
     expect(codeOf(() => completeTestRun(ledger, { ...COMPLETE_A, runId: RUN_2 }))).toBe("no_open_test_run");
     expect(codeOf(() => completeTestRun(ledger, { ...COMPLETE_A, candidateSha: SHA_2 }))).toBe("no_open_test_run");
     const length = ledger.readVerified().length;
-    for (const counts of [{ pass: 1, total: 9, flaky: 0 }, { pass: 11, total: 10, flaky: 0 }, { pass: 8, total: 10, flaky: 3 }]) {
-      expect(codeOf(() => completeTestRun(ledger, { ...COMPLETE_A, ...counts })), JSON.stringify(counts)).toBe("invalid_input");
+    for (const counts of [
+      { pass: 1, total: 9, flaky: 0 },
+      { pass: 11, total: 10, flaky: 0 },
+      { pass: 8, total: 10, flaky: 3 },
+    ]) {
+      expect(
+        codeOf(() => completeTestRun(ledger, { ...COMPLETE_A, ...counts })),
+        JSON.stringify(counts),
+      ).toBe("invalid_input");
     }
     expect(ledger.readVerified()).toHaveLength(length);
 
@@ -71,13 +89,19 @@ describe("authorizeTestReseal", () => {
   it("is for people only", () => {
     const ledger = newLedger();
     beginTestRun(ledger, BEGIN_A);
-    for (const actor of ["omf", "agent:x"]) expect(codeOf(() => authorizeTestReseal(ledger, RESEAL, actor)), actor).toBe("forbidden");
+    for (const actor of ["omf", "agent:x"])
+      expect(
+        codeOf(() => authorizeTestReseal(ledger, RESEAL, actor)),
+        actor,
+      ).toBe("forbidden");
     expect(stateOf(ledger).pending_authorization).toBeNull();
   });
 
   it("with nothing consumed allows only J3, which writes a null-digest authorization", () => {
     const ledger = newLedger();
-    expect(codeOf(() => authorizeTestReseal(ledger, { ...RESEAL, basis: "J6" }, "human:dev"))).toBe("nothing_to_reseal");
+    expect(codeOf(() => authorizeTestReseal(ledger, { ...RESEAL, basis: "J6" }, "human:dev"))).toBe(
+      "nothing_to_reseal",
+    );
     expect(authorizeTestReseal(ledger, RESEAL, "human:dev")).toMatchObject({
       actor: "human:dev",
       type: "feedback.test_reseal_authorized",
@@ -98,7 +122,9 @@ describe("authorizeTestReseal", () => {
     expect(codeOf(() => authorizeTestReseal(ledger, RESEAL, "human:dev"))).toBe("already_authorized");
 
     beginTestRun(ledger, { ...BEGIN_A, runId: RUN_2, testDigest: DIGEST_B });
-    expect(codeOf(() => beginTestRun(ledger, { ...BEGIN_A, runId: RUN_2, testDigest: DIGEST_B }))).toBe("test_already_consumed");
+    expect(codeOf(() => beginTestRun(ledger, { ...BEGIN_A, runId: RUN_2, testDigest: DIGEST_B }))).toBe(
+      "test_already_consumed",
+    );
     expect(codeOf(() => beginTestRun(ledger, BEGIN_A))).toBe("test_already_consumed");
     expect(codeOf(() => beginTestRun(ledger, { ...BEGIN_A, testDigest: DIGEST_C }))).toBe("reseal_not_authorized");
   });

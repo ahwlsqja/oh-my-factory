@@ -48,7 +48,10 @@ describe("git helpers", () => {
 
   it("matches watched globs, including dot paths", () => {
     const paths = ["src/telemetry/a.ts", "src/app.ts", ".github/workflows/ci.yml"];
-    expect(matchWatched(paths, ["src/telemetry/**", ".github/**"])).toEqual(["src/telemetry/a.ts", ".github/workflows/ci.yml"]);
+    expect(matchWatched(paths, ["src/telemetry/**", ".github/**"])).toEqual([
+      "src/telemetry/a.ts",
+      ".github/workflows/ci.yml",
+    ]);
     expect(matchWatched(paths, [])).toEqual([]);
   });
 
@@ -102,10 +105,18 @@ describe("commitsSince", () => {
     commitAll(repo, "main one");
     gitIn(
       repo,
-      "-c", "user.name=omf-test",
-      "-c", "user.email=omf-test@example.invalid",
-      "-c", "commit.gpgsign=false",
-      "merge", "--no-ff", "-q", "-m", "merge side", "side",
+      "-c",
+      "user.name=omf-test",
+      "-c",
+      "user.email=omf-test@example.invalid",
+      "-c",
+      "commit.gpgsign=false",
+      "merge",
+      "--no-ff",
+      "-q",
+      "-m",
+      "merge side",
+      "side",
     );
     expect(Number(gitIn(repo, "rev-list", "--count", `${base}..HEAD`).trim())).toBe(4);
     expect(commitsSince(repo, base)).toBe(2);

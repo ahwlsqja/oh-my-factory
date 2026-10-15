@@ -9,6 +9,7 @@ describe("parseDuration", () => {
   });
 
   it("rejects anything else", () => {
-    for (const bad of ["", "0d", "7", "1w", "1.5h", "-1d"]) expect(() => parseDuration(bad)).toThrow(/invalid duration/);
+    for (const bad of ["", "0d", "7", "1w", "1.5h", "-1d"])
+      expect(() => parseDuration(bad)).toThrow(/invalid duration/);
   });
 });

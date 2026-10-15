@@ -78,7 +78,8 @@ export function renderScenarioFile(scenario: StoredScenario): string {
   return stringify(scenario, { sortMapEntries: true, lineWidth: 0 });
 }
 
-const byId = (a: StoredScenario, b: StoredScenario): number => (a.scenario_id < b.scenario_id ? -1 : a.scenario_id > b.scenario_id ? 1 : 0);
+const byId = (a: StoredScenario, b: StoredScenario): number =>
+  a.scenario_id < b.scenario_id ? -1 : a.scenario_id > b.scenario_id ? 1 : 0;
 
 /** sha256 over the canonical JSON of the stored scenarios sorted by id: the whole record, so any edited field changes it. */
 export function setSha256(scenarios: readonly StoredScenario[]): string {
@@ -95,7 +96,10 @@ export function splitDigest(
   split: ScenarioSplit,
 ): string {
   const active = scenarios
-    .filter((scenario) => scenario.split === split && (statuses.get(scenarioRef(scenario.scenario_id)) ?? "active") === "active")
+    .filter(
+      (scenario) =>
+        scenario.split === split && (statuses.get(scenarioRef(scenario.scenario_id)) ?? "active") === "active",
+    )
     .sort(byId);
   return sha256Hex(canonicalize(active));
 }
@@ -105,12 +109,24 @@ export function splitDigest(
  * `mkdir` so an existing name (a set, or a link planted there) is `set_exists`, then writes each `<scenario_id>.yaml` exclusively.
  * A crash leaves an orphan directory that no event names; nothing is swept.
  */
-export function writeScenarioSet(vault: Vault, ref: SetRef, scenarios: readonly StoredScenario[]): { set_sha256: string } {
-  if (scenarios.length > MAX_SCENARIOS_PER_SET) throw new VaultError("too_many", `a set holds at most ${MAX_SCENARIOS_PER_SET} scenarios`);
+export function writeScenarioSet(
+  vault: Vault,
+  ref: SetRef,
+  scenarios: readonly StoredScenario[],
+): { set_sha256: string } {
+  if (scenarios.length > MAX_SCENARIOS_PER_SET)
+    throw new VaultError("too_many", `a set holds at most ${MAX_SCENARIOS_PER_SET} scenarios`);
   const seen = new Set<string>();
   for (const scenario of scenarios) {
-    if (!validateDef(SCHEMA, "stored_scenario", scenario).ok || scenario.work_id !== ref.work_id || seen.has(scenario.scenario_id)) {
-      throw new VaultError("invalid_scenario", "a scenario does not validate, names another work item or repeats an id");
+    if (
+      !validateDef(SCHEMA, "stored_scenario", scenario).ok ||
+      scenario.work_id !== ref.work_id ||
+      seen.has(scenario.scenario_id)
+    ) {
+      throw new VaultError(
+        "invalid_scenario",
+        "a scenario does not validate, names another work item or repeats an id",
+      );
     }
     seen.add(scenario.scenario_id);
   }
@@ -119,7 +135,8 @@ export function writeScenarioSet(vault: Vault, ref: SetRef, scenarios: readonly 
   try {
     mkdirSync(dir, { mode: 0o700 });
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "EEXIST") throw new VaultError("set_exists", `set ${ref.seal_id} already exists`);
+    if ((err as NodeJS.ErrnoException).code === "EEXIST")
+      throw new VaultError("set_exists", `set ${ref.seal_id} already exists`);
     throw err;
   }
   chmodSync(dir, 0o700);
@@ -133,7 +150,14 @@ export type ScenarioSetRead =
   | { ok: true; scenarios: StoredScenario[]; set_sha256: string }
   | {
       ok: false;
-      reason: "set_missing" | "symlink_refused" | "unreadable" | "invalid_scenario" | "name_mismatch" | "extra_entry" | "work_mismatch";
+      reason:
+        | "set_missing"
+        | "symlink_refused"
+        | "unreadable"
+        | "invalid_scenario"
+        | "name_mismatch"
+        | "extra_entry"
+        | "work_mismatch";
     };
 
 /**
@@ -181,7 +205,11 @@ export function readScenarioSet(vault: Vault, ref: SetRef): ScenarioSetRead {
     }
     let data: unknown;
     try {
-      data = parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes), { schema: "core", uniqueKeys: true, maxAliasCount: 0 });
+      data = parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes), {
+        schema: "core",
+        uniqueKeys: true,
+        maxAliasCount: 0,
+      });
     } catch {
       return { ok: false, reason: "invalid_scenario" };
     }

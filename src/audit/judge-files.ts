@@ -2,7 +2,16 @@ import { basename } from "node:path";
 import picomatch from "picomatch";
 import { normalizePath } from "../work/fingerprint.js";
 
-const NODE_RUNNER_CONFIGS = ["package.json", "tsconfig.json", "vitest.config.*", "vitest.workspace.*", "vite.config.*", "jest.config.*", ".mocharc.*", "babel.config.*"];
+const NODE_RUNNER_CONFIGS = [
+  "package.json",
+  "tsconfig.json",
+  "vitest.config.*",
+  "vitest.workspace.*",
+  "vite.config.*",
+  "jest.config.*",
+  ".mocharc.*",
+  "babel.config.*",
+];
 const PYTEST_CONFIGS = ["pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg", "**/conftest.py"];
 
 /**
@@ -46,7 +55,11 @@ function toolOf(token: string): string {
  * `judge_files_checked` is `tracked.length + config_globs.length`; zero means the commands name no file and no known tool, and the
  * caller reports `judge_config: not_run`, never a vacuous `unchanged`.
  */
-export function resolveJudgeFiles(argvs: ReadonlyArray<readonly string[]>, baseTree: readonly string[], diffPaths: readonly string[]): JudgeFiles {
+export function resolveJudgeFiles(
+  argvs: ReadonlyArray<readonly string[]>,
+  baseTree: readonly string[],
+  diffPaths: readonly string[],
+): JudgeFiles {
   const known = new Set([...baseTree, ...diffPaths]);
   const tracked = new Set<string>();
   const globs = new Set<string>();
@@ -67,7 +80,8 @@ export function resolveJudgeFiles(argvs: ReadonlyArray<readonly string[]>, baseT
  */
 export function judgeConfigTouched(judge: JudgeFiles, diffPaths: readonly string[]): boolean {
   const tracked = new Set(judge.tracked);
-  const matchesConfig = judge.config_globs.length > 0 ? picomatch([...judge.config_globs], { dot: true, nocase: true }) : () => false;
+  const matchesConfig =
+    judge.config_globs.length > 0 ? picomatch([...judge.config_globs], { dot: true, nocase: true }) : () => false;
   return diffPaths.some((path) => {
     const normalized = normalizePath(path);
     return tracked.has(normalized) || matchesConfig(normalized);

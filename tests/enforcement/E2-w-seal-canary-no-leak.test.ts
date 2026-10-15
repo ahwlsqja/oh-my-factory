@@ -10,7 +10,16 @@ import { CANARY, canaryHits } from "../helpers/canary.js";
 import { omf } from "../helpers/cli.js";
 import { measureOnce } from "../helpers/decision-fixture.js";
 import { ledgerEvents } from "../helpers/enforcement-goal.js";
-import { SCENARIO_TEXT, ROUND1, ROUND2, passDeps, prompts, sealDeps, setupLine, writeYaml } from "../helpers/line-fixture.js";
+import {
+  SCENARIO_TEXT,
+  ROUND1,
+  ROUND2,
+  passDeps,
+  prompts,
+  sealDeps,
+  setupLine,
+  writeYaml,
+} from "../helpers/line-fixture.js";
 import { readTree } from "../helpers/tree.js";
 
 // Spec §4.6 (F6), E2 on the W side, first third: what OMF puts in the seal prompt, the ledger and its own
@@ -41,19 +50,29 @@ describe("E2-w-seal-canary-no-leak", () => {
     const scenarioStrings = [...SCENARIO_TEXT, ...set.scenarios.map((s) => s.canary)];
 
     const vaultText = [...readTree(setDir(l.vault, ref)).values()].join("\n");
-    for (const needle of scenarioStrings) expect(vaultText, "positive control: the vault holds the scenario").toContain(needle);
-    expect(canaryHits(readFileSync(l.f.fx.ledger.file, "utf8")), "positive control: the ledger holds the reading").toContain("reading");
+    for (const needle of scenarioStrings)
+      expect(vaultText, "positive control: the vault holds the scenario").toContain(needle);
+    expect(
+      canaryHits(readFileSync(l.f.fx.ledger.file, "utf8")),
+      "positive control: the ledger holds the reading",
+    ).toContain("reading");
 
     const cli = ["decide lint --render", "decide show", "ledger verify"]
       .map((line) => {
         const args = line.split(" ");
-        const run = omf(args[0] === "decide" ? [...args.slice(0, 2), l.f.workId, ...args.slice(2)] : args, l.f.fx.repo, l.f.fx.home);
+        const run = omf(
+          args[0] === "decide" ? [...args.slice(0, 2), l.f.workId, ...args.slice(2)] : args,
+          l.f.fx.repo,
+          l.f.fx.home,
+        );
         // A refusal prints little, so a non-zero exit would pass the no-leak checks below for nothing.
         expect(run.code, `${line} exits 0`).toBe(0);
         return `${run.stdout}\n${run.stderr}`;
       })
       .join("\n");
-    const needsHuman = existsSync(needsHumanFile(l.f.item.dir)) ? readFileSync(needsHumanFile(l.f.item.dir), "utf8") : "";
+    const needsHuman = existsSync(needsHumanFile(l.f.item.dir))
+      ? readFileSync(needsHumanFile(l.f.item.dir), "utf8")
+      : "";
     const payloads = events
       .filter((e) => /^(seal|scenario|gate2)\./.test(e.type))
       .map((e) => JSON.stringify(e.payload))

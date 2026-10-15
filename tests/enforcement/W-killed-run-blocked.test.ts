@@ -57,9 +57,13 @@ describe("W-killed-run-blocked", () => {
       expect(readEvidence(line.itemDir)).toMatchObject({ ok: true, doc: { run_id: done.run_id } });
       expect(readFileSync(join(line.itemDir, EVIDENCE_MD), "utf8")).not.toContain("stale");
 
-      const reclaimed = line.events().filter((e) => e.type === "work.claim_reclaimed" && e.payload.work_id === line.workId);
+      const reclaimed = line
+        .events()
+        .filter((e) => e.type === "work.claim_reclaimed" && e.payload.work_id === line.workId);
       expect(reclaimed).toHaveLength(1);
-      const record = JSON.parse(readFileSync(handoffFile(line.itemDir, done.run_id, "killed_predecessor"), "utf8")) as HandoffRecord;
+      const record = JSON.parse(
+        readFileSync(handoffFile(line.itemDir, done.run_id, "killed_predecessor"), "utf8"),
+      ) as HandoffRecord;
       expect(validate("handoff.schema.json", record)).toEqual({ ok: true });
       expect(record).toMatchObject({
         kind: "killed_predecessor",
@@ -72,7 +76,9 @@ describe("W-killed-run-blocked", () => {
       });
       expect(record.ran.map((entry) => entry.node)).toEqual(["S3"]);
       expect(owedPredecessors(line.itemDir, line.events(), line.workId)).toEqual([]);
-      expect(readdirSync(join(line.itemDir, "handoffs")).filter((name) => name.endsWith(".predecessor.json"))).toHaveLength(1);
+      expect(
+        readdirSync(join(line.itemDir, "handoffs")).filter((name) => name.endsWith(".predecessor.json")),
+      ).toHaveLength(1);
     } finally {
       child.kill("SIGKILL");
     }

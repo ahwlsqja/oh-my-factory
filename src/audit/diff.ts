@@ -22,8 +22,14 @@ const SPECIAL_MODES: ReadonlySet<string> = new Set(["120000", "160000"]);
 const byBytes = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 /** A rename is a delete plus an add in the raw diff, so renaming a test counts as an edit. Pure: the same entries give the same facts. */
-export function classifyDiff(entries: readonly RawDiffEntry[], explicitTestPaths: readonly string[], projectionPaths: readonly string[]): DiffFacts {
-  const projections = new Set(projectionPaths.map((path) => normalizePath(path).toLowerCase()).filter((path) => path !== ""));
+export function classifyDiff(
+  entries: readonly RawDiffEntry[],
+  explicitTestPaths: readonly string[],
+  projectionPaths: readonly string[],
+): DiffFacts {
+  const projections = new Set(
+    projectionPaths.map((path) => normalizePath(path).toLowerCase()).filter((path) => path !== ""),
+  );
   const paths: string[] = [];
   const testsEdited: string[] = [];
   const projectionsTouched: string[] = [];
@@ -68,7 +74,11 @@ export function assessDiffRisk(
   globs: { watchedGlobs: readonly string[]; extraGlobs: readonly string[] },
 ): RiskOutcome {
   if (facts.empty) return { recomputed: null, effective: declared, raised: false };
-  const recomputed = classifyLiteralPaths({ paths: facts.paths, watchedGlobs: globs.watchedGlobs, extraGlobs: globs.extraGlobs });
+  const recomputed = classifyLiteralPaths({
+    paths: facts.paths,
+    watchedGlobs: globs.watchedGlobs,
+    extraGlobs: globs.extraGlobs,
+  });
   const effective = raiseRisk(declared, recomputed);
   const raised = effective.class !== declared.class || effective.rules.some((rule) => !declared.rules.includes(rule));
   return { recomputed, effective, raised };

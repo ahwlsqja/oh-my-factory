@@ -11,7 +11,9 @@ import { registerGoalCommands } from "./goal.js";
 import { registerBudgetCommands, registerWorkCommands } from "./work.js";
 import { NOT_INITIALIZED_MESSAGE, initProject, readProjectStatus } from "../core/project.js";
 
-const { version } = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { version: string };
+const { version } = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as {
+  version: string;
+};
 
 const program = new Command()
   .name("omf")

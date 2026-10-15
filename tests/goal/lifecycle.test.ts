@@ -102,7 +102,12 @@ describe("escalate and terminate", () => {
       signature: null,
       default: "stay stopped",
     });
-    expect(added[1]?.payload).toMatchObject({ goal_id: G, tick_id: TICK, state: "blocked_on_user", reason_code: "wall_time_exceeded" });
+    expect(added[1]?.payload).toMatchObject({
+      goal_id: G,
+      tick_id: TICK,
+      state: "blocked_on_user",
+      reason_code: "wall_time_exceeded",
+    });
     expect(escalation).toMatchObject({ tick_id: TICK, j: "J8", reason_code: "wall_time_exceeded", signature: null });
     expect(runStateFromEvents(fx.ledger.readVerified(), G)).toMatchObject({
       status: "blocked_on_user",
@@ -122,7 +127,11 @@ describe("escalate and terminate", () => {
   it("terminate writes goal.terminated as omf by default and as a person when told", () => {
     const fx = setupGoal();
     const failed = terminate(fx.ledger, G, "failed", TICK, "internal_error");
-    expect(failed).toMatchObject({ actor: "omf", type: "goal.terminated", payload: { goal_id: G, tick_id: TICK, state: "failed", reason_code: "internal_error" } });
+    expect(failed).toMatchObject({
+      actor: "omf",
+      type: "goal.terminated",
+      payload: { goal_id: G, tick_id: TICK, state: "failed", reason_code: "internal_error" },
+    });
     const cancelled = terminate(fx.ledger, G, "cancelled", null, "cancelled_by_user", "human:dev");
     expect(cancelled.actor).toBe("human:dev");
     expect(cancelled.payload.tick_id).toBeNull();
@@ -142,7 +151,11 @@ describe("resumeGoal", () => {
     const fx = setupGoal();
     escalate(fx.ledger, G, TICK, "no_progress", null);
     expect(resumeGoal(fx.ledger, G, "human:dev")).toMatchObject({ status: "running", open_escalation: null });
-    expect(fx.ledger.readVerified().at(-1)).toMatchObject({ actor: "human:dev", type: "goal.resumed", payload: { goal_id: G, from: "blocked_on_user" } });
+    expect(fx.ledger.readVerified().at(-1)).toMatchObject({
+      actor: "human:dev",
+      type: "goal.resumed",
+      payload: { goal_id: G, from: "blocked_on_user" },
+    });
 
     terminate(fx.ledger, G, "failed", TICK, "internal_error");
     expect(resumeGoal(fx.ledger, G, "human:dev").status).toBe("running");
@@ -152,7 +165,9 @@ describe("resumeGoal", () => {
   it("refuses a running goal and a finished goal, and writes nothing", () => {
     const fx = setupGoal();
     const count = fx.ledger.readVerified().length;
-    expect(() => resumeGoal(fx.ledger, G, "human:dev")).toThrow(/goal g-fast is running; only a blocked_on_user or failed goal can be resumed/);
+    expect(() => resumeGoal(fx.ledger, G, "human:dev")).toThrow(
+      /goal g-fast is running; only a blocked_on_user or failed goal can be resumed/,
+    );
     terminate(fx.ledger, G, "finish", TICK, "success_candidate");
     expect(() => resumeGoal(fx.ledger, G, "human:dev")).toThrow(/is finish/);
     expect(fx.ledger.readVerified()).toHaveLength(count + 1);
@@ -190,19 +205,29 @@ describe("cancelGoal", () => {
     });
 
     const added = fx.ledger.readVerified().slice(before);
-    expect(added.map((event) => event.type)).toEqual(["work.cancelled", "work.cancelled", "work.cancelled", "goal.terminated"]);
+    expect(added.map((event) => event.type)).toEqual([
+      "work.cancelled",
+      "work.cancelled",
+      "work.cancelled",
+      "goal.terminated",
+    ]);
     for (const event of added.slice(0, 3)) {
       expect(event.actor).toBe("human:dev");
       expect(event.payload).toMatchObject({ goal_id: G, cause: "goal_cancelled" });
     }
-    expect(added[3]).toMatchObject({ actor: "human:dev", payload: { goal_id: G, tick_id: null, state: "cancelled", reason_code: "cancelled_by_user" } });
+    expect(added[3]).toMatchObject({
+      actor: "human:dev",
+      payload: { goal_id: G, tick_id: null, state: "cancelled", reason_code: "cancelled_by_user" },
+    });
     expect(runStateFromEvents(fx.ledger.readVerified(), G).status).toBe("cancelled");
   });
 
   it("is for people only", () => {
     const fx = setupGoal();
     const count = fx.ledger.readVerified().length;
-    expect(() => cancelGoal(fx.ledger, createMarkdownStore(fx.location.dir), G, "omf", NOW)).toThrow(/only a person may cancel a goal/);
+    expect(() => cancelGoal(fx.ledger, createMarkdownStore(fx.location.dir), G, "omf", NOW)).toThrow(
+      /only a person may cancel a goal/,
+    );
     expect(fx.ledger.readVerified()).toHaveLength(count);
   });
 
@@ -213,12 +238,16 @@ describe("cancelGoal", () => {
     expect(cancelGoal(fx.ledger, store, G, "human:dev", NOW)).toEqual({ cancelled: [] });
     expect(runStateFromEvents(fx.ledger.readVerified(), G).status).toBe("cancelled");
     const count = fx.ledger.readVerified().length;
-    expect(() => cancelGoal(fx.ledger, store, G, "human:dev", NOW)).toThrow(/goal g-fast is already cancelled; nothing to cancel/);
+    expect(() => cancelGoal(fx.ledger, store, G, "human:dev", NOW)).toThrow(
+      /goal g-fast is already cancelled; nothing to cancel/,
+    );
     expect(fx.ledger.readVerified()).toHaveLength(count);
 
     const other = setupGoal();
     terminate(other.ledger, G, "finish", TICK, "success_candidate");
-    expect(() => cancelGoal(other.ledger, createMarkdownStore(other.location.dir), G, "human:dev", NOW)).toThrow(/already finish/);
+    expect(() => cancelGoal(other.ledger, createMarkdownStore(other.location.dir), G, "human:dev", NOW)).toThrow(
+      /already finish/,
+    );
   });
 });
 
@@ -227,7 +256,16 @@ describe("nextSteps", () => {
   const escalationFor = (code: string, signature: string | null = null): Escalation => {
     const entry = ESCALATIONS[code];
     if (entry === undefined) throw new Error(`no such code ${code}`);
-    return { tick_id: TICK, j: entry.j, reason_code: code, signature, question: entry.question, options: entry.options, default: entry.default, at: NOW.toISOString() };
+    return {
+      tick_id: TICK,
+      j: entry.j,
+      reason_code: code,
+      signature,
+      question: entry.question,
+      options: entry.options,
+      default: entry.default,
+      at: NOW.toISOString(),
+    };
   };
 
   const rows: [string, string | null, string[]][] = [
@@ -237,7 +275,10 @@ describe("nextSteps", () => {
     [
       "approach_unusable",
       null,
-      ["edit goal.md: remove metric names and numbers from the objective and the ## Approach section", "omf goal resume g-demo"],
+      [
+        "edit goal.md: remove metric names and numbers from the objective and the ## Approach section",
+        "omf goal resume g-demo",
+      ],
     ],
     ["wall_time_exceeded", null, ["omf budget raise g-demo wall_time <dur>", "omf goal resume g-demo"]],
     ["rounds_exhausted", null, ["omf budget raise g-demo rounds <n>", "omf goal resume g-demo"]],
@@ -245,7 +286,13 @@ describe("nextSteps", () => {
     [
       "no_progress",
       null,
-      ["omf work list g-demo", "omf work approve <work_id>", "omf veto <work_id>", "omf goal resume g-demo", "omf goal cancel g-demo"],
+      [
+        "omf work list g-demo",
+        "omf work approve <work_id>",
+        "omf veto <work_id>",
+        "omf goal resume g-demo",
+        "omf goal cancel g-demo",
+      ],
     ],
     [
       "repeated_signature",
@@ -255,12 +302,20 @@ describe("nextSteps", () => {
     [
       "repeated_signature",
       "measure|failed|metric command failed",
-      ["read the latest tick reports to see why the same outcome repeated", "omf goal resume g-demo", "omf goal cancel g-demo"],
+      [
+        "read the latest tick reports to see why the same outcome repeated",
+        "omf goal resume g-demo",
+        "omf goal cancel g-demo",
+      ],
     ],
     [
       "repeated_signature",
       null,
-      ["read the latest tick reports to see why the same outcome repeated", "omf goal resume g-demo", "omf goal cancel g-demo"],
+      [
+        "read the latest tick reports to see why the same outcome repeated",
+        "omf goal resume g-demo",
+        "omf goal cancel g-demo",
+      ],
     ],
   ];
 
@@ -273,18 +328,25 @@ describe("nextSteps", () => {
   });
 
   it("refuses a reason code it has no steps for", () => {
-    expect(() => nextSteps({ ...escalationFor("no_progress"), reason_code: "made_up" }, D)).toThrow(/no next steps for made_up/);
+    expect(() => nextSteps({ ...escalationFor("no_progress"), reason_code: "made_up" }, D)).toThrow(
+      /no next steps for made_up/,
+    );
   });
 
   it("stoppedNextSteps uses the open escalation, and falls back for a failed or hand-blocked goal", () => {
     const base = { since: null, reason_code: null, ticks: 0 } as const;
-    expect(stoppedNextSteps({ ...base, status: "blocked_on_user", open_escalation: escalationFor("stale_goal") }, D)).toEqual(["omf goal approve g-demo"]);
+    expect(
+      stoppedNextSteps({ ...base, status: "blocked_on_user", open_escalation: escalationFor("stale_goal") }, D),
+    ).toEqual(["omf goal approve g-demo"]);
     expect(stoppedNextSteps({ ...base, status: "failed", open_escalation: null }, D)).toEqual([
       "read the latest tick report for the error",
       "omf goal resume g-demo",
       "omf goal cancel g-demo",
     ]);
-    expect(stoppedNextSteps({ ...base, status: "blocked_on_user", open_escalation: null }, D)).toEqual(["omf goal audit g-demo", "omf goal resume g-demo"]);
+    expect(stoppedNextSteps({ ...base, status: "blocked_on_user", open_escalation: null }, D)).toEqual([
+      "omf goal audit g-demo",
+      "omf goal resume g-demo",
+    ]);
     expect(stoppedNextSteps({ ...base, status: "running", open_escalation: null }, D)).toEqual([]);
     expect(stoppedNextSteps({ ...base, status: "finish", open_escalation: null }, D)).toEqual([]);
   });
@@ -328,7 +390,9 @@ describe("withTickLock", () => {
 
   it("refuses an unknown or malformed goal id without creating a lock", async () => {
     const fx = setupGoal();
-    await expect(withTickLock(fx.location, "g-nope", () => "x")).rejects.toThrow(/goal g-nope not found; run omf goal new g-nope/);
+    await expect(withTickLock(fx.location, "g-nope", () => "x")).rejects.toThrow(
+      /goal g-nope not found; run omf goal new g-nope/,
+    );
     expect(existsSync(tickLockFile(fx.location, "g-nope"))).toBe(false);
     await expect(withTickLock(fx.location, "NOT AN ID", () => "x")).rejects.toThrow();
   });

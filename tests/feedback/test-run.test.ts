@@ -208,7 +208,13 @@ describe("feedbackEntryCheck (M3d-D12)", () => {
 
   const STATES: [string, (l: Ledger) => void, string, string | null, ReturnType<typeof feedbackEntryCheck>][] = [
     ["nothing consumed", () => undefined, DIGEST_A, SHA_1, { status: "proceed" }],
-    ["consumed, no result", (l) => void consume(l, DIGEST_A), DIGEST_A, SHA_1, { status: "blocked", reason_code: "test_run_incomplete" }],
+    [
+      "consumed, no result",
+      (l) => void consume(l, DIGEST_A),
+      DIGEST_A,
+      SHA_1,
+      { status: "blocked", reason_code: "test_run_incomplete" },
+    ],
     [
       "completed for this commit",
       (l) => {

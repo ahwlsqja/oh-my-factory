@@ -52,15 +52,12 @@ export function forbiddenTermsFor(semantic: GoalSemantic): ForbiddenTerms {
 const NO_WORD_BEFORE = String.raw`(?<![\p{L}\p{N}_])`;
 const NO_WORD_AFTER = String.raw`(?![\p{L}\p{N}_])`;
 const NO_LETTER_BEFORE = String.raw`(?<![\p{L}_])`;
-const UNIT =
-  String.raw`(?:ms|s|secs?|seconds?|mins?|minutes?|hrs?|hours?|days?|kb|mb|gb|tb|x|req\/s|qps|rps|users?|percent|per\s*cent)`;
+const UNIT = String.raw`(?:ms|s|secs?|seconds?|mins?|minutes?|hrs?|hours?|days?|kb|mb|gb|tb|x|req\/s|qps|rps|users?|percent|per\s*cent)`;
 const NUMBER_WORD =
   "(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|" +
   "eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million)";
-const WORD_UNIT =
-  String.raw`(?:%|percent|per\s*cent|ms|seconds?|minutes?|hours?|days?|kb|mb|gb|users?|requests?)`;
-const COMPARATOR =
-  String.raw`(?:under|below|over|above|at\s+most|at\s+least|within|less\s+than|more\s+than)`;
+const WORD_UNIT = String.raw`(?:%|percent|per\s*cent|ms|seconds?|minutes?|hours?|days?|kb|mb|gb|users?|requests?)`;
+const COMPARATOR = String.raw`(?:under|below|over|above|at\s+most|at\s+least|within|less\s+than|more\s+than)`;
 
 /** Each pattern is one way a threshold can be written. Any hit is rule `number`. */
 const NUMBER_PATTERNS: readonly RegExp[] = [
@@ -77,10 +74,7 @@ const NUMBER_PATTERNS: readonly RegExp[] = [
   // a symbol comparator right before a number: <250, >= 3
   /(?:<=|>=|<|>|≤|≥)\s*\d/u,
   // a word comparator with a number within two words: at most 4, under about 250
-  new RegExp(
-    `${NO_WORD_BEFORE}${COMPARATOR}${NO_WORD_AFTER}(?:[^\\p{L}\\p{N}]+\\p{L}+){0,2}[^\\p{L}\\p{N}]*\\d`,
-    "iu",
-  ),
+  new RegExp(`${NO_WORD_BEFORE}${COMPARATOR}${NO_WORD_AFTER}(?:[^\\p{L}\\p{N}]+\\p{L}+){0,2}[^\\p{L}\\p{N}]*\\d`, "iu"),
   // a number written in words next to a unit: twenty percent, five hundred ms
   new RegExp(`${NO_WORD_BEFORE}${NUMBER_WORD}(?:[\\s-]+${NUMBER_WORD})*[ \\t]*${WORD_UNIT}${NO_WORD_AFTER}`, "iu"),
 ];

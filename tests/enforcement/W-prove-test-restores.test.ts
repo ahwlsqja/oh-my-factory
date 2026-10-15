@@ -30,7 +30,9 @@ async function startChild(): Promise<Running> {
   const parent = realTempDir("omf-prove-sig-");
   const marker = join(makeTempDir("omf-marker-"), "sleeper.pid");
   const before = snapshot(fx);
-  const child = spawn(process.execPath, [CHILD, parent, fx.quarantine.gitDir, fx.base, fx.head, marker], { stdio: ["ignore", "ignore", "inherit"] });
+  const child = spawn(process.execPath, [CHILD, parent, fx.quarantine.gitDir, fx.base, fx.head, marker], {
+    stdio: ["ignore", "ignore", "inherit"],
+  });
   const ended = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
     child.once("exit", (code, signal) => resolve({ code, signal }));
   });

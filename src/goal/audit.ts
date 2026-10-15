@@ -98,7 +98,11 @@ function verifiedMetricLocks(
       continue;
     }
     const sha = metricSha256(lock);
-    if (sha !== lock.sha256 || sha !== lockedSha256(events, goalId, id, approval.regime) || lock.regime !== approval.regime) {
+    if (
+      sha !== lock.sha256 ||
+      sha !== lockedSha256(events, goalId, id, approval.regime) ||
+      lock.regime !== approval.regime
+    ) {
       problems.push(`metric lock tampered: ${id}`);
       intact = false;
       continue;
@@ -113,7 +117,8 @@ function definitionChanges(dir: string, locks: readonly MetricLock[]): string[] 
   for (const lock of locks) {
     try {
       const proposal = readProposal(dir, lock.metric_id);
-      if (proposal !== null && metricSha256(proposal) !== lock.sha256) changes.push(`metric ${lock.metric_id} definition changed`);
+      if (proposal !== null && metricSha256(proposal) !== lock.sha256)
+        changes.push(`metric ${lock.metric_id} definition changed`);
     } catch (err) {
       if (!(err instanceof MetricError)) throw err;
       changes.push(`metric ${lock.metric_id} proposal is unreadable`);
@@ -122,7 +127,11 @@ function definitionChanges(dir: string, locks: readonly MetricLock[]): string[] 
   return changes;
 }
 
-function watchedChanges(repo: string, commit: string, locks: readonly MetricLock[]): { messages: string[]; paths: string[] } {
+function watchedChanges(
+  repo: string,
+  commit: string,
+  locks: readonly MetricLock[],
+): { messages: string[]; paths: string[] } {
   if (locks.every((lock) => lock.watched_paths.length === 0)) return { messages: [], paths: [] };
   let changed: string[];
   try {
@@ -130,7 +139,9 @@ function watchedChanges(repo: string, commit: string, locks: readonly MetricLock
   } catch {
     return { messages: [`approval commit ${commit.slice(0, 12)} is no longer in the repository`], paths: [] };
   }
-  const hits = locks.flatMap((lock) => matchWatched(changed, lock.watched_paths).map((path) => ({ path, id: lock.metric_id })));
+  const hits = locks.flatMap((lock) =>
+    matchWatched(changed, lock.watched_paths).map((path) => ({ path, id: lock.metric_id })),
+  );
   return {
     messages: hits.map(({ path, id }) => `watched path changed: ${path} (${id})`),
     paths: [...new Set(hits.map((hit) => hit.path))],

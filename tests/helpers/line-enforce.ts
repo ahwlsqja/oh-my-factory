@@ -119,7 +119,10 @@ export function setupLine(limits: { maxRounds?: number; maxUsd?: number } = {}):
   const f = setupDecisionItem();
   closeInterface(f);
   const { location } = f.fx;
-  writeFileSync(join(location.dir, "config.toml"), withWLimits(f.fx.baseConfig, limits.maxRounds ?? 3, limits.maxUsd ?? 5));
+  writeFileSync(
+    join(location.dir, "config.toml"),
+    withWLimits(f.fx.baseConfig, limits.maxRounds ?? 3, limits.maxUsd ?? 5),
+  );
   const workId = f.workId;
   const events = (): LedgerEvent[] => f.fx.ledger.readVerified();
   const mine = (): LedgerEvent[] => events().filter((e) => e.type.startsWith("work.") && e.payload.work_id === workId);
@@ -130,7 +133,10 @@ export function setupLine(limits: { maxRounds?: number; maxUsd?: number } = {}):
     itemDir: f.item.dir,
     events,
     types: () => mine().map((e) => e.type),
-    rounds: () => mine().filter((e) => e.type === "work.round").map((e) => e.payload.round),
+    rounds: () =>
+      mine()
+        .filter((e) => e.type === "work.round")
+        .map((e) => e.payload.round),
     state: () => {
       const item = createMarkdownStore(location.dir).fetchWorkItemsByIds([workId])[0];
       if (item === undefined) throw new Error("the item vanished");

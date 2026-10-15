@@ -28,7 +28,10 @@ import {
   setProbe,
 } from "../helpers/gate2-input.js";
 
-const blockGate1 = (i: Gate2Input): Gate2Input => ({ ...i, gate1: { status: "blocked_on_user", j: "J2", reasons: [{ code: "interface_missing" }] } });
+const blockGate1 = (i: Gate2Input): Gate2Input => ({
+  ...i,
+  gate1: { status: "blocked_on_user", j: "J2", reasons: [{ code: "interface_missing" }] },
+});
 const addAnomalies = (i: Gate2Input): Gate2Input => ({ ...i, anomalies: 2 });
 const probeError = (i: Gate2Input): Gate2Input =>
   setProbe(i, "null_error", pick(i, "behavior", "train"), "error", "fixture_hash_mismatch");
@@ -55,14 +58,33 @@ interface Row {
 }
 
 const ROWS: Row[] = [
-  { name: "gate1 not passing", code: "gate1_not_passing", route: "J2", exact: ["gate1_not_passing"], make: () => blockGate1(passingInput()) },
-  { name: "ledger anomaly", code: "ledger_anomaly", route: "J3", exact: ["ledger_anomaly"], make: () => addAnomalies(passingInput()) },
+  {
+    name: "gate1 not passing",
+    code: "gate1_not_passing",
+    route: "J2",
+    exact: ["gate1_not_passing"],
+    make: () => blockGate1(passingInput()),
+  },
+  {
+    name: "ledger anomaly",
+    code: "ledger_anomaly",
+    route: "J3",
+    exact: ["ledger_anomaly"],
+    make: () => addAnomalies(passingInput()),
+  },
   {
     name: "no seal",
     code: "seal_missing",
     route: "back_to_S2",
     exact: ["seal_missing"],
-    make: () => ({ ...passingInput(), seal: null, set: null, effective: [], probes: null, order: { ok: false, reason: "no_seal" } }),
+    make: () => ({
+      ...passingInput(),
+      seal: null,
+      set: null,
+      effective: [],
+      probes: null,
+      order: { ok: false, reason: "no_seal" },
+    }),
   },
   {
     name: "seal after start",
@@ -153,7 +175,11 @@ const ROWS: Row[] = [
     code: "contradiction",
     route: "back_to_S2",
     exact: ["contradiction"],
-    make: () => rebuild(passingInput(), [...baselineScenarios(), effective({ kind: "behavior", split: "train", refs: ["d-cache"], exit: 2 })]),
+    make: () =>
+      rebuild(passingInput(), [
+        ...baselineScenarios(),
+        effective({ kind: "behavior", split: "train", refs: ["d-cache"], exit: 2 }),
+      ]),
   },
   {
     name: "train split exposure at the limit",
@@ -169,11 +195,41 @@ const ROWS: Row[] = [
     exact: ["exposure_exhausted"],
     make: () => ({ ...passingInput(), exposure: { train: 0, test: EXPOSURE_LIMIT + 1 } }),
   },
-  { name: "a probe errored", code: "probe_error", route: "J7", exact: ["probe_error"], make: () => probeError(passingInput()) },
-  { name: "no probes at all", code: "probe_error", route: "J7", exact: ["probe_error"], make: () => ({ ...passingInput(), probes: null }) },
-  { name: "null implementation passes", code: "null_impl_passes", route: "back_to_S2", exact: ["null_impl_passes"], make: () => nullPasses(passingInput()) },
-  { name: "echo stub passes a canary", code: "judge_broken_or_gamed", route: "J3", exact: ["judge_broken_or_gamed"], make: () => echoPasses(passingInput()) },
-  { name: "decision without a link", code: "unlinked_decisions", route: "back_to_S2", exact: ["unlinked_decisions"], make: () => unlink(passingInput()) },
+  {
+    name: "a probe errored",
+    code: "probe_error",
+    route: "J7",
+    exact: ["probe_error"],
+    make: () => probeError(passingInput()),
+  },
+  {
+    name: "no probes at all",
+    code: "probe_error",
+    route: "J7",
+    exact: ["probe_error"],
+    make: () => ({ ...passingInput(), probes: null }),
+  },
+  {
+    name: "null implementation passes",
+    code: "null_impl_passes",
+    route: "back_to_S2",
+    exact: ["null_impl_passes"],
+    make: () => nullPasses(passingInput()),
+  },
+  {
+    name: "echo stub passes a canary",
+    code: "judge_broken_or_gamed",
+    route: "J3",
+    exact: ["judge_broken_or_gamed"],
+    make: () => echoPasses(passingInput()),
+  },
+  {
+    name: "decision without a link",
+    code: "unlinked_decisions",
+    route: "back_to_S2",
+    exact: ["unlinked_decisions"],
+    make: () => unlink(passingInput()),
+  },
 ];
 
 describe("evaluateGate2", () => {
@@ -262,13 +318,19 @@ describe("evaluateGate2", () => {
     expect(anomaly.status === "fail" && anomaly.reasons).toEqual([{ code: "ledger_anomaly", count: 2 }]);
 
     const exposed = evaluateGate2({ ...passingInput(), exposure: { train: 0, test: EXPOSURE_LIMIT } });
-    expect(exposed.status === "fail" && exposed.reasons).toEqual([{ code: "exposure_exhausted", split: "test", count: EXPOSURE_LIMIT }]);
+    expect(exposed.status === "fail" && exposed.reasons).toEqual([
+      { code: "exposure_exhausted", split: "test", count: EXPOSURE_LIMIT },
+    ]);
 
     const probed = evaluateGate2(probeError(passingInput()));
-    expect(probed.status === "fail" && probed.reasons).toEqual([{ code: "probe_error", count: 1, refusal_codes: ["fixture_hash_mismatch"] }]);
+    expect(probed.status === "fail" && probed.reasons).toEqual([
+      { code: "probe_error", count: 1, refusal_codes: ["fixture_hash_mismatch"] },
+    ]);
 
     const unlinked = evaluateGate2(unlink(passingInput()));
-    expect(unlinked.status === "fail" && unlinked.reasons).toEqual([{ code: "unlinked_decisions", count: 1, decision_ids: ["d-cache"] }]);
+    expect(unlinked.status === "fail" && unlinked.reasons).toEqual([
+      { code: "unlinked_decisions", count: 1, decision_ids: ["d-cache"] },
+    ]);
   });
 
   it("treats an exposure count that is not a finite number as exhausted", () => {
@@ -277,7 +339,10 @@ describe("evaluateGate2", () => {
   });
 
   it("ignores a lint problem coded contradiction: the contradiction reason comes from the scenarios", () => {
-    const result = evaluateGate2({ ...passingInput(), problems: [{ code: "contradiction", scenario_ref: "0123456789abcdef" }] });
+    const result = evaluateGate2({
+      ...passingInput(),
+      problems: [{ code: "contradiction", scenario_ref: "0123456789abcdef" }],
+    });
     expect(result.status).toBe("pass");
   });
 
@@ -288,12 +353,20 @@ describe("evaluateGate2", () => {
     expect(without.reasons).toEqual([{ code: "canary_missing" }]);
     expect(without.route).toBe("back_to_S2");
 
-    const withOne = evaluateGate2(rebuild(passingInput(), [...withoutCanaries(baselineScenarios()), effective({ kind: "contradiction_canary", split: "test" })]));
+    const withOne = evaluateGate2(
+      rebuild(passingInput(), [
+        ...withoutCanaries(baselineScenarios()),
+        effective({ kind: "contradiction_canary", split: "test" }),
+      ]),
+    );
     expect(withOne.status).toBe("pass");
 
     // A canary that was contaminated or retired no longer counts: the set is back to zero active canaries.
     const spent = evaluateGate2(
-      rebuild(passingInput(), [...withoutCanaries(baselineScenarios()), effective({ kind: "contradiction_canary", split: "train", status: "contaminated" })]),
+      rebuild(passingInput(), [
+        ...withoutCanaries(baselineScenarios()),
+        effective({ kind: "contradiction_canary", split: "train", status: "contaminated" }),
+      ]),
     );
     expect(spent.status === "fail" && spent.reasons.map((r) => r.code)).toEqual(["canary_missing"]);
   });
@@ -305,7 +378,13 @@ describe("evaluateGate2", () => {
     const probes = withRetired.probes;
     if (probes === null) throw new Error("probes");
     // A passing null run for the retired scenario is stray data, not a verdict on the live judge.
-    const stray = { ...withRetired, probes: { ...probes, null_error: [...probes.null_error, { scenario_ref: refOf(retired), outcome: "pass" as const }] } };
+    const stray = {
+      ...withRetired,
+      probes: {
+        ...probes,
+        null_error: [...probes.null_error, { scenario_ref: refOf(retired), outcome: "pass" as const }],
+      },
+    };
     expect(evaluateGate2(stray).status).toBe("pass");
   });
 
@@ -314,17 +393,31 @@ describe("evaluateGate2", () => {
     const probes = base.probes;
     if (probes === null) throw new Error("probes");
     const ref = pick(base, "behavior", "train");
-    const missing = { ...base, probes: { ...probes, null_empty: probes.null_empty.filter((r) => r.scenario_ref !== ref) } };
+    const missing = {
+      ...base,
+      probes: { ...probes, null_empty: probes.null_empty.filter((r) => r.scenario_ref !== ref) },
+    };
     const gone = evaluateGate2(missing);
     expect(gone.status === "fail" && gone.reasons.map((r) => r.code)).toEqual(["probe_error"]);
 
-    const dup = { ...base, probes: { ...probes, null_empty: [...probes.null_empty, { scenario_ref: ref, outcome: "pass" as const }] } };
+    const dup = {
+      ...base,
+      probes: { ...probes, null_empty: [...probes.null_empty, { scenario_ref: ref, outcome: "pass" as const }] },
+    };
     const hidden = evaluateGate2(dup);
     expect(hidden.status === "fail" && hidden.reasons.map((r) => r.code)).toEqual(["null_impl_passes"]);
   });
 
   it("does not read the decisions digest as a pass signal when the seal is absent", () => {
-    const result = evaluateGate2({ ...passingInput(), seal: null, set: null, effective: [], probes: null, order: { ok: false, reason: "no_seal" }, decisionsDigest: DECISIONS_DIGEST });
+    const result = evaluateGate2({
+      ...passingInput(),
+      seal: null,
+      set: null,
+      effective: [],
+      probes: null,
+      order: { ok: false, reason: "no_seal" },
+      decisionsDigest: DECISIONS_DIGEST,
+    });
     expect(result.status === "fail" && result.aggregate).toBeNull();
   });
 });
@@ -348,7 +441,8 @@ describe("scenarioAggregate", () => {
       contradiction_canary: { train: 1, test: 0 },
     });
     const leaves: unknown[] = [];
-    const walk = (v: unknown): void => (typeof v === "object" && v !== null ? Object.values(v).forEach(walk) : void leaves.push(v));
+    const walk = (v: unknown): void =>
+      typeof v === "object" && v !== null ? Object.values(v).forEach(walk) : void leaves.push(v);
     walk(aggregate);
     expect(leaves.every((v) => typeof v === "number")).toBe(true);
   });
@@ -390,7 +484,13 @@ describe("gate2EventFor", () => {
     expect(validateDef("scenario.schema.json", "ev_gate2_evaluated", back.payload)).toEqual({ ok: true });
     const pass = gate2EventFor(SCOPE, 1, evaluateGate2(passingInput()), digests);
     expect(pass.payload["feedback_counts"]).toBeNull();
-    const j3: Gate2Result = { status: "fail", route: "J3", reasons: [{ code: "probe_error" }], not_run: [], aggregate: null };
+    const j3: Gate2Result = {
+      status: "fail",
+      route: "J3",
+      reasons: [{ code: "probe_error" }],
+      not_run: [],
+      aggregate: null,
+    };
     expect(gate2EventFor(SCOPE, 1, j3, digests).payload["feedback_counts"]).toBeNull();
   });
 
@@ -399,8 +499,19 @@ describe("gate2EventFor", () => {
     expect(validateDef("scenario.schema.json", "ev_gate2_evaluated", pass.payload)).toEqual({ ok: true });
     expect(pass.payload).toMatchObject({ status: "pass", route: null, reason_codes: [], unlinked_decision_ids: [] });
 
-    const noSeal: Gate2Result = evaluateGate2({ ...passingInput(), seal: null, set: null, effective: [], probes: null, order: { ok: false, reason: "no_seal" } });
-    const event = gate2EventFor(SCOPE, 1, noSeal, { seal_id: null, set_sha256: null, decisions_digest: DECISIONS_DIGEST });
+    const noSeal: Gate2Result = evaluateGate2({
+      ...passingInput(),
+      seal: null,
+      set: null,
+      effective: [],
+      probes: null,
+      order: { ok: false, reason: "no_seal" },
+    });
+    const event = gate2EventFor(SCOPE, 1, noSeal, {
+      seal_id: null,
+      set_sha256: null,
+      decisions_digest: DECISIONS_DIGEST,
+    });
     expect(validateDef("scenario.schema.json", "ev_gate2_evaluated", event.payload)).toEqual({ ok: true });
     expect(event.payload).toMatchObject({
       seal_id: null,
@@ -450,7 +561,12 @@ describe("sealFeedbackFor", () => {
 
   it("gives plain counts and the unlinked ids when the item goes back to S2", () => {
     const result = evaluateGate2(unlink(nullPasses(passingInput())));
-    expect(sealFeedbackFor(result)).toEqual({ unlinked_decision_ids: ["d-cache"], weak: 0, contradictions: 0, invalid: 0 });
+    expect(sealFeedbackFor(result)).toEqual({
+      unlinked_decision_ids: ["d-cache"],
+      weak: 0,
+      contradictions: 0,
+      invalid: 0,
+    });
     const weak = evaluateGate2(nullPasses(passingInput()));
     expect(sealFeedbackFor(weak)).toEqual({ unlinked_decision_ids: [], weak: 1, contradictions: 0, invalid: 0 });
   });
@@ -459,7 +575,13 @@ describe("sealFeedbackFor", () => {
 import { scenarioRef } from "../../src/scenario/types.js";
 import type { RunTarget, StepInput } from "../../src/scenario/runner.js";
 import type { StepObservation } from "../../src/scenario/types.js";
-import { DEFAULT_SPECS, STRONG_EXPECT, buildScenarios, fakeFixtureRunner, fixtureOf } from "../helpers/scenario-fixture.js";
+import {
+  DEFAULT_SPECS,
+  STRONG_EXPECT,
+  buildScenarios,
+  fakeFixtureRunner,
+  fixtureOf,
+} from "../helpers/scenario-fixture.js";
 
 describe("runGate2Probes", () => {
   const scenarios = buildScenarios(DEFAULT_SPECS, "w-probe");
@@ -470,13 +592,19 @@ describe("runGate2Probes", () => {
     const probes = await runGate2Probes(fake.runner, scenarios);
     expect(probes.null_error.map((p) => p.scenario_ref)).toEqual(refs);
     expect(probes.null_empty.map((p) => p.scenario_ref)).toEqual(refs);
-    expect(probes.echo.map((p) => p.scenario_ref), "only the canary meets the echo-everything stub").toEqual([refs[2]]);
+    expect(
+      probes.echo.map((p) => p.scenario_ref),
+      "only the canary meets the echo-everything stub",
+    ).toEqual([refs[2]]);
     expect(fake.opened).toHaveLength(7);
     for (const run of [...probes.null_error, ...probes.null_empty, ...probes.echo]) expect(run.outcome).toBe("fail");
   });
 
   it("runs at most 8 scenarios at a time", async () => {
-    const many = buildScenarios(Array.from({ length: 20 }, () => ({ split: "train" as const, expect: STRONG_EXPECT })), "w-probe");
+    const many = buildScenarios(
+      Array.from({ length: 20 }, () => ({ split: "train" as const, expect: STRONG_EXPECT })),
+      "w-probe",
+    );
     const fake = fakeFixtureRunner({ delayMs: 5 });
     await runGate2Probes(fake.runner, many);
     expect(fake.opened).toHaveLength(40);
@@ -500,17 +628,30 @@ describe("runGate2Probes", () => {
 
   it("counts a fixture that did not run normally as an error, never as a failed scenario", async () => {
     const killed = await runGate2Probes(
-      fakeFixtureRunner({ observe: (target, step) => (target.kind === "fixture" && target.id === "null-error" ? { outcome: "signaled", signal: "SIGKILL" } : fixtureOf(target, step)) }).runner,
+      fakeFixtureRunner({
+        observe: (target, step) =>
+          target.kind === "fixture" && target.id === "null-error"
+            ? { outcome: "signaled", signal: "SIGKILL" }
+            : fixtureOf(target, step),
+      }).runner,
       scenarios,
     );
     expect(killed.null_error.map((p) => p.outcome)).toEqual(["error", "error", "error"]);
     expect(killed.null_empty.map((p) => p.outcome)).toEqual(["fail", "fail", "fail"]);
     const crashed = await runGate2Probes(
-      fakeFixtureRunner({ observe: (target, step) => (target.kind === "fixture" && target.id === "null-empty" ? { outcome: "exited", exit_code: 134, stdout: "" } : fixtureOf(target, step)) }).runner,
+      fakeFixtureRunner({
+        observe: (target, step) =>
+          target.kind === "fixture" && target.id === "null-empty"
+            ? { outcome: "exited", exit_code: 134, stdout: "" }
+            : fixtureOf(target, step),
+      }).runner,
       scenarios,
     );
     expect(crashed.null_empty.map((p) => p.outcome)).toEqual(["error", "error", "error"]);
-    const cannotStart = await runGate2Probes(fakeFixtureRunner({ observe: () => ({ outcome: "error" }) }).runner, scenarios);
+    const cannotStart = await runGate2Probes(
+      fakeFixtureRunner({ observe: () => ({ outcome: "error" }) }).runner,
+      scenarios,
+    );
     expect(cannotStart.null_error.map((p) => p.outcome)).toEqual(["error", "error", "error"]);
   });
 });
@@ -527,8 +668,16 @@ import { makeTempDir } from "../helpers/tmp.js";
 
 describe("runGate2", () => {
   it.each([
-    ["a null fixture killed by a signal", (t: RunTarget, st: StepInput): StepObservation => (t.kind === "fixture" && t.id === "null-error" ? { outcome: "signaled", signal: "SIGKILL" } : fixtureOf(t, st))],
-    ["a null fixture that cannot start", (t: RunTarget, st: StepInput): StepObservation => (t.kind === "fixture" && t.id === "null-empty" ? { outcome: "error" } : fixtureOf(t, st))],
+    [
+      "a null fixture killed by a signal",
+      (t: RunTarget, st: StepInput): StepObservation =>
+        t.kind === "fixture" && t.id === "null-error" ? { outcome: "signaled", signal: "SIGKILL" } : fixtureOf(t, st),
+    ],
+    [
+      "a null fixture that cannot start",
+      (t: RunTarget, st: StepInput): StepObservation =>
+        t.kind === "fixture" && t.id === "null-empty" ? { outcome: "error" } : fixtureOf(t, st),
+    ],
   ])("does not pass when %s", async (_name, observe) => {
     const s = seedSealedItem(DEFAULT_SPECS);
     const result = await runGate2(sealedCtx(s, { runner: fakeFixtureRunner({ observe }).runner }));
@@ -545,7 +694,14 @@ describe("runGate2", () => {
     expect(result.status === "pass" ? result.not_run : null).toEqual(["d-latency"]);
     expect(s.f.fx.ledger.readVerified()).toHaveLength(before);
     expect(seen).toEqual([
-      { total: 3, active: 3, retired: 0, contaminated: 0, behavior: { train: 1, test: 1 }, contradiction_canary: { train: 1, test: 0 } },
+      {
+        total: 3,
+        active: 3,
+        retired: 0,
+        contaminated: 0,
+        behavior: { train: 1, test: 1 },
+        contradiction_canary: { train: 1, test: 0 },
+      },
     ]);
     const text = JSON.stringify(seen);
     for (const scenario of s.scenarios) {
@@ -559,7 +715,14 @@ describe("runGate2", () => {
     const fake = fakeFixtureRunner();
     const before = s.f.fx.ledger.readVerified().length;
     await expect(
-      runGate2(sealedCtx(s, { runner: fake.runner, preflight: () => { throw new Error("guard first"); } })),
+      runGate2(
+        sealedCtx(s, {
+          runner: fake.runner,
+          preflight: () => {
+            throw new Error("guard first");
+          },
+        }),
+      ),
     ).rejects.toThrow("guard first");
     symlinkSync(s.f.fx.repo, join(s.f.fx.location.dir, "stray-link"));
     await expect(runGate2(sealedCtx(s, { runner: fake.runner }))).rejects.toBeInstanceOf(SymlinkRefusedError);
@@ -581,13 +744,22 @@ describe("runGate2", () => {
 
   it("refuses a runner that executes candidate code", async () => {
     const s = seedSealedItem();
-    await expect(runGate2(sealedCtx(s, { runner: fakeFixtureRunner({ executes: "candidate" }).runner }))).rejects.toThrow("omf_fixture");
+    await expect(
+      runGate2(sealedCtx(s, { runner: fakeFixtureRunner({ executes: "candidate" }).runner })),
+    ).rejects.toThrow("omf_fixture");
   });
 
   it("asks the exposure count for the digest of each split", async () => {
     const s = seedSealedItem();
     const asked: { split: string; digest: string }[] = [];
-    await runGate2(sealedCtx(s, { exposureCount: (key) => { asked.push(key); return 0; } }));
+    await runGate2(
+      sealedCtx(s, {
+        exposureCount: (key) => {
+          asked.push(key);
+          return 0;
+        },
+      }),
+    );
     expect(asked).toEqual([
       { split: "train", digest: splitDigest(s.scenarios, new Map(), "train") },
       { split: "test", digest: splitDigest(s.scenarios, new Map(), "test") },
@@ -619,7 +791,8 @@ describe("runGate2, GATE-1 for the item's state", () => {
     );
     return s;
   }
-  const codes = (result: Gate2Result): string[] => (result.status === "pass" ? [] : result.reasons.map((reason) => reason.code));
+  const codes = (result: Gate2Result): string[] =>
+    result.status === "pass" ? [] : result.reasons.map((reason) => reason.code);
   const inProgress = (item: WorkItem): WorkItem => ({ ...item, front: { ...item.front, state: "in_progress" } });
 
   it("takes GATE-1 as passed for an in_progress item: an expired deferral gives no gate1_not_passing", async () => {

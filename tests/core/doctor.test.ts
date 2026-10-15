@@ -92,11 +92,7 @@ describe("runDoctor", () => {
     const report = runDoctor(repo, e);
     expect(report.ok).toBe(false);
     expect(report.problems).toEqual(
-      expect.arrayContaining([
-        "claude not found on PATH",
-        "codex not found on PATH",
-        "docker daemon is not reachable",
-      ]),
+      expect.arrayContaining(["claude not found on PATH", "codex not found on PATH", "docker daemon is not reachable"]),
     );
   });
 
@@ -260,7 +256,13 @@ describe("runDoctor: advisory isolation and an atomic preflight.json", () => {
     expect(seen).toEqual([e.PATH, true]);
     expect([report.ok, report.problems]).toEqual([baseline.ok, baseline.problems]);
     // Even a probe that claims L2 is only a label: the report stays advisory and ok does not move.
-    const claimsL2 = runDoctor(repo, e, undefined, () => ({ declared: "L2", measured: "L2", advisory: true, note: "n", failure: null }));
+    const claimsL2 = runDoctor(repo, e, undefined, () => ({
+      declared: "L2",
+      measured: "L2",
+      advisory: true,
+      note: "n",
+      failure: null,
+    }));
     expect([claimsL2.ok, claimsL2.problems]).toEqual([baseline.ok, baseline.problems]);
     expect(claimsL2.isolation.advisory).toBe(true);
   });
@@ -273,8 +275,15 @@ describe("runDoctor: advisory isolation and an atomic preflight.json", () => {
     const report = runDoctor(repo, e, undefined, () => {
       throw new Error("docker inspect exploded");
     });
-    expect(report.isolation).toMatchObject({ declared: "L2", measured: "unmeasurable", advisory: true, failure: "docker inspect exploded" });
-    const written = JSON.parse(readFileSync(join(projectDir, "preflight.json"), "utf8")) as { isolation: { measured: string } };
+    expect(report.isolation).toMatchObject({
+      declared: "L2",
+      measured: "unmeasurable",
+      advisory: true,
+      failure: "docker inspect exploded",
+    });
+    const written = JSON.parse(readFileSync(join(projectDir, "preflight.json"), "utf8")) as {
+      isolation: { measured: string };
+    };
     expect(written.isolation.measured).toBe("unmeasurable");
   });
 

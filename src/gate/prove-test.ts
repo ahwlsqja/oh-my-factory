@@ -50,7 +50,11 @@ function statusOf(result: CommandResult): number | null {
 }
 
 /** Creates a copy, registers its abort with the cleanup registry, and always disposes it (the copy is discarded, which is the restore). */
-async function withCopy<T>(copies: WorkCopyFactory, spec: { quarantine: GitTarget; sha: string }, use: (copy: WorkCopy) => Promise<T>): Promise<T> {
+async function withCopy<T>(
+  copies: WorkCopyFactory,
+  spec: { quarantine: GitTarget; sha: string },
+  use: (copy: WorkCopy) => Promise<T>,
+): Promise<T> {
   const copy = await copies.create(spec);
   const unregister = registerCleanup(() => copy.abortSync());
   try {
@@ -73,12 +77,20 @@ async function withCopy<T>(copies: WorkCopyFactory, spec: { quarantine: GitTarge
  */
 export async function proveTest(input: ProveTestInput): Promise<ProveTestResult> {
   const counts = { non_test_paths: 0, test_paths: 0 };
-  const result = (status: ProveStatus, reason: ProveReason | null, test_exit: number | null = null): ProveTestResult => ({ status, reason, test_exit, ...counts });
-  const stop = (reason: ProveReason, test_exit: number | null = null): ProveTestResult => result("MISCONFIGURED", reason, test_exit);
+  const result = (
+    status: ProveStatus,
+    reason: ProveReason | null,
+    test_exit: number | null = null,
+  ): ProveTestResult => ({ status, reason, test_exit, ...counts });
+  const stop = (reason: ProveReason, test_exit: number | null = null): ProveTestResult =>
+    result("MISCONFIGURED", reason, test_exit);
   const aborted = (): boolean => input.signal?.aborted === true;
 
   if (aborted()) return stop("interrupted");
-  const [base, head] = await Promise.all([resolveCommit(input.quarantine, input.base), resolveCommit(input.quarantine, input.head)]);
+  const [base, head] = await Promise.all([
+    resolveCommit(input.quarantine, input.base),
+    resolveCommit(input.quarantine, input.head),
+  ]);
   if (base === null || head === null) return stop("invalid-base-ref");
   if (!(await isAncestor(input.quarantine, input.base, input.head))) return stop("base-not-ancestor");
 

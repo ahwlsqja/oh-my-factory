@@ -7,7 +7,12 @@ import { makeTempDir } from "../helpers/tmp.js";
 
 const STUB = fileURLToPath(new URL("../helpers/author-stub.mjs", import.meta.url));
 
-function authorFor(record: string, mode: string, extra: { timeoutMs?: number; envPassthrough?: string[] } = {}, realEnv: NodeJS.ProcessEnv = process.env) {
+function authorFor(
+  record: string,
+  mode: string,
+  extra: { timeoutMs?: number; envPassthrough?: string[] } = {},
+  realEnv: NodeJS.ProcessEnv = process.env,
+) {
   return createCommandAuthor({ command: [process.execPath, STUB, mode, record], ...extra }, realEnv);
 }
 
@@ -18,7 +23,13 @@ function recorded<T>(record: string, name: string): T {
 describe("createCommandAuthor", () => {
   it("labels the session as a host command and passes the prompt on stdin with a stripped environment", async () => {
     const record = makeTempDir("omf-rec-");
-    const realEnv = { PATH: process.env.PATH, KEEP_ME: "1", SECRET_TOKEN: "s3cret", ANTHROPIC_API_KEY: "sk-x", OMF_HOME: "/real/omf" };
+    const realEnv = {
+      PATH: process.env.PATH,
+      KEEP_ME: "1",
+      SECRET_TOKEN: "s3cret",
+      ANTHROPIC_API_KEY: "sk-x",
+      OMF_HOME: "/real/omf",
+    };
     const author = authorFor(record, "from_feedback", { envPassthrough: ["KEEP_ME"] }, realEnv);
     expect(author).toMatchObject({ vendor: "command", model: "stub", isolation: "host_command" });
 
@@ -51,16 +62,28 @@ describe("createCommandAuthor", () => {
       expect(outcome, mode).toMatchObject({ ok: false, code });
     }
     // The author's own limit wins over a longer request: 300 ms, not 20 s.
-    const slow = await authorFor(makeTempDir("omf-rec-"), "sleep", { timeoutMs: 300 }).run({ prompt: "p", timeoutMs: 20_000 });
+    const slow = await authorFor(makeTempDir("omf-rec-"), "sleep", { timeoutMs: 300 }).run({
+      prompt: "p",
+      timeoutMs: 20_000,
+    });
     expect(slow).toMatchObject({ ok: false, code: "timeout" });
-    const missing = await createCommandAuthor({ command: ["/nonexistent/omf-author"] }).run({ prompt: "p", timeoutMs: 20_000 });
+    const missing = await createCommandAuthor({ command: ["/nonexistent/omf-author"] }).run({
+      prompt: "p",
+      timeoutMs: 20_000,
+    });
     expect(missing).toMatchObject({ ok: false, code: "spawn_failed" });
   });
 
   it("is misconfigured with no command or no positive time limit, and never spawns", async () => {
     const record = makeTempDir("omf-rec-");
-    expect(await createCommandAuthor({ command: [] }).run({ prompt: "p", timeoutMs: 1000 })).toMatchObject({ ok: false, code: "misconfigured" });
-    expect(await authorFor(record, "empty").run({ prompt: "p", timeoutMs: 0 })).toMatchObject({ ok: false, code: "misconfigured" });
+    expect(await createCommandAuthor({ command: [] }).run({ prompt: "p", timeoutMs: 1000 })).toMatchObject({
+      ok: false,
+      code: "misconfigured",
+    });
+    expect(await authorFor(record, "empty").run({ prompt: "p", timeoutMs: 0 })).toMatchObject({
+      ok: false,
+      code: "misconfigured",
+    });
     expect(existsSync(join(record, "stdin.txt"))).toBe(false);
   });
 });

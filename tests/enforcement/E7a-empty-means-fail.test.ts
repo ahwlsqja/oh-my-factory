@@ -156,7 +156,10 @@ describe("E7a-empty-means-fail", () => {
 
     const doc = JSON.parse(original) as Record<string, unknown>;
     const edits: [string, unknown][] = [
-      ["recommendation flipped, unverified areas emptied", { ...doc, recommendation: "merge_recommended", unverified_areas: [] }],
+      [
+        "recommendation flipped, unverified areas emptied",
+        { ...doc, recommendation: "merge_recommended", unverified_areas: [] },
+      ],
       ["another run id", { ...doc, run_id: "r-20261014T000000Z-ffff" }],
       ["another outcome", { ...doc, outcome: "blocked" }],
       ["an invalid file", {}],

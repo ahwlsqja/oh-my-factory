@@ -25,7 +25,12 @@ export interface S2Outcome {
 }
 
 /** Author faults that retrying cannot fix (a missing command, a timeout, a disk) go to the environment route. */
-const ENVIRONMENT_FAILURES: ReadonlySet<SealFailureCode> = new Set(["timeout", "spawn_failed", "misconfigured", "write_failed"]);
+const ENVIRONMENT_FAILURES: ReadonlySet<SealFailureCode> = new Set([
+  "timeout",
+  "spawn_failed",
+  "misconfigured",
+  "write_failed",
+]);
 
 function stepOf(stage: SealStageResult): S2Next {
   switch (stage.status) {

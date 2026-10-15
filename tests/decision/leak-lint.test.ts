@@ -12,7 +12,13 @@ import { setupGoal } from "../helpers/goal.js";
 /** A locked semantic whose target metric and value are the given ones; everything else is the template's. */
 function semanticFor(metricId: string, value: number): GoalSemantic {
   const front = parseGoal(goalTemplate("g-a")).front;
-  return { ...front, target: { ...front.target, metric_id: metricId, value }, leading: [], lagging: [metricId], guardrails: [] };
+  return {
+    ...front,
+    target: { ...front.target, metric_id: metricId, value },
+    leading: [],
+    lagging: [metricId],
+    guardrails: [],
+  };
 }
 
 /** The canary metric id with a chosen locked target value and chosen readings. */
@@ -20,9 +26,8 @@ function ctxFor(value: number, measured: readonly number[] = []): LeakContext {
   return leakContextFor(semanticFor(CANARY.metricId, value), measured);
 }
 
-const rulesOf = (body: unknown, ctx: LeakContext): string[] => [
-  ...new Set(lintDecisionStrings(body, ctx).map((finding) => finding.rule)),
-].sort();
+const rulesOf = (body: unknown, ctx: LeakContext): string[] =>
+  [...new Set(lintDecisionStrings(body, ctx).map((finding) => finding.rule))].sort();
 
 const codeOf = (fn: () => unknown): unknown => {
   try {
@@ -72,7 +77,9 @@ describe("leak lint, rules target-value and number-value", () => {
     ]);
     expect(lintDecisionStrings({ response_measure: { threshold: 13 } }, ctx)).toEqual([]);
     // 12.0 is not the literal "12", so only the numeric rule can see it.
-    expect(lintDecisionStrings({ question: "Is 12.0 seconds too slow?" }, ctx)).toEqual([{ rule: "number-value", field: "question" }]);
+    expect(lintDecisionStrings({ question: "Is 12.0 seconds too slow?" }, ctx)).toEqual([
+      { rule: "number-value", field: "question" },
+    ]);
     // a unit glued to the digits is still a value
     expect(rulesOf({ question: "Is 12ms too slow?" }, ctx)).toEqual(["number-value", "target-value"]);
     expect(lintDecisionStrings({ question: "Allow 1,200 requests" }, ctxFor(1200))).toEqual([
@@ -82,7 +89,9 @@ describe("leak lint, rules target-value and number-value", () => {
 
   it("refuses the integer part of a non-integer target, in prose and as a threshold", () => {
     const ctx = ctxFor(Number(CANARY.target));
-    expect(lintDecisionStrings({ question: "about 3719 per second" }, ctx)).toEqual([{ rule: "number-value", field: "question" }]);
+    expect(lintDecisionStrings({ question: "about 3719 per second" }, ctx)).toEqual([
+      { rule: "number-value", field: "question" },
+    ]);
     expect(lintDecisionStrings({ response_measure: { threshold: 3719 } }, ctx)).toEqual([
       { rule: "number-value", field: "response_measure.threshold" },
     ]);
@@ -92,13 +101,20 @@ describe("leak lint, rules target-value and number-value", () => {
   it("lets a lone single-digit integer through unless it is the locked target itself (A16a)", () => {
     const readings = ctxFor(Number(CANARY.target), [0, 2.3, 1.42, 4.7]);
     expect(lintDecisionStrings({ question: "Should we keep 2 replicas per region?" }, readings)).toEqual([]);
-    expect(lintDecisionStrings({ interface: { io_contract: "exit 0 on success, 1 on error", run: ["make", "-j", "4"] } }, readings)).toEqual([]);
+    expect(
+      lintDecisionStrings(
+        { interface: { io_contract: "exit 0 on success, 1 on error", run: ["make", "-j", "4"] } },
+        readings,
+      ),
+    ).toEqual([]);
     expect(lintDecisionStrings({ response_measure: { threshold: 2 } }, readings)).toEqual([]);
     const target = ctxFor(3, [2.3]);
     expect(rulesOf({ question: "Keep 3 retries?" }, target)).toEqual(["number-value", "target-value"]);
     // two digits and up still match a reading exactly, and by integer part
     expect(rulesOf({ question: "Keep 12 replicas?" }, ctxFor(Number(CANARY.target), [12.7]))).toEqual(["number-value"]);
-    expect(rulesOf({ question: "Keep 12.7 replicas?" }, ctxFor(Number(CANARY.target), [12.7]))).toEqual(["number-value"]);
+    expect(rulesOf({ question: "Keep 12.7 replicas?" }, ctxFor(Number(CANARY.target), [12.7]))).toEqual([
+      "number-value",
+    ]);
   });
 
   it("does not refuse an integer part of 0", () => {
@@ -115,13 +131,23 @@ describe("leak lint, rules target-value and number-value", () => {
     expect(lintDecisionStrings({ response_measure: { threshold: 4817.39 } }, ctx)).toEqual([
       { rule: "number-value", field: "response_measure.threshold" },
     ]);
-    expect(lintDecisionStrings({ question: "it reads 4817 today" }, ctx)).toEqual([{ rule: "number-value", field: "question" }]);
+    expect(lintDecisionStrings({ question: "it reads 4817 today" }, ctx)).toEqual([
+      { rule: "number-value", field: "question" },
+    ]);
     expect(lintDecisionStrings({ response_measure: { threshold: 4900 } }, ctx)).toEqual([]);
   });
 
   it("exempts percentile and the keys OMF sets", () => {
     expect(lintDecisionStrings({ response_measure: { percentile: 95, threshold: 250 } }, ctxFor(95))).toEqual([]);
-    const set = { class: "latency", op: "<=", by: "human:12", signed_by: "human:12", at: "12", expires_at: "12", kind: "cli" };
+    const set = {
+      class: "latency",
+      op: "<=",
+      by: "human:12",
+      signed_by: "human:12",
+      at: "12",
+      expires_at: "12",
+      kind: "cli",
+    };
     expect(lintDecisionStrings(set, ctxFor(12))).toEqual([]);
   });
 });
@@ -134,8 +160,21 @@ describe("leak lint, clean text and pinned limits", () => {
       id: "d-cache-scope",
       class: "latency",
       question: "Should the cache be shared by all workers?",
-      qas: { source: "a visitor", stimulus: "opens a page", environment: "normal load", artifact: "the cache", response: "serves it" },
-      response_measure: { metric: "queue depth", op: "<=", threshold: 250, unit: "items", percentile: 95, window: "5 minutes" },
+      qas: {
+        source: "a visitor",
+        stimulus: "opens a page",
+        environment: "normal load",
+        artifact: "the cache",
+        response: "serves it",
+      },
+      response_measure: {
+        metric: "queue depth",
+        op: "<=",
+        threshold: 250,
+        unit: "items",
+        percentile: 95,
+        window: "5 minutes",
+      },
     };
     expect(lintDecisionStrings(body, ctx)).toEqual([]);
   });
@@ -164,7 +203,11 @@ describe("leak context", () => {
     const fx = setupGoal();
     lockGoal(fx.location, "g-fast", "human:dev");
     const measured = (goalId: string, value: unknown): void => {
-      fx.ledger.append({ actor: "omf", type: "metric.measured", payload: { goal_id: goalId, metric_id: "m-p95", value } });
+      fx.ledger.append({
+        actor: "omf",
+        type: "metric.measured",
+        payload: { goal_id: goalId, metric_id: "m-p95", value },
+      });
     };
     measured("g-fast", 312);
     measured("g-fast", 312);
@@ -182,7 +225,11 @@ describe("leak context", () => {
     const fx = setupGoal();
     lockGoal(fx.location, "g-fast", "human:dev");
     for (const value of [312, 0.4, 500]) {
-      fx.ledger.append({ actor: "omf", type: "metric.measured", payload: { goal_id: "g-fast", metric_id: "m-p95", value } });
+      fx.ledger.append({
+        actor: "omf",
+        type: "metric.measured",
+        payload: { goal_id: "g-fast", metric_id: "m-p95", value },
+      });
     }
     const ctx = loadLeakContext(fx.location.dir, "g-fast", fx.ledger.readVerified());
     const seqs = (ctx.readings ?? []).map((reading) => reading.seq);

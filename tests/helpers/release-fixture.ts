@@ -11,7 +11,9 @@ export const RUN = "r-20261014T091500Z-0001";
 export const DIGEST = "a".repeat(64);
 
 /** `{ interface: [3, 5] }` is five train scenarios in that category, three of them passed (none flaky). */
-export function counts(parts: Partial<Record<DecisionClass, readonly [pass: number, total: number]>>): ScenarioResult[] {
+export function counts(
+  parts: Partial<Record<DecisionClass, readonly [pass: number, total: number]>>,
+): ScenarioResult[] {
   const out: ScenarioResult[] = [];
   for (const [category, pair] of Object.entries(parts) as [DecisionClass, readonly [number, number]][]) {
     for (let i = 0; i < pair[1]; i += 1) out.push({ category, passed: i < pair[0], flaky: false });

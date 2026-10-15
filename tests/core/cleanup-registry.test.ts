@@ -11,7 +11,9 @@ const PROCESS_GROUP = JSON.stringify(new URL("../../dist/adapters/process-group.
 
 /** Starts `script` as a child process and resolves with how it ended once `signal` was sent after it printed "ready". */
 async function killedBy(script: string, signal: NodeJS.Signals) {
-  const child = spawn(process.execPath, ["--input-type=module", "-e", script], { stdio: ["ignore", "pipe", "inherit"] });
+  const child = spawn(process.execPath, ["--input-type=module", "-e", script], {
+    stdio: ["ignore", "pipe", "inherit"],
+  });
   const ended = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
     child.once("exit", (code, sig) => resolve({ code, signal: sig }));
   });
@@ -96,7 +98,10 @@ describe("registerCleanup", () => {
         { cwd: process.cwd(), env: process.env, timeoutMs: 120000, maxOutputBytes: 1024 });
       console.log("ready");
     `;
-    const child = spawn(process.execPath, ["--input-type=module", "-e", script], { stdio: ["ignore", "pipe", "inherit"], cwd: dir });
+    const child = spawn(process.execPath, ["--input-type=module", "-e", script], {
+      stdio: ["ignore", "pipe", "inherit"],
+      cwd: dir,
+    });
     const ended = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
       child.once("exit", (code, sig) => resolve({ code, signal: sig }));
     });
@@ -148,7 +153,10 @@ describe("registerCleanup", () => {
         { cwd: process.cwd(), env: process.env, timeoutMs: 120000, maxOutputBytes: 1024 });
       console.log("ready");
     `;
-    const child = spawn(process.execPath, ["--input-type=module", "-e", script], { stdio: ["ignore", "pipe", "inherit"], cwd: dir });
+    const child = spawn(process.execPath, ["--input-type=module", "-e", script], {
+      stdio: ["ignore", "pipe", "inherit"],
+      cwd: dir,
+    });
     const ended = new Promise<unknown>((resolve) => child.once("exit", (code, sig) => resolve({ code, signal: sig })));
     await waitForLine(child, "ready");
     await waitForPids(pidFile);

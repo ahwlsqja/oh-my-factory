@@ -5,8 +5,21 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema_version", "kind", "work_id", "goal_id", "run_id", "predecessor_seq", "outcome", "reason_code",
-    "state", "ran", "remaining", "risks", "decision_required", "resume", "created_at"
+    "schema_version",
+    "kind",
+    "work_id",
+    "goal_id",
+    "run_id",
+    "predecessor_seq",
+    "outcome",
+    "reason_code",
+    "state",
+    "ran",
+    "remaining",
+    "risks",
+    "decision_required",
+    "resume",
+    "created_at"
   ],
   "properties": {
     "schema_version": { "const": 1 },
@@ -69,22 +82,49 @@
     "goal_id": { "type": "string", "pattern": "^g-[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },
     "work_id": { "type": "string", "pattern": "^w-[0-9a-f]{12}$" },
     "run_id": { "type": "string", "pattern": "^r-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}$" },
-    "timestamp": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$" },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+    },
     "sentence": { "type": "string", "pattern": "^[ -~]{1,300}$" },
     "node": { "enum": ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "GATE-1", "GATE-2", "GATE-3", "GATE-4"] },
     "reason_code": {
       "enum": [
-        "j2_open", "gate_blocked", "budget_exhausted", "infra_failure", "manual_required", "station_error",
-        "visit_cap", "stalled", "gate_not_run", "station_skipped", "evidence_incomplete", "run_killed",
-        "audit_flag", "sealed_failed", "flaky_scenario", "within_variance", "gate2_exhausted", "reentry_loop",
+        "j2_open",
+        "gate_blocked",
+        "budget_exhausted",
+        "infra_failure",
+        "manual_required",
+        "station_error",
+        "visit_cap",
+        "stalled",
+        "gate_not_run",
+        "station_skipped",
+        "evidence_incomplete",
+        "run_killed",
+        "audit_flag",
+        "sealed_failed",
+        "flaky_scenario",
+        "within_variance",
+        "gate2_exhausted",
+        "reentry_loop",
         "scenarios_need_review",
-        "test_run_incomplete", "test_reseal_required", "noise_unverified", "scenarios_exhausted"
+        "test_run_incomplete",
+        "test_reseal_required",
+        "noise_unverified",
+        "scenarios_exhausted"
       ]
     },
     "risk": {
       "enum": [
-        "decision_unmeasured", "model_spend_unverifiable", "noise_check_not_run", "noise_check_not_evaluated",
-        "high_risk_paths_not_run", "high_risk_paths_touched", "decisions_masked", "injected_gate"
+        "decision_unmeasured",
+        "model_spend_unverifiable",
+        "noise_check_not_run",
+        "noise_check_not_evaluated",
+        "high_risk_paths_not_run",
+        "high_risk_paths_touched",
+        "decisions_masked",
+        "injected_gate"
       ]
     }
   }

@@ -8,7 +8,15 @@ import { lockFile } from "../../src/goal/metrics.js";
 import { runStateFromEvents } from "../../src/goal/run-state.js";
 import { isStalled } from "../../src/goal/tick.js";
 import { claimItem, releaseItem } from "../../src/work/claim.js";
-import { GOAL, type LoopFixture, runTick, setMeasured, setPlan, setupLoopGoal, stubCalls } from "../helpers/tick-loop.js";
+import {
+  GOAL,
+  type LoopFixture,
+  runTick,
+  setMeasured,
+  setPlan,
+  setupLoopGoal,
+  stubCalls,
+} from "../helpers/tick-loop.js";
 
 const mark = (fx: LoopFixture): number => fx.ledger.readVerified().length;
 const since = (fx: LoopFixture, at: number): LedgerEvent[] => fx.ledger.readVerified().slice(at);
@@ -31,7 +39,12 @@ describe("stall guard (no_progress)", () => {
     const at = mark(fx);
 
     const second = await runTick(fx);
-    expect(second).toMatchObject({ status: "blocked_on_user", outcome: "escalated", reason_code: "no_progress", reconciled: false });
+    expect(second).toMatchObject({
+      status: "blocked_on_user",
+      outcome: "escalated",
+      reason_code: "no_progress",
+      reconciled: false,
+    });
     expect(second.escalation).toMatchObject({ j: "J6", reason_code: "no_progress" });
     expect(stubCalls(fx)).toBe(1);
     expect(consumed(fx)).toBe(1);

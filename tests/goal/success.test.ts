@@ -65,7 +65,9 @@ describe("evaluateSuccess: the candidate", () => {
   });
 
   it("accepts guardrails pass as well as none", () => {
-    const verdict = evaluate([measured(0, { guardrails: "pass" }), measured(HOUR, { guardrails: "pass" })], { now: HOUR });
+    const verdict = evaluate([measured(0, { guardrails: "pass" }), measured(HOUR, { guardrails: "pass" })], {
+      now: HOUR,
+    });
     expect(verdict.kind).toBe("candidate");
   });
 
@@ -96,7 +98,12 @@ describe("evaluateSuccess: the streak", () => {
     const events = [measured(0), measured(HOUR, { target_met: false }), measured(2 * HOUR)];
     expect(evaluate(events, { now: 4 * HOUR })).toEqual({ kind: "undetermined", missing: ["consecutive"] });
     const later = evaluate([...events, measured(3 * HOUR)], { now: 3 * HOUR });
-    expect(later).toEqual({ kind: "candidate", first_met_at: iso(2 * HOUR), consecutive: 2, attribution: "before_after" });
+    expect(later).toEqual({
+      kind: "candidate",
+      first_met_at: iso(2 * HOUR),
+      consecutive: 2,
+      attribution: "before_after",
+    });
   });
 
   it("is broken by a measurement taken while a regime change was pending", () => {
@@ -134,7 +141,10 @@ describe("evaluateSuccess: the streak", () => {
 
   it("does not count a previous regime's streak", () => {
     const old = [measured(0, { regime: 1 }), measured(HOUR, { regime: 1 })];
-    expect(evaluate(old, { regime: 2, now: 4 * HOUR })).toEqual({ kind: "undetermined", missing: ["consecutive", "min_observation"] });
+    expect(evaluate(old, { regime: 2, now: 4 * HOUR })).toEqual({
+      kind: "undetermined",
+      missing: ["consecutive", "min_observation"],
+    });
     const mixed = [...old, measured(2 * HOUR, { regime: 2 })];
     expect(evaluate(mixed, { regime: 2, now: 4 * HOUR })).toEqual({ kind: "undetermined", missing: ["consecutive"] });
   });
@@ -174,7 +184,11 @@ describe("evaluateSuccess: guardrails (spec F7, E4)", () => {
   });
 
   it("ends the streak at an earlier unevaluated measurement", () => {
-    const events = [measured(0, { guardrails: "pass" }), measured(HOUR, { guardrails: "unevaluated" }), measured(2 * HOUR, { guardrails: "pass" })];
+    const events = [
+      measured(0, { guardrails: "pass" }),
+      measured(HOUR, { guardrails: "unevaluated" }),
+      measured(2 * HOUR, { guardrails: "pass" }),
+    ];
     expect(evaluate(events, { now: 9 * HOUR })).toEqual({ kind: "undetermined", missing: ["consecutive"] });
   });
 

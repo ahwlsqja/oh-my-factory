@@ -19,8 +19,21 @@ describe("proveTest with an empty revert patch", () => {
         throw new Error("no copy expected");
       },
     };
-    const result = await proveTest({ quarantine: fx.quarantine, base: fx.base, head: fx.head, testCommand: TEST_COMMAND, explicitTestPaths: [], copies });
-    expect(result).toEqual({ status: "MISCONFIGURED", reason: "empty-revert-patch", test_exit: null, non_test_paths: 1, test_paths: 1 });
+    const result = await proveTest({
+      quarantine: fx.quarantine,
+      base: fx.base,
+      head: fx.head,
+      testCommand: TEST_COMMAND,
+      explicitTestPaths: [],
+      copies,
+    });
+    expect(result).toEqual({
+      status: "MISCONFIGURED",
+      reason: "empty-revert-patch",
+      test_exit: null,
+      non_test_paths: 1,
+      test_paths: 1,
+    });
     expect(created).toBe(0);
   });
 });
