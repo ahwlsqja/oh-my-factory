@@ -2,6 +2,7 @@ import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Ledger, type LedgerEvent, type VerifyResult } from "./ledger.js";
 import { type ProjectLocation, resolveProject } from "./paths.js";
+import { assertStateTreeClean } from "./safe-fs.js";
 
 export const PROJECT_SUBDIRS = ["vault/metrics", "vault/scenarios", "runs", "worktrees", "goals"] as const;
 
@@ -61,9 +62,15 @@ export function projectProblem(status: ProjectStatus): string | null {
   return null;
 }
 
-/** For commands that need an initialized project with a sound ledger. The CLI reports the error with exit 2. */
+/**
+ * For commands that need an initialized project with a sound ledger. The CLI reports the error with exit 2.
+ * The symlink guard runs before anything is read, so no state is read through a link. It returns quietly
+ * when the OMF home does not exist, so a missing project still reads "project not initialized".
+ */
 export function requireProject(cwd: string, env: NodeJS.ProcessEnv = process.env): ProjectStatus {
-  const status = readProjectStatus(resolveProject(cwd, env));
+  const location = resolveProject(cwd, env);
+  assertStateTreeClean(location, env);
+  const status = readProjectStatus(location);
   const problem = projectProblem(status);
   if (problem !== null) throw new Error(problem);
   return status;
@@ -98,7 +105,10 @@ function restrictProjectModes(dir: string): void {
 }
 
 export function initProject(cwd: string, env: NodeJS.ProcessEnv = process.env): InitResult {
-  const { repo, id, dir } = resolveProject(cwd, env);
+  const location = resolveProject(cwd, env);
+  const { repo, id, dir } = location;
+  // Before any mkdir, chmod or write: an existing project must not be repaired through a planted link.
+  assertStateTreeClean(location, env);
 
   // Creating the layout is idempotent, so every init also repairs missing directories.
   for (const sub of PROJECT_SUBDIRS) mkdirSync(join(dir, sub), { recursive: true, mode: 0o700 });

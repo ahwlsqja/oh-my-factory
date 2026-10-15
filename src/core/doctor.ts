@@ -2,9 +2,11 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
+import { sealedProblem } from "../vault/pokayoke.js";
 import { TORN_TAIL_WARNING, type VerifyResult } from "./ledger.js";
 import { NotAGitRepoError, type ProjectLocation, UnsupportedRepoError, locateProject, repoToplevel } from "./paths.js";
 import { projectProblem, readProjectStatus } from "./project.js";
+import { SymlinkRefusedError, assertStateTreeClean } from "./safe-fs.js";
 
 export interface ToolProbe {
   found: boolean;
@@ -101,6 +103,7 @@ export function runDoctor(
   let dir: string | null = null;
   let initialized = false;
   let ledgerResult: VerifyResult | null = null;
+  let treeClean = true;
   if (toplevel !== null) {
     let location: ProjectLocation | null = null;
     try {
@@ -110,12 +113,27 @@ export function runDoctor(
     }
     if (location !== null) {
       dir = location.dir;
-      const status = readProjectStatus(location);
-      initialized = status.initialized;
-      ledgerResult = status.ledger;
-      const problem = projectProblem(status);
-      if (problem !== null) problems.push(problem);
-      if (status.ledger?.ok && status.ledger.tornTail) warnings.push(TORN_TAIL_WARNING);
+      try {
+        assertStateTreeClean(location, env);
+      } catch (err) {
+        if (!(err instanceof SymlinkRefusedError)) throw err;
+        // The state is not read through a link, so the report shows the project as not initialized.
+        problems.push(err.message);
+        treeClean = false;
+      }
+      if (treeClean) {
+        const status = readProjectStatus(location);
+        initialized = status.initialized;
+        ledgerResult = status.ledger;
+        const problem = projectProblem(status);
+        if (problem !== null) problems.push(problem);
+        if (status.ledger?.ok && status.ledger.tornTail) warnings.push(TORN_TAIL_WARNING);
+        // Poka-yoke (spec §11 rule 4): sealed material in the repository or a worktree is a problem to fix before any run.
+        if (status.initialized) {
+          const sealed = sealedProblem(location, env);
+          if (sealed !== null) problems.push(sealed);
+        }
+      }
     }
   }
 
@@ -134,7 +152,8 @@ export function runDoctor(
     problems,
     warnings,
   };
-  if (initialized && dir !== null) {
+  // Never when the tree has a link: writeFileSync would follow a symlinked preflight.json.
+  if (initialized && treeClean && dir !== null) {
     const preflightPath = join(dir, "preflight.json");
     writeFileSync(preflightPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
     // writeFileSync keeps the mode of an existing file, so set it explicitly.
