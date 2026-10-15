@@ -1,8 +1,8 @@
-import { goldenFor } from "../container/golden.js";
+import { containerSpecFor, goldenFor } from "../container/golden.js";
 import { digestOf, ImageRefError, type PinnedImage, pinnedImage } from "../container/image-ref.js";
 import { createMeasured, type MeasureDeps, NotGoldenError } from "../container/measure.js";
 import type { ContainerRuntime, ImageInfo } from "../container/runtime.js";
-import { type ContainerSpec, containerName, type OwnedLabels, type TmpfsSpec } from "../container/spec.js";
+import type { OwnedLabels } from "../container/spec.js";
 import { buildSutImage } from "../container/sut-build.js";
 import { registerCleanup } from "../core/cleanup-registry.js";
 import type { JudgeConfig } from "../core/config.js";
@@ -135,27 +135,6 @@ export function scenarioVerdict(outcomes: readonly Outcome[]): ScenarioTally["ve
   const passes = outcomes.filter((outcome) => outcome === "pass").length;
   if (passes === outcomes.length) return "pass";
   return passes === 0 ? "fail" : "flaky";
-}
-
-function specFor(
-  role: "sut" | "harness",
-  image: ImageInfo,
-  labels: OwnedLabels,
-  serial: number,
-  config: JudgeConfig,
-): ContainerSpec {
-  const own: TmpfsSpec =
-    role === "sut"
-      ? { destination: "/scratch", size_mb: config.scratch_tmpfs_mb, exec: false, owned: true }
-      : { destination: "/state", size_mb: config.state_tmpfs_mb, exec: false, owned: true };
-  const owned: OwnedLabels = { ...labels, role };
-  return {
-    name: containerName(owned, serial),
-    image: image.id,
-    labels: owned,
-    tmpfs: [{ destination: "/tmp", size_mb: config.tmp_tmpfs_mb, exec: false, owned: false }, own],
-    limits: { memory_mb: config.memory_mb, cpus: config.cpus, pids: config.pids_limit },
-  };
 }
 
 function assertSet(scenarios: readonly RoundScenario[]): void {
@@ -329,7 +308,7 @@ export async function runJudgeRound(input: JudgeRoundInput): Promise<RoundVerdic
   let serial = 0;
   const create = async (role: "sut" | "harness", image: ImageInfo) => {
     serial += 1;
-    const spec = specFor(role, image, labels, serial, config);
+    const spec = containerSpecFor({ role, image: image.id, labels, serial, judge: config });
     live.add(spec.name); // before the create: a signal in the middle of it still removes the name
     return createMeasured(input.measure, spec, goldenFor({ role, image, forbidden: input.forbidden }));
   };

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createArgv } from "../../src/container/argv.js";
 import { NotGoldenError } from "../../src/container/measure.js";
+import { roleTmpfs } from "../../src/container/spec.js";
 import { scenarioVerdict } from "../../src/judge/round.js";
 import { judgeConfig, lease, ref, runRound, scenarioOf, stepOf } from "../helpers/judge-fixture.js";
 import { measureHook, resetMeasureHook } from "../helpers/measure-mock.js";
@@ -80,6 +82,18 @@ describe("runJudgeRound", () => {
       cpus: judgeConfig().cpus,
       pids: judgeConfig().pids_limit,
     });
+  });
+
+  it("creates every container with the tmpfs set and argv of its role, owned by the sandbox user (one source: roleTmpfs)", async () => {
+    const double = new RuntimeDouble(always0);
+    await runRound(double, [scenarioOf(1, [stepOf(["a"], 0)])], { k: 2 });
+    expect(double.specs.length).toBeGreaterThan(1);
+    for (const spec of double.specs) {
+      const role = spec.labels.role;
+      expect(spec.tmpfs).toEqual(roleTmpfs(role, judgeConfig()));
+      const argv = createArgv(spec, null);
+      expect(argv).toContain(`/tmp:rw,size=${judgeConfig().tmp_tmpfs_mb}m,nosuid,nodev,uid=65532,gid=65532`);
+    }
   });
 
   it("never treats zero scenarios as a pass and creates nothing", async () => {

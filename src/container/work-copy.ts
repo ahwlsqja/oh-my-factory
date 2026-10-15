@@ -5,10 +5,10 @@ import type { CommandResult, RunOptions, WorkCopy, WorkCopyFactory } from "../ga
 import { createScratchGitDir, type GitTarget } from "../git/hardened.js";
 import { applyPatchToDir, exportTree, isDirClean } from "../git/ops.js";
 import type { StageGolden } from "../isolation/evaluate.js";
-import { goldenFor } from "./golden.js";
+import { containerSpecFor, goldenFor } from "./golden.js";
 import { createMeasured, type MeasureDeps, type MeasuredContainer, NotGoldenError } from "./measure.js";
 import type { ContainerHandle, ContainerRuntime, ImageInfo } from "./runtime.js";
-import { type ContainerSpec, containerName, type OwnedLabels } from "./spec.js";
+import type { ContainerSpec, OwnedLabels } from "./spec.js";
 import { tarOfDir } from "./tar-dir.js";
 
 export type WorkCopyErrorCode = "build_failed" | "extract_failed" | "not_golden" | "timeout";
@@ -96,17 +96,13 @@ class ContainerWorkCopy implements WorkCopy {
   private async boot(): Promise<void> {
     const { ctx } = this;
     containerSerial += 1;
-    const labels: OwnedLabels = { ...ctx.labels, role: "workcopy" };
-    const spec: ContainerSpec = {
-      name: containerName(labels, containerSerial),
+    const spec: ContainerSpec = containerSpecFor({
+      role: "workcopy",
       image: ctx.image.id,
-      labels,
-      tmpfs: [
-        { destination: "/tmp", size_mb: ctx.config.tmp_tmpfs_mb, exec: false, owned: true },
-        { destination: "/work", size_mb: ctx.config.work_tmpfs_mb, exec: true, owned: true },
-      ],
-      limits: { memory_mb: ctx.config.memory_mb, cpus: ctx.config.cpus, pids: ctx.config.pids_limit },
-    };
+      labels: ctx.labels,
+      serial: containerSerial,
+      judge: ctx.config,
+    });
     this.lastName = spec.name;
     let measured: MeasuredContainer;
     try {

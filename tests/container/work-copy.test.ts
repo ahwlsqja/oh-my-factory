@@ -2,9 +2,10 @@ import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MeasureError, NotGoldenError } from "../../src/container/measure.js";
+import { roleTmpfs } from "../../src/container/spec.js";
 import { ContainerWorkCopyFactory, type Launch, WorkCopyError } from "../../src/container/work-copy.js";
 import { revertPatch } from "../../src/git/ops.js";
-import { EXIT_0, MemoryRuntime, exit } from "../helpers/memory-runtime.js";
+import { EXIT_0, exit, MemoryRuntime } from "../helpers/memory-runtime.js";
 import { calcFixture } from "../helpers/prove-fixture.js";
 import { workCopies, workCopyDeps } from "../helpers/work-copy-fixture.js";
 
@@ -139,6 +140,7 @@ describe("ContainerWorkCopyFactory (spec section 4.8)", () => {
     await expect(factory.create({ quarantine: fx.quarantine, sha: fx.head })).rejects.toBeInstanceOf(MeasureError);
     expect(memory.specs[0]?.labels.role).toBe("workcopy");
     expect(memory.specs[0]?.tmpfs.find((tmpfs) => tmpfs.destination === "/work")).toMatchObject({ exec: true });
+    expect(memory.specs[0]?.tmpfs).toEqual(roleTmpfs("workcopy", workCopyDeps(memory).config));
     expect(memory.execs).toEqual([]);
     expect(memory.live.size).toBe(0);
   });
