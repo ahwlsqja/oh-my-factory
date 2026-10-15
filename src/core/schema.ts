@@ -4,7 +4,7 @@ import type { ValidateFunction } from "ajv/dist/2020.js";
 
 export type Validation = { ok: true } | { ok: false; errors: string };
 
-const ajv = new Ajv2020({ allErrors: true, strict: true });
+const ajv = new Ajv2020({ allErrors: true, strict: true, multipleOfPrecision: 6 });
 const compiled = new Map<string, ValidateFunction>();
 
 /** Schemas live in `<package>/schemas`, two levels above both `src/core` and `dist/core`. */

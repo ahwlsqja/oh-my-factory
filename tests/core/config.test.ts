@@ -260,9 +260,21 @@ describe("[judge]", () => {
     ["a zero tmpfs size", "tmp_tmpfs_mb = 0"],
     ["a context name that starts with a dash", 'docker_context = "-x"'],
     ["a context name with a space", 'docker_context = "a b"'],
+    ["a context name of 65 characters", `docker_context = "${"a".repeat(65)}"`],
+    ["cpus with three decimals", "cpus = 1.005"],
+    ["cpus with three decimals just above the floor", "cpus = 0.101"],
     ["an unknown key", "network = true"],
   ])("refuses %s", (_name, line) => {
     expect(() => parseConfig(`[judge]\n${line}\n`)).toThrow(/config\.toml is invalid/);
+  });
+
+  it.each([
+    ["a context name of 64 characters", `docker_context = "${"a".repeat(64)}"`],
+    ["cpus with two decimals", "cpus = 0.29"],
+    ["the cpus floor", "cpus = 0.1"],
+    ["the cpus ceiling", "cpus = 4"],
+  ])("accepts %s, which the argv layer accepts too", (_name, line) => {
+    expect(() => parseConfig(`[judge]\n${line}\n`)).not.toThrow();
   });
 
   it("refuses an image that is not pinned by digest, before the schema runs", () => {
