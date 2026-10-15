@@ -32,6 +32,7 @@ const MAY_SPAWN: readonly string[] = [
   "adapters/process-group.ts",
   "adapters/measure-cmd.ts",
   "adapters/reconciler.ts",
+  "container/docker-cli.ts",
   "core/actor.ts",
   "core/doctor.ts",
   "core/lock.ts",
@@ -94,6 +95,15 @@ describe("no module under src/ runs candidate code on the host (M3e-D7)", () => 
   it("only the listed modules import node:child_process or the process runner", () => {
     const offenders = sources().filter(({ file, text }) => SPAWNS_ANY.test(text) && !MAY_SPAWN.includes(file));
     expect(offenders.map((o) => o.file)).toEqual([]);
+  });
+
+  it("the docker adapter starts only the docker program", () => {
+    const text = readFileSync(join(SRC, "container/docker-cli.ts"), "utf8");
+    const programs = [...text.matchAll(/\b(?:runProcessGroup|spawnSync)\(\s*(\[?\s*"[^"]*")/g)].map(
+      (match) => match[1] ?? "",
+    );
+    expect(programs.length).toBeGreaterThan(0);
+    expect(programs.filter((program) => !program.endsWith('"docker"'))).toEqual([]);
   });
 
   it("only the hardened runner starts git for container-written data", () => {
