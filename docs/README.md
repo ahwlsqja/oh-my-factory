@@ -26,6 +26,7 @@ Start with the top-level [README](../README.md) for what OMF is and the command 
 
 ## Verification line
 
+- [The container judge](container-judge.md): the two-container judge, how its containers are measured, and its limits.
 - [Gates, audit and isolation](isolation-and-gates.md): what the integrity line is, what it proves and what is not
   enforced yet.
 - [Where the contract differs from the spec](m3c-spec-deviations.md): where the scenario and seal contract is more exact

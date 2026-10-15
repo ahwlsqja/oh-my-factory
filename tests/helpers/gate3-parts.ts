@@ -15,7 +15,7 @@ import {
 import type { RiskAssessment } from "../../src/work/types.js";
 
 export const RUN = "r-20261012T100000Z-ab12";
-export const SCOPE = { goal_id: "g-fast", work_id: "w-0123456789ab", run_id: RUN };
+export const SCOPE = { goal_id: "g-fast", work_id: "w-0123456789ab", run_id: RUN, round: 1 };
 
 /** An audit with a complete, clean canary scan, no judge-config change and a proven prove-test. */
 export function cleanAudit(over: Partial<WorkAudit> = {}): WorkAudit {

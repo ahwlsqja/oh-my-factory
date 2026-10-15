@@ -6,7 +6,7 @@ import { schemaUrl, validate } from "../../src/core/schema.js";
 import { auditCompletedEvent, auditPayloadOf } from "../../src/gate/events.js";
 import type { ProveReason } from "../../src/gate/prove-test.js";
 import type { RiskRule } from "../../src/work/types.js";
-import { SCOPE, auditFixture, auditInput } from "../helpers/audit-diff-fixture.js";
+import { HEAD_SHA, SCOPE, auditFixture, auditInput } from "../helpers/audit-diff-fixture.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
 // Records the closed lists as objects keyed by the type, so a member added to the type without being added
@@ -71,7 +71,7 @@ describe("audit.completed event", () => {
 
   it("builds an omf event that the ledger accepts", async () => {
     const report = await editedTestReport();
-    const event = auditCompletedEvent(SCOPE, report);
+    const event = auditCompletedEvent(SCOPE, report, HEAD_SHA);
     expect(event.actor).toBe("omf");
     expect(event.type).toBe("audit.completed");
     expect(event.payload).toMatchObject({ ...SCOPE, tests_edited: 1 });
@@ -82,7 +82,9 @@ describe("audit.completed event", () => {
 
   it("refuses a scope that is not three well-formed ids, before any event exists", async () => {
     const report = await editedTestReport();
-    expect(() => auditCompletedEvent({ ...SCOPE, run_id: "../x" }, report)).toThrow(/invalid audit.completed event/);
+    expect(() => auditCompletedEvent({ ...SCOPE, run_id: "../x" }, report, HEAD_SHA)).toThrow(
+      /invalid audit.completed event/,
+    );
   });
 
   it("schema: every closed list equals the TypeScript list", () => {
@@ -102,7 +104,7 @@ describe("audit.completed event", () => {
   });
 
   it("schema: refuses free text, unknown members, negative counts and missing fields", async () => {
-    const valid = auditCompletedEvent(SCOPE, await editedTestReport()).payload;
+    const valid = auditCompletedEvent(SCOPE, await editedTestReport(), HEAD_SHA).payload;
     const without = Object.fromEntries(Object.entries(valid).filter(([key]) => key !== "judge_config_touched"));
     const bad: Array<[string, Record<string, unknown>]> = [
       ["an extra key", { ...valid, note: "free text" }],

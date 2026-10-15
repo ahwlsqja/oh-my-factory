@@ -1,6 +1,6 @@
 import { SURFACE_KINDS, textSurface } from "../../src/audit/canary-scan.js";
 import type { AuditSurface, SurfaceKind } from "../../src/audit/canary-scan.js";
-import type { AuditInput, RunScope } from "../../src/audit/work-audit.js";
+import type { AuditInput, RoundScope } from "../../src/audit/work-audit.js";
 import type { ProveTestResult } from "../../src/gate/prove-test.js";
 import { type GitFixture, gitFixture } from "./git-fixture.js";
 
@@ -55,8 +55,12 @@ export function auditInput(fx: AuditFixture, overrides: Partial<AuditInput> = {}
 }
 
 /** Ids that match the patterns of the gate-event schema. */
-export const SCOPE: RunScope = {
+export const SCOPE: RoundScope = {
   goal_id: "g-audit-fixture",
   work_id: "w-0123456789ab",
   run_id: "r-20261014T091500Z-ab12",
+  round: 1,
 };
+
+/** A full lowercase hex commit id for the audit's head. */
+export const HEAD_SHA = "b".repeat(40);

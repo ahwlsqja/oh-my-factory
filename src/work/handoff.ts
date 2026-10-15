@@ -44,7 +44,7 @@ interface Route {
   j: JCode;
   state: string;
   question: string;
-  options: (workId: string) => string[];
+  options: (workId: string, goalId: string) => string[];
 }
 
 // The only commands an option may name. Each exists today; a command that needs the line to run again
@@ -57,6 +57,9 @@ const veto = (id: string): string => `omf veto ${id}`;
 const raiseRounds = (id: string): string => `omf budget raise ${id} --rounds <n>`;
 const raiseUsd = (id: string): string => `omf budget raise ${id} --usd <amount>`;
 const rerun = (id: string): string => `after M3h: omf run ${id}`;
+// The disclosure budget belongs to the goal, so these two name the goal id and not the work id.
+const declareDisclosure = (goalId: string): string => `omf budget declare ${goalId} disclosure <n>`;
+const raiseDisclosure = (goalId: string): string => `omf budget raise ${goalId} disclosure <n>`;
 
 const REVIEW_QUESTION = "Do you accept this result after reading its evidence, or drop the item?";
 const RETRY_QUESTION = "Should the line be tried again, the item changed, or the item dropped?";
@@ -212,6 +215,18 @@ export const HANDOFF_ROUTES: Readonly<Record<ReasonCode, Route>> = {
       "The line cannot go on: a rerun reuses the standing seal and would stop here again, and no command seals fresh scenarios yet. Should the item be dropped?",
     options: review,
   },
+  gates_failed: {
+    j: "J4",
+    state: "A declared gate failed, so the result is not recommended.",
+    question: REVIEW_QUESTION,
+    options: review,
+  },
+  disclosure_unavailable: {
+    j: "J8",
+    state: "Feedback needs a disclosure budget, and none is declared or the declared one is used up.",
+    question: "Should a disclosure budget be declared or raised, or should the item be dropped?",
+    options: (id, goalId) => [declareDisclosure(goalId), raiseDisclosure(goalId), veto(id), rerun(id)],
+  },
 };
 
 /**
@@ -269,7 +284,11 @@ export function buildHandoff(input: HandoffInput): HandoffRecord {
     ran: input.ran,
     remaining: input.remaining,
     risks: [...new Set(unverified_areas.map((area) => area.code))],
-    decision_required: { j: route.j, question: route.question, options: route.options(input.scope.work_id) },
+    decision_required: {
+      j: route.j,
+      question: route.question,
+      options: route.options(input.scope.work_id, input.scope.goal_id),
+    },
     resume: "not_available_until_m4",
     created_at: input.now.toISOString(),
   };

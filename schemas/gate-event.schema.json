@@ -10,6 +10,8 @@
         "goal_id",
         "work_id",
         "run_id",
+        "round",
+        "head_sha",
         "diff_files",
         "diff_empty",
         "tests_edited",
@@ -38,6 +40,8 @@
         "run_id": {
           "$ref": "#/$defs/run_id"
         },
+        "round": { "$ref": "#/$defs/round" },
+        "head_sha": { "$ref": "#/$defs/commit_sha" },
         "diff_files": {
           "type": "integer",
           "minimum": 0
@@ -139,13 +143,58 @@
       "type": "string",
       "pattern": "^r-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}$"
     },
+    "round": { "type": "integer", "minimum": 1 },
+    "commit_sha": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" },
+    "image_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "judge_round_completed_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goal_id",
+        "work_id",
+        "run_id",
+        "round",
+        "phase",
+        "candidate_sha",
+        "k",
+        "scenarios_total",
+        "pass",
+        "fail",
+        "flaky",
+        "error",
+        "contradiction_scenarios",
+        "contradiction_rejected",
+        "harness_context_sha256",
+        "sut_base_digest",
+        "harness_base_digest"
+      ],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "round": { "$ref": "#/$defs/round" },
+        "phase": { "enum": ["train", "test"] },
+        "candidate_sha": { "$ref": "#/$defs/commit_sha" },
+        "k": { "type": "integer", "minimum": 2, "maximum": 10 },
+        "scenarios_total": { "type": "integer", "minimum": 0 },
+        "pass": { "type": "integer", "minimum": 0 },
+        "fail": { "type": "integer", "minimum": 0 },
+        "flaky": { "type": "integer", "minimum": 0 },
+        "error": { "type": "integer", "minimum": 0 },
+        "contradiction_scenarios": { "type": "integer", "minimum": 0 },
+        "contradiction_rejected": { "type": "integer", "minimum": 0 },
+        "harness_context_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "sut_base_digest": { "$ref": "#/$defs/image_digest" },
+        "harness_base_digest": { "$ref": "#/$defs/image_digest" }
+      }
+    },
     "gate_name": {
       "enum": ["fast", "full", "deep"]
     },
     "gates_evaluated_payload": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["goal_id", "work_id", "run_id", "line", "status", "failing", "misconfigured", "reasons"],
+      "required": ["goal_id", "work_id", "run_id", "round", "line", "status", "failing", "misconfigured", "reasons"],
       "properties": {
         "goal_id": {
           "$ref": "#/$defs/goal_id"
@@ -156,6 +205,7 @@
         "run_id": {
           "$ref": "#/$defs/run_id"
         },
+        "round": { "$ref": "#/$defs/round" },
         "line": {
           "type": "string",
           "pattern": "^OMF_GATES: fast=(pass|fail|skip|empty) full=(pass|fail|skip|empty) deep=(pass|fail|skip|empty)$"
@@ -318,7 +368,7 @@
     "gate3_evaluated_payload": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["goal_id", "work_id", "run_id", "passed", "failed", "route"],
+      "required": ["goal_id", "work_id", "run_id", "round", "passed", "failed", "route"],
       "properties": {
         "goal_id": {
           "$ref": "#/$defs/goal_id"
@@ -329,6 +379,7 @@
         "run_id": {
           "$ref": "#/$defs/run_id"
         },
+        "round": { "$ref": "#/$defs/round" },
         "passed": {
           "type": "boolean"
         },
@@ -450,6 +501,15 @@
         "payload": {
           "$ref": "#/$defs/gate3_evaluated_payload"
         }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": {
+        "type": { "const": "judge.round_completed" },
+        "payload": { "$ref": "#/$defs/judge_round_completed_payload" }
       }
     }
   ]

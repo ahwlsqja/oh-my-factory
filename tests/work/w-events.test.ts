@@ -258,3 +258,16 @@ describe("scenarios_need_review", () => {
     expect(accepts("work.parked", { ...scope, outcome: "blocked", reason_code: "scenarios_need_review" })).toBe(true);
   });
 });
+
+describe("gates_failed and disclosure_unavailable", () => {
+  it("are appended after the earlier codes, in this order, in the list and in the schema", () => {
+    const at = (code: string): number => (W_REASON_CODES as readonly string[]).indexOf(code);
+    expect(at("gates_failed")).toBe(at("scenarios_exhausted") + 1);
+    expect(at("disclosure_unavailable")).toBe(at("gates_failed") + 1);
+    expect(schemaDoc().$defs.reason_code?.enum).toEqual([...W_REASON_CODES]);
+    for (const reason_code of ["gates_failed", "disclosure_unavailable"]) {
+      expect(accepts("work.failed", { ...scope, outcome: "flawed", reason_code }), reason_code).toBe(true);
+      expect(accepts("work.parked", { ...scope, outcome: "blocked", reason_code }), reason_code).toBe(true);
+    }
+  });
+});

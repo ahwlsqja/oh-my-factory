@@ -295,7 +295,7 @@ export interface JudgeRoundInput {
 }
 
 /**
- * One round of the two-container judge (spec 5.5, M3f-D4/D5/D7/D8). One harness container per round holds the scenarios
+ * One round of the two-container judge (spec 5.5). One harness container per round holds the scenarios
  * (loaded over stdin, so no path is mounted) and judges; for each rep and each scenario a NEW SUT container is created,
  * measured against its golden before it starts, used for the steps of that scenario only and removed before the next one is
  * created, so a candidate cannot carry a file, a background process or a dead PID 1 from one scenario or rep into another.

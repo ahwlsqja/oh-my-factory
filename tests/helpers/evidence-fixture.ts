@@ -61,6 +61,7 @@ export function cleanInputs(): EvidenceInputs {
     high_risk_paths_touched: [],
     noise_check: "ok",
     gate_line: "OMF_GATES fast=pass",
+    gate_verdict: "GREEN",
     plan_summary: "Add a cache.",
     implementer_notes: "Done.",
   };

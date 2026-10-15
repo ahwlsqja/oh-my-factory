@@ -154,65 +154,84 @@ export interface RunScope {
   run_id: string;
 }
 
-/** `<itemDir>/runs/<run_id>/audit.json`: a view of the run's `audit.completed` event. */
-export function auditPath(itemDir: string, runId: string): string {
-  return join(itemDir, "runs", runId, "audit.json");
+/** `RunScope` plus the round: a rework run judges several rounds and each has its own audit. */
+export interface RoundScope extends RunScope {
+  /** An integer of 1 or more. */
+  round: number;
 }
 
-function writeAuditFile(itemDir: string, runId: string, report: WorkAudit): void {
-  writePrivateFileAtomic(auditPath(itemDir, runId), `${JSON.stringify(report, null, 2)}\n`);
+const isRound = (round: number): boolean => Number.isInteger(round) && round >= 1;
+
+/** `<itemDir>/runs/<run_id>/audit-<round>.json`: a view of that round's `audit.completed` event. */
+export function auditPath(itemDir: string, runId: string, round: number): string {
+  if (!isRound(round)) throw new RangeError("an audit belongs to a round of 1 or more");
+  return join(itemDir, "runs", runId, `audit-${round}.json`);
+}
+
+function writeAuditFile(itemDir: string, scope: RoundScope, report: WorkAudit): void {
+  writePrivateFileAtomic(auditPath(itemDir, scope.run_id, scope.round), `${JSON.stringify(report, null, 2)}\n`);
 }
 
 /**
- * Ledger event first, then the atomic host file (the M2b/M3b1 order). A crash between the two leaves an event and
- * no file, which `loadAudit` reads as absent and `repairAudit` heals. An invalid report throws before the event, so
- * the ledger never holds an audit that the schema refuses. A run has one audit: a second record for the same run is
- * refused, identical or not (a lost file is healed by `repairAudit`, not by recording again).
+ * Event first, then the atomic file; a crash between the two leaves an event and no file, which `loadAudit` reads as
+ * absent and `repairAudit` heals. An invalid report throws before the event. A round has one audit: a second record for
+ * the same run and round is refused, identical or not. `headSha` is the commit audited; GATE-3 compares it with the
+ * commit the judge ran.
  */
-export function recordAudit(sink: RecordSink, scope: RunScope, itemDir: string, report: WorkAudit): void {
+export function recordAudit(
+  sink: RecordSink,
+  scope: RoundScope,
+  itemDir: string,
+  report: WorkAudit,
+  headSha: string,
+): void {
   const check = validate("work-audit.schema.json", report);
   if (!check.ok) throw new Error(`invalid audit report: ${check.errors}`);
   sink.appendWith((events) => {
-    if (events.some((event) => event.type === "audit.completed" && event.payload.run_id === scope.run_id)) {
-      throw new Error(`an audit for run ${scope.run_id} is already recorded`);
-    }
-    return auditCompletedEvent(scope, report);
+    const recorded = events.some(
+      (e) => e.type === "audit.completed" && e.payload.run_id === scope.run_id && e.payload.round === scope.round,
+    );
+    if (recorded) throw new Error(`an audit for run ${scope.run_id} round ${scope.round} is already recorded`);
+    return auditCompletedEvent(scope, report, headSha);
   });
-  writeAuditFile(itemDir, scope.run_id, report);
+  writeAuditFile(itemDir, scope, report);
 }
 
-const SCOPE_KEYS: readonly string[] = ["goal_id", "work_id", "run_id"];
+const SCOPE_KEYS: readonly string[] = ["goal_id", "work_id", "run_id", "round"];
 
-function withoutScope(payload: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(payload).filter(([key]) => !SCOPE_KEYS.includes(key)));
+function without(payload: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(payload).filter(([key]) => !keys.includes(key)));
 }
 
 /**
- * The closed fields the ledger vouches for: the payload of the run's valid `audit.completed` events written by
- * `omf`. Events by another actor and events that fail the schema are not evidence. Two valid events that
- * disagree make the audit untrustworthy (null), so a second, differing event can never replace the first.
+ * What the ledger vouches for: the payload (minus ids and round, `head_sha` kept) of the valid `audit.completed`
+ * events of this run and round written by `omf`. Two valid events that disagree make the audit untrustworthy (null).
  */
-function authoritativePayload(events: readonly LedgerEvent[], scope: RunScope): Record<string, unknown> | null {
+function authoritativePayload(events: readonly LedgerEvent[], scope: RoundScope): Record<string, unknown> | null {
   let found: Record<string, unknown> | null = null;
   for (const event of events) {
     if (event.type !== "audit.completed" || event.actor !== "omf") continue;
-    if (
-      event.payload.run_id !== scope.run_id ||
-      event.payload.goal_id !== scope.goal_id ||
-      event.payload.work_id !== scope.work_id
-    )
-      continue;
-    if (!validate("gate-event.schema.json", { type: event.type, payload: event.payload }).ok) continue;
-    const fields = withoutScope(event.payload);
+    const p = event.payload;
+    if (p.run_id !== scope.run_id || p.goal_id !== scope.goal_id || p.work_id !== scope.work_id) continue;
+    if (p.round !== scope.round) continue;
+    if (!validate("gate-event.schema.json", { type: event.type, payload: p }).ok) continue;
+    const fields = without(p, SCOPE_KEYS);
     if (found !== null && canonicalize(found) !== canonicalize(fields)) return null;
     found = fields;
   }
   return found;
 }
 
-function readAuditFile(itemDir: string, runId: string): WorkAudit | null {
+/** The commit the round's audit looked at, from the ledger event alone; null without a valid audit event. */
+export function auditHeadSha(events: readonly LedgerEvent[], scope: RoundScope): string | null {
+  if (!isRound(scope.round)) return null;
+  const head = authoritativePayload(events, scope)?.head_sha;
+  return typeof head === "string" ? head : null;
+}
+
+function readAuditFile(itemDir: string, scope: RoundScope): WorkAudit | null {
   try {
-    const parsed: unknown = JSON.parse(readFileSync(auditPath(itemDir, runId), "utf8"));
+    const parsed: unknown = JSON.parse(readFileSync(auditPath(itemDir, scope.run_id, scope.round), "utf8"));
     return validate("work-audit.schema.json", parsed).ok ? (parsed as WorkAudit) : null;
   } catch {
     return null; // missing or unparseable: the view is gone, and the event stays the authority
@@ -220,22 +239,17 @@ function readAuditFile(itemDir: string, runId: string): WorkAudit | null {
 }
 
 /**
- * The run's audit, or null. `audit.json` is accepted only when every closed field equals the `audit.completed`
- * event (canary status and total, judge_config_touched, judge_files_checked, tests_edited_count, prove status and
- * reason, risk class and the rest of `auditPayloadOf`). GATE-3 reads the audit through this function or straight
- * from the event payload, never from the raw file. The path lists are not in the event, but their lengths are
- * pinned to the authenticated counts (`listsMatchCounts`), so a file cannot empty `high_risk_paths_touched` or
- * `tests_edited` while the count says otherwise; the names inside a list are display data and rendering escapes them.
+ * The round's audit, or null. The file is accepted only when every closed field equals the round's event
+ * (`auditPayloadOf`); the capped path lists are pinned to the authenticated counts (`listsMatchCounts`). GATE-3 reads the
+ * audit through this function, never from the raw file.
  */
-export function loadAudit(itemDir: string, scope: RunScope, events: readonly LedgerEvent[]): WorkAudit | null {
-  const runId = scope.run_id;
-  if (!RUN_ID_PATTERN.test(runId)) return null;
+export function loadAudit(itemDir: string, scope: RoundScope, events: readonly LedgerEvent[]): WorkAudit | null {
+  if (!RUN_ID_PATTERN.test(scope.run_id) || !isRound(scope.round)) return null;
   const authority = authoritativePayload(events, scope);
   if (authority === null) return null;
-  const report = readAuditFile(itemDir, runId);
-  if (report === null) return null;
-  if (!listsMatchCounts(report)) return null;
-  return canonicalize(auditPayloadOf(report)) === canonicalize(authority) ? report : null;
+  const report = readAuditFile(itemDir, scope);
+  if (report === null || !listsMatchCounts(report)) return null;
+  return canonicalize(auditPayloadOf(report)) === canonicalize(without(authority, ["head_sha"])) ? report : null;
 }
 
 /** The capped lists carry as many entries as the authenticated counts say (up to the cap). */
@@ -247,23 +261,20 @@ function listsMatchCounts(report: WorkAudit): boolean {
 }
 
 /**
- * Heals a crash between the event and the file. `rerun` repeats `runAudit` and returns null when its inputs (the
- * surfaces, the quarantine shas) no longer exist. The new report is written only when it equals the event on every
- * closed field. This function never appends: a second, differing `audit.completed` event for one run is not
- * possible, and a rerun that disagrees leaves the audit reading as absent (`not_run` downstream).
+ * Heals a crash between the event and the file. `rerun` repeats `runAudit` (null when its inputs are gone); the new report
+ * is written only when it equals the event on every closed field. Never appends.
  */
 export async function repairAudit(
   itemDir: string,
-  scope: RunScope,
+  scope: RoundScope,
   events: readonly LedgerEvent[],
   rerun: () => Promise<WorkAudit | null>,
 ): Promise<WorkAudit | null> {
-  const runId = scope.run_id;
-  if (!RUN_ID_PATTERN.test(runId)) return null;
+  if (!RUN_ID_PATTERN.test(scope.run_id) || !isRound(scope.round)) return null;
   const existing = loadAudit(itemDir, scope, events);
   if (existing !== null) return existing;
   const authority = authoritativePayload(events, scope);
-  if (authority === null) return null; // no event: nothing to repair, the caller records a fresh audit
+  if (authority === null) return null; // no event: nothing to repair
   let report: WorkAudit | null;
   try {
     report = await rerun();
@@ -271,8 +282,8 @@ export async function repairAudit(
     return null; // the inputs are gone
   }
   if (report === null || !validate("work-audit.schema.json", report).ok || !listsMatchCounts(report)) return null;
-  if (canonicalize(auditPayloadOf(report)) !== canonicalize(authority)) return null;
-  writeAuditFile(itemDir, runId, report);
+  if (canonicalize(auditPayloadOf(report)) !== canonicalize(without(authority, ["head_sha"]))) return null;
+  writeAuditFile(itemDir, scope, report);
   return report;
 }
 

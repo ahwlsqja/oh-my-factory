@@ -47,7 +47,7 @@ export function harnessSources(options: { harnessDir?: string; matcherFile?: str
 
 /**
  * SHA-256 over the base reference and every file of the context, each framed by its name and length so no two inputs
- * share a byte stream. It is the second half of judge config (M3e-D23): the harness a verdict came from is named by it.
+ * share a byte stream. It is the second half of judge config: the harness a verdict came from is named by it.
  */
 export function harnessContextSha256(sources: HarnessSources, base: PinnedImage): string {
   const hash = createHash("sha256");

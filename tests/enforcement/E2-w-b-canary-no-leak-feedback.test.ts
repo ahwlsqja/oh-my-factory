@@ -3,18 +3,27 @@ import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { declareBudget } from "../../src/core/budget.js";
 import { Ledger } from "../../src/core/ledger.js";
+import { foldDecisions } from "../../src/decision/state.js";
 import { DECISION_CLASSES } from "../../src/decision/types.js";
 import { isAllowlistedFeedback } from "../../src/feedback/render.js";
 import { releaseFeedback } from "../../src/feedback/release.js";
 import { parseScenarioResults } from "../../src/feedback/tally.js";
 import { FeedbackError } from "../../src/feedback/types.js";
+import { harnessSetOf, toScenarioResults } from "../../src/judge/results.js";
+import type { RoundScenario, ScenarioTally } from "../../src/judge/round.js";
+import { type StoredScenario, scenarioRef } from "../../src/scenario/types.js";
+import { SCOPE, addedEvent, eventsOf } from "../helpers/decision.js";
 import { ledgerEvents, reconcileInputs, reconcileTexts } from "../helpers/enforcement-goal.js";
 import {
+  FAKE_DECISION_CLASS,
   FB_CANARY_LABELS,
+  type FakeVaultScenario,
+  type FakeVerdict,
   LINKABLE_REFS,
   containsToken,
   digestOf,
   fbCanaryHits,
+  makeSet,
   mulberry32,
   pick,
   plantedOf,
@@ -24,12 +33,13 @@ import {
   verdictsFor,
 } from "../helpers/feedback-canary.js";
 import { type FeedbackPipelineRun, HOST_FILE_NAME, runFeedbackPipeline } from "../helpers/feedback-pipeline.js";
+import { storedScenario } from "../helpers/stored-scenario.js";
 import { makeTempDir } from "../helpers/tmp.js";
 import { joinTree, readTree } from "../helpers/tree.js";
 
 // Spec §5.7, §4.6 F6: the implementer, the goal loop and the evidence files get percentages, counts and class
-// names, never a scenario's id, input, expected output or assertion. PARTIAL: the scenario-to-ScenarioResult
-// mapper here is test-local (tests/helpers/feedback-canary.ts). The real mapper is the M3f judge station.
+// names, never a scenario's id, input, expected output or assertion. The pipeline and the first loop use a
+// test-local mapper (tests/helpers/feedback-canary.ts); the last block re-runs the canaries through the real judge mapper.
 
 /** Fails with the surface's name and the canaries found in it, so a leak says where it went. */
 function expectNoFbCanary(surfaces: Record<string, string>): void {
@@ -46,7 +56,7 @@ function thrown(fn: () => unknown): FeedbackError {
   throw new Error("expected the call to throw");
 }
 
-describe("E2-W-b canary-no-leak, feedback side (partial: test-local mapper)", () => {
+describe("E2-W-b canary-no-leak, feedback side", () => {
   describe("the closed input", () => {
     const scenario = plantedScenario(mulberry32(1), 0, ["d-interface"]);
 
@@ -227,7 +237,120 @@ describe("E2-W-b canary-no-leak, feedback side (partial: test-local mapper)", ()
     }, 120_000);
   });
 
-  it.todo(
-    "M3f: re-run this canary set from vault scenarios through the real judge-station mapper, which must drop the ids",
-  );
+  describe("through the real judge mapper (harnessSetOf and toScenarioResults)", () => {
+    const STATE = foldDecisions(
+      eventsOf(...[...FAKE_DECISION_CLASS].map(([id, cls]) => addedEvent(id, { class: cls }))),
+      SCOPE,
+    );
+
+    function storedOf(fake: FakeVaultScenario, index: number): StoredScenario {
+      return storedScenario(index + 1, {
+        scenario_id: fake.scenario_id,
+        split: fake.split,
+        decision_refs: [...fake.decision_refs],
+        steps: [
+          {
+            invoke: { argv: fake.step.argv, stdin: fake.step.stdin },
+            expect: {
+              exit_code: 0,
+              stdout_matches: { kind: "exact", text: fake.step.expect_stdout },
+              json_path: null,
+              note: fake.step.note,
+            },
+          },
+        ],
+      });
+    }
+
+    /** What a judge round tallies for one scenario: an outcome per repetition, then the verdict rule of runJudgeRound. */
+    function tallyOf(round: RoundScenario, reps: readonly boolean[]): ScenarioTally {
+      const passes = reps.filter(Boolean).length;
+      return {
+        scenario_ref: round.scenario_ref,
+        category: round.category,
+        kind: round.kind,
+        outcomes: reps.map((rep) => (rep ? "pass" : "fail")),
+        verdict: passes === reps.length ? "pass" : passes === 0 ? "fail" : "flaky",
+      };
+    }
+
+    function throughJudge(scenarios: readonly FakeVaultScenario[], verdicts: readonly FakeVerdict[]) {
+      const stored = scenarios.map(storedOf);
+      const rounds = harnessSetOf(stored, STATE);
+      const byRef = new Map(rounds.map((round) => [round.scenario_ref, round]));
+      const tallies = scenarios.map((scenario, index) => {
+        const round = byRef.get(scenarioRef(scenario.scenario_id));
+        const verdict = verdicts[index];
+        if (round === undefined || verdict === undefined) throw new Error("the judge set lost a scenario");
+        return tallyOf(round, verdict.reps);
+      });
+      return { stored, sets: rounds.map((round) => round.set), tallies, results: toScenarioResults(tallies) };
+    }
+
+    function release(scenarios: readonly FakeVaultScenario[], results: ReturnType<typeof toScenarioResults>) {
+      const ledger = new Ledger(makeTempDir("omf-fb-real-"));
+      declareBudget(ledger, "g-real", "disclosure", 3, "human:dev");
+      const released = releaseFeedback(ledger, {
+        goalId: "g-real",
+        workId: SCOPE.work_id,
+        runId: "r-20261015T100000Z-0001",
+        trainDigest: digestOf(scenarios.map((s) => s.scenario_id)),
+        results,
+      });
+      if (released.status !== "released") throw new Error(`withheld (${released.reason})`);
+      return { text: released.feedback.text, ledgerText: readFileSync(ledger.file, "utf8") };
+    }
+
+    it("drops the ids and the fixed canaries: tallies, rows, feedback and ledger hold none, and the rows equal the test-local mapper's", () => {
+      const scenarios = makeSet(mulberry32(7731), [
+        { refs: ["d-interface"], count: 6 },
+        { refs: ["d-interface", "d-errors"], count: 6 },
+      ]);
+      const verdicts = verdictsFor(scenarios, new Set([0, 1, 6]), new Set([5]));
+      const { stored, sets, tallies, results } = throughJudge(scenarios, verdicts);
+      expect(fbCanaryHits(JSON.stringify(stored)), "positive control: the vault objects hold them").toEqual(
+        FB_CANARY_LABELS,
+      );
+      expect(results).toEqual(toResults(scenarios, verdicts));
+      expect(parseScenarioResults(results)).toEqual(results);
+      const { text, ledgerText } = release(scenarios, results);
+      expectNoFbCanary({
+        "judge tallies": JSON.stringify(tallies),
+        "result rows": JSON.stringify(results),
+        "rendered feedback": text,
+        "ledger file": ledgerText,
+      });
+      // The harness set holds what the harness needs to judge a step (argv, stdin, expected output) and none of the handles.
+      const setText = JSON.stringify(sets);
+      for (const scenario of scenarios) {
+        expect(containsToken(setText, scenario.scenario_id), "scenario id in the harness set").toBe(false);
+        expect(containsToken(setText, scenario.step.note), "assertion note in the harness set").toBe(false);
+      }
+      expect(setText).not.toMatch(/decision_refs|d-interface|d-errors|canary|author/);
+    });
+
+    it("maps 40 seeded random sets to the test-local rows and releases only allowed text", () => {
+      const random = mulberry32(20261015);
+      for (let i = 0; i < 40; i += 1) {
+        const scenarios = Array.from({ length: 5 + Math.floor(random() * 36) }, (_, index) =>
+          plantedScenario(random, index, pick(random, LINKABLE_REFS)),
+        );
+        const verdicts = randomVerdicts(random, scenarios);
+        const { sets, tallies, results } = throughJudge(scenarios, verdicts);
+        expect(results, `iteration ${i}`).toEqual(toResults(scenarios, verdicts));
+        const { text, ledgerText } = release(scenarios, results);
+        expect(isAllowlistedFeedback(text), `iteration ${i}`).toBe(true);
+        const surfaces = [JSON.stringify(tallies), JSON.stringify(results), text, ledgerText].join("\n");
+        expect(
+          scenarios.flatMap(plantedOf).filter((value) => containsToken(surfaces, value)),
+          `iteration ${i}: planted values`,
+        ).toEqual([]);
+        const setText = JSON.stringify(sets);
+        expect(
+          scenarios.filter((s) => containsToken(setText, s.scenario_id) || containsToken(setText, s.step.note)),
+          `iteration ${i}: ids or notes in the harness set`,
+        ).toEqual([]);
+      }
+    }, 120_000);
+  });
 });

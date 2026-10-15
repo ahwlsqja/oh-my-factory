@@ -119,6 +119,12 @@ export interface LineOptions {
   now?: () => Date;
   newRunId?: ((at: Date) => string) | undefined;
   store?: StateStore;
+  /**
+   * Called once when the line ends, finished or aborted, while the claim is still held (M3f). A station that owns a
+   * resource past its own run (the judge's per-round image) lets go of it here. A throw is ignored: cleanup never
+   * changes what the line returns, and what it leaves behind is swept by the next run that judges.
+   */
+  onLineEnd?: () => void | Promise<void>;
 }
 
 export type LineResult =
@@ -744,6 +750,11 @@ export async function runLine(options: LineOptions): Promise<LineResult> {
       at: line?.at ?? "S1",
     };
   } finally {
+    try {
+      await options.onLineEnd?.();
+    } catch {
+      // See LineOptions.onLineEnd: the message is dropped and the result stays what the line decided.
+    }
     run.abandon();
   }
 }

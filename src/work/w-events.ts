@@ -68,6 +68,10 @@ export const W_REASON_CODES = [
   "test_reseal_required",
   "noise_unverified",
   "scenarios_exhausted",
+  // The declared gates failed (a RED gate line): a result about the candidate, reviewed at J4.
+  "gates_failed",
+  // Feedback needs a disclosure budget that is not declared or is used up: a person declares or raises it (J8).
+  "disclosure_unavailable",
 ] as const;
 export type ReasonCode = (typeof W_REASON_CODES)[number];
 

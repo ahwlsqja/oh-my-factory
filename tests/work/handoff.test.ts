@@ -76,6 +76,7 @@ const ALLOWED_OPTIONS: readonly RegExp[] = [
   /^omf veto w-[0-9a-f]{12}$/,
   /^omf budget raise w-[0-9a-f]{12} --rounds <n>$/,
   /^omf budget raise w-[0-9a-f]{12} --usd <amount>$/,
+  /^omf budget (declare|raise) g-[a-z0-9]+(-[a-z0-9]+)* disclosure <n>$/,
   /^after M3h: omf run w-[0-9a-f]{12}$/,
 ];
 
@@ -110,12 +111,14 @@ describe("HANDOFF_ROUTES", () => {
       test_reseal_required: "J3",
       noise_unverified: "J4",
       scenarios_exhausted: "J3",
+      gates_failed: "J4",
+      disclosure_unavailable: "J8",
     });
   });
 
   it("offers only commands from the closed allowlist, and only the work id varies", () => {
     for (const code of W_REASON_CODES) {
-      const options = HANDOFF_ROUTES[code].options(WORK);
+      const options = HANDOFF_ROUTES[code].options(WORK, GOAL);
       expect(options.length, code).toBeGreaterThan(0);
       expect(new Set(options).size, code).toBe(options.length);
       for (const option of options) {
@@ -125,14 +128,16 @@ describe("HANDOFF_ROUTES", () => {
         ).toBe(true);
       }
       const other = "w-aaaaaaaaaaaa";
-      expect(HANDOFF_ROUTES[code].options(other).join("\n").replaceAll(other, "ID"), code).toBe(
-        options.join("\n").replaceAll(WORK, "ID"),
-      );
+      const otherGoal = "g-other";
+      expect(
+        HANDOFF_ROUTES[code].options(other, otherGoal).join("\n").replaceAll(other, "ID").replaceAll(otherGoal, "GOAL"),
+        code,
+      ).toBe(options.join("\n").replaceAll(WORK, "ID").replaceAll(GOAL, "GOAL"));
     }
   });
 
   it("offers scenarios_need_review no rerun, because a rerun reuses the standing seal and stops again", () => {
-    const options = HANDOFF_ROUTES.scenarios_need_review.options(WORK);
+    const options = HANDOFF_ROUTES.scenarios_need_review.options(WORK, GOAL);
     expect(options).toEqual([`omf work show ${WORK}`, `omf veto ${WORK}`]);
     expect(options.join("\n")).not.toContain(" run ");
   });
@@ -144,7 +149,7 @@ describe("HANDOFF_ROUTES", () => {
       "test_reseal_required",
       "test_run_incomplete",
     ] as const) {
-      const options = HANDOFF_ROUTES[code].options(WORK);
+      const options = HANDOFF_ROUTES[code].options(WORK, GOAL);
       expect(options, code).toEqual([`omf work show ${WORK}`, `omf veto ${WORK}`]);
       expect(options.join("\n"), code).not.toContain(" run ");
     }
@@ -152,7 +157,7 @@ describe("HANDOFF_ROUTES", () => {
 
   it("names a command that runs the line again only with the 'after M3h' prefix", () => {
     for (const code of W_REASON_CODES) {
-      for (const option of HANDOFF_ROUTES[code].options(WORK)) {
+      for (const option of HANDOFF_ROUTES[code].options(WORK, GOAL)) {
         if (option.includes(" run ")) expect(option.startsWith("after M3h: omf run "), `${code}: ${option}`).toBe(true);
       }
     }
@@ -167,7 +172,7 @@ describe("buildHandoff", () => {
         expect(validate("handoff.schema.json", record), `${outcome}/${code}`).toEqual({ ok: true });
         expect(record.decision_required.j).toBe(HANDOFF_ROUTES[code].j);
         expect(record.decision_required.question).toBe(HANDOFF_ROUTES[code].question);
-        expect(record.decision_required.options).toEqual(HANDOFF_ROUTES[code].options(WORK));
+        expect(record.decision_required.options).toEqual(HANDOFF_ROUTES[code].options(WORK, GOAL));
         expect(record).toMatchObject({
           schema_version: 1,
           kind: "outcome",

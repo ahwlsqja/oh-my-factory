@@ -6,6 +6,8 @@ import { runGates } from "../../src/gate/run-gates.js";
 import type { CommandTarget } from "../../src/gate/ports.js";
 import { type Gate3Parts, evaluateGate3, measuredFrom } from "../../src/gate/gate3.js";
 import { cleanAudit, healthyParts } from "../helpers/gate3-parts.js";
+import { gate3Gate } from "../../src/gate/gate3-gate.js";
+import { setupGate3 } from "../helpers/gate3-line.js";
 
 // E7c (spec §5.0, E7): a missing gate, a missing gate line, a gate with zero rules, a never-produced audit, gate run
 // or isolation measurement, and a never-run prove-test are failures or "unverified". None of them reads as a pass.
@@ -151,5 +153,22 @@ describe("E7c: a prove-test that never ran is unverified", () => {
       canary: { ...cleanAudit().canary, status: "not_run", surfaces_scanned: [] },
     });
     expect([...auditSignals(audit).unverified].sort()).toEqual(["canary_not_scanned", "prove_test_not_run"]);
+  });
+});
+
+describe("E7c: the registered GATE-3", () => {
+  it("fails on every measurement nobody recorded, and never passes on an empty ledger", async () => {
+    const result = await gate3Gate().evaluate(setupGate3().ctx());
+    expect(result).toEqual({
+      gate: "GATE-3",
+      verdict: "fail",
+      reasons: [
+        "canary_not_scanned",
+        "judge_config_not_checked",
+        "contradiction_canary_not_run",
+        "gate_line_not_run",
+        "isolation_unmeasured",
+      ],
+    });
   });
 });

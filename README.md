@@ -109,15 +109,16 @@ or **designed** and not built yet.
   out a work item is next.
 - **Holdout, not homework.** *Designed.* Acceptance scenarios are sealed, written by the other
   vendor, and never shown to the implementer.
-- **Isolation is measured, not declared.** *Partly built.* The per-stage measurement types, the stage
-  evaluator and GATE-3 exist and are tested without a container. The line does not call GATE-3 yet: it
-  still reads as a placeholder, so until the container stations are wired in, every full run stops at GATE-3 as
-  not run. A level measured on a real container is not enforced yet; `omf doctor` reports it as advisory: without a
-  `[judge]` section it says `unmeasurable` ("judge.docker_context is not set, so no container runtime is used"), and
-  with one it measures a throwaway container and reports L2 or L1 (`docs/isolation-and-gates.md`).
+- **Isolation is measured, not declared.** *Partly built.* The judge runs a candidate in two disposable containers (a
+  system under test and a harness; no network, no `docker.sock`, no mounted path; the harness holds the scenarios,
+  loaded over stdin, and the SUT never sees an expectation) and measures each with
+  `docker inspect` before candidate code runs in it. GATE-3 reads those measurements from the ledger. Only the offline
+  form against a fake Docker is tested: a level measured on a real container is not enforced until a gated run is
+  recorded in `docs/evidence/gated-runs.json`, and the implementer and author containers do not exist yet, so a real
+  line still stops at GATE-3 as `isolation_unmeasured` ([`docs/container-judge.md`](docs/container-judge.md)).
 - **Empty means fail.** *Partly built.* The line skeleton (`E7a`), GATE-2 (`E7b`) and the gate line, the
   audit and GATE-3 (`E7c`) read a missing measurement as a failure, never as a pass. The judge's verdict
-  file arrives with the container runner.
+  (`E7d`) is the same: a missing, malformed or foreign verdict ends the round and is never a pass.
 - **No auto-merge, no auto-deploy.** *Designed.* Candidates live on local `omf/*` branches until a
   person ships them.
 
@@ -126,7 +127,7 @@ or **designed** and not built yet.
 | Command | What it does |
 |---|---|
 | `omf init` | Creates host state for the current repository under `~/.omf`. Writes nothing to the repository or to the agent CLIs' configuration. |
-| `omf doctor [--json] [--strict]` | Checks git, Docker, Claude Code and Codex, the repository and the ledger, and writes `preflight.json`. Runs the agent CLIs with a throwaway home. A missing or unreachable Docker, or a missing agent CLI, is a warning that names the stage that needs it; every problem and warning has a one-line fix. `--strict` turns the missing-tool warnings into problems; a torn ledger tail stays a warning. |
+| `omf doctor [--json] [--strict]` | Checks git, Docker, Claude Code and Codex, the repository and the ledger, and writes `preflight.json`. Runs the agent CLIs with a throwaway home. A missing or unreachable Docker, or a missing agent CLI, is a warning that names the stage that needs it; every problem and warning has a one-line fix. `--strict` turns the missing-tool warnings into problems; a torn ledger tail stays a warning. It also reports an advisory isolation probe (a throwaway container) when `[judge]` names an image and a Docker context, otherwise `unmeasurable` with the reason. |
 | `omf ledger verify [--json]` | Checks the ledger's hash chain. On a corrupt ledger, stderr line 2 gives the path, the line and the next step; `--json` gives the same as fields. With `--json` every error is `{ "ok": false, "error": { "code": "...", "message": "..." } }` (codes: `not_initialized`, `ledger_corrupt`, `not_a_git_repository`, `git_not_found`, `unsupported_repository`, `symlink_refused`, `cannot_run`); keys are snake_case. Exit 2 before `omf init`. |
 | `omf goal new <id>` | Creates `goal.md` in host state from a template. |
 | `omf metric propose <id> --unit <u> -- <command>` | Proposes a metric: the command that prints its value, the unit, and the paths whose change is a regime change. |
@@ -155,7 +156,9 @@ Exit codes: `0` ok, `1` needs attention (problems found, a declined confirmation
 
 Sealed scenarios and GATE-2 exist as library code only, with no command yet. After GATE-1 passes, an author session writes scenarios, OMF stamps them and stores them in a vault outside the repository (`vault/scenarios/<work-id>/<seal-id>/`), and GATE-2 refuses a set that is empty, lacks a split, passes against a program that does nothing, has no contradiction canary (`canary_missing`), or leaves a resolved decision unlinked. Today the author is a stub process on the host, so the author stage is reported as unmeasured and sealing is not enforced. See [`docs/m3c-spec-deviations.md`](docs/m3c-spec-deviations.md).
 
-Not built yet: the container runner and judge, evidence reports, `omf ship`, goal sign-off (`omf goal sign`) and asking people for input in the middle of a run. The
+The judge stations exist as library code only, with no command yet. S4 judges the stored train split and the contradiction canaries in two disposable containers, k times; S5 runs the gates and prove-test in a container work copy and audits; S6 spends the test split once. Everything is tested offline against a fake Docker, and a real-container run is gated and not enforced until it is recorded. See [`docs/container-judge.md`](docs/container-judge.md).
+
+Not built yet: the implementer and author containers, the command that runs the line (`omf run`), evidence reports, `omf ship`, goal sign-off (`omf goal sign`) and asking people for input in the middle of a run. The
 [design](docs/design/2026-10-12-omf-v0-design.md) describes all of them.
 
 ## Quick start

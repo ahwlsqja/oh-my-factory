@@ -1,8 +1,11 @@
-import type { WorkAudit } from "../audit/work-audit.js";
-import type { NewEvent } from "../core/ledger.js";
+import type { RoundScope, WorkAudit } from "../audit/work-audit.js";
+import { canonicalize } from "../core/canonical-json.js";
+import type { LedgerEvent, NewEvent } from "../core/ledger.js";
 import { validate } from "../core/schema.js";
+import type { GateName } from "../decision/types.js";
 import type { StageMeasurement } from "../isolation/types.js";
 import type { RiskClass, RiskRule } from "../work/types.js";
+import type { GateLineVerdict } from "./gate-line.js";
 import type { ProveReason, ProveStatus } from "./prove-test.js";
 import type { GateRunResult } from "./run-gates.js";
 import type { Gate3Result } from "./gate3.js";
@@ -14,15 +17,16 @@ interface EventScope {
   run_id: string;
 }
 
-/**
- * The `gates.evaluated` event as OMF appends it (actor `omf`). The payload is the line OMF composed plus the closed
- * verdict fields: no command output, path or gate name outside the closed list can enter. It is checked against the
- * schema first, so an invalid line fails here, at the writer, instead of becoming a ledger event.
- */
-export function gatesEvaluatedEvent(scope: EventScope, result: GateRunResult): NewEvent {
+/** The four ids every round-scoped event carries; picking them keeps a wider caller object out of a payload. */
+function roundIds(scope: RoundScope): { goal_id: string; work_id: string; run_id: string; round: number } {
+  return { goal_id: scope.goal_id, work_id: scope.work_id, run_id: scope.run_id, round: scope.round };
+}
+
+/** `gates.evaluated` (actor `omf`), one per gate run of a round: the composed line plus closed verdict fields. */
+export function gatesEvaluatedEvent(scope: RoundScope, result: Pick<GateRunResult, "line" | "verdict">): NewEvent {
   const { verdict } = result;
   const payload: Record<string, unknown> = {
-    ...scope,
+    ...roundIds(scope),
     line: result.line,
     status: verdict.status,
     failing: [...verdict.failing],
@@ -82,9 +86,9 @@ export function auditPayloadOf(report: WorkAudit): AuditPayload {
   };
 }
 
-/** The `audit.completed` event as OMF appends it. The payload is checked against the schema first, like `wEvent`. */
-export function auditCompletedEvent(scope: EventScope, report: WorkAudit): NewEvent {
-  const payload: Record<string, unknown> = { ...scope, ...auditPayloadOf(report) };
+/** `audit.completed` (actor `omf`); `headSha` is the commit the audit looked at. Checked against the schema first. */
+export function auditCompletedEvent(scope: RoundScope, report: WorkAudit, headSha: string): NewEvent {
+  const payload: Record<string, unknown> = { ...roundIds(scope), head_sha: headSha, ...auditPayloadOf(report) };
   const check = validate("gate-event.schema.json", { type: "audit.completed", payload });
   if (!check.ok) throw new Error(`invalid audit.completed event: ${check.errors}`);
   return { actor: "omf", type: "audit.completed", payload };
@@ -123,19 +127,10 @@ export function isolationMeasuredEvent(
   return { actor: "omf", type: "isolation.measured", payload };
 }
 
-/**
- * The `gate3.evaluated` event as OMF appends it (actor `omf`). The payload is checked against the
- * schema first, which ties `passed` to `failed` and `route`: `passed` true goes with an empty `failed` and route
- * `none`; `passed` false goes with at least one condition and route `J6` or `J7`. The schema does not check that the
- * route matches the kind of condition. A result that breaks these ties fails here, at the writer, instead of becoming
- * a ledger event.
- */
-export function gate3EvaluatedEvent(
-  scope: { goal_id: string; work_id: string; run_id: string },
-  result: Gate3Result,
-): NewEvent {
+/** `gate3.evaluated` (actor `omf`); the schema ties `passed` to `failed` and `route`, so a contradicting result fails here. */
+export function gate3EvaluatedEvent(scope: RoundScope, result: Gate3Result): NewEvent {
   const payload: Record<string, unknown> = {
-    ...scope,
+    ...roundIds(scope),
     passed: result.passed,
     failed: [...result.failed],
     route: result.route,
@@ -143,4 +138,39 @@ export function gate3EvaluatedEvent(
   const check = validate("gate-event.schema.json", { type: "gate3.evaluated", payload });
   if (!check.ok) throw new Error(`invalid gate3.evaluated event: ${check.errors}`);
   return { actor: "omf", type: "gate3.evaluated", payload };
+}
+
+interface GatesEvaluatedPayload {
+  line: string;
+  status: GateLineVerdict["status"];
+  failing: GateName[];
+  misconfigured: GateName[];
+  reasons: GateLineVerdict["reasons"];
+}
+
+/**
+ * The gate verdict of one round from the ledger alone: the schema-valid `gates.evaluated` events of actor `omf` for this
+ * run and round. None is null (GATE-3 reads no gate run); two that disagree are null too, so a later event never replaces
+ * the first.
+ */
+export function gatesVerdictFromEvents(
+  events: readonly LedgerEvent[],
+  scope: RoundScope,
+): Pick<GateRunResult, "verdict"> | null {
+  let found: Record<string, unknown> | null = null;
+  for (const event of events) {
+    if (event.type !== "gates.evaluated" || event.actor !== "omf") continue;
+    const p = event.payload;
+    if (p.goal_id !== scope.goal_id || p.work_id !== scope.work_id) continue;
+    if (p.run_id !== scope.run_id || p.round !== scope.round) continue;
+    if (!validate("gate-event.schema.json", { type: event.type, payload: p }).ok) continue;
+    if (found !== null && canonicalize(found) !== canonicalize(p)) return null;
+    found = p;
+  }
+  if (found === null) return null;
+  const payload = found as unknown as GatesEvaluatedPayload;
+  const { status, line } = payload;
+  const failing = [...payload.failing];
+  const misconfigured = [...payload.misconfigured];
+  return { verdict: { status, line, failing, misconfigured, reasons: [...payload.reasons] } };
 }

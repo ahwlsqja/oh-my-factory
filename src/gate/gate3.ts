@@ -16,7 +16,7 @@ import type { GateRunResult } from "./run-gates.js";
  */
 
 export type CanaryState = "clean" | "hit" | "not_run";
-/** `unchanged` means the file half only, until M3f adds the harness image digest to this slot. */
+/** `unchanged` is the file half; the registered GATE-3 adds the harness-image half (`imageCheck`) before it trusts the value. */
 export type JudgeConfigState = "unchanged" | "changed" | "not_run";
 /** "failing" is the healthy state: the judge rejects the contradiction. */
 export type ContradictionCanaryState = "failing" | "passing" | "not_run";
@@ -96,7 +96,7 @@ export function evaluateGate3(measured: Measured): Gate3Result {
 export interface Gate3Parts {
   /** From `loadAudit` (checked against the ledger event), never from the raw audit.json. */
   audit: WorkAudit | null;
-  gates: GateRunResult | null;
+  gates: Pick<GateRunResult, "verdict"> | null;
   /** From `contradictionState`, never from GATE-2. */
   contradiction: ContradictionCanaryState | null;
   /** From `loadRunIsolation` (the ledger is the authority), never from preflight.json. */

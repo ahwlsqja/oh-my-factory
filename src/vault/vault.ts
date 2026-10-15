@@ -1,6 +1,7 @@
 import { chmodSync, lstatSync, mkdirSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parse, stringify } from "yaml";
+import type { CanaryIndexEntry } from "../audit/attribute.js";
 import { canonicalize, sha256Hex } from "../core/canonical-json.js";
 import type { ProjectLocation } from "../core/paths.js";
 import {
@@ -15,7 +16,7 @@ import {
 import { validateDef } from "../core/schema.js";
 import { SEAL_ID_PATTERN } from "../scenario/events.js";
 import type { SealRecord } from "../scenario/events.js";
-import { MAX_SCENARIO_BYTES, MAX_SCENARIOS_PER_SET, scenarioRef } from "../scenario/types.js";
+import { CANARY_PATTERN, MAX_SCENARIO_BYTES, MAX_SCENARIOS_PER_SET, scenarioRef } from "../scenario/types.js";
 import type { ScenarioSplit, ScenarioStatus, StoredScenario } from "../scenario/types.js";
 
 /**
@@ -243,4 +244,39 @@ export function listVaultCanaries(
     for (const scenario of read.scenarios) canaries.add(scenario.canary);
   }
   return { canaries: [...canaries].sort(), unverified };
+}
+
+/**
+ * The canary-to-scenario index the audit needs to mark a contaminated scenario. Same trust rule as `listVaultCanaries`: only a
+ * set that reads cleanly and whose digest equals its `seal.completed` contributes index entries. A set that reads but does not
+ * verify is listed in `unverified`, and its canary-shaped strings come back in `unverified_canaries` so the scan can still look
+ * for them; they never name a scenario, because a hand-edited file must not decide which scenario gets marked.
+ */
+export function listVaultCanaryIndex(
+  vault: Vault,
+  workId: string,
+  seals: readonly SealRecord[],
+): { index: CanaryIndexEntry[]; unverified: string[]; unverified_canaries: string[] } {
+  const index: CanaryIndexEntry[] = [];
+  const unverified: string[] = [];
+  const loose = new Set<string>();
+  for (const seal of seals) {
+    const read = readScenarioSet(vault, { work_id: workId, seal_id: seal.seal_id });
+    if (!read.ok || read.set_sha256 !== seal.set_sha256) {
+      unverified.push(seal.seal_id);
+      if (read.ok)
+        for (const scenario of read.scenarios) if (CANARY_PATTERN.test(scenario.canary)) loose.add(scenario.canary);
+      continue;
+    }
+    for (const scenario of read.scenarios) {
+      index.push({
+        canary: scenario.canary,
+        scenario_ref: scenarioRef(scenario.scenario_id),
+        seal_id: seal.seal_id,
+        scenario_id: scenario.scenario_id,
+      });
+    }
+  }
+  index.sort((a, b) => (a.canary < b.canary ? -1 : a.canary > b.canary ? 1 : 0));
+  return { index, unverified, unverified_canaries: [...loose].sort() };
 }

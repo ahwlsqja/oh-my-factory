@@ -2,8 +2,8 @@
 
 What the integrity line of the verification loop is, what it proves and what it does not. Everything here runs
 offline: no container and no model, and no module under `src/` runs candidate code on the host. A command a gate
-or a prove-test runs goes through a `CommandTarget`; the tests supply a fixture target, and M3f supplies the
-container.
+or a prove-test runs goes through a `CommandTarget`; the tests supply a fixture target, and the container
+judge (`docs/container-judge.md`) supplies a container-backed one.
 
 ## What exists
 
@@ -15,6 +15,7 @@ container.
 | Audit | `src/audit/work-audit.ts` | Tests edited, judge config touched, `spec.md` or `intent.md` diffs, canary hits on implementer-side surfaces, and a risk recompute that can only raise. |
 | Isolation types | `src/isolation/types.ts` | Per stage (`author`, `implementer`, `sut`, `harness`) measurements. The stage level is the minimum over its measurements and the run level is the minimum over the stages, with `unmeasured` lowest. |
 | GATE-3 | `src/gate/gate3.ts` | A pure function over what was measured. |
+| GATE-3 adapter | `src/gate/gate3-gate.ts` | Registered in `defaultGates()`. Reads the round's gate run, audit, judge and isolation events from the ledger and the item directory, nothing else. |
 
 ## GATE-3
 
@@ -40,13 +41,13 @@ The tests are `tests/enforcement/E7c-empty-means-fail.test.ts` and `tests/enforc
 ## `omf doctor` is advisory
 
 `omf doctor` always runs its container probe and marks the result `advisory`. Without a `[judge]` section (no `judge.docker_context`) it reports `unmeasurable` with the note "judge.docker_context is not set, so no container runtime is used"; it also reports `unmeasurable` when the daemon is unreachable, the endpoint is not a local socket or the base image is not already local. Otherwise it measures one throwaway golden container and reports L2 or L1. GATE-3 never reads `preflight.json`.
-The level of a run comes only from `isolation.measured` events in the ledger; `isolation.json` and `audit.json` in
+The level of a run comes only from `isolation.measured` events in the ledger; `isolation.json` and `audit-<round>.json` in
 a run directory are views of those events.
 
 ## Not enforced
 
-- A level measured on a real container is not enforced until the container runner and its gated run (M3f to M3h). The `docker inspect` parser and the stage evaluator are tested against fixtures only.
-- The author stage, the golden values of the implementer, the SUT and the harness stage, and the harness image digest are not enforced until M3f to M3h.
+- A level measured on a real container is not enforced until a gated run is recorded in `docs/evidence/gated-runs.json`. The `docker inspect` parser is tested against recorded real output and the stage evaluator against fixtures; a fake Docker stands in everywhere else.
+- The author and implementer stages are not enforced until M3g and M3h; the golden values of the SUT and harness stages and the harness image digest are not enforced until their gated runs are recorded.
 - A scenario set that is sealed against the implementer is not enforced by this page; see the design spec.
 
 ## Known limits
@@ -61,7 +62,7 @@ a run directory are views of those events.
 ## Re-check against merged code
 
 The skeleton listed what M3e depends on in milestones that were not merged when it was planned. Each row was run
-against merged code before this task was committed.
+against merged code before this task was committed. R9 describes M3e as merged: since M3f `defaultGates()` registers `gate3Gate()` (`src/gate/gate3-gate.ts`).
 
 | ID | What was checked | Check | Result |
 |---|---|---|---|

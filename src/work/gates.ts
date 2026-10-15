@@ -2,6 +2,7 @@ import type { LedgerEvent } from "../core/ledger.js";
 import type { ProjectLocation } from "../core/paths.js";
 import { gate1ForItem } from "../decision/gate1-item.js";
 import { syncNeedsHuman } from "../decision/needs-human.js";
+import { gate3Gate } from "../gate/gate3-gate.js";
 import { gate2Gate } from "../scenario/gate2-gate.js";
 import type { EvidenceInputs } from "./classify.js";
 import { GATE_IDS, type GateId, ROUND_SCOPED_GATES } from "./line-types.js";
@@ -145,14 +146,14 @@ export function gate1(): Gate {
   };
 }
 
-/** GATE-3 until M3f registers it: always not_run, so a default full run fails closed. */
+/** A placeholder for a gate with no implementation: always not_run, so a line that uses it fails closed. */
 export function unimplementedGate(id: "GATE-2" | "GATE-3"): Gate {
   return { id, evaluate: () => ({ gate: id, verdict: "not_run", reasons: ["not_implemented"] }) };
 }
 
 /** A fresh set on every call; the sequencer calls it once and compares the merged set against that same object. */
 export function defaultGates(): Record<Exclude<GateId, "GATE-4">, Gate> {
-  return { "GATE-1": gate1(), "GATE-2": gate2Gate(), "GATE-3": unimplementedGate("GATE-3") };
+  return { "GATE-1": gate1(), "GATE-2": gate2Gate(), "GATE-3": gate3Gate() };
 }
 
 /** The gates that did not come from `defaults`, in line order; evidence lists them and a success is capped at human_needed (M3b2-D20). */
