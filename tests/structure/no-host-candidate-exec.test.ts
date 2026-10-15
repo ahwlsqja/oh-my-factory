@@ -5,8 +5,11 @@ import { describe, expect, it } from "vitest";
 
 const SRC = fileURLToPath(new URL("../../src/", import.meta.url));
 
-/** Kept for a future named exception; M3c's fixture runner is a ScenarioRunner and needs no entry (cross-plan X-24). */
-const ALLOWED_HOST_ADAPTERS: readonly string[] = [];
+/**
+ * The one named exception (M3f-D25): the container work copy implements the work-copy ports and runs every command inside a
+ * container through the ContainerRuntime port. M3c's fixture runner is a ScenarioRunner and needs no entry (cross-plan X-24).
+ */
+const ALLOWED_HOST_ADAPTERS: readonly string[] = ["container/work-copy.ts"];
 
 /** A class, object or function that is a CommandTarget, WorkCopy or WorkCopyFactory. Interfaces that only `extend` one and method signatures ending in `;` are fine. */
 const PORT = "CommandTarget|WorkCopyFactory|WorkCopy";
@@ -85,6 +88,14 @@ describe("no module under src/ runs candidate code on the host (M3e-D7)", () => 
       ({ file, text }) => IMPLEMENTS.test(text) && !ALLOWED_HOST_ADAPTERS.includes(file),
     );
     expect(offenders.map((o) => o.file)).toEqual([]);
+  });
+
+  it("the named adapter exists, implements the ports and starts no process", () => {
+    const adapter = sources().find(({ file }) => file === "container/work-copy.ts");
+    expect(adapter).toBeDefined();
+    expect(IMPLEMENTS.test(adapter?.text ?? "")).toBe(true);
+    expect(SPAWNS_ANY.test(adapter?.text ?? "")).toBe(false);
+    expect(ALLOWED_HOST_ADAPTERS).toEqual(["container/work-copy.ts"]);
   });
 
   it("the gate, audit and isolation modules start no process", () => {

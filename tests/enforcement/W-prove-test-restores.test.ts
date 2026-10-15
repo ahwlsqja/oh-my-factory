@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -11,6 +11,7 @@ import { sweepOrphanCopies } from "../helpers/temp-work-copy.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
 const CHILD = fileURLToPath(new URL("../helpers/prove-child.mjs", import.meta.url));
+const LIFECYCLE_CHILD = fileURLToPath(new URL("../helpers/lifecycle-child.mjs", import.meta.url));
 
 // Spec §5.4, M3e-D8: "restore" is "discard the copy". prove-test never changes the shared tree or the quarantine
 // repository, and an interruption leaves nothing behind that a later sweep cannot remove: SIGTERM removes the copies
@@ -70,5 +71,39 @@ describe("W-prove-test-restores", () => {
       }
     }
     expect(await waitDead(run.sleeper)).toBe(true);
+  });
+});
+
+// The same property for container copies (M3f): a signal in the middle of the baseline run removes the container by name and the
+// staging directory before the process ends with the signal status, and the shared repository is untouched.
+describe("W-prove-test-restores, container copies", () => {
+  it("SIGTERM in the middle of the baseline run removes the container and the staging directory and leaves the repository byte-identical", async () => {
+    const fx = calcFixture();
+    const dir = realTempDir("omf-prove-ctr-");
+    const log = join(dir, "log");
+    const marker = join(dir, "ready");
+    const stageRoot = join(dir, "judge");
+    const before = snapshot(fx);
+    const child = spawn(
+      process.execPath,
+      [LIFECYCLE_CHILD, "prove", log, marker, stageRoot, fx.quarantine.gitDir, fx.base, fx.head],
+      { stdio: ["ignore", "ignore", "inherit"] },
+    );
+    const ended = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+      child.once("exit", (code, signal) => resolve({ code, signal }));
+    });
+    await waitForPids(marker, 15_000); // the baseline test command is running inside the container of copy A
+    expect(readdirSync(stageRoot).filter((name) => name.startsWith("wc-"))).toHaveLength(1);
+    child.kill("SIGTERM");
+    expect(await ended).toEqual({ code: null, signal: "SIGTERM" });
+    const lines = readFileSync(log, "utf8").trim().split("\n");
+    const created = lines.filter((line) => line.startsWith("create ")).map((line) => line.slice("create ".length));
+    const removed = new Set(
+      lines.filter((line) => /^(remove|removeAllSync) /.test(line)).map((line) => line.replace(/^\S+ /, "")),
+    );
+    expect(created).toHaveLength(1);
+    expect(created.every((name) => removed.has(name))).toBe(true);
+    expect(readdirSync(stageRoot).filter((name) => name.startsWith("wc-"))).toEqual([]);
+    expect(snapshot(fx)).toBe(before);
   });
 });
