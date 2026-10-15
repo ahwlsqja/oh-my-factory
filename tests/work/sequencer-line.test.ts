@@ -373,7 +373,7 @@ describe("runLine, GATE-2 stop routes", () => {
     expect(result).toMatchObject({ outcome: "blocked", reason_code: "gate_not_run" });
   });
 
-  it("drops a stop on a GATE-2 pass and on GATE-3", async () => {
+  it("ends a GATE-2 pass with a stray stop and a failing GATE-3 as an ordinary GATE-3 block, not a scenario route", async () => {
     const fx = setupLine();
     const gate3: Gate = { id: "GATE-3", evaluate: () => ({ gate: "GATE-3", verdict: "fail", reasons: ["canary_hit"], stop: "J3" }) as never };
     const result = finished(
