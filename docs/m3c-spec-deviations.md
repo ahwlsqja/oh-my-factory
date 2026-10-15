@@ -1,7 +1,7 @@
-# M3c: where the contract differs from the spec, and the seam M3b2 fills
+# M3c: where the contract differs from the spec, and how it is wired into the line
 
 The v0 spec (`docs/design/2026-10-12-omf-v0-design.md`, §5.0, §5.2, §5.3, §8, §11) is the intent. Where M3c had to
-be more exact than the spec's examples, or could not wire into a part that is built in parallel, the choice is
+be more exact than the spec's examples, or had to decide how it joins the line, the choice is
 recorded here. The schema files and the code are the contract; the spec's examples are not.
 
 | # | Where | Spec says | M3c does | Why |
@@ -13,21 +13,22 @@ recorded here. The schema files and the code are the contract; the spec's exampl
 | V5 | "a stub that returns errors or empty output" | one stub | two null implementations (`fixtures/null-error.mjs`, `fixtures/null-empty.mjs`) and an echo-everything stub (`fixtures/echo-everything.mjs`); every behavior scenario must fail both nulls | the two shapes pass different weak scenarios (`exit_code: 0` only, or an empty stdout only) |
 | V6 | scenario status and exposure | fields in the scenario file | neither is in the file. Status is the ledger's (`scenario.status_changed`, default `active`); the exposure limit is the code constant `EXPOSURE_LIMIT` over a count function the feedback milestone supplies (`src/scenario/types.ts`) | a file edit can then neither loosen a check nor retire a scenario; an edited file is `set_tampered` through the set digest |
 | V7 | GATE-2 failure routes | back to S2 | by cause: J2 when GATE-1 no longer passes; J3 for a ledger anomaly, a tampered, missing or unreadable set, a seal after the start, or a judge that is broken or gamed; J7 for a probe error; back to S2 only for author-quality reasons (`src/scenario/gate2.ts`, `src/scenario/gate2-adapter.ts`) | a reseal must never run the author again for a fault the author did not cause, and a deleted vault file is never replaced by a quiet reseal |
-| V8 | wiring into the line | GATE-2 is a gate, S2 is a station | M3c ships the pieces and a pass over them, and does not edit M3b2: `evaluateGate2Step` (`src/scenario/gate2-adapter.ts`), `runS2Station` and `runS2ThenGate2` (`src/seal/station.ts`). The sequencer's registration is a few lines that M3b2 or M3h adds (below). | M3c is built in parallel with M3b2 and may merge first, so it depends only on what is on `main` |
-| V9 | guard failures | M3c rule 4 (spec §8): refuse to run | a sealed file or a symlink under the state is a J7 stop with a closed code (`sealed_material_in_repo`, `symlink_in_state`, `unsafe_state_path`) at line entry and before each stage, GATE-2 included (a throw that is not a guard refusal is `gate_error`); the `decide` write actions and `beginRun` throw instead (`src/vault/line-guard.ts`, `src/cli/decide.ts`, `src/work/w-run.ts`) | the line needs a stop route; a person at a terminal needs the error |
+| V8 | wiring into the line | GATE-2 is a gate, S2 is a station | M3c ships the pieces and a pass over them: `evaluateGate2Step` (`src/scenario/gate2-adapter.ts`), `runS2Station` and `runS2ThenGate2` (`src/seal/station.ts`). The line wires them in: `defaultGates()` registers the real GATE-2 (`src/scenario/gate2-gate.ts`) and `s2Station` (`src/seal/s2-station.ts`) is the S2 station a caller passes to `runLine` (below). | the pieces depend only on what the line already offers, and the line decides when to call them |
+| V9 | guard failures | M3c rule 4 (spec §8): refuse to run | a sealed file or a symlink under the state is a J7 stop with a closed code (`sealed_material_in_repo`, `symlink_in_state`, `unsafe_state_path`) at line entry and before each stage. A guard refusal before a station is that station's `blocked gate_blocked` (J7). A guard refusal at GATE-2 keeps its closed code in the gate history and ends the line as `gate_not_run` (J6), because a gate that did not run is never a stop route. A throw that is not a guard refusal is `gate_error` at a gate and a station error at a station. The `decide` write actions and `beginRun` throw instead (`src/vault/line-guard.ts`, `src/cli/decide.ts`, `src/work/w-run.ts`) | the line needs a stop route; a person at a terminal needs the error |
 | V10 | the author | a different vendor, sealed away from the implementer | a host command process behind the `AgentSession` port, labelled `author.isolation: "host_command"`; the stage result says `stored`, not `sealed` | sealing is not enforced: the stub sees the intent, spec and contract and can write anywhere its OS user can. M3c proves what OMF puts in the prompt and records, nothing about the author's reach. A container session is a later milestone. |
+| V11 | GATE-2 `back_to_S2` on a started item | S2 re-seals after a GATE-2 `back_to_S2` | on a fresh item S2 re-seals (`work.started` is appended only when S3 opens the round). On an item that is already `in_progress` a `back_to_S2` is a J3 stop (`scenarios_need_review`), not a loop (`src/scenario/gate2-gate.ts`, `src/seal/seal.ts`) | a started item can only reuse its standing seal, and a re-seal after the start is `seal_after_start` at GATE-2, so looping could change nothing |
 
-## The seam M3b2 fills
+## Wiring
 
-The M3b2 names below (`Gate.evaluate`, `defaultGates()`, `unimplementedGate`, `gate1ForItem`) come from the M3b2 plan and were not on `main` when M3c was built. Check them against M3b2's merged code before wiring. In that plan `Gate.evaluate` may return a promise. Registering GATE-2 and the S2 station is these steps, none of which M3c did:
+The line registers the pieces as follows.
 
-1. In `defaultGates()`, replace `unimplementedGate("GATE-2")` with a gate whose `evaluate` calls `evaluateGate2Step` and maps the outcome: `verdict` to the tri-state (`pass`, `fail`, `not_run`), `reasons` to the reasons, and `next: "stop"` with `stop_route` to the route that ends the line at J2, J3 or J7 instead of the default back to S2.
-2. Register the S2 station as `runS2Station` and map its `S2Next`: `gate2` continues, `retry_s2` loops under the visit cap, `stop` ends the line at its route. `runS2ThenGate2` is the same two calls in one unit and is what the line's tests use.
-3. Call `assertLineSafe` at line entry and before every station. The stage functions run it themselves; this adds the entry check for stations that are not S2. `beginRun` (M3b1's run entry) and the `decide` writes already call it.
-4. Replace the four-call GATE-1 snapshot inside `runSealStage` and `runGate2` with M3b2's `gate1ForItem`, when it exists.
-5. Persist a `stop` as `needs-human.json` and the handoff record, and cap the `back_to_S2` loop (M3b2's visit counter).
+1. `defaultGates()` returns the real GATE-2 (`gate2Gate`): the adapter's `verdict` is the tri-state, `reasons` are the reasons, and `next: "stop"` with `stop_route` ends the line at J2, J3 or J7 instead of the default return to S2.
+2. `s2Station` is the S2 station. `gate2` answers ok with the set digest, `retry_s2` answers ok (GATE-2 decides and the visit cap bounds the loop), and `stop` is `blocked` with `j2_open`, `scenarios_need_review` or `gate_blocked` for J2, J3 and J7.
+3. The sequencer calls `assertLineSafe` before every station; a refusal is that station's `blocked gate_blocked`. `beginRun` and the `decide` writes call it too.
+4. The `gate1ForItem` swap is not done: the four-call GATE-1 snapshot inside `runSealStage` and `runGate2` stays, and agreement tests (`tests/seal/seal.test.ts`, `tests/scenario/gate2.test.ts`) compare each path with `gate1ForItem`.
+5. A stop is persisted by the sequencer as the handoff record, and the `back_to_S2` loop is capped by its visit counter.
 
-The `work.started` event type is the string `WORK_STARTED_EVENT` (`src/scenario/events.ts`); `tests/enforcement/W-gate1-then-gate2-walk.test.ts` asserts it is the type M3b1 writes.
+The `work.started` event type is the string `WORK_STARTED_EVENT` (`src/scenario/events.ts`); `tests/enforcement/W-gate1-then-gate2-walk.test.ts` asserts it is a member of M3b1's `W_EVENT_TYPES` and the type M3b1 writes.
 
 ## Known limits
 

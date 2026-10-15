@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { gate1ForItem } from "../../src/decision/gate1-item.js";
 import { acquireLock, releaseLock } from "../../src/core/lock.js";
 import { SymlinkRefusedError } from "../../src/core/safe-fs.js";
 import { runSealStage, sealLockFile } from "../../src/seal/seal.js";
@@ -139,6 +140,13 @@ describe("runSealStage: no set is stored", () => {
     startWork(without);
     expect(await runSealStage(depsFor(without, countingSession()))).toEqual({ status: "refused", reason: "implementation_started" });
     expect(sealEvents(without)).toEqual([]);
+  });
+
+  it("blocked_gate1 carries the reasons gate1ForItem gives for the same ledger", async () => {
+    const s = sealFixture("open");
+    const expected = gate1ForItem(s.f.fx.location, s.f.item, s.f.fx.ledger.readVerified(), s.now).result;
+    if (expected.status === "pass") throw new Error("the open fixture should not pass GATE-1");
+    expect(await runSealStage(depsFor(s, countingSession()))).toEqual({ status: "blocked_gate1", reasons: expected.reasons });
   });
 
   it("a started item is reused even when GATE-1 no longer passes (an expired deferral), and the author is not called", async () => {
