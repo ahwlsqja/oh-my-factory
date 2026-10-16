@@ -17,7 +17,7 @@ import { addImage } from "./fake-docker-core.mjs";
 import { measurement } from "./gate3-parts.js";
 import { type JudgeLineFixture, setupJudgeLine } from "./judge-line.js";
 import { finished } from "./line.js";
-import { type Finished, type SeamRun } from "./line-m3f.js";
+import type { Finished, SeamRun } from "./line-m3f.js";
 import { LocalTreeContainer } from "./implementer-container.js";
 import { BUGGY, FIXED, testFile } from "./prove-fixture.js";
 import { commitAll, gitIn } from "./tmp.js";
@@ -37,7 +37,12 @@ export type Behavior = "good" | "leak_then_remove" | "fail_after_print";
 
 export function scriptFor(workId: string, behavior: Behavior): string[] {
   const plan = `.omf/${workId}/plan.md`;
-  const lines = ["set -eu", 'echo "SAW_KEY_LENGTH=${#ANTHROPIC_API_KEY}"', 'echo "token=$ANTHROPIC_API_KEY"'];
+  const lines = [
+    "set -eu",
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the shell, not JS, expands this variable inside the container
+    'echo "SAW_KEY_LENGTH=${#ANTHROPIC_API_KEY}"',
+    'echo "token=$ANTHROPIC_API_KEY"',
+  ];
   if (behavior === "fail_after_print") return ["sh", "-c", [...lines, "exit 3"].join("\n")];
   lines.push(
     `mkdir -p ".omf/${workId}" src tests`,
