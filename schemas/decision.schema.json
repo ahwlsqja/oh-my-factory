@@ -449,6 +449,26 @@
         "reasons": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/reason" } },
         "created_at": { "$ref": "#/$defs/timestamp" }
       }
+    },
+    "implementer_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["work_id", "kind", "paths", "question", "options", "resume_token", "created_at"],
+      "properties": {
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "kind": { "enum": ["test_conflict", "spec_conflict"] },
+        "paths": { "type": "array", "maxItems": 10, "items": { "$ref": "#/$defs/plain_line" } },
+        "question": { "$ref": "#/$defs/plain_line" },
+        "options": { "type": "array", "minItems": 1, "maxItems": 6, "items": { "$ref": "#/$defs/plain_line" } },
+        "resume_token": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+        "created_at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "plain_line": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "pattern": "^[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$"
     }
   }
 }
