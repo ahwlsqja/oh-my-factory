@@ -11,6 +11,7 @@ import {
   findLeaks,
   gatedDocker,
   gatedEnabled,
+  gatedModelEnabled,
   gatedPath,
   scrubInspect,
 } from "./helpers.js";
@@ -33,10 +34,14 @@ describe("gated helpers", () => {
     expect(gatedPath({})).toBe("");
   });
 
-  it("the switch is exactly OMF_GATED=docker", () => {
+  it("the switches are exactly docker and docker+model, and a model suite never runs under plain docker", () => {
     expect(gatedEnabled({})).toBe(false);
     expect(gatedEnabled({ OMF_GATED: "1" })).toBe(false);
     expect(gatedEnabled({ OMF_GATED: "docker" })).toBe(true);
+    expect(gatedEnabled({ OMF_GATED: "docker+model" })).toBe(true);
+    expect(gatedModelEnabled({})).toBe(false);
+    expect(gatedModelEnabled({ OMF_GATED: "docker" })).toBe(false);
+    expect(gatedModelEnabled({ OMF_GATED: "docker+model" })).toBe(true);
   });
 
   it("accepts a config holding only the omf-m3f context", () => {
