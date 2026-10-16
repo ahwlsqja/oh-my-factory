@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { CANARY, canaryHits } from "../helpers/canary.js";
 import {
   type ClassifierInput,
   type ClassifierRule,
-  type EvidenceInputs,
   classifyOutcome,
+  type EvidenceInputs,
   emptyEvidenceInputs,
   resetRoundScopedInputs,
   toOutcomeInput,
@@ -17,8 +16,9 @@ import {
   type StationId,
   type StationStatus,
 } from "../../src/work/line-types.js";
-import { type Disposition, type WOutcome, dispositionOf } from "../../src/work/outcome.js";
+import { type Disposition, dispositionOf, type WOutcome } from "../../src/work/outcome.js";
 import type { ReasonCode, Recommendation } from "../../src/work/w-events.js";
+import { CANARY, canaryHits } from "../helpers/canary.js";
 
 /** Every input produced and clean: the only inputs from which a success can come. */
 function cleanInputs(): EvidenceInputs {
@@ -143,6 +143,36 @@ const ROWS: Row[] = [
     outcome: "blocked",
     exhausted: false,
     reason_code: "infra_failure",
+    recommendation: "human_needed",
+    rule: "station_blocked",
+    action: "park",
+  },
+  {
+    name: "1d S3 stopped on a missing plan: flawed, because an implementation exists behind it",
+    input: base({ stop: { kind: "station", station: "S3", result: "blocked", reason_code: "plan_missing" } }),
+    outcome: "flawed",
+    exhausted: false,
+    reason_code: "plan_missing",
+    recommendation: "not_recommended",
+    rule: "plan_missing",
+    action: "submit",
+  },
+  {
+    name: "1e S3 stopped on an implementer request: still blocked, so the item stays rerunnable",
+    input: base({ stop: { kind: "station", station: "S3", result: "blocked", reason_code: "implementer_request" } }),
+    outcome: "blocked",
+    exhausted: false,
+    reason_code: "implementer_request",
+    recommendation: "human_needed",
+    rule: "station_blocked",
+    action: "park",
+  },
+  {
+    name: "1f any other closed code from S3 is still a blocked stop",
+    input: base({ stop: { kind: "station", station: "S3", result: "blocked", reason_code: "gate_blocked" } }),
+    outcome: "blocked",
+    exhausted: false,
+    reason_code: "gate_blocked",
     recommendation: "human_needed",
     rule: "station_blocked",
     action: "park",

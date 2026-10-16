@@ -72,6 +72,10 @@ export const W_REASON_CODES = [
   "gates_failed",
   // Feedback needs a disclosure budget that is not declared or is used up: a person declares or raises it (J8).
   "disclosure_unavailable",
+  // The implementer: its first commit was not the plan alone (a flawed, reviewable result), or it stopped to ask a person
+  // to settle a conflict between a test and the spec (blocked, answered at J2, and the item can be run again).
+  "plan_missing",
+  "implementer_request",
 ] as const;
 export type ReasonCode = (typeof W_REASON_CODES)[number];
 
