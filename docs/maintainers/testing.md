@@ -118,8 +118,8 @@ npm run test:gated -- --record                      # also append a record per p
 
 A gated suite that calls a real model needs the implementer key, and only that key. Create a dedicated Anthropic
 workspace key with a spend limit and pass it as `OMF_IMPLEMENTER_API_KEY` for that one command, for example
-`OMF_IMPLEMENTER_API_KEY=... npm run test:gated -- --only G-<suite>`. The driver passes that variable through to the
-test process and nothing else secret; it never forwards `ANTHROPIC_API_KEY`, which is the reconciler's host key, and
+`OMF_IMPLEMENTER_API_KEY=... npm run test:gated -- --model --only G-<suite>`. With `--model` the driver passes that variable to the
+test process only, sends its output through a redactor and passes nothing else secret; without `--model` the key is dropped; it never forwards `ANTHROPIC_API_KEY`, which is the reconciler's host key, and
 the implementer never falls back to it. Do not reuse a key that has no spend limit.
 
 Records live in `docs/evidence/gated-runs.json` and are written only by `--record`, never from inside a test. Until a
