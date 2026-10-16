@@ -13,8 +13,8 @@ import type { BundleCode, PrepareCode } from "./workspace.js";
 
 /**
  * Every way the S3 station can refuse, by where it happened. The station never builds a reason code itself and never
- * passes on text: a refusal is one of these, and `reasonFor` is the only place that turns it into a code (M3g-D9,
- * spec §5.6). Environment and container trouble is `infra_failure`, so a rerun can fix it. Anything a person has to look
+ * passes on text: a refusal is one of these, and `reasonFor` is the only place that turns it into a code (spec
+ * §5.6). Environment and container trouble is `infra_failure`, so a rerun can fix it. Anything a person has to look
  * at (a repository this stage will not export, inputs that leak, bytes the container returned that do not check out, a
  * credential or canary in a result) is `gate_blocked`.
  */
