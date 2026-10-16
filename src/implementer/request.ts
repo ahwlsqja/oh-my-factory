@@ -1,3 +1,4 @@
+import { safeText } from "../core/safe-text.js";
 import { validateDef } from "../core/schema.js";
 import type { GitTarget } from "../git/hardened.js";
 import { blobId } from "../git/ops.js";
@@ -39,6 +40,10 @@ export async function readConflictRequest(
     return { status: "invalid" };
   }
   if (!validateDef("implementer-event.schema.json", "request_file", doc).ok) return { status: "invalid" };
+  // A path with a control, line-break or bidi/format character could hide or fake text where a person reads it.
+  if ((doc as { paths: string[] }).paths.some((candidate) => safeText(candidate) !== candidate)) {
+    return { status: "invalid" };
+  }
   const file = doc as { kind: ConflictRequest["kind"]; paths: string[]; note?: string };
   return {
     status: "raised",

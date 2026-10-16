@@ -44,6 +44,10 @@ describe("readConflictRequest", () => {
     ["eleven paths", file({ kind: "test_conflict", paths: Array.from({ length: 11 }, (_v, i) => `p${i}`) })],
     ["a file over the size cap", { [REQUEST]: `{"kind":"test_conflict","paths":[],"note":"${"x".repeat(17_000)}"}` }],
     ["bytes that are not UTF-8", { [REQUEST]: Buffer.from([0x7b, 0xff, 0x7d]) }],
+    ["a path with a tab", file({ kind: "test_conflict", paths: ["tests/a.test.ts", "tests/a\tb.ts"] })],
+    ["a path with a newline", file({ kind: "test_conflict", paths: ["tests/a.test.ts\nSPEC.md"] })],
+    ["a path with a bidi override", file({ kind: "spec_conflict", paths: ["tests/a\u202Etxt.ts"] })],
+    ["a path with a line separator", file({ kind: "spec_conflict", paths: ["src/a\u2028.ts"] })],
     ["a directory in its place", { [`${REQUEST}/inner.txt`]: "x" }],
   ];
   it.each(INVALID)("reads %s as invalid", async (_name, step) => {
