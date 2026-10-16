@@ -15,7 +15,8 @@
 //
 // Exit codes: 0 every selected gated test passed; 1 a gated test failed or nothing could be recorded;
 // 2 refused (colima or docker missing, another OMF_GATED value, a context that is not the omf-m3f socket,
-// --record on a dirty tree, --model without a usable OMF_IMPLEMENTER_API_KEY, an unknown argument); 3 colima could not start the profile.
+// --record on a dirty tree, --model without a usable OMF_IMPLEMENTER_API_KEY, an unknown argument);
+// 3 colima could not start the profile.
 //
 // The run never changes the user's current Docker context (`--activate=false`, and it is restored if it changed anyway).
 //
@@ -88,8 +89,9 @@ export function dockerConfigFor(dir, host) {
 }
 
 /**
- * The whole environment of the test process. No HOME. The only caller variables passed are TMPDIR, the fixture switch and the
- * three gated image names; in model mode also the dedicated implementer key `OMF_IMPLEMENTER_API_KEY` (never `ANTHROPIC_API_KEY`, the reconciler's host key) and the path where the real-run suite may write its report.
+ * The whole environment of the test process. No HOME. The only caller variables passed are TMPDIR, the fixture switch
+ * and the three gated image names; in model mode also the dedicated implementer key `OMF_IMPLEMENTER_API_KEY`
+ * (never `ANTHROPIC_API_KEY`, the reconciler's host key) and the path where the real-run suite may write its report.
  * Without model mode the key is dropped, not refused: a key left in the shell must not reach a suite that never needed it.
  */
 export function gatedEnv(env, dockerConfig, omfHome, options = {}) {
