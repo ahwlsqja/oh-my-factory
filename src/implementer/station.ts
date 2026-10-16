@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { type AuditSurface, scanCanaries, textSurface } from "../audit/canary-scan.js";
 import { containerSpecFor, goldenFor } from "../container/golden.js";
 import { pinnedImage } from "../container/image-ref.js";
-import { createMeasured, type MeasuredContainer, NotGoldenError } from "../container/measure.js";
+import { createMeasured, type MeasuredContainer } from "../container/measure.js";
 import type { ContainerRuntime, ImageInfo } from "../container/runtime.js";
 import { isImageId } from "../container/spec.js";
 import { canonicalize, sha256Hex } from "../core/canonical-json.js";
@@ -30,6 +30,7 @@ import { foldWorkBudget } from "../work/w-budget.js";
 import type { ReasonCode } from "../work/w-events.js";
 import { claudeSettings, createClaudeSession } from "./claude-session.js";
 import { buildContextFiles, contextTar, explicitTestPathsFor, omfDir } from "./context-files.js";
+import { discardRoundStage, measureRefusal, refusedCandidateEvent, roundStageDir, stopFor } from "./refusals.js";
 import { type Credential, containsCredential, readCredential } from "./credential.js";
 import {
   baseFixedEvent,
@@ -107,16 +108,6 @@ interface Harvest {
 }
 
 /**
- * A container that is not golden is J7 `gate_blocked` (the L1 is already recorded and the key was never handed over); any
- * other failure to create or measure it is the environment. The message never leaves: it may hold a daemon's words.
- */
-function containerStop(error: unknown): ReasonCode {
-  const notGolden =
-    error instanceof NotGoldenError || (error instanceof Error && error.cause instanceof NotGoldenError);
-  return notGolden ? "gate_blocked" : "infra_failure";
-}
-
-/**
  * What the host reads of the workspace before anything is published: the credential (found by value) and the vault canaries,
  * in one pass over the exported tree and the container capture. Credential first, then canary, then "could not look".
  */
@@ -180,23 +171,23 @@ async function runS3(
   try {
     config = readConfig(location.dir);
   } catch {
-    return blocked("infra_failure");
+    return stopFor({ from: "environment" });
   }
   // Only Claude runs as the implementer in this version: another vendor stops here, before any key is read.
   const vendorRefusal = implementerVendorRefusal(config);
-  if (vendorRefusal !== null) return blocked(vendorRefusal.reason);
+  if (vendorRefusal !== null) return stopFor({ from: "vendor" });
   const imp = config.implementer;
   if (imp.image === null || config.judge.docker_context === null || runtime.context === null) {
-    return blocked("infra_failure");
+    return stopFor({ from: "environment" });
   }
   const credential = readCredential("claude", deps.env ?? process.env);
-  if (credential === null) return blocked("infra_failure");
+  if (credential === null) return stopFor({ from: "environment" });
   try {
-    if (!(await runtime.info()).ok || !(await runtime.endpoint()).local) return blocked("infra_failure");
+    if (!(await runtime.info()).ok || !(await runtime.endpoint()).local) return stopFor({ from: "environment" });
     // Leftovers of earlier runs, quarantines that may hold a key included, go before anything is created, even when S4 never ran.
     await sweepOrphans({ runtime, itemDir: ctx.item.dir, currentRunId: ctx.runId });
   } catch {
-    return blocked("infra_failure");
+    return stopFor({ from: "environment" });
   }
 
   // The base: the user's HEAD at the item's first S3, pinned in the ledger; later rounds and reruns reuse it.
@@ -204,29 +195,29 @@ async function runS3(
   // Only a resolved record counts, as in the seal's input check: an open, deferred or n/a interface is not a contract.
   const interfaceRecord = findDecision(foldDecisions(events, itemScope), INTERFACE_DECISION_ID);
   const contract = interfaceRecord !== null && interfaceRecord.status === "resolved" ? interfaceRecord.interface : null;
-  if (contract === null) return blocked("gate_blocked");
+  if (contract === null) return stopFor({ from: "context" });
   let base: Awaited<ReturnType<typeof exportBase>>;
   try {
     assertLineSafe(location);
     const recorded = baseFixedOf(events, itemScope);
     const baseSha = recorded?.base_sha ?? (await userHeadCommit(location.repo));
     base = await exportBase({ repo: location.repo, baseSha, maxBytes: imp.max_workspace_bytes });
-    if (recorded !== null && recorded.base_tree_sha !== base.base_tree_sha) return blocked("gate_blocked");
+    if (recorded !== null && recorded.base_tree_sha !== base.base_tree_sha) return stopFor({ from: "context" });
     // A base that already tracks this item's own directory is a rerun of an item that was merged.
-    if (base.tracked_paths.some((path) => path.startsWith(`${omfDir(ctx.workId)}/`))) return blocked("gate_blocked");
+    if (base.tracked_paths.some((path) => path.startsWith(`${omfDir(ctx.workId)}/`)))
+      return stopFor({ from: "context" });
     if (recorded === null) {
       ledger.append(baseFixedEvent(scope, { base_sha: baseSha, base_tree_sha: base.base_tree_sha }));
     }
   } catch (error) {
-    if (error instanceof UserRepoError || error instanceof HostGitError || guardRefusal(error) !== null) {
-      return blocked("gate_blocked");
-    }
+    if (error instanceof UserRepoError) return stopFor({ from: "user_repo", code: error.code });
+    if (error instanceof HostGitError || guardRefusal(error) !== null) return stopFor({ from: "guard" });
     throw error;
   }
 
   // Inputs, and the canary scan of every byte the container will be given, before the first exec.
   const built = buildContextFiles({ location, item: ctx.item, events });
-  if (!built.ok) return blocked("gate_blocked");
+  if (!built.ok) return stopFor({ from: "context" });
   const contextBytes = contextTar(ctx.workId, built.files);
   const prompt = buildImplementerPrompt({ workId: ctx.workId, round: ctx.round, feedback: deps.feedback.released() });
   const settings = claudeSettings({ denyEditGlobs: TEST_GLOBS });
@@ -237,7 +228,7 @@ async function runS3(
   );
   const canaries = [...new Set([...listed.index.map((entry) => entry.canary), ...listed.unverified_canaries])].sort();
   // No canary to look for, or a seal whose files do not verify, means the scan could not be complete: fail closed.
-  if (canaries.length === 0 || listed.unverified.length > 0) return blocked("gate_blocked");
+  if (canaries.length === 0 || listed.unverified.length > 0) return stopFor({ from: "context" });
   const pre = await scanCanaries(
     canaries,
     [
@@ -248,7 +239,7 @@ async function runS3(
     ],
     ["worktree", "prompt"],
   );
-  if (pre.total > 0 || pre.status !== "scanned") return blocked("gate_blocked");
+  if (pre.total > 0 || pre.status !== "scanned") return stopFor({ from: "context" });
 
   const model = config.roles.implementer.model ?? null;
   const budget = foldWorkBudget(events, ctx.workId);
@@ -278,7 +269,7 @@ async function runS3(
       goldenFor({ role: "implementer", image, forbidden: judgeForbiddenPaths(location) }),
     );
   } catch (error) {
-    return blocked(containerStop(error));
+    return stopFor(measureRefusal(error));
   }
   const container = measured.handle;
   const removeContainer = async (): Promise<void> => {
@@ -314,7 +305,7 @@ async function runS3(
 
   const inContainer = async (): Promise<Harvest | StationResult> => {
     const prepared = await prepareWorkspace(runtime, container, { baseTar: base.tar, contextTar: contextBytes });
-    if (!prepared.ok) return blocked("infra_failure");
+    if (!prepared.ok) return stopFor({ from: "prepare", code: prepared.code });
 
     const outcome = await session.run(container, {
       prompt,
@@ -335,26 +326,26 @@ async function runS3(
     if (!outcome.ok) {
       // Nothing of a failed session is kept or imported; the container goes at once.
       recordSession(outcome, stored, "not_captured");
-      return blocked("infra_failure");
+      return stopFor({ from: "session", code: outcome.code });
     }
 
     // No background job of the implementer may survive into the capture or the finalize step.
     if (!(await killAllProcesses(runtime, container)).ok) {
       recordSession(outcome, stored, "not_captured");
-      return blocked("infra_failure");
+      return stopFor({ from: "kill" });
     }
     const capture = await captureWorkspace(runtime, container, imp.max_workspace_bytes);
     recordSession(outcome, stored, capture.complete ? "captured" : "incomplete");
     const bundled = await finalizeAndBundle(runtime, container, imp.max_workspace_bytes);
-    if (!bundled.ok) return blocked(bundled.code === "finalize_failed" ? "infra_failure" : "gate_blocked");
+    if (!bundled.ok) return stopFor({ from: "bundle", code: bundled.code });
     return { bundle: bundled.bundle, capture, log: stored.toString("utf8"), logTruncated, notes: outcome.notes };
   };
   const harvested = await inContainer().finally(removeContainer);
   if ("kind" in harvested) return harvested;
 
   // From here on only host code runs, over data the container wrote.
-  const stage = join(stageRoot, `round-${ctx.round}`);
-  const dropStage = (): void => rmSync(stage, { recursive: true, force: true });
+  const stage = roundStageDir(stageRoot, ctx.round);
+  const dropStage = (): void => discardRoundStage(stageRoot, ctx.round);
   const checked = (facts: Partial<CandidateFacts>): void => {
     ledger.append(
       candidateCheckedEvent(scope, {
@@ -383,8 +374,8 @@ async function runS3(
     });
     if (!imported.ok) {
       dropStage();
-      checked({ import_failure: imported.code });
-      return blocked("gate_blocked");
+      ledger.append(refusedCandidateEvent(scope, ctx.round, { import_failure: imported.code }));
+      return stopFor({ from: "import", code: imported.code });
     }
     const { quarantine, head, context, work } = imported.value;
     const known = { head_sha: head, context_sha: context, commits: work.length };
@@ -407,15 +398,15 @@ async function runS3(
     }
     if (scan !== "clean") {
       dropStage(); // no key and no canary stays on disk
-      checked({ ...known, scan });
-      return blocked("gate_blocked");
+      ledger.append(refusedCandidateEvent(scope, ctx.round, { ...known, scan }));
+      return stopFor({ from: "scan", status: scan });
     }
 
     const request = await readConflictRequest(quarantine, ctx.workId, head, new Set(base.tracked_paths));
     if (request.status === "invalid") {
       dropStage();
-      checked({ ...known, scan, request: "invalid" });
-      return blocked("gate_blocked");
+      ledger.append(refusedCandidateEvent(scope, ctx.round, { ...known, scan, request: "invalid" }));
+      return stopFor({ from: "request_invalid" });
     }
     if (request.status === "raised") {
       writeImplementerRequest(ctx.item.dir, itemScope, request.request, ctx.now());
@@ -442,8 +433,8 @@ async function runS3(
     } catch (error) {
       if (!(error instanceof UserRepoError)) throw error;
       dropStage();
-      checked({ ...known, scan, request: "none", ...planFacts });
-      return blocked("gate_blocked");
+      ledger.append(refusedCandidateEvent(scope, ctx.round, { ...known, scan, request: "none", ...planFacts }));
+      return stopFor({ from: "user_repo", code: error.code });
     }
     checked({ ...known, scan, request: "none", ...planFacts, published: true });
     if (plan.status === "missing") {
@@ -467,7 +458,7 @@ async function runS3(
     return { kind: "ok", progress_digest: sha256Hex(canonicalize({ head, commits: work.length })) };
   } catch (error) {
     dropStage();
-    if (error instanceof HostGitError) return blocked("gate_blocked");
+    if (error instanceof HostGitError) return stopFor({ from: "guard" });
     throw error;
   }
 }

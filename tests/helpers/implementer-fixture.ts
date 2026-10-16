@@ -10,8 +10,8 @@ import { type ImplementerStations, implementerStations } from "../../src/impleme
 import type { FeedbackSlot } from "../../src/judge/round-state.js";
 import type { StationContext } from "../../src/work/sequencer.js";
 import { CONTRACT } from "./decision-fixture.js";
-import { FakeDocker } from "./fake-docker.js";
-import { addImage, type FakeExecCall } from "./fake-docker-core.mjs";
+import { FakeDocker, verbOf } from "./fake-docker.js";
+import { addImage, type FakeExecCall, type FakeHooks, type FakeResult } from "./fake-docker-core.mjs";
 import { fakeRuntime } from "./fake-runtime.js";
 import { LocalTreeContainer } from "./implementer-container.js";
 import { stationCtx } from "./judge-seed.js";
@@ -27,6 +27,48 @@ export const MODEL = "claude-test-1";
 export const SENTINEL_KEY = ["sk", "ant", "sentinel", "k".repeat(28)].join("-");
 /** The test command names a tracked file, so `explicitTestPaths` has something to find. */
 export const TEST_CONTRACT: InterfaceContract = { ...CONTRACT, test_command: ["sh", "tests/run.sh"] };
+
+/** The key of the matrix tests; an invented shape, never a real credential. */
+export const FAKE_KEY = SENTINEL_KEY;
+
+export interface CommitScript {
+  message: string;
+  /** `null` deletes the path. */
+  files: Readonly<Record<string, string | null>>;
+}
+export interface StubBehavior {
+  /** Made in order, in `/work`, with a plain `git commit` (the prepared repository carries the identity). */
+  commits: readonly CommitScript[];
+  /** Files left in `/work` and never committed. */
+  uncommitted?: Readonly<Record<string, string>>;
+  /** Files left under the container's temp directory; keys are relative to it. */
+  tmpFiles?: Readonly<Record<string, string>>;
+  /** Raw text the session prints, as if the agent had echoed it. */
+  log?: string;
+}
+
+const quoted = (text: string): string => `'${text.replaceAll("'", `'\\''`)}'`;
+
+/** The shell a `StubBehavior` stands for. Test data, run for real by `LocalTreeContainer`; never product code. */
+export function behaviorScript(behavior: StubBehavior): string {
+  const lines = ["set -e"];
+  const write = (target: string, text: string): void => {
+    lines.push(`mkdir -p "$(dirname ${target})"`, `printf '%s' ${quoted(text)} > ${target}`);
+  };
+  for (const commit of behavior.commits) {
+    for (const [path, text] of Object.entries(commit.files)) {
+      if (text === null) lines.push(`git rm -q -f --ignore-unmatch -- ${quoted(path)}`);
+      else {
+        write(quoted(path), text);
+        lines.push(`git add -- ${quoted(path)}`);
+      }
+    }
+    lines.push(`git commit -q --allow-empty -m ${quoted(commit.message)}`);
+  }
+  for (const [path, text] of Object.entries(behavior.uncommitted ?? {})) write(quoted(path), text);
+  for (const [path, text] of Object.entries(behavior.tmpFiles ?? {})) write(`"$OMF_TMP"/${quoted(path)}`, text);
+  return lines.join("\n");
+}
 
 /**
  * The script the stub implementer runs inside the container, from `/work`: a plan-only first commit, then one code commit.
@@ -135,10 +177,34 @@ export interface RigOptions {
   released?: readonly string[];
   cost?: number | null;
   log?: (key: string) => string;
+  /** The whole environment the key is read from; wins over `key`. */
+  env?: NodeJS.ProcessEnv;
+  /** `[implementer] image`; null leaves it unset. Default `IMPLEMENTER_IMAGE`. */
+  image?: string | null;
+  /** `[judge] docker_context`; null leaves it unset and gives the runtime no context. Default `IMPLEMENTER_CONTEXT`. */
+  context?: string | null;
+  /** `docker info` fails with this text on stderr (a daemon that is down). */
+  info?: { ok: false; failure: string };
+  /** false: the context's endpoint is a tcp address, not a local socket. */
+  local?: boolean;
+  /** A data-driven stub implementer; wins over `script`. `canary` is one canary of the sealed set. */
+  behavior?: (workId: string, canary: string) => StubBehavior;
+  /** Asked before the container double for every exec; null lets the double answer. */
+  execFault?: (call: FakeExecCall) => FakeResult | null;
+  /** Replaces the scripted session entirely. */
+  session?: (credential: Credential) => ImplementerSession;
+  /** Edits the inspect document of a container: a deviation from the golden. */
+  tamper?: FakeHooks["inspect"];
+  /** Extra lines appended to the `[implementer]` table. */
+  implementerToml?: string;
 }
 
 export interface ImplementerRig {
   s: SealedItem;
+  /** The same object as `s`; the matrix files read `rig.l.f`. */
+  l: SealedItem;
+  /** A canary of the sealed set. It sits in the vault, never in the repository. */
+  canary: string;
   workId: string;
   repo: string;
   itemDir: string;
@@ -181,6 +247,10 @@ export function implementerRig(options: RigOptions = {}): ImplementerRig {
   commitAll(fx.repo, "add the test script");
 
   const key = options.key === undefined ? SENTINEL_KEY : options.key;
+  const canary = s.scenarios[0]?.canary ?? "";
+  if (canary === "") throw new Error("the sealed fixture has no scenario canary");
+  const context = options.context === undefined ? IMPLEMENTER_CONTEXT : options.context;
+  const image = options.image === undefined ? IMPLEMENTER_IMAGE : options.image;
   writeFileSync(
     join(fx.location.dir, "config.toml"),
     [
@@ -188,27 +258,39 @@ export function implementerRig(options: RigOptions = {}): ImplementerRig {
         'implementer = { vendor = "claude" }',
         `implementer = { vendor = "claude", model = "${MODEL}" }`,
       ),
-      "[judge]",
-      `docker_context = "${IMPLEMENTER_CONTEXT}"`,
-      "",
+      ...(context === null ? [] : ["[judge]", `docker_context = "${context}"`, ""]),
       "[implementer]",
-      `image = "${IMPLEMENTER_IMAGE}"`,
+      ...(image === null ? [] : [`image = "${image}"`]),
+      ...(options.implementerToml === undefined ? [] : [options.implementerToml.trimEnd()]),
       "",
     ].join("\n"),
   );
 
   const trees = new Map<string, LocalTreeContainer>();
   const fake = new FakeDocker({
-    exec: (call) =>
-      call.argv.join("\n") === CONTAINER_PROBE_ARGV.join("\n")
+    contexts: {
+      fake: "unix:///var/run/omf-fake.sock",
+      [IMPLEMENTER_CONTEXT]: options.local === false ? "tcp://192.0.2.10:2375" : "unix:///var/run/omf-fake-colima.sock",
+    },
+    ...(options.tamper === undefined ? {} : { tamper: options.tamper }),
+    exec: (call) => {
+      const fault = options.execFault?.(call) ?? null;
+      if (fault !== null) return fault;
+      return call.argv.join("\n") === CONTAINER_PROBE_ARGV.join("\n")
         ? { status: 0, stdout: CLEAN_PROBE, stderr: "" }
-        : containerFor(trees, call).exec(call),
+        : containerFor(trees, call).exec(call);
+    },
   });
+  if (options.info !== undefined) {
+    const { failure } = options.info;
+    fake.intercept = (argv) =>
+      verbOf(argv) === "info" ? { kind: "exited", status: 1, signal: null, stdout: "", stderr: failure } : null;
+  }
   addImage(fake.state, IMPLEMENTER_IMAGE, { env: ["PATH=/usr/local/bin:/usr/bin", "NODE_VERSION=22"] });
 
   const measured = (): number =>
     fx.ledger.readVerified().filter((e) => e.type === "isolation.measured" && e.payload.stage === "implementer").length;
-  const spy = spyRuntime(fakeRuntime(fake, IMPLEMENTER_CONTEXT), measured);
+  const spy = spyRuntime(fakeRuntime(fake, context), measured);
   const requests: SessionRequest[] = [];
   const spends: (number | null)[] = [];
   const released = options.released ?? [];
@@ -219,15 +301,24 @@ export function implementerRig(options: RigOptions = {}): ImplementerRig {
     location: fx.location,
     runtime: spy.runtime,
     feedback,
-    env: key === null ? {} : { OMF_IMPLEMENTER_API_KEY: key },
-    session: (credential) => {
-      sessions += 1;
-      return scriptSession(spy.runtime, script(s.f.workId, sessions), {
-        requests,
-        ...(options.cost === undefined ? {} : { cost: options.cost }),
-        ...(options.log === undefined ? {} : { log: options.log }),
-      })(credential);
-    },
+    env: options.env ?? (key === null ? {} : { OMF_IMPLEMENTER_API_KEY: key }),
+    session:
+      options.session ??
+      ((credential) => {
+        sessions += 1;
+        const behavior = options.behavior?.(s.f.workId, canary);
+        const printed = behavior?.log;
+        const log = printed === undefined ? options.log : (): string => printed;
+        return scriptSession(
+          spy.runtime,
+          behavior === undefined ? script(s.f.workId, sessions) : behaviorScript(behavior),
+          {
+            requests,
+            ...(options.cost === undefined ? {} : { cost: options.cost }),
+            ...(log === undefined ? {} : { log }),
+          },
+        )(credential);
+      }),
   });
 
   const refs = (): string[] =>
@@ -236,6 +327,8 @@ export function implementerRig(options: RigOptions = {}): ImplementerRig {
       .filter((line) => line !== "");
   return {
     s,
+    l: s,
+    canary,
     workId: s.f.workId,
     repo: fx.repo,
     itemDir: s.f.item.dir,
@@ -267,3 +360,7 @@ export function implementerRig(options: RigOptions = {}): ImplementerRig {
     omfRefs: refs,
   };
 }
+
+export type ImplementerRigOptions = RigOptions;
+/** The name the matrix files use for `implementerRig`. */
+export const setupImplementer = (options: RigOptions = {}): ImplementerRig => implementerRig(options);
