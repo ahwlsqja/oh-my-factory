@@ -131,12 +131,21 @@ export function createRedactor(secrets) {
     .filter((needle) => needle.length > 0)
     .sort((a, b) => b.length - a.length);
   const longest = needles[0]?.length ?? 0;
+  const firsts = new Set(needles.map((needle) => needle[0]));
   const decoder = new StringDecoder("utf8");
   let pending = "";
   const scan = (text, final) => {
     let out = "";
     let at = 0;
     while (at < text.length) {
+      if (!firsts.has(text[at])) {
+        // Cannot start a secret: copy the run up to the next possible start in one step.
+        let end = at + 1;
+        while (end < text.length && !firsts.has(text[end])) end += 1;
+        out += text.slice(at, end);
+        at = end;
+        continue;
+      }
       const hit = needles.find((needle) => text.startsWith(needle, at));
       if (hit !== undefined) {
         out += REDACTED;
