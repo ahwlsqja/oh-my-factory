@@ -3,18 +3,8 @@ import { dirname, join } from "node:path";
 import { stringify } from "yaml";
 import { runDecideAdd, runDecideResolve } from "../../src/cli/decide.js";
 import { decisionsDigest, foldDecisions } from "../../src/decision/state.js";
+import type { InterfaceContract } from "../../src/decision/types.js";
 import type { Gate2Context, Gate2Reason, Gate2Result } from "../../src/scenario/gate2.js";
-import { type SetRef, type Vault, openVault, setDir, writeScenarioSet } from "../../src/vault/vault.js";
-import {
-  HUMAN,
-  NOW,
-  type DecisionFixture,
-  addOpen,
-  closeInterface,
-  resolveOpen,
-  setupDecisionItem,
-} from "./decision-fixture.js";
-import { recordW } from "./work.js";
 import type { Ids, IntakeContext } from "../../src/scenario/intake.js";
 import type { RunTarget, ScenarioRunner, StepInput } from "../../src/scenario/runner.js";
 import type {
@@ -25,6 +15,17 @@ import type {
   StoredKind,
   StoredScenario,
 } from "../../src/scenario/types.js";
+import { openVault, type SetRef, setDir, type Vault, writeScenarioSet } from "../../src/vault/vault.js";
+import {
+  addOpen,
+  closeInterface,
+  type DecisionFixture,
+  HUMAN,
+  NOW,
+  resolveOpen,
+  setupDecisionItem,
+} from "./decision-fixture.js";
+import { recordW } from "./work.js";
 
 export const WORK_ID = "w-0123456789ab";
 /** A valid stamp. `host_command` is what the stub author reports (M3c-D11). */
@@ -244,6 +245,8 @@ export interface SealedOptions {
   seal?: boolean;
   /** Record `work.started` before `seal.completed`: the judge was written after the implementation began. */
   startBeforeSeal?: boolean;
+  /** The interface contract the item resolves; default `CONTRACT` of the decision fixture. */
+  contract?: InterfaceContract;
 }
 
 /** `scenarioFile(s, i)`: the vault file of the i-th seeded scenario. */
@@ -260,7 +263,7 @@ export function scenarioFile(s: SealedItem, index: number): string {
  */
 export function seedSealedItem(specs: readonly SeedSpec[] = DEFAULT_SPECS, options: SealedOptions = {}): SealedItem {
   const f = setupDecisionItem();
-  closeInterface(f);
+  closeInterface(f, options.contract);
   addOpen(f, "d-cache", "compatibility");
   resolveOpen(f, "d-cache");
   if (options.latency === true) {
