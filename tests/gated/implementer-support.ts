@@ -239,5 +239,5 @@ export async function runImplementerRound(input: RoundInput): Promise<RoundResul
 export function writeModelReport(report: { name: string; spend_micro_usd: number | null; log_bytes: number }): void {
   const file = process.env.OMF_GATED_MODEL_REPORT;
   if (file === undefined || file === "") return;
-  writeFileSync(file, `${JSON.stringify({ vendor: "claude", ...report })}\n`);
+  writeFileSync(file, `${JSON.stringify({ vendor: "claude", ...report })}\n`, { mode: 0o600 });
 }

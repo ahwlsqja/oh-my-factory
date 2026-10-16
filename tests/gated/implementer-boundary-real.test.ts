@@ -107,6 +107,7 @@ describeGated("G-implementer-boundary-real", (ctx) => {
         const spec = { argv: ["sh", "-c", script], timeoutMs: 20_000, maxOutputBytes: 4096 };
         return exitedOf(await runtime.exec(handle, secret === undefined ? spec : { ...spec, secret }));
       };
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: the shell, not JS, expands this variable inside the container
       const LENGTH = 'printf %s "${ANTHROPIC_API_KEY:-}" | wc -c';
       expect(Number((await sh(LENGTH, SENTINEL)).stdout.trim())).toBe(SENTINEL_VALUE.length); // visible in the one exec that names it
       expect((await sh(LENGTH)).stdout.trim()).toBe("0"); // and in no other
