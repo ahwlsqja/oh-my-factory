@@ -204,7 +204,7 @@ const REQUEST: ConflictRequest = {
 };
 
 describe("the implementer request record", () => {
-  it("is its own file at 0600: a fixed question with the kind and path count only, the handoff's commands, no note", () => {
+  it("is its own file at 0600: a fixed question with the kind and the paths, the handoff's commands, no note", () => {
     const dir = makeTempDir();
     const record = writeImplementerRequest(dir, SCOPE, REQUEST, T1);
     expect(IMPLEMENTER_REQUEST_FILE).toBe("needs-human-implementer.json");
@@ -213,7 +213,7 @@ describe("the implementer request record", () => {
     expect(validateDef("decision.schema.json", "implementer_request", record)).toEqual({ ok: true });
     expect(readImplementerRequest(dir)).toEqual(record);
     expect(record.question).toBe(
-      "Work item w-0123456789ab: the implementer stopped and raised a spec_conflict conflict that names 2 path(s) (J2).",
+      "Work item w-0123456789ab: the implementer stopped and raised a spec_conflict conflict that names 2 path(s): docs/spec.md, tests/a.test.ts (J2).",
     );
     expect(record.options).toEqual(HANDOFF_ROUTES.implementer_request.options(SCOPE.work_id, SCOPE.goal_id));
     expect(Object.keys(record).sort()).toEqual(
@@ -224,6 +224,24 @@ describe("the implementer request record", () => {
     const other = writeImplementerRequest(makeTempDir(), SCOPE, { ...REQUEST, paths: ["docs/spec.md"] }, T1);
     expect(again.resume_token).toBe(record.resume_token);
     expect(other.resume_token).not.toBe(record.resume_token);
+  });
+
+  it("shows the paths escaped, so an invisible format character cannot hide in them, and keeps the question within the schema's length", () => {
+    const hostile = writeImplementerRequest(
+      makeTempDir(),
+      SCOPE,
+      { ...REQUEST, paths: ["a\u200Bb.ts", "c\u00ADd.ts"] },
+      T1,
+    );
+    expect(hostile.question).toContain("a\\u200bb.ts, c\\u00add.ts");
+    expect(validateDef("decision.schema.json", "implementer_request", hostile)).toEqual({ ok: true });
+    const long = Array.from({ length: 10 }, (_v, i) => `${i}${"x".repeat(290)}`);
+    const many = writeImplementerRequest(makeTempDir(), SCOPE, { ...REQUEST, paths: long }, T1);
+    expect(many.question.length).toBeLessThanOrEqual(1000);
+    expect(many.question).toContain("names 10 path(s)");
+    expect(many.question).toMatch(/\(\+\d+ more\)/);
+    expect(validateDef("decision.schema.json", "implementer_request", many)).toEqual({ ok: true });
+    expect(many.paths).toEqual(long);
   });
 
   it("coexists with the GATE-1 record: neither overwrites the other, and each clear leaves the other alone", () => {

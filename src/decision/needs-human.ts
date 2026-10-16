@@ -2,6 +2,7 @@ import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { canonicalize, sha256Hex } from "../core/canonical-json.js";
 import { writePrivateFileAtomic } from "../core/private-fs.js";
+import { safeText } from "../core/safe-text.js";
 import { validateDef } from "../core/schema.js";
 import type { ConflictRequest } from "../implementer/request.js";
 import type { Gate1Reason, Gate1Result } from "./gate1.js";
@@ -187,7 +188,7 @@ export interface ImplementerRequestRecord {
   work_id: string;
   kind: "test_conflict" | "spec_conflict";
   paths: string[];
-  /** Fixed template with the kind and the path count only. */
+  /** Fixed template with the kind, the path count and the paths (escaped, cut to fit). */
   question: string;
   /** The same commands the J2 handoff of this stop offers; a rerun clears this record and starts a new implementer run. */
   options: string[];
@@ -203,6 +204,24 @@ export function implementerRequestFile(itemDir: string): string {
   return join(itemDir, IMPLEMENTER_REQUEST_FILE);
 }
 
+/** The question must stay within the schema's 1000 characters, so the paths shown are cut to this many. */
+const SHOWN_PATHS_MAX_CHARS = 700;
+
+/** The paths of a request as one escaped line, as many as fit, then how many were left out. */
+function pathsLine(paths: readonly string[]): string {
+  const shown: string[] = [];
+  let length = 0;
+  for (const path of paths) {
+    const text = safeText(path);
+    const next = length + text.length + (shown.length === 0 ? 0 : 2);
+    if (next > SHOWN_PATHS_MAX_CHARS) break;
+    shown.push(text);
+    length = next;
+  }
+  const left = paths.length - shown.length;
+  return `${shown.join(", ")}${left > 0 ? ` (+${left} more)` : ""}`;
+}
+
 /** Atomic write at 0600. A new request replaces an older one: the line clears the old record when a new implementer run starts. */
 export function writeImplementerRequest(
   itemDir: string,
@@ -215,7 +234,7 @@ export function writeImplementerRequest(
     work_id: id,
     kind: request.kind,
     paths: [...request.paths],
-    question: `Work item ${id}: the implementer stopped and raised a ${request.kind} conflict that names ${request.paths.length} path(s) (J2).`,
+    question: `Work item ${id}: the implementer stopped and raised a ${request.kind} conflict that names ${request.paths.length} path(s)${request.paths.length === 0 ? "" : `: ${pathsLine(request.paths)}`} (J2).`,
     options: [`omf decide show ${id}`, `omf veto ${id}`, `after M3h: omf run ${id}`],
     resume_token: sha256Hex(canonicalize({ work_id: id, kind: request.kind, paths: request.paths })).slice(0, 32),
     created_at: now.toISOString(),
