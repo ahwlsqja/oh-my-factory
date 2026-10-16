@@ -110,7 +110,7 @@ OMF 는 루프 두 개를 돌립니다.
   `docker.sock` 없음, 마운트된 경로 없음; 하네스만 시나리오를 stdin 으로 받아
   들고 있고 SUT 는 기대값을 보지 못합니다)에서 돌리고, 후보 코드가 돌기 전에 컨테이너마다 `docker inspect` 로 측정합니다. GATE-3 는 그 측정을 원장에서 읽습니다. 지금 시험되는 것은 가짜 Docker 를 쓴 오프라인 형태뿐입니다.
   실제 컨테이너에서 잰 수준은 `docs/evidence/gated-runs.json` 에 통과한 실행이 기록되기 전까지 강제되지 않으며,
-  구현자·작성자 컨테이너가 아직 없어서 실제 라인은 GATE-3 에서 `isolation_unmeasured` 로 멈춥니다
+  구현자 컨테이너는 아직 어떤 명령도 돌리지 않는 라이브러리 코드로만 있고([`docs/implementer.md`](docs/implementer.md)) 작성자 컨테이너는 없어서 실제 라인은 GATE-3 에서 `isolation_unmeasured` 로 멈춥니다
   ([`docs/container-judge.md`](docs/container-judge.md)).
 - **비어 있으면 실패.** *일부 구현됨.* 라인 뼈대 (`E7a`), GATE-2 (`E7b`), 게이트 줄·감사·GATE-3 (`E7c`) 는
   없는 측정을 통과가 아니라 실패로 읽습니다. 심판의 판정(`E7d`)도 같습니다. 판정이 없거나 형식이 틀리거나 다른 라운드의 것이면 라운드가 끝나며 통과로 읽지 않습니다.
@@ -122,7 +122,7 @@ OMF 는 루프 두 개를 돌립니다.
 | 명령 | 하는 일 |
 |---|---|
 | `omf init` | 현재 저장소의 호스트 상태를 `~/.omf` 아래에 만듭니다. 저장소와 에이전트 CLI 설정에는 아무것도 쓰지 않습니다. |
-| `omf doctor [--json] [--strict]` | git, Docker, Claude Code, Codex, 저장소, 원장을 점검하고 `preflight.json` 을 씁니다. 에이전트 CLI 는 쓰고 버리는 임시 홈에서 실행합니다. Docker 가 없거나 실행 중이 아니거나 에이전트 CLI 가 없으면 필요한 단계를 밝힌 경고로 보고하고, 문제와 경고마다 한 줄 조치(`fix`)가 붙습니다. `--strict` 는 도구 누락 경고를 문제로 봅니다(원장 꼬리 손상은 경고로 남습니다). 설정의 `[judge]` 에 이미지와 Docker 컨텍스트가 있으면 격리 수준을 쓰고 버리는 컨테이너로 참고용 점검하고, 없으면 이유와 함께 `unmeasurable` 로 보고합니다. |
+| `omf doctor [--json] [--strict]` | git, Docker, Claude Code, Codex, 저장소, 원장을 점검하고 `preflight.json` 을 씁니다. 에이전트 CLI 는 쓰고 버리는 임시 홈에서 실행합니다. Docker 가 없거나 실행 중이 아니거나 에이전트 CLI 가 없으면 필요한 단계를 밝힌 경고로 보고하고, 문제와 경고마다 한 줄 조치(`fix`)가 붙습니다. `--strict` 는 도구 누락 경고를 문제로 봅니다(원장 꼬리 손상은 경고로 남습니다). 설정의 `[judge]` 에 이미지와 Docker 컨텍스트가 있으면 격리 수준을 쓰고 버리는 컨테이너로 참고용 점검하고, 없으면 이유와 함께 `unmeasurable` 로 보고합니다. JSON 보고서에는 참고용 `implementer` 항목도 있어, 구현자 이미지가 설정됐는지와 `OMF_IMPLEMENTER_API_KEY` 설정 여부를 이름만으로 알려 줍니다(값은 절대 싣지 않습니다). |
 | `omf ledger verify [--json]` | 원장의 해시 체인을 확인합니다. 원장이 손상됐으면 stderr 둘째 줄에 경로, 줄 번호, 다음 행동이 나오고 `--json` 은 같은 내용을 필드로 냅니다. `--json` 의 오류는 모두 `{ "ok": false, "error": { "code": "...", "message": "..." } }` 형태입니다(code: `not_initialized`, `ledger_corrupt`, `not_a_git_repository`, `git_not_found`, `unsupported_repository`, `symlink_refused`, `cannot_run`). 키는 snake_case 입니다. `omf init` 전에는 종료 코드 2 입니다. |
 | `omf goal new <id>` | 템플릿으로 호스트 상태에 `goal.md` 를 만듭니다. |
 | `omf metric propose <id> --unit <u> -- <command>` | 지표를 제안합니다. 값을 출력하는 명령, 단위, 바뀌면 체제 변경(regime change)이 되는 경로를 적습니다. |
@@ -153,7 +153,7 @@ OMF 는 루프 두 개를 돌립니다.
 
 판정 스테이션은 아직 명령 없이 라이브러리 코드로만 있습니다. S4 는 저장된 train 분할과 모순 카나리를 일회용 컨테이너 두 개에서 k 번 판정하고, S5 는 게이트와 prove-test 를 컨테이너 작업 사본에서 돌려 감사하며, S6 은 test 분할을 한 번만 씁니다. 모두 가짜 Docker 로 오프라인 시험되고, 실제 컨테이너 실행은 따로 두며 기록되기 전까지 강제되지 않습니다. [`docs/container-judge.md`](docs/container-judge.md) 를 보십시오.
 
-아직 만들지 않은 것: 구현자·작성자 컨테이너, 라인을 돌리는 명령(`omf run`), 증거 보고서, `omf ship`, 목표 달성 확인(`omf goal sign`), 실행 도중 사람에게 입력을 요청하는 흐름. 모두 [설계 문서](docs/ko/design/2026-10-12-omf-v0-design.md)에
+아직 만들지 않은 것: 작성자 컨테이너, 라인을 돌리는 명령(`omf run`, 쓰게 될 구현자 컨테이너는 라이브러리 코드로만 있습니다: [`docs/implementer.md`](docs/implementer.md)), 증거 보고서, `omf ship`, 목표 달성 확인(`omf goal sign`), 실행 도중 사람에게 입력을 요청하는 흐름. 모두 [설계 문서](docs/ko/design/2026-10-12-omf-v0-design.md)에
 적혀 있습니다.
 
 ## 빠른 시작
@@ -281,7 +281,7 @@ kind = "claude"          # 또는 "command": 프롬프트를 stdin 으로 읽고
 그 키는 조정 모델용 `ANTHROPIC_API_KEY` 가 아닙니다. 사용 한도를 건 별도의 Anthropic 워크스페이스 키를 만들어,
 구현자를 돌리는 명령 한 번에만 `OMF_IMPLEMENTER_API_KEY` 로 지정하세요. OMF 는 이 변수만 읽고
 (`ANTHROPIC_API_KEY` 로 대신하지 않습니다) 컨테이너에는 Claude CLI 가 기대하는 이름으로 전달합니다. 키가 없으면
-구현자 단계는 `OMF_IMPLEMENTER_API_KEY` 를 이름으로 밝히는 인프라 실패로 막힙니다.
+구현자 단계는 인프라 실패(`infra_failure`, 키를 지정하고 다시 돌리면 됩니다)로 막힙니다. 멈춤 자체에는 그 코드만 담기고, `omf doctor --json` 의 참고용 `implementer` 항목이 `OMF_IMPLEMENTER_API_KEY` 와 그 설정 여부를 알려 줍니다.
 
 `claude` 종류는 실제 모델로 검증하지 않았습니다. `scripts/smoke-reconciler.sh` 가 수동 확인 수단입니다.
 

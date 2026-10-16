@@ -129,5 +129,12 @@ real judge mapper, `E7d-verdict-missing-means-fail.test.ts` is the judge's half 
 `W-no-merge-recommended-in-m3f.test.ts` pins that no line ends `merge_recommended` while `noise_check` is
 `not_evaluated` (owner decision O-1). `tests/judge/line-m3f.test.ts` is a seam test: it appends the author and implementer
 measurements the later milestones make, so it shows the line's logic and not a measured container. Not enforced: the
-image build step (unmeasured candidate execution), a daemon or base image that lies, and any real author or implementer
-container (M3g, M3h).
+image build step (unmeasured candidate execution), a daemon or base image that lies, and any real author container;
+the implementer is covered in the next paragraph.
+
+Status of the implementer boundary: the git boundary, the credential handling, the session adapter, the station and the driver's key
+redaction are enforced offline (fake Docker, real git, a stub session; `W-driver-redacts-key.test.ts` for the driver). The real
+container, the real model and `docker exec --env NAME` inheritance are not enforced until `docs/evidence/gated-runs.json` records
+`G-implementer-boundary-real`, `G-implementer-real-run` and `G-e6-l2-leak-redteam`; `E6-station-smoke.test.ts` is a wiring test
+and is never mapped to E6. Not enforced either way: a key leaving over the open network, and a credential baked into the image
+under a name outside the closed set.

@@ -48,7 +48,7 @@ With `docker_context` unset every container operation is refused. `omf doctor` r
 
 ## Limits
 
-- With the implementer stubbed and the `author` and `implementer` stages unmeasured, no real line reaches a sealing label: GATE-3 stops it at `isolation_unmeasured` until M3g and M3h. The full-line test appends those two measurements itself and says so.
+- With the implementer stubbed and the `author` and `implementer` stages unmeasured, no real line reaches a sealing label: GATE-3 stops it at `isolation_unmeasured` until a command runs the implementer and the author container exists (the implementer container is described in `docs/implementer.md`). The full-line test appends those two measurements itself and says so.
 - **The image build step is unmeasured candidate execution.** `docker build` runs the candidate's declared build argv as root, with BuildKit's default build capabilities, `--network none` and no mounts, in a BuildKit container OMF never inspects. OMF measures the SUT, harness and work-copy containers before candidate code runs in them, and the build is the stated exception.
 - The build must be self-contained (dependencies vendored). The base image must provide `sleep`, `sh` and `tar` and must not declare `VOLUME` (refused).
 - The in-container probe is a tripwire, not proof: the daemon's `docker inspect` is the authority. A compromised daemon, colima VM or pinned base image is out of scope. Only a local `unix://` endpoint is accepted.

@@ -114,8 +114,8 @@ or **designed** and not built yet.
   loaded over stdin, and the SUT never sees an expectation) and measures each with
   `docker inspect` before candidate code runs in it. GATE-3 reads those measurements from the ledger. Only the offline
   form against a fake Docker is tested: a level measured on a real container is not enforced until a gated run is
-  recorded in `docs/evidence/gated-runs.json`, and the implementer and author containers do not exist yet, so a real
-  line still stops at GATE-3 as `isolation_unmeasured` ([`docs/container-judge.md`](docs/container-judge.md)).
+  recorded in `docs/evidence/gated-runs.json`. The implementer container exists as library code that no command runs yet
+  ([`docs/implementer.md`](docs/implementer.md)) and the author container does not exist, so a real line still stops at GATE-3 as `isolation_unmeasured` ([`docs/container-judge.md`](docs/container-judge.md)).
 - **Empty means fail.** *Partly built.* The line skeleton (`E7a`), GATE-2 (`E7b`) and the gate line, the
   audit and GATE-3 (`E7c`) read a missing measurement as a failure, never as a pass. The judge's verdict
   (`E7d`) is the same: a missing, malformed or foreign verdict ends the round and is never a pass.
@@ -127,7 +127,7 @@ or **designed** and not built yet.
 | Command | What it does |
 |---|---|
 | `omf init` | Creates host state for the current repository under `~/.omf`. Writes nothing to the repository or to the agent CLIs' configuration. |
-| `omf doctor [--json] [--strict]` | Checks git, Docker, Claude Code and Codex, the repository and the ledger, and writes `preflight.json`. Runs the agent CLIs with a throwaway home. A missing or unreachable Docker, or a missing agent CLI, is a warning that names the stage that needs it; every problem and warning has a one-line fix. `--strict` turns the missing-tool warnings into problems; a torn ledger tail stays a warning. It also reports an advisory isolation probe (a throwaway container) when `[judge]` names an image and a Docker context, otherwise `unmeasurable` with the reason. |
+| `omf doctor [--json] [--strict]` | Checks git, Docker, Claude Code and Codex, the repository and the ledger, and writes `preflight.json`. Runs the agent CLIs with a throwaway home. A missing or unreachable Docker, or a missing agent CLI, is a warning that names the stage that needs it; every problem and warning has a one-line fix. `--strict` turns the missing-tool warnings into problems; a torn ledger tail stays a warning. It also reports an advisory isolation probe (a throwaway container) when `[judge]` names an image and a Docker context, otherwise `unmeasurable` with the reason. The JSON report also carries an advisory `implementer` row: whether an implementer image is configured and whether `OMF_IMPLEMENTER_API_KEY` is set, by name only, never the value. |
 | `omf ledger verify [--json]` | Checks the ledger's hash chain. On a corrupt ledger, stderr line 2 gives the path, the line and the next step; `--json` gives the same as fields. With `--json` every error is `{ "ok": false, "error": { "code": "...", "message": "..." } }` (codes: `not_initialized`, `ledger_corrupt`, `not_a_git_repository`, `git_not_found`, `unsupported_repository`, `symlink_refused`, `cannot_run`); keys are snake_case. Exit 2 before `omf init`. |
 | `omf goal new <id>` | Creates `goal.md` in host state from a template. |
 | `omf metric propose <id> --unit <u> -- <command>` | Proposes a metric: the command that prints its value, the unit, and the paths whose change is a regime change. |
@@ -158,7 +158,7 @@ Sealed scenarios and GATE-2 exist as library code only, with no command yet. Aft
 
 The judge stations exist as library code only, with no command yet. S4 judges the stored train split and the contradiction canaries in two disposable containers, k times; S5 runs the gates and prove-test in a container work copy and audits; S6 spends the test split once. Everything is tested offline against a fake Docker, and a real-container run is gated and not enforced until it is recorded. See [`docs/container-judge.md`](docs/container-judge.md).
 
-Not built yet: the implementer and author containers, the command that runs the line (`omf run`), evidence reports, `omf ship`, goal sign-off (`omf goal sign`) and asking people for input in the middle of a run. The
+Not built yet: the author container, the command that runs the line (`omf run`; the implementer container it will use exists as library code, see [`docs/implementer.md`](docs/implementer.md)), evidence reports, `omf ship`, goal sign-off (`omf goal sign`) and asking people for input in the middle of a run. The
 [design](docs/design/2026-10-12-omf-v0-design.md) describes all of them.
 
 ## Quick start
@@ -294,7 +294,7 @@ read the key it is given, so the key is never the reconciler's `ANTHROPIC_API_KE
 workspace key with a spend limit and export it as `OMF_IMPLEMENTER_API_KEY` for the one command that runs the
 implementer. OMF reads that variable only (it does not fall back to `ANTHROPIC_API_KEY`) and hands the key to the
 container under the name the Claude CLI expects. If it is missing, the implementer step is blocked as an
-infrastructure failure that names `OMF_IMPLEMENTER_API_KEY`.
+infrastructure failure (`infra_failure`, so a rerun with the key set can succeed). The stop carries only that code; the advisory `implementer` row of `omf doctor --json` names `OMF_IMPLEMENTER_API_KEY` and whether it is set.
 
 ### Rounds, ending states and exit codes
 

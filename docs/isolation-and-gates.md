@@ -47,7 +47,7 @@ a run directory are views of those events.
 ## Not enforced
 
 - A level measured on a real container is not enforced until a gated run is recorded in `docs/evidence/gated-runs.json`. The `docker inspect` parser is tested against recorded real output and the stage evaluator against fixtures; a fake Docker stands in everywhere else.
-- The author and implementer stages are not enforced until M3g and M3h; the golden values of the SUT and harness stages and the harness image digest are not enforced until their gated runs are recorded.
+- The author container does not exist, and nothing runs the implementer yet: the implementer container, the git boundary and the credential handling exist as library code (`src/implementer/`, see `docs/implementer.md`) and are tested offline against a fake Docker and a real git. Their behaviour in a real container and with a real model is not enforced until `G-implementer-boundary-real`, `G-implementer-real-run` and `G-e6-l2-leak-redteam` are recorded in `docs/evidence/gated-runs.json`. The golden values of the SUT and harness stages and the harness image digest are not enforced until their gated runs are recorded.
 - A scenario set that is sealed against the implementer is not enforced by this page; see the design spec.
 
 ## Known limits
