@@ -111,7 +111,7 @@ interface Harvest {
  * What the host reads of the workspace before anything is published: the credential (found by value) and the vault canaries,
  * in one pass over the exported tree and the container capture. Credential first, then canary, then "could not look".
  */
-async function scanWorkspace(
+export async function scanWorkspace(
   surface: AuditSurface,
   canaries: readonly string[],
   credential: Credential,
