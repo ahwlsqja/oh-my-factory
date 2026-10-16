@@ -9,6 +9,7 @@ import { commitChain } from "../../src/git/ops.js";
 import { combineLineEnd } from "../../src/implementer/station.js";
 import { MUTATING_VERBS } from "../helpers/fake-docker.js";
 import { goodScript, IMPLEMENTER_IMAGE, implementerRig, MODEL, SENTINEL_KEY } from "../helpers/implementer-fixture.js";
+import type { ImplementerFailureCode, ImplementerSession, SessionRequest } from "../../src/implementer/session.js";
 import { RUN } from "../helpers/judge-seed.js";
 
 describe("S3 station, happy path", () => {
@@ -96,6 +97,53 @@ describe("S3 station, happy path", () => {
     expect(rig.spends).toEqual([1234]);
     expect(rig.requests[0]).toMatchObject({ model: MODEL, maxBudgetUsd: 3.75 });
   });
+
+  it.each(["nonzero_exit", "timeout", "output_limit"] as const satisfies readonly ImplementerFailureCode[])(
+    "a session that ends with %s records the budget it was given as its spend, so failing rounds cannot exceed the limit",
+    async (code) => {
+      const asked: SessionRequest[] = [];
+      const rig = implementerRig({
+        session: () =>
+          ({
+            id: "failing",
+            vendor: "stub",
+            model: null,
+            async run(_container, request) {
+              asked.push(request);
+              return { ok: false, code, log: "", credential_hits: 0, durationMs: 1 };
+            },
+          }) satisfies ImplementerSession,
+      });
+      const { ledger } = rig.s.f.fx;
+      const scope = { goal_id: rig.s.f.scope.goal_id, work_id: rig.workId, run_id: RUN };
+      const LIMIT = 5_000_000;
+      ledger.append({
+        actor: "omf",
+        type: "work.limits_set",
+        payload: { ...scope, max_rounds: 3, max_model_micro_usd: LIMIT },
+      });
+      let recorded = 0;
+      for (const round of [1, 2, 3]) {
+        await rig.stations.S3.run(
+          rig.ctx({
+            round,
+            recordSpend: (micro) => {
+              rig.spends.push(micro);
+              recorded += micro ?? 0;
+              ledger.append({
+                actor: "omf",
+                type: "work.spend",
+                payload: { ...scope, station: "S3", micro_usd: micro },
+              });
+            },
+          }),
+        );
+      }
+      expect(asked.map((request) => request.maxBudgetUsd)).toEqual([5, 0, 0]);
+      expect(rig.spends).toEqual([LIMIT, 0, 0]);
+      expect(recorded).toBeLessThanOrEqual(LIMIT);
+    },
+  );
 
   it("counts a key in the raw log, writes the log redacted at 0600 and does not stop", async () => {
     const rig = implementerRig({ log: (key) => `env: ANTHROPIC_API_KEY=${key}` });

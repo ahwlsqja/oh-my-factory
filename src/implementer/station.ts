@@ -315,8 +315,18 @@ async function runS3(
       model,
       maxBudgetUsd,
     });
-    // The cost is recorded whatever the outcome; a failure to record it is not swallowed.
-    ctx.recordSpend(outcome.ok ? outcome.cost_micro_usd : null);
+    // The cost is recorded whatever the outcome; a failure to record it is not swallowed. A session that started and then
+    // failed reported no cost but may have spent up to its --max-budget-usd, so that cap is recorded as an upper bound:
+    // failing rounds then use up the item's limit instead of each being offered all of it again.
+    const startedAndFailed =
+      !outcome.ok && (outcome.code === "nonzero_exit" || outcome.code === "timeout" || outcome.code === "output_limit");
+    ctx.recordSpend(
+      outcome.ok
+        ? outcome.cost_micro_usd
+        : startedAndFailed && maxBudgetUsd !== null
+          ? Math.round(maxBudgetUsd * 1_000_000)
+          : null,
+    );
     const raw = Buffer.from(outcome.log, "utf8");
     const logTruncated = raw.length > imp.max_log_bytes;
     const stored = logTruncated ? raw.subarray(0, imp.max_log_bytes) : raw;
