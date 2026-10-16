@@ -34,9 +34,17 @@ const script = (await import(SCRIPT)) as {
     currentContext: string[];
     restoreContext: (name: string) => string[];
   };
-  parseArgs: (argv: string[]) => { only: string | null; record: boolean } | { error: string };
+  parseArgs: (argv: string[]) => { only: string | null; record: boolean; model: boolean } | { error: string };
   dockerConfigFor: (dir: string, host: string) => string;
-  gatedEnv: (env: Record<string, string | undefined>, dockerConfig: string, omfHome: string) => Record<string, string>;
+  gatedEnv: (
+    env: Record<string, string | undefined>,
+    dockerConfig: string,
+    omfHome: string,
+    options?: { model?: boolean; report?: string },
+  ) => Record<string, string>;
+  createRedactor: (secrets: string[]) => { write: (chunk: string | Buffer) => string; flush: () => string };
+  childEnv: (env: Record<string, string | undefined>) => Record<string, string>;
+  recordsFromVitest: (report: unknown, meta: Record<string, unknown>) => Array<Record<string, unknown>>;
   appendGatedRuns: (file: string, records: unknown[]) => void;
   main: (argv: string[], env: Record<string, string | undefined>, deps: Deps) => number;
 };
@@ -101,8 +109,9 @@ describe("dockerConfigFor", () => {
 
 describe("arguments and environment", () => {
   it("accepts --only and --record and refuses anything else", () => {
-    expect(script.parseArgs([])).toEqual({ only: null, record: false });
-    expect(script.parseArgs(["--only", "G-x", "--record"])).toEqual({ only: "G-x", record: true });
+    expect(script.parseArgs([])).toEqual({ only: null, record: false, model: false });
+    expect(script.parseArgs(["--only", "G-x", "--record"])).toEqual({ only: "G-x", record: true, model: false });
+    expect(script.parseArgs(["--model"])).toEqual({ only: null, record: false, model: true });
     expect(script.parseArgs(["--only"])).toEqual({ error: "--only needs a test name" });
     expect(script.parseArgs(["--profile", "default"])).toEqual({ error: "unknown argument: --profile" });
   });
@@ -121,16 +130,6 @@ describe("arguments and environment", () => {
     expect(env.OMF_GATED_BASE_IMAGE).toBe("r/a@sha256:1");
     expect(env.OMF_GATED_HARNESS_IMAGE).toBe("r/n@sha256:2");
     expect(env.OMF_API_TOKEN).toBeUndefined();
-  });
-
-  it("passes the dedicated implementer key through and never ANTHROPIC_API_KEY", () => {
-    const env = script.gatedEnv(
-      { PATH: "/bin", ANTHROPIC_API_KEY: "reconciler-key", OMF_IMPLEMENTER_API_KEY: "planted-implementer-key" },
-      "/tmp/cfg",
-      "/tmp/omf-home",
-    );
-    expect(env.OMF_IMPLEMENTER_API_KEY).toBe("planted-implementer-key");
-    expect(env).not.toHaveProperty("ANTHROPIC_API_KEY");
   });
 
   it("gives the test process only a short list of variables, never HOME or a key", () => {
@@ -339,5 +338,116 @@ describe("main", () => {
     const { deps, evidenceFile } = harness({ vitest: { status: 1 } });
     expect(script.main(["--record"], {}, deps)).toBe(EXIT.failed);
     expect(JSON.parse(readFileSync(evidenceFile, "utf8")).runs).toEqual([]);
+  });
+});
+
+describe("model mode environment", () => {
+  const BASE = {
+    PATH: "/bin",
+    OMF_IMPLEMENTER_API_KEY: "key-value-1",
+    ANTHROPIC_API_KEY: "reconciler-key",
+    OMF_GATED_IMPLEMENTER_IMAGE: "sha256:a",
+    OMF_API_TOKEN: "t",
+  };
+
+  it("--model switches to docker+model and adds exactly the implementer key and the report path; without it the key is dropped, and ANTHROPIC_API_KEY never passes", () => {
+    const plain = script.gatedEnv(BASE, "/tmp/cfg", "/tmp/omf-home");
+    const model = script.gatedEnv(BASE, "/tmp/cfg", "/tmp/omf-home", {
+      model: true,
+      report: "/tmp/r/model-report.json",
+    });
+    expect(plain.OMF_GATED).toBe("docker");
+    expect(plain.OMF_IMPLEMENTER_API_KEY).toBeUndefined();
+    expect(plain.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(plain.OMF_GATED_IMPLEMENTER_IMAGE).toBe("sha256:a");
+    expect(plain.OMF_API_TOKEN).toBeUndefined();
+    expect(model).toEqual({
+      ...plain,
+      OMF_GATED: "docker+model",
+      OMF_IMPLEMENTER_API_KEY: "key-value-1",
+      OMF_GATED_MODEL_REPORT: "/tmp/r/model-report.json",
+    });
+    expect(
+      script.gatedEnv({ ...BASE, OMF_IMPLEMENTER_API_KEY: "" }, "/c", "/h", { model: true }).OMF_IMPLEMENTER_API_KEY,
+    ).toBeUndefined();
+  });
+
+  it("childEnv removes the key and keeps everything else, for the children that are not the test process", () => {
+    expect(script.childEnv({ PATH: "/bin", OMF_IMPLEMENTER_API_KEY: "k", ANTHROPIC_API_KEY: "r", HOME: "/h" })).toEqual(
+      { PATH: "/bin", HOME: "/h" },
+    );
+  });
+});
+
+describe("createRedactor", () => {
+  const KEY = "sk-ant-SECRET-0123456789";
+  const run = (chunks: Array<string | Buffer>, secrets: string[] = [KEY]): string => {
+    const redactor = script.createRedactor(secrets);
+    return [...chunks.map((chunk) => redactor.write(chunk)), redactor.flush()].join("");
+  };
+
+  it("replaces the secret wherever the chunk boundary falls, also one character at a time", () => {
+    const text = `before ${KEY} after ${KEY}`;
+    for (let cut = 1; cut < text.length; cut += 1) {
+      expect(run([text.slice(0, cut), text.slice(cut)])).toBe("before [redacted] after [redacted]");
+    }
+    expect(run([...text])).toBe("before [redacted] after [redacted]");
+  });
+
+  it("also hides the JSON-escaped spelling of a secret that holds a quote and a backslash", () => {
+    const key = 'a"b\\c-0123456789';
+    expect(run([JSON.stringify({ key })], [key])).toBe('{"key":"[redacted]"}');
+  });
+
+  it("holds back only a possible start of the secret, and redacts a stream that ends inside one", () => {
+    const redactor = script.createRedactor([KEY]);
+    expect(redactor.write("plain output sk-ant-SEC")).toBe("plain output ");
+    expect(redactor.write("RET-0123456789!")).toBe("[redacted]!");
+    expect(redactor.flush()).toBe("");
+    const cut = script.createRedactor([KEY]);
+    expect(cut.write("x sk-ant-SEC")).toBe("x ");
+    expect(cut.flush()).toBe("[redacted]");
+  });
+
+  it("keeps a multi-byte character that is split between two chunks", () => {
+    const bytes = Buffer.from("héllo wörld", "utf8");
+    expect(run([bytes.subarray(0, 2), bytes.subarray(2)])).toBe("héllo wörld");
+  });
+});
+
+describe("the optional model field of a run record", () => {
+  const MODEL = { vendor: "claude", name: "default", spend_micro_usd: 123456, log_bytes: 2048 };
+
+  it("accepts the model report (an unknown cost is null), rejects free text and extra fields, and recordsFromVitest attaches it to the real-run suite only", () => {
+    const file = join(makeTempDir("omf-gated-ev-"), "gated-runs.json");
+    writeFileSync(file, `${JSON.stringify({ schema_version: 1, runs: [] })}\n`);
+    const real = { ...RECORD, test: "G-implementer-real-run" };
+    script.appendGatedRuns(file, [
+      { ...real, model: MODEL },
+      { ...real, model: { ...MODEL, spend_micro_usd: null } },
+    ]);
+    const before = readFileSync(file, "utf8");
+    for (const bad of [
+      { ...MODEL, name: "free text with a space" },
+      { ...MODEL, vendor: "codex" },
+      { ...MODEL, spend_micro_usd: -1 },
+      { ...MODEL, note: "x" },
+      { vendor: "claude", name: "default", spend_micro_usd: 1 },
+    ]) {
+      expect(() => script.appendGatedRuns(file, [{ ...real, model: bad }])).toThrow(/gated run record rejected/);
+    }
+    expect(readFileSync(file, "utf8")).toBe(before);
+
+    const passed = ["G-implementer-real-run", "G-e6-l2-leak-redteam"].map((name) => ({
+      ancestorTitles: [name],
+      status: "passed",
+    }));
+    const report = { testResults: [{ assertionResults: passed }] };
+    const meta = { at: RECORD.at, commit: COMMIT, docker: RECORD.docker };
+    expect(script.recordsFromVitest(report, { ...meta, model: MODEL }).map((r) => [r.test, "model" in r])).toEqual([
+      ["G-implementer-real-run", true],
+      ["G-e6-l2-leak-redteam", false],
+    ]);
+    expect(script.recordsFromVitest(report, { ...meta, model: null }).some((r) => "model" in r)).toBe(false);
   });
 });

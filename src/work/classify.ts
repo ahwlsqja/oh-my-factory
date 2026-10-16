@@ -101,6 +101,7 @@ export type ClassifierRule =
   | "station_error"
   | "station_manual"
   | "station_blocked"
+  | "plan_missing"
   | "gate_not_run"
   | "gate1_open"
   | "gate2_stop"
@@ -246,6 +247,11 @@ export function classifyOutcome(input: ClassifierInput): Classification {
   if (stop.kind === "station") {
     if (stop.result === "error") return make("blocked", false, "station_error", "station_error");
     if (stop.result === "manual") return make("manual", false, stop.reason_code, "station_manual");
+    // A flawed result needs an implementation behind it, and S3 only runs in a round (>= 1) after the implementer started.
+    // The branch is already published, so a person can review it (J4); every other blocked stop stays blocked.
+    if (stop.station === "S3" && stop.reason_code === "plan_missing") {
+      return make("flawed", false, "plan_missing", "plan_missing");
+    }
     return make("blocked", false, stop.reason_code, "station_blocked");
   }
   if (stop.kind === "gate") {

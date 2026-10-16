@@ -2,13 +2,13 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createMarkdownStore } from "../../src/adapters/state-markdown.js";
 import { type DecideReport, decideReport, runDecideAdd, runDecideResolve } from "../../src/cli/decide.js";
+import type { LedgerEvent } from "../../src/core/ledger.js";
 import type { Gate1Reason, Gate1Result } from "../../src/decision/gate1.js";
 import { loadLeakContext } from "../../src/decision/leak-lint.js";
 import { renderSpec, specFile } from "../../src/decision/spec-md.js";
 import { foldDecisions } from "../../src/decision/state.js";
 import type { DecisionClass, DecisionScope, InterfaceContract } from "../../src/decision/types.js";
 import { DecisionError } from "../../src/decision/write.js";
-import type { LedgerEvent } from "../../src/core/ledger.js";
 import { approveGoal } from "../../src/goal/approve.js";
 import { goalFile } from "../../src/goal/goal-file.js";
 import { fingerprintOf } from "../../src/work/fingerprint.js";
@@ -68,20 +68,20 @@ export function addInterface(f: DecisionFixture): void {
   );
 }
 
-export function resolveInterface(f: DecisionFixture): void {
+export function resolveInterface(f: DecisionFixture, contract: InterfaceContract = CONTRACT): void {
   runDecideResolve(
     f.fx.location,
     f.workId,
     "d-interface",
-    { choice: "A command line program", rationale: "Callers already shell out.", rejected: [], interface: CONTRACT },
+    { choice: "A command line program", rationale: "Callers already shell out.", rejected: [], interface: contract },
     HUMAN,
   );
 }
 
 /** Adds and resolves the mandatory interface decision. */
-export function closeInterface(f: DecisionFixture): void {
+export function closeInterface(f: DecisionFixture, contract: InterfaceContract = CONTRACT): void {
   addInterface(f);
-  resolveInterface(f);
+  resolveInterface(f, contract);
 }
 
 /** An open decision with a clean question. */

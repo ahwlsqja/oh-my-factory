@@ -114,7 +114,9 @@
         "noise_unverified",
         "scenarios_exhausted",
         "gates_failed",
-        "disclosure_unavailable"
+        "disclosure_unavailable",
+        "plan_missing",
+        "implementer_request"
       ]
     },
     "risk": {

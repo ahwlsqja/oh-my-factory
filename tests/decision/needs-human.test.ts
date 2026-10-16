@@ -4,14 +4,21 @@ import { describe, expect, it } from "vitest";
 import { validateDef } from "../../src/core/schema.js";
 import type { Gate1Reason, Gate1Result } from "../../src/decision/gate1.js";
 import {
+  clearImplementerRequest,
   clearNeedsHuman,
+  IMPLEMENTER_REQUEST_FILE,
+  implementerRequestFile,
   needsHumanFile,
   needsHumanFor,
   persistNeedsHuman,
+  readImplementerRequest,
   readNeedsHuman,
   syncNeedsHuman,
+  writeImplementerRequest,
 } from "../../src/decision/needs-human.js";
 import type { DecisionScope } from "../../src/decision/types.js";
+import type { ConflictRequest } from "../../src/implementer/request.js";
+import { HANDOFF_ROUTES } from "../../src/work/handoff.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
 const SCOPE: DecisionScope = { goal_id: "g-demo", work_id: "w-0123456789ab" };
@@ -187,5 +194,80 @@ describe("clearNeedsHuman and syncNeedsHuman", () => {
     syncNeedsHuman(dir, SCOPE, { status: "pass" }, T2);
     expect(existsSync(needsHumanFile(dir))).toBe(false);
     expect(() => syncNeedsHuman(dir, SCOPE, { status: "pass" }, T2)).not.toThrow();
+  });
+});
+
+const REQUEST: ConflictRequest = {
+  kind: "spec_conflict",
+  paths: ["docs/spec.md", "tests/a.test.ts"],
+  note_present: true,
+};
+
+describe("the implementer request record", () => {
+  it("is its own file at 0600: a fixed question with the kind and the paths, the handoff's commands, no note", () => {
+    const dir = makeTempDir();
+    const record = writeImplementerRequest(dir, SCOPE, REQUEST, T1);
+    expect(IMPLEMENTER_REQUEST_FILE).toBe("needs-human-implementer.json");
+    expect(implementerRequestFile(dir)).toBe(join(dir, "needs-human-implementer.json"));
+    expect((statSync(implementerRequestFile(dir)).mode & 0o777).toString(8)).toBe("600");
+    expect(validateDef("decision.schema.json", "implementer_request", record)).toEqual({ ok: true });
+    expect(readImplementerRequest(dir)).toEqual(record);
+    expect(record.question).toBe(
+      "Work item w-0123456789ab: the implementer stopped and raised a spec_conflict conflict that names 2 path(s): docs/spec.md, tests/a.test.ts (J2).",
+    );
+    expect(record.options).toEqual(HANDOFF_ROUTES.implementer_request.options(SCOPE.work_id, SCOPE.goal_id));
+    expect(Object.keys(record).sort()).toEqual(
+      ["created_at", "kind", "options", "paths", "question", "resume_token", "work_id"].sort(),
+    );
+    // The token depends on the item, the kind and the paths only.
+    const again = writeImplementerRequest(makeTempDir(), SCOPE, { ...REQUEST, note_present: false }, T2);
+    const other = writeImplementerRequest(makeTempDir(), SCOPE, { ...REQUEST, paths: ["docs/spec.md"] }, T1);
+    expect(again.resume_token).toBe(record.resume_token);
+    expect(other.resume_token).not.toBe(record.resume_token);
+  });
+
+  it("shows the paths escaped, so an invisible format character cannot hide in them, and keeps the question within the schema's length", () => {
+    const hostile = writeImplementerRequest(
+      makeTempDir(),
+      SCOPE,
+      { ...REQUEST, paths: ["a\u200Bb.ts", "c\u00ADd.ts"] },
+      T1,
+    );
+    expect(hostile.question).toContain("a\\u200bb.ts, c\\u00add.ts");
+    expect(validateDef("decision.schema.json", "implementer_request", hostile)).toEqual({ ok: true });
+    const long = Array.from({ length: 10 }, (_v, i) => `${i}${"x".repeat(290)}`);
+    const many = writeImplementerRequest(makeTempDir(), SCOPE, { ...REQUEST, paths: long }, T1);
+    expect(many.question.length).toBeLessThanOrEqual(1000);
+    expect(many.question).toContain("names 10 path(s)");
+    expect(many.question).toMatch(/\(\+\d+ more\)/);
+    expect(validateDef("decision.schema.json", "implementer_request", many)).toEqual({ ok: true });
+    expect(many.paths).toEqual(long);
+  });
+
+  it("coexists with the GATE-1 record: neither overwrites the other, and each clear leaves the other alone", () => {
+    const dir = makeTempDir();
+    const gate1 = needsHumanFor(SCOPE, blocked({ code: "required_open", decision_id: "d-a" }), T1);
+    persistNeedsHuman(dir, gate1);
+    const request = writeImplementerRequest(dir, SCOPE, REQUEST, T1);
+    expect(readNeedsHuman(dir)).toEqual(gate1);
+    expect(readImplementerRequest(dir)).toEqual(request);
+    // A GATE-1 pass clears needs-human.json and never the implementer's record.
+    syncNeedsHuman(dir, SCOPE, { status: "pass" }, T2);
+    expect(existsSync(needsHumanFile(dir))).toBe(false);
+    expect(readImplementerRequest(dir)).toEqual(request);
+    // Only clearImplementerRequest removes it, and then GATE-1's record stays.
+    syncNeedsHuman(dir, SCOPE, blocked({ code: "required_open", decision_id: "d-a" }), T2);
+    clearImplementerRequest(dir);
+    expect(readImplementerRequest(dir)).toBeNull();
+    expect(readNeedsHuman(dir)).not.toBeNull();
+    expect(() => clearImplementerRequest(dir)).not.toThrow();
+  });
+
+  it("reads an unparsable or schema-invalid file as null", () => {
+    const dir = makeTempDir();
+    writeFileSync(implementerRequestFile(dir), "{not json");
+    expect(readImplementerRequest(dir)).toBeNull();
+    writeFileSync(implementerRequestFile(dir), JSON.stringify({ work_id: "w-0123456789ab", kind: "other" }));
+    expect(readImplementerRequest(dir)).toBeNull();
   });
 });

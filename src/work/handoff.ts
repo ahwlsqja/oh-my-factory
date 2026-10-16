@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { PROGRESS_MARKER_PATTERN } from "../adapters/state-markdown.js";
 import type { LedgerEvent } from "../core/ledger.js";
@@ -6,7 +6,7 @@ import { writePrivateFileAtomic } from "../core/private-fs.js";
 import { validate } from "../core/schema.js";
 import type { Classification } from "./classify.js";
 import { LINE_ORDER, type NodeId, type UnverifiedCode } from "./line-types.js";
-import { RUN_ID_PATTERN, type ReasonCode, classifyWEvent, lastStateEvent } from "./w-events.js";
+import { classifyWEvent, lastStateEvent, type ReasonCode, RUN_ID_PATTERN } from "./w-events.js";
 
 /**
  * The minimal handoff record (spec §6.3, M3b2-D10, D21): what a person needs when a run stops without a
@@ -226,6 +226,20 @@ export const HANDOFF_ROUTES: Readonly<Record<ReasonCode, Route>> = {
     state: "Feedback needs a disclosure budget, and none is declared or the declared one is used up.",
     question: "Should a disclosure budget be declared or raised, or should the item be dropped?",
     options: (id, goalId) => [declareDisclosure(goalId), raiseDisclosure(goalId), veto(id), rerun(id)],
+  },
+  plan_missing: {
+    j: "J4",
+    state: "The implementer did not commit a plan first, so the result is not recommended.",
+    question: REVIEW_QUESTION,
+    options: review,
+  },
+  // A rerun is real here: the next S3 clears the persisted request and starts again, and `beginRun` refuses only manual items.
+  implementer_request: {
+    j: "J2",
+    state:
+      "The implementer asked a person to settle a conflict between a test and the spec, so the line stopped before judging.",
+    question: "Which answer do you give to the implementer's request?",
+    options: (id) => [decideShow(id), veto(id), rerun(id)],
   },
 };
 

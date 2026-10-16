@@ -4,10 +4,11 @@ import { homedir, userInfo } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe } from "vitest";
+import { type Credential, readCredential } from "../../src/implementer/credential.js";
 
 /**
  * Helpers for the Docker-gated suites (tests/gated/*.test.ts). A gated suite runs only when
- * `OMF_GATED=docker`, which `scripts/gated-docker.mjs` sets after it has started the dedicated colima
+ * `OMF_GATED` is `docker` (`docker+model` for the model suites), which `scripts/gated-docker.mjs` sets after it has started the dedicated colima
  * profile and written a DOCKER_CONFIG that holds only the `colima-omf-m3f` context. These helpers refuse
  * any other context, so a gated test cannot touch the default daemon or another profile by mistake.
  */
@@ -34,8 +35,20 @@ export class GatedRefusal extends Error {
   }
 }
 
+/** Docker-only suites run under `docker` and under `docker+model` (a model run includes them); model suites only under `docker+model`. */
 export function gatedEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.OMF_GATED === "docker";
+  return env.OMF_GATED === "docker" || env.OMF_GATED === "docker+model";
+}
+
+export function gatedModelEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.OMF_GATED === "docker+model";
+}
+
+/** The implementer key, read from OMF_IMPLEMENTER_API_KEY in the test process environment (the driver passes it only in model mode). A refusal never names a value. */
+export function gatedCredential(env: NodeJS.ProcessEnv = process.env): Credential {
+  const credential = readCredential("claude", env);
+  if (credential === null) throw new GatedRefusal("the model suites need OMF_IMPLEMENTER_API_KEY in the environment");
+  return credential;
 }
 
 /** The context and the docker config directory a gated test passes to `createDockerRuntime`. */
@@ -58,6 +71,17 @@ export function describeGated(name: string, body: (ctx: GatedContext) => void): 
   describe.skipIf(!gatedEnabled())(name, () => {
     body(
       gatedEnabled()
+        ? { context: GATED_CONTEXT, dockerConfig: gatedDockerConfig() }
+        : { context: GATED_CONTEXT, dockerConfig: "" },
+    );
+  });
+}
+
+/** Like `describeGated`, for a suite that calls the real model. Skipped unless `OMF_GATED=docker+model`, so a plain `docker` run never spends money. */
+export function describeGatedModel(name: string, body: (ctx: GatedContext) => void): void {
+  describe.skipIf(!gatedModelEnabled())(name, () => {
+    body(
+      gatedModelEnabled()
         ? { context: GATED_CONTEXT, dockerConfig: gatedDockerConfig() }
         : { context: GATED_CONTEXT, dockerConfig: "" },
     );

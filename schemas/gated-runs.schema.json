@@ -31,6 +31,17 @@
             "context": { "const": "colima-omf-m3f" },
             "arch": { "type": "string", "minLength": 1, "maxLength": 32 }
           }
+        },
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["vendor", "name", "spend_micro_usd", "log_bytes"],
+          "properties": {
+            "vendor": { "const": "claude" },
+            "name": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,80}$" },
+            "spend_micro_usd": { "type": ["integer", "null"], "minimum": 0 },
+            "log_bytes": { "type": "integer", "minimum": 0 }
+          }
         }
       }
     }
