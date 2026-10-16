@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -158,6 +159,25 @@ describe("S3 station, happy path", () => {
       expect(statSync(join(dir, name)).mode & 0o777).toBe(0o600);
     }
   });
+
+  it.each([0, 1, 2, 3])(
+    "cuts an over-long log at a character boundary (padding %i), so the file on disk hashes to the digest in the ledger",
+    async (pad) => {
+      const LIMIT = 1024 * 1024;
+      // A run of four-byte characters: depending on the padding, the cap falls inside one of them.
+      const rig = implementerRig({
+        implementerToml: `max_log_bytes = ${LIMIT}`,
+        log: () => `${"a".repeat(pad)}${"\u{1F600}".repeat(LIMIT / 4 + 10)}`,
+      });
+      expect((await rig.stations.S3.run(rig.ctx())).kind).toBe("ok");
+      const file = readFileSync(join(rig.itemDir, "runs", RUN, "implementer", "round-1", "implementer.log"));
+      const [event] = rig.events("implementer.session_completed");
+      expect(event?.payload.log_sha256).toBe(createHash("sha256").update(file).digest("hex"));
+      expect(event?.payload.log_bytes).toBe(file.length);
+      expect(file.length).toBeLessThanOrEqual(LIMIT);
+      expect(file.toString("utf8")).not.toContain("\ufffd");
+    },
+  );
 
   it("restarts round 2 from the recorded base with the released feedback, never from the first head", async () => {
     const rig = implementerRig({

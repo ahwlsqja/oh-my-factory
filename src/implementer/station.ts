@@ -107,6 +107,16 @@ interface Harvest {
   notes: string | null;
 }
 
+/** The largest length up to `max` that does not end inside a multi-byte UTF-8 character of `bytes`. */
+function utf8Boundary(bytes: Buffer, max: number): number {
+  let end = Math.min(max, bytes.length);
+  // A continuation byte is 10xxxxxx; step back over them and the lead byte they belong to.
+  if (end < bytes.length) {
+    while (end > 0 && ((bytes[end] ?? 0) & 0xc0) === 0x80) end -= 1;
+  }
+  return end;
+}
+
 /**
  * What the host reads of the workspace before anything is published: the credential (found by value) and the vault canaries,
  * in one pass over the exported tree and the container capture. Credential first, then canary, then "could not look".
@@ -329,7 +339,8 @@ async function runS3(
     );
     const raw = Buffer.from(outcome.log, "utf8");
     const logTruncated = raw.length > imp.max_log_bytes;
-    const stored = logTruncated ? raw.subarray(0, imp.max_log_bytes) : raw;
+    // Cut at a character boundary, so the bytes that are hashed and the text that is written are the same.
+    const stored = logTruncated ? raw.subarray(0, utf8Boundary(raw, imp.max_log_bytes)) : raw;
     writePrivateFile(join(runDir, "prompt.txt"), prompt);
     writePrivateFile(join(runDir, "settings.json"), settings);
     writePrivateFile(join(runDir, "implementer.log"), stored.toString("utf8"));
