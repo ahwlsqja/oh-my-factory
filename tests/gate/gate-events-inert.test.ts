@@ -5,9 +5,16 @@ import {
   gatesEvaluatedEvent,
   isolationMeasuredEvent,
 } from "../../src/gate/events.js";
+import {
+  baseFixedEvent,
+  candidateCheckedEvent,
+  publishIntendedEvent,
+  sessionCompletedEvent,
+} from "../../src/implementer/events.js";
 import { judgeRoundEvent } from "../../src/judge/events.js";
 import { HEAD_SHA } from "../helpers/audit-diff-fixture.js";
-import { GREEN_LINE, cleanAudit, gateRunOf, measurement } from "../helpers/gate3-parts.js";
+import { cleanAudit, GREEN_LINE, gateRunOf, measurement } from "../helpers/gate3-parts.js";
+import { CANDIDATE_FACTS, SESSION_FACTS } from "../helpers/implementer-events.js";
 import { setupW } from "../helpers/w-verbs-fixture.js";
 
 // audit.*, gates.*, isolation.* and gate3.* stay inert for the W verifier and the fold. The events here are built by the
@@ -52,6 +59,25 @@ describe("gate, audit and isolation events do not touch the W verifier", () => {
       for (const event of events) fx.ledger.append({ ...event, actor });
       expect(fx.ledger.verify()).toMatchObject({ ok: true, count: fx.events().length });
       expect(fx.events().filter((event) => events.some((e) => e.type === event.type))).toHaveLength(5);
+      expect({ verdict: fx.verdict(), verified: fx.verified() }).toEqual(before);
+    },
+  );
+
+  it.each(["omf", "human:dev"])(
+    "appending the four implementer event types as %s changes no verdict and no verified item",
+    (actor) => {
+      const fx = setupW();
+      const before = { verdict: fx.verdict(), verified: fx.verified() };
+      const sha = "a".repeat(40);
+      const events = [
+        baseFixedEvent(fx.scope, { base_sha: sha, base_tree_sha: sha }),
+        sessionCompletedEvent(fx.scope, SESSION_FACTS),
+        publishIntendedEvent(fx.scope, { round: 1, head_sha: sha }),
+        candidateCheckedEvent(fx.scope, CANDIDATE_FACTS),
+      ];
+      for (const event of events) fx.ledger.append({ ...event, actor });
+      expect(fx.ledger.verify()).toMatchObject({ ok: true, count: fx.events().length });
+      expect(fx.events().filter((event) => event.type.startsWith("implementer."))).toHaveLength(4);
       expect({ verdict: fx.verdict(), verified: fx.verified() }).toEqual(before);
     },
   );
