@@ -38,6 +38,7 @@ const script = (await import(SCRIPT)) as {
     options: RunOptions,
     sinks: { stdout: (text: string) => void; stderr: (text: string) => void },
   ) => RunResult;
+  realDeps: () => { deps: Deps; cleanup: () => void };
 };
 const { EXIT } = script;
 
@@ -148,6 +149,48 @@ describe("W-driver-redacts-key", () => {
     expect(plain.vitestCall()?.options.env?.OMF_GATED).toBe("docker");
     expect(plain.vitestCall()?.options).toMatchObject({ inherit: true });
     expect(plain.vitestCall()?.options.redact).toBeUndefined();
+  });
+
+  it("the children the driver really spawns without an explicit env inherit neither the implementer key nor the reconciler key", () => {
+    const names = ["OMF_IMPLEMENTER_API_KEY", "ANTHROPIC_API_KEY"];
+    const before = names.map((name) => process.env[name]);
+    process.env.OMF_IMPLEMENTER_API_KEY = SENTINEL;
+    process.env.ANTHROPIC_API_KEY = "sk-ant-planted-reconciler-key-0000";
+    const PROBE =
+      "process.stdout.write(JSON.stringify(['OMF_IMPLEMENTER_API_KEY','ANTHROPIC_API_KEY'].map((n) => n in process.env)))";
+    const { deps, cleanup } = script.realDeps();
+    try {
+      const plain = deps.run(process.execPath, ["-e", PROBE]);
+      expect(plain.stdout).toBe("[false,false]");
+      const sunk: string[] = [];
+      const redacted = script.runRedacted(
+        process.execPath,
+        ["-e", PROBE],
+        { redact: [SENTINEL] },
+        { stdout: (text) => sunk.push(text), stderr: () => undefined },
+      );
+      expect(redacted.status).toBe(0);
+      expect(sunk.join("")).toBe("[false,false]");
+      const viaDeps: string[] = [];
+      const originalWrite = process.stdout.write.bind(process.stdout);
+      process.stdout.write = ((chunk: string | Uint8Array) => {
+        viaDeps.push(String(chunk));
+        return true;
+      }) as typeof process.stdout.write;
+      try {
+        deps.run(process.execPath, ["-e", PROBE], { redact: [SENTINEL] });
+      } finally {
+        process.stdout.write = originalWrite;
+      }
+      expect(viaDeps.join("")).toBe("[false,false]");
+    } finally {
+      cleanup();
+      names.forEach((name, index) => {
+        const value = before[index];
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      });
+    }
   });
 
   it.each([

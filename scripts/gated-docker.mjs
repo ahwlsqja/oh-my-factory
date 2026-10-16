@@ -374,7 +374,7 @@ export function main(argv, env, deps) {
   }
 }
 
-function realDeps() {
+export function realDeps() {
   const made = [];
   return {
     cleanup: () => {
