@@ -12,6 +12,15 @@
         "model": { "type": "string", "minLength": 1 },
         "effort": { "type": "string", "minLength": 1 }
       }
+    },
+    "implementer_role": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "vendor": { "enum": ["claude", "codex"] },
+        "model": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$" },
+        "effort": { "type": "string", "minLength": 1 }
+      }
     }
   },
   "properties": {
@@ -27,7 +36,7 @@
       "additionalProperties": false,
       "properties": {
         "author": { "$ref": "#/$defs/role" },
-        "implementer": { "$ref": "#/$defs/role" },
+        "implementer": { "$ref": "#/$defs/implementer_role" },
         "judge": { "$ref": "#/$defs/role" },
         "reconciler": { "$ref": "#/$defs/role" }
       }
