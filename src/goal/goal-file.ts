@@ -140,6 +140,7 @@ target:
   # You then define how it is measured with omf metric propose.
   metric_id: ${PLACEHOLDER_METRIC_ID}
   operator: "<="
+  # Placeholder: 0 is only a default. Set the number you want to reach.
   value: 0
   # Placeholder: must match the unit you give omf metric propose (for example ms, warnings, tests).
   unit: ms
@@ -187,6 +188,11 @@ export function placeholdersIn(doc: GoalDoc): string[] {
   if (referencedMetrics(front).includes(PLACEHOLDER_METRIC_ID)) {
     found.push(
       `metric id ${PLACEHOLDER_METRIC_ID} is a placeholder: use your own metric id in target and lagging, and set target.unit to its unit`,
+    );
+  }
+  if (front.target.unit === "ms" && front.target.value === 0) {
+    found.push(
+      "target unit ms and value 0 are template defaults: set the value you want to reach and the unit your metric uses",
     );
   }
   if (front.title === PLACEHOLDER_TITLE) found.push("title is still the template text: say what the goal is");

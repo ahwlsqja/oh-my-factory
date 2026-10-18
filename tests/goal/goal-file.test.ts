@@ -35,7 +35,7 @@ describe("goal.md", () => {
 
   it("lists every placeholder a fresh goal still has, and none once they are replaced", () => {
     const fresh = placeholdersIn(parseGoal(goalTemplate("g-a")));
-    expect(fresh).toHaveLength(5);
+    expect(fresh).toHaveLength(6);
     expect(fresh[0]).toMatch(/^metric id m-replace-me is a placeholder/);
     const edited = goalTemplate("g-a")
       .replace(/m-replace-me/g, "m-warnings")
@@ -43,7 +43,12 @@ describe("goal.md", () => {
       .replace("The outcome you want, in plain words", "Keep the code base tidy")
       .replace("Why moving the leading metrics should move the lagging ones", "Warnings hide real problems")
       .replace(/Replace this line/g, "Write");
-    expect(placeholdersIn(parseGoal(edited))).toEqual([]);
+    const unitLeft = placeholdersIn(parseGoal(edited));
+    expect(unitLeft).toHaveLength(1);
+    expect(unitLeft[0]).toMatch(/^target unit ms and value 0 are template defaults/);
+    const decided = edited.replace("value: 0", "value: 3").replace("unit: ms", "unit: warnings");
+    expect(placeholdersIn(parseGoal(decided))).toEqual([]);
+    expect(placeholdersIn(parseGoal(edited.replace("value: 0", "value: 200")))).toEqual([]);
   });
 
   it("rejects a file without front matter, invalid YAML, or a schema violation", () => {
