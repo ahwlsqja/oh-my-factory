@@ -7,7 +7,7 @@ Generated from `docs/requirements.json` by `node scripts/conformance-matrix.mjs 
 - **deferred**: the design states it and v0.1 does not implement it. It has no test, and the documents say `not implemented`.
 - **missing**: no test counts, or a mapped file is absent. CI fails.
 
-Totals: 31 covered, 5 unproven, 7 deferred, 0 missing.
+Totals: 33 covered, 5 unproven, 7 deferred, 0 missing.
 
 | Id | State | Last recorded | Tests | Claim |
 |---|---|---|---|---|
@@ -54,3 +54,5 @@ Totals: 31 covered, 5 unproven, 7 deferred, 0 missing.
 | `S5.3.seal-refuses-out-of-order` | covered | - | 2 offline | omf seal refuses before it spends anything when GATE-1 is not passing, the item is unknown, claimed by a run or started without an author-measured seal, and names the missing gate. |
 | `S5.3.seal-idempotent-when-measured` | covered | - | 1 offline | omf seal on a seal that is current and author-measured does nothing: exit 0, no key, no docker call, no ledger event. |
 | `S5.0.verbs-thin-adapters` | covered | - | 1 offline | The W verbs are thin adapters registered through one function; main.ts holds one import and one call. |
+| `S5.0.run-refuses-out-of-order` | covered | - | 1 offline | omf run refuses an item whose GATE-1 is open (exit 3) or that has no passing seal (exit 2) and names the missing gate; omf report names S7 when there is no trusted evidence; a refusal writes nothing. |
+| `S5.0.run-report-idempotent` | covered | - | 1 offline | omf run on an item that already ran, and omf report, change nothing; omf report prints only evidence the verified ledger vouches for, rendered from the validated evidence.json. |

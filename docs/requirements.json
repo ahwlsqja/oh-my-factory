@@ -549,6 +549,32 @@
           "proves": "behavior"
         }
       ]
+    },
+    {
+      "id": "S5.0.run-refuses-out-of-order",
+      "source": "spec §5.0; M3h",
+      "claim": "omf run refuses an item whose GATE-1 is open (exit 3) or that has no passing seal (exit 2) and names the missing gate; omf report names S7 when there is no trusted evidence; a refusal writes nothing.",
+      "real_world": false,
+      "surfaces": ["README.md"],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-cli-order.test.ts",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.0.run-report-idempotent",
+      "source": "spec §5.0; M3h",
+      "claim": "omf run on an item that already ran, and omf report, change nothing; omf report prints only evidence the verified ledger vouches for, rendered from the validated evidence.json.",
+      "real_world": false,
+      "surfaces": ["README.md"],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-cli-idempotent-run-report.test.ts",
+          "proves": "behavior"
+        }
+      ]
     }
   ]
 }

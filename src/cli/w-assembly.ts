@@ -131,12 +131,13 @@ function lineOrder(input: {
   if (standing === null) {
     return refuse("GATE-2", 2, `GATE-2 has no passing seal for the current decisions: run omf seal ${id}`);
   }
-  const warnings = standing.author_measured
-    ? []
-    : [
-        `the author stage of this seal is unmeasured; this run will stop at GATE-3 (isolation_unmeasured); run omf seal ${id} first`,
-      ];
-  return { ok: true, item, warnings };
+  if (standing.author_measured) return { ok: true, item, warnings: [] };
+  const hint = state === "ready" ? `run omf seal ${id} first` : "a started item cannot be resealed in this version";
+  return {
+    ok: true,
+    item,
+    warnings: [`the author stage is unmeasured, so this run will stop at GATE-3 (isolation_unmeasured); ${hint}`],
+  };
 }
 
 export { assembleLine, exitForLine, judgeLine, type LineAssembly } from "./w-line.js";
