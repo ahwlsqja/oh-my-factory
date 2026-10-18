@@ -203,11 +203,11 @@ report, including `problem_details` and `warning_details` with the fix and the s
 ## Define and measure a goal
 
 Commands that record a person's decision (`omf metric propose`, `omf goal approve`, `omf goal resume`,
-`omf goal cancel`, `omf work approve`, `omf budget raise`, `omf decide resolve` and `omf decide defer`) identify you as
+`omf goal cancel`, `omf work approve`, `omf work veto`, `omf budget declare`, `omf budget raise`, `omf decide resolve` and `omf decide defer`) identify you as
 `human:<email>`, where the email is what `git config user.email` returns inside the repository. Set it first, or
 the command stops and says so. The identifier is printed in the command output, including the confirmation
-prompt, and is stored in the project's `ledger.jsonl` and in the proposal and lock files under `~/.omf` (or
-`OMF_HOME`), all on your machine. OMF never sends it anywhere: there is no telemetry and nothing is published.
+prompt, and is stored in the project's `ledger.jsonl`, in the proposal and lock files, and in a work item's `item.md`
+(its `approval` field) under `~/.omf` (or `OMF_HOME`), all on your machine. OMF never sends it anywhere: there is no telemetry and nothing is published.
 Before you paste output, a ledger excerpt or a report into an issue or a chat, redact the address, for example by
 replacing it with `human:you@example.com`. It is not a secret, but it is personal data. See
 [`SECURITY.md`](SECURITY.md) for what else to leave out.
@@ -365,7 +365,7 @@ OMF keeps everything outside your repository, one directory per project:
     bands/<metric>.yaml   control bands (locked with the goal)
     reports/              gap reports (<stamp>-gap.json) and tick reports (<stamp>-tick.md)
     reconcile/            the exact model input and raw output of each tick
-    work/<work-id>/       item.md (state and progress) and intent.md
+    work/<work-id>/       item.md (state, progress and the approval, with the approver) and intent.md
     tick.lock             held while a tick runs
   vault/
     metrics/proposed/     metric proposals, <metric>.json

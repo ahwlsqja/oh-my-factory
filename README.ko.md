@@ -197,10 +197,10 @@ warning: claude not found on PATH (needed for: the implementer, the sealing auth
 ## 목표를 정하고 재기
 
 사람의 결정을 기록하는 명령(`omf metric propose`, `omf goal approve`, `omf goal resume`, `omf goal cancel`,
-`omf work approve`, `omf budget raise`, `omf decide resolve`, `omf decide defer`)은 당신을 `human:<email>` 로
+`omf work approve`, `omf work veto`, `omf budget declare`, `omf budget raise`, `omf decide resolve`, `omf decide defer`)은 당신을 `human:<email>` 로
 기록합니다. 이메일은 저장소 안에서 `git config user.email` 이 돌려주는 값입니다. 먼저 설정해 두세요. 없으면
 명령이 멈추고 그렇게 안내합니다. 이 식별자는 명령 출력(확인 입력 줄 포함)에 나오고, 프로젝트의 `ledger.jsonl`
-과 `~/.omf`(또는 `OMF_HOME`) 아래 제안·잠금 파일에 저장됩니다. 모두 당신의 기기 안입니다. OMF 는 이를 어디로도
+과 `~/.omf`(또는 `OMF_HOME`) 아래 제안·잠금 파일, 작업 항목의 `item.md`(`approval` 필드)에 저장됩니다. 모두 당신의 기기 안입니다. OMF 는 이를 어디로도
 보내지 않습니다. 텔레메트리도 없고 공개되는 것도 없습니다. 출력, ledger 일부, 보고서를 이슈나 채팅에 붙이기
 전에는 주소를 가린 뒤 올리세요. 예를 들면 `human:you@example.com` 으로 바꿉니다. 비밀은 아니지만 개인정보입니다.
 그 밖에 빼야 할 것은 [`SECURITY.md`](SECURITY.md)(영어)를 보세요.
@@ -348,7 +348,7 @@ OMF 는 모든 것을 저장소 밖에, 프로젝트마다 폴더 하나로 둡�
     bands/<metric>.yaml   관리 한계 (목표와 함께 잠김)
     reports/              격차 보고서(<stamp>-gap.json)와 틱 보고서(<stamp>-tick.md)
     reconcile/            틱마다 모델에 준 입력과 받은 원본 출력
-    work/<work-id>/       item.md (상태와 진행)와 intent.md
+    work/<work-id>/       item.md (상태, 진행, 승인자가 담긴 승인)와 intent.md
     tick.lock             틱이 도는 동안 쥐는 잠금
   vault/
     metrics/proposed/     지표 제안, <metric>.json
