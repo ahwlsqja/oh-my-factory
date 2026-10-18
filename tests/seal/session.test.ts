@@ -3,6 +3,7 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { createCommandAuthor } from "../../src/seal/session.js";
+import { SESSION_INPUTS } from "../helpers/seal-fixture.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
 const STUB = fileURLToPath(new URL("../helpers/author-stub.mjs", import.meta.url));
@@ -34,7 +35,7 @@ describe("createCommandAuthor", () => {
     expect(author).toMatchObject({ vendor: "command", model: "stub", isolation: "host_command" });
 
     const prompt = "PROMPT-MARKER\n- unlinked decision: d-cache\n";
-    const outcome = await author.run({ prompt, timeoutMs: 20_000 });
+    const outcome = await author.run({ prompt, inputs: SESSION_INPUTS, timeoutMs: 20_000 });
     expect(outcome).toMatchObject({ ok: true });
     // from_feedback links the id the prompt named, once per split
     expect(outcome.ok && outcome.output.match(/^ {2}- d-cache$/gm)).toHaveLength(2);
@@ -58,17 +59,23 @@ describe("createCommandAuthor", () => {
       ["big", "output_limit"],
     ];
     for (const [mode, code] of cases) {
-      const outcome = await authorFor(makeTempDir("omf-rec-"), mode).run({ prompt: "p", timeoutMs: 20_000 });
+      const outcome = await authorFor(makeTempDir("omf-rec-"), mode).run({
+        prompt: "p",
+        inputs: SESSION_INPUTS,
+        timeoutMs: 20_000,
+      });
       expect(outcome, mode).toMatchObject({ ok: false, code });
     }
     // The author's own limit wins over a longer request: 300 ms, not 20 s.
     const slow = await authorFor(makeTempDir("omf-rec-"), "sleep", { timeoutMs: 300 }).run({
       prompt: "p",
+      inputs: SESSION_INPUTS,
       timeoutMs: 20_000,
     });
     expect(slow).toMatchObject({ ok: false, code: "timeout" });
     const missing = await createCommandAuthor({ command: ["/nonexistent/omf-author"] }).run({
       prompt: "p",
+      inputs: SESSION_INPUTS,
       timeoutMs: 20_000,
     });
     expect(missing).toMatchObject({ ok: false, code: "spawn_failed" });
@@ -76,11 +83,13 @@ describe("createCommandAuthor", () => {
 
   it("is misconfigured with no command or no positive time limit, and never spawns", async () => {
     const record = makeTempDir("omf-rec-");
-    expect(await createCommandAuthor({ command: [] }).run({ prompt: "p", timeoutMs: 1000 })).toMatchObject({
+    expect(
+      await createCommandAuthor({ command: [] }).run({ prompt: "p", inputs: SESSION_INPUTS, timeoutMs: 1000 }),
+    ).toMatchObject({
       ok: false,
       code: "misconfigured",
     });
-    expect(await authorFor(record, "empty").run({ prompt: "p", timeoutMs: 0 })).toMatchObject({
+    expect(await authorFor(record, "empty").run({ prompt: "p", inputs: SESSION_INPUTS, timeoutMs: 0 })).toMatchObject({
       ok: false,
       code: "misconfigured",
     });

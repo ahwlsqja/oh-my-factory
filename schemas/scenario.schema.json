@@ -136,6 +136,9 @@
             "no_output",
             "output_limit",
             "misconfigured",
+            "not_golden",
+            "container_failed",
+            "credential_in_output",
             "no_valid_scenarios",
             "write_failed"
           ]

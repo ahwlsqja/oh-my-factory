@@ -79,7 +79,12 @@ export type AuthorFailureCode =
   | "nonzero_exit"
   | "no_output"
   | "output_limit"
-  | "misconfigured";
+  | "misconfigured"
+  // A container author (spec §5.3, §7): the container measured below its golden, could not be made or fed, or the
+  // answer held the key. None is an author-quality failure, so none is retried.
+  | "not_golden"
+  | "container_failed"
+  | "credential_in_output";
 /** Ids and plain counts only; no scenario id, ref or text can be expressed in this type. */
 export interface SealFeedback {
   unlinked_decision_ids: readonly string[];

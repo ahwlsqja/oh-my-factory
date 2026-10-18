@@ -29,6 +29,9 @@ const ENVIRONMENT_FAILURES: ReadonlySet<SealFailureCode> = new Set([
   "timeout",
   "spawn_failed",
   "misconfigured",
+  "not_golden",
+  "container_failed",
+  "credential_in_output",
   "write_failed",
 ]);
 

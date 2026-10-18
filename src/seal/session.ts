@@ -4,9 +4,12 @@ import { basename, join } from "node:path";
 import { runProcessGroup } from "../adapters/process-group.js";
 import { MAX_AUTHOR_OUTPUT_BYTES } from "../scenario/types.js";
 import type { AuthorFailureCode, AuthorIsolation } from "../scenario/types.js";
+import type { SealInputs } from "./prompt.js";
 
 export interface AuthorRequest {
   prompt: string;
+  /** The closed object `buildSealPrompt` turned into `prompt`. The container author writes these into files; the command author ignores them. */
+  inputs: SealInputs;
   timeoutMs: number;
 }
 
