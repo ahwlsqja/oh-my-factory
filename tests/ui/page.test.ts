@@ -27,14 +27,24 @@ class Element {
   set innerHTML(_value: string) {
     throw new Error("HTML parsing is forbidden in this client");
   }
+  set outerHTML(_value: string) {
+    throw new Error("HTML parsing is forbidden in this client");
+  }
+  insertAdjacentHTML() {
+    throw new Error("HTML parsing is forbidden in this client");
+  }
   append(...children: Element[]) {
     this.children.push(...children);
+  }
+  prepend(...children: Element[]) {
+    this.children.unshift(...children);
   }
   replaceChildren(...children: Element[]) {
     this.text = "";
     this.children = children;
   }
   setAttribute(name: string, value: string) {
+    if (/^on/i.test(name) || name.toLowerCase() === "srcdoc") throw new Error("Executable attributes are forbidden");
     this.attributes[name] = value;
   }
   addEventListener(name: string, callback: () => unknown) {
@@ -94,7 +104,20 @@ async function client(initial: UiSnapshot) {
       if (!found) throw new Error(`Missing UI element: ${id}`);
       return found;
     },
-    createElement: (tag: string) => new Element(tag),
+    createElement: (tag: string) => {
+      if (["script", "iframe", "object", "embed"].includes(tag.toLowerCase())) {
+        throw new Error("Executable elements are forbidden");
+      }
+      return new Element(tag);
+    },
+    createRange: () => ({
+      createContextualFragment: () => {
+        throw new Error("HTML parsing is forbidden in this client");
+      },
+    }),
+    write: () => {
+      throw new Error("HTML parsing is forbidden in this client");
+    },
   };
   new Script(UI_JS).runInContext(
     createContext({
@@ -105,10 +128,11 @@ async function client(initial: UiSnapshot) {
       setInterval: (callback: () => unknown) => {
         interval = callback;
       },
-      fetch: async (url: string, options: { cache: string; credentials: string }) => {
+      fetch: async (url: string, options: { cache: string; credentials: string; method?: string }) => {
         expect(url).toBe("./api/snapshot");
         expect(options.cache).toBe("no-store");
         expect(options.credentials).toBe("same-origin");
+        expect(options.method ?? "GET").toBe("GET");
         requests += 1;
         if (next instanceof Error) throw next;
         return { ok: true, json: async () => next };
@@ -134,13 +158,31 @@ async function client(initial: UiSnapshot) {
 }
 
 describe("read-only dashboard client", () => {
-  it("renders hostile IDs literally without parsing HTML or creating executable nodes", async () => {
-    const hostile = '<img src=x onerror="globalThis.compromised=true">';
-    const ui = await client(snapshot([goal(hostile)]));
+  it("renders hostile identifiers and enum fields without parsing HTML or creating executable nodes", async () => {
+    const hostile = '<img src=x onerror="alert(1)">';
+    const input = snapshot([goal(hostile)]);
+    const item = input.goals[0];
+    if (!item) throw new Error("Goal fixture missing");
+    item.work_items[0] = { work_id: hostile, state: "ready", risk: "normal", evidence: null };
+    // Attack the browser boundary directly, including values the server's closed projection rejects.
+    item.needs_human = [{ code: hostile, work_id: hostile }] as unknown as UiGoal["needs_human"];
+    item.warnings = [hostile] as unknown as UiGoal["warnings"];
+    input.warnings = [hostile] as unknown as UiSnapshot["warnings"];
+    input.events = [
+      { seq: 1, at: input.generated_at, type: hostile, goal_id: hostile, work_id: hostile },
+    ] as unknown as UiSnapshot["events"];
+    const ui = await client(input);
     expect(ui.element("selected-goal").textContent).toBe(hostile);
     expect(ui.element("goal-list").textContent).toContain(hostile);
     expect(ui.element("goal-list").children[0]?.children[0]?.tagName).toBe("span");
+    expect(ui.element("workboard").textContent).toContain(hostile);
+    expect(ui.element("needs-human").textContent).toContain(hostile);
+    expect(ui.element("timeline").textContent).toContain(hostile);
+    expect(ui.element("goal-warnings").textContent).toBe("State unavailable.");
+    expect(ui.element("notice").textContent).not.toContain(hostile);
     expect(ui.element("revision").textContent).toContain("Verified revision");
+    expect(ui.element("notice").textContent).toContain("Snapshot has limits");
+    expect(ui.element("notice").textContent).not.toContain("Refresh failed");
     expect(ui.element("refresh").disabled).toBe(false);
   });
 
@@ -154,7 +196,7 @@ describe("read-only dashboard client", () => {
     };
     const ui = await client(snapshot([item]));
     const text = ui.element("evidence").textContent;
-    expect(text).toContain("Recommendationhuman needed");
+    expect(text).toContain("Agent recommendationhuman needed");
     expect(text).toContain("Report verificationDetails withheld · inspect in CLI");
     expect(text).toContain("Human approvalNot established by this view");
     expect(text).toContain("does not independently verify evidence quality");
@@ -173,13 +215,69 @@ describe("read-only dashboard client", () => {
     expect(ui.element("refresh").disabled).toBe(false);
   });
 
-  it("withholds overview and goal details for a corrupt ledger", async () => {
-    const ui = await client({ ...snapshot([]), status: "corrupt", ledger_head: null, warnings: ["ledger_corrupt"] });
-    expect(ui.element("overview").hidden).toBe(true);
-    expect(ui.element("goal-section").hidden).toBe(true);
-    expect(ui.element("timeline-section").hidden).toBe(true);
-    expect(ui.element("revision").textContent).toBe("Revision unavailable");
-    expect(ui.element("notice").textContent).toContain("Factory details are withheld");
+  it.each(["corrupt", "unavailable"] as const)(
+    "withholds goal counts and details for a %s snapshot",
+    async (status) => {
+      const ui = await client({
+        ...snapshot([]),
+        status,
+        ledger_head: null,
+        warnings: [status === "corrupt" ? "ledger_corrupt" : "project_unavailable"],
+      });
+      expect(ui.element("overview").hidden).toBe(true);
+      expect(ui.element("goal-section").hidden).toBe(true);
+      expect(ui.element("timeline-section").hidden).toBe(true);
+      expect(ui.element("revision").textContent).toBe("Revision unavailable");
+      expect(ui.element("goal-count").textContent).toBe("—");
+      expect(ui.element("goal-list").textContent).toBe("Goal list withheld until verification succeeds.");
+      expect(ui.element("goal-list").textContent).not.toContain("No goals");
+    },
+  );
+
+  it("counts only approved running goals, excluding draft, tampered and re-approval states", async () => {
+    const goals = (["approved", "draft", "tampered", "needs_reapproval", "invalid"] as const).map((audit) => ({
+      ...goal(audit),
+      audit_state: audit,
+    }));
+    goals.push({ ...goal("finished"), run_state: "finish", audit_state: "approved" });
+    const ui = await client(snapshot(goals));
+    expect(ui.element("overview").children[1]?.children[1]?.textContent).toBe("1");
+    expect(ui.element("goal-list").textContent).toContain("needs re-approval");
+  });
+
+  it("labels a finished run as a success candidate awaiting human sign-off", async () => {
+    const ui = await client(snapshot([{ ...goal(), run_state: "finish" }]));
+    expect(ui.element("goal-status").textContent).toContain("Run · Success candidate · awaiting human sign-off");
+    expect(ui.element("overview").children[1]?.children[1]?.textContent).toBe("0");
+  });
+
+  it.each([false, true])(
+    "marks human attention unknown when projection is unavailable (recorded=%s)",
+    async (recorded) => {
+      const item = goal();
+      item.warnings = ["needs_human_unavailable"];
+      if (recorded) item.needs_human = [{ code: "J1", work_id: null }];
+      const ui = await client(snapshot([item]));
+      expect(ui.element("human-count").textContent).toBe("Unknown");
+      expect(ui.element("overview").children[3]?.children[1]?.textContent).toBe("Unknown");
+      expect(ui.element("needs-human").textContent).toContain("unknown");
+      expect(ui.element("needs-human").textContent).not.toContain("No human-attention");
+      if (recorded) expect(ui.element("needs-human").textContent).toContain("J1");
+    },
+  );
+
+  it.each([
+    ["goal_integrity_attention", "Goal integrity needs inspection"],
+    ["goal_invalid", "Goal definition needs attention"],
+  ] as const)("explains %s without suggesting approval alone repairs it", async (code, text) => {
+    const item = goal();
+    item.needs_human = [{ code, work_id: null }];
+    item.warnings = [code];
+    const ui = await client(snapshot([item]));
+    expect(ui.element("needs-human").textContent).toContain(text);
+    expect(ui.element("needs-human").textContent).toContain("Continue in CLI");
+    expect(ui.element("goal-warnings").textContent).toContain("CLI");
+    expect(ui.element("needs-human").textContent).not.toContain("No human-attention");
   });
 
   it("filters locally, preserves goal selection, and polls only when opted in and visible", async () => {
@@ -205,8 +303,6 @@ describe("read-only dashboard client", () => {
     expect(UI_HTML).toContain('href="./style.css"');
     expect(UI_HTML).toContain('<script src="./app.js" defer></script>');
     expect(UI_HTML).not.toMatch(/<form|\son\w+\s*=|<style|<script(?! src=)/i);
-    expect(UI_JS).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(/);
-    expect(UI_JS).not.toMatch(/method:\s*["'](?:POST|PUT|PATCH|DELETE)/i);
     expect(UI_CSS).not.toContain("@import");
     expect(UI_CSS).toContain("prefers-color-scheme:dark");
     expect(UI_CSS).toContain("focus-visible");

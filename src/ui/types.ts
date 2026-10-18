@@ -14,6 +14,8 @@ export type UiWarning =
   | "concurrent_change"
   | "resource_limit"
   | "goal_unavailable"
+  | "goal_integrity_attention"
+  | "goal_invalid"
   | "work_projection_invalid"
   | "evidence_unavailable"
   | "needs_human_unavailable"
@@ -23,6 +25,7 @@ export type UiWarning =
 export const UI_EVENT_TYPES = [
   "project.initialized",
   "goal.approved",
+  "goal.audit_failed",
   "goal.tick_started",
   "goal.tick_ended",
   "goal.measured",
@@ -68,7 +71,7 @@ export interface UiWorkItem {
 }
 
 export interface UiHumanNeed {
-  code: Gate1Reason["code"] | "J1" | "J6" | "J8" | "approval_required";
+  code: Gate1Reason["code"] | "J1" | "J6" | "J8" | "approval_required" | "goal_integrity_attention" | "goal_invalid";
   work_id: string | null;
 }
 

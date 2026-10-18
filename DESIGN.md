@@ -6,7 +6,7 @@
 - Last refreshed: 2026-10-19
 - Primary product surfaces: CLI first; optional local, read-only operations dashboard.
 - Evidence reviewed: `README.md`, `README.ko.md`, `docs/README.md`, `package.json`, `src/goal`, `src/work`, and `src/decision`. No existing browser UI, design tokens, screenshots, or brand assets were present.
-- Approved direction: issue #36; an operations control room with persistent goal context, rather than a chat interface. This document governs the dashboard; existing protocol specifications continue to govern factory behavior.
+- Product direction: an operations control room with persistent goal context. This document governs the dashboard; existing protocol specifications continue to govern factory behavior.
 
 ## Brand
 
@@ -36,6 +36,7 @@
 
 - Show provenance before interpretation: ledger verification and current snapshot revision remain visible.
 - Keep decisions separate: an evidence recommendation, evidence integrity, and human approval are independent facts.
+- Keep lifecycle meanings precise: running counts require an approved audit and running run state. A finished run is a success candidate awaiting human sign-off. Unavailable verification withholds counts; unknown human-attention state is never presented as zero.
 - Prefer honest absence: unavailable history is a clear empty state, never an inferred curve or invented baseline. Disclosed direction/size history is labeled as disclosures with event/time provenance; it is not a numeric trend.
 - Tradeoffs: IDs and fixed vocabulary preserve privacy at the cost of richer titles; bounded lists preserve responsiveness and disclose truncation.
 
@@ -90,7 +91,7 @@
 - Design-token constraints: system light/dark preference and CSS variables; no external fonts, icons, or CDN.
 - Performance constraints: bounded server projection, one snapshot request, no background execution; optional 15-second read polling.
 - Compatibility constraints: Node 22 build and current evergreen browsers; all data enters through `textContent`/DOM node construction, never HTML interpolation; strict CSP has no inline script or event handlers.
-- Test/screenshot expectations: executable client-script tests cover hostile IDs and failure states; parent integration runs server and browser QA at desktop/mobile widths. No claim of measured visual accessibility until checked.
+- Test/screenshot expectations: executable client-script tests cover hostile identifiers, reason codes and failure states; integration checks run the server and browser at desktop/mobile widths. Visual inspection supplements semantic and keyboard checks.
 
 ## Open questions
 

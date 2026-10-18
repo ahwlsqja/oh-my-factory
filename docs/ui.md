@@ -11,11 +11,17 @@ omf ui --port 4321 --no-open
 
 The dashboard reads state. It does not initialize a project, run a measurement or agent, approve a decision, resume or cancel work, raise a budget, merge, or deploy. Use the CLI for those actions. An uninitialized repository is shown as uninitialized; starting the UI does not create its factory state.
 
+Underlying goal audits can run read-only Git commands and create temporary index files. This observation path does not persist changes to repository content, its normal index, or OMF state.
+
 ## Reading the view
 
 Select a goal ID in the left rail; the filter searches IDs locally. Overview counts cover goals included in the snapshot, while the workboard, human-attention items and evidence belong to the selected goal. The ledger activity section includes recent selected-goal and workspace events. Lists are bounded; a truncation notice means older or additional items may be omitted.
 
+**Running** counts goals whose audit is approved and whose run state is running. A raw running run state alone does not make a draft, tampered or re-approval goal runnable. A run in `finish` is displayed as **Success candidate · awaiting human sign-off**; that candidate is not goal sign-off. When verification is unavailable, the goal list and count are withheld. Incomplete human-attention projection is explicitly unknown, even if some attention items are recorded.
+
 The header identifies the verified ledger revision and the last successful refresh. Refresh manually, or enable optional 15-second refreshes while the tab is visible. If a refresh fails, the previous snapshot remains visible with an explicit stale notice. No browser interaction changes OMF state.
+
+Polling is opt-in because each refresh can repeat audits and Git reads. There is no audit cache based only on Git HEAD: dirty working-tree changes and changed lock files can affect an audit without changing HEAD.
 
 **Last disclosed gap** shows only a verified, previously disclosed direction and size bucket from the current approved goal contract. Its timestamp and ledger event identify when it was disclosed. It is not a new measurement. A later measurement, changed contract, missing provenance, or missing disclosure can make the current gap unavailable.
 
@@ -28,6 +34,8 @@ The header identifies the verified ledger revision and the last successful refre
 The browser receives an explicit projection of IDs, closed status/reason codes, counts, timestamps and coarse buckets. It does not receive goal objectives, work titles, decision questions, notes, raw metric values/names/units, commands, private paths, actor emails, logs, or sealed scenario content. All browser assets are local; no external fonts, analytics, or CDN are used.
 
 The printed URL grants access to that local server session. Authentication applies to the page, assets and snapshot endpoint. The server accepts the expected loopback host and same-origin browser requests; mutation methods are rejected. The token is session access control, not an invitation to expose the server through a remote proxy.
+
+The command assumes a trusted local machine. Opening the browser passes the capability URL as an opener argument, so local process introspection can reveal it. The URL does not isolate access from other users or processes on the same host. Browser opening does not create a temporary redirect file.
 
 ## Reading and output limits
 

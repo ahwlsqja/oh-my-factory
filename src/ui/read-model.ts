@@ -282,16 +282,31 @@ function readGoalView(
   try {
     const audit = auditGoal(location, id);
     result.audit_state = audit.state;
+    if (audit.state === "needs_reapproval") result.needs_human.push({ code: "J1", work_id: null });
+    if (audit.state === "tampered") {
+      result.needs_human.push({ code: "goal_integrity_attention", work_id: null });
+      warn("goal_integrity_attention");
+    }
+    if (audit.state === "invalid") {
+      result.needs_human.push({ code: "goal_invalid", work_id: null });
+      warn("goal_invalid");
+    }
   } catch {
     warn("goal_unavailable");
+    warn("needs_human_unavailable");
   }
   try {
     const run = runStateFromEvents(events, id);
     result.run_state = run.status;
     result.ticks = Number.isSafeInteger(run.ticks) && run.ticks >= 0 ? run.ticks : 0;
-    if (run.open_escalation !== null) result.needs_human.push({ code: run.open_escalation.j, work_id: null });
+    if (
+      run.open_escalation !== null &&
+      !result.needs_human.some((need) => need.work_id === null && need.code === run.open_escalation?.j)
+    )
+      result.needs_human.push({ code: run.open_escalation.j, work_id: null });
   } catch {
     warn("goal_unavailable");
+    warn("needs_human_unavailable");
   }
   const history = gapHistory(events, id, result.audit_state === "approved");
   result.gap_history = history.slice(-MAX_HISTORY);
@@ -305,7 +320,10 @@ function readGoalView(
   if (history.length > MAX_HISTORY) result.truncated = true;
   try {
     const verified = verifiedItems(createMarkdownStore(location.dir), events, id);
-    if (verified.malformed.length > 0) warn("work_projection_invalid");
+    if (verified.malformed.length > 0) {
+      warn("work_projection_invalid");
+      warn("needs_human_unavailable");
+    }
     const items = verified.items.filter(
       (item) =>
         workId(item.front.work_id) &&
@@ -350,6 +368,7 @@ function readGoalView(
     }
   } catch {
     warn("work_projection_invalid");
+    warn("needs_human_unavailable");
   }
   if (result.truncated) warn("truncated");
   return result;

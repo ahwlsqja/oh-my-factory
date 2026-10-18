@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { UI_CSS, UI_HTML, UI_JS } from "./page.js";
 import { readUiSnapshot } from "./read-model.js";
@@ -48,13 +48,16 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
   }
   const env = options.env ?? process.env;
   const readSnapshot = options.readSnapshot ?? readUiSnapshot;
-  const basePath = `/${randomBytes(24).toString("hex")}/`;
+  const capability = randomBytes(24);
+  const basePath = `/${capability.toString("hex")}/`;
   let origin = "";
   const server = createServer((req, res) => {
     res.setHeader("Content-Security-Policy", CSP);
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Referrer-Policy", "no-referrer");
+    res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+    res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
 
     if (
       headerCount(req, "host") !== 1 ||
@@ -63,14 +66,21 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
       (req.headers.origin !== undefined && req.headers.origin !== origin) ||
       headerCount(req, "sec-fetch-site") > 1 ||
       (req.headers["sec-fetch-site"] !== undefined &&
-        !["none", "same-origin", "same-site"].includes(String(req.headers["sec-fetch-site"])))
+        !["none", "same-origin"].includes(String(req.headers["sec-fetch-site"])))
     ) {
       respond(req, res, 403, "Forbidden\n");
       return;
     }
+
     if (req.method !== "GET" && req.method !== "HEAD") {
       res.setHeader("Allow", "GET, HEAD");
       respond(req, res, 405, "Method not allowed\n");
+      return;
+    }
+
+    const requestedCapability = /^\/([a-f0-9]{48})\//.exec(req.url ?? "")?.[1];
+    if (requestedCapability === undefined || !timingSafeEqual(Buffer.from(requestedCapability, "hex"), capability)) {
+      respond(req, res, 404, "Not found\n");
       return;
     }
 
@@ -115,11 +125,14 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
     });
   });
   const address = server.address();
-  if (address === null || typeof address === "string") {
-    server.close();
-    throw new Error("Unable to start the local UI server.");
+  if (address === null || typeof address === "string" || address.address !== "127.0.0.1") {
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+      server.closeAllConnections();
+    });
+    throw new Error("Unable to bind the UI server to IPv4 loopback.");
   }
-  origin = `http://127.0.0.1:${address.port}`;
+  origin = `http://${address.address}:${address.port}`;
   let closing: Promise<void> | undefined;
   return {
     url: `${origin}${basePath}`,

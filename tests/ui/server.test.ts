@@ -1,4 +1,4 @@
-import { request } from "node:http";
+import { request, Server } from "node:http";
 import { connect } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readUiSnapshot } from "../../src/ui/read-model.js";
@@ -57,6 +57,7 @@ function duplicateHost(server: UiServer): Promise<number> {
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.close()));
+  vi.restoreAllMocks();
 });
 
 describe("read-only UI HTTP boundary", () => {
@@ -74,6 +75,10 @@ describe("read-only UI HTTP boundary", () => {
       expect(res.headers["cache-control"]).toBe("no-store");
       expect(res.headers["referrer-policy"]).toBe("no-referrer");
       expect(res.headers["x-content-type-options"]).toBe("nosniff");
+      expect(res.headers["cross-origin-resource-policy"]).toBe("same-origin");
+      expect(res.headers["cross-origin-opener-policy"]).toBe("same-origin");
+      expect(head.headers["cross-origin-resource-policy"]).toBe("same-origin");
+      expect(head.headers["cross-origin-opener-policy"]).toBe("same-origin");
       expect(res.headers["content-security-policy"]).toBe(
         "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; object-src 'none'",
       );
@@ -98,12 +103,72 @@ describe("read-only UI HTTP boundary", () => {
       { Origin: "https://attacker.invalid" },
       { Origin: `${server.origin}/` },
       { "Sec-Fetch-Site": "cross-site" },
+      { "Sec-Fetch-Site": "same-site" },
       { "Sec-Fetch-Site": ["cross-site", "same-origin"] },
       { Origin: [server.origin, "https://attacker.invalid"] },
     ]) {
       expect((await get(server, `${server.basePath}api/snapshot`, headers)).status).toBe(403);
     }
     expect(await duplicateHost(server)).toBe(403);
+    expect(readSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("accepts absent, none and same-origin fetch metadata", async () => {
+    const { server, readSnapshot } = await fixture();
+    for (const headers of [{}, { "Sec-Fetch-Site": "none" }, { "Sec-Fetch-Site": "same-origin" }]) {
+      expect((await get(server, `${server.basePath}api/snapshot`, headers)).status).toBe(200);
+    }
+    expect(readSnapshot).toHaveBeenCalledTimes(3);
+  });
+
+  it("verifies the actual listening socket is IPv4 loopback", async () => {
+    const address = vi.spyOn(Server.prototype, "address");
+    const { server } = await fixture();
+    expect(address).toHaveBeenCalledOnce();
+    expect(address.mock.results[0]?.value).toEqual({
+      address: "127.0.0.1",
+      family: "IPv4",
+      port: Number(new URL(server.origin).port),
+    });
+  });
+
+  it("rejects and closes an actual wildcard bind if the listen host is accidentally omitted", async () => {
+    const listen = Server.prototype.listen;
+    const address = vi.spyOn(Server.prototype, "address");
+    const close = vi.spyOn(Server.prototype, "close");
+    vi.spyOn(Server.prototype, "listen").mockImplementation(function (
+      this: Server,
+      port: number,
+      _host: string,
+      listening: () => void,
+    ) {
+      return Reflect.apply(listen, this, [port, listening]) as Server;
+    } as Server["listen"]);
+    const readSnapshot = vi.fn(() => {
+      throw new Error("must not read state");
+    });
+    const starting = startUiServer({ cwd: makeGitRepo(), readSnapshot }).then((server) => {
+      servers.push(server);
+      return server;
+    });
+    await expect(starting).rejects.toThrow("Unable to bind the UI server to IPv4 loopback.");
+    expect(address.mock.results[0]?.value).not.toMatchObject({ address: "127.0.0.1" });
+    expect(close).toHaveBeenCalledOnce();
+    expect(close.mock.instances[0]).toHaveProperty("listening", false);
+    expect(readSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("rejects wrong and malformed capabilities on every asset and API route before reading state", async () => {
+    const { server, readSnapshot } = await fixture();
+    const token = server.basePath.slice(1, -1);
+    const wrong = `${token.slice(0, -1)}${token.endsWith("0") ? "1" : "0"}`;
+    for (const capability of [wrong, token.slice(1), `${token}0`, "g".repeat(48), `A${token.slice(1)}`]) {
+      for (const route of ["", "index.html", "style.css", "app.js", "api/snapshot"]) {
+        for (const method of ["GET", "HEAD"]) {
+          expect((await get(server, `/${capability}/${route}`, {}, method)).status).toBe(404);
+        }
+      }
+    }
     expect(readSnapshot).not.toHaveBeenCalled();
   });
 

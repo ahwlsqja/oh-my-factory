@@ -20,6 +20,7 @@ import { createGoal } from "../../src/goal/goal-file.js";
 import { readUiSnapshot } from "../../src/ui/read-model.js";
 import { buildEvidence, writeEvidence } from "../../src/work/evidence.js";
 import { workIdOf } from "../../src/work/fingerprint.js";
+import * as workProjection from "../../src/work/ledger-verify.js";
 import { cleanBuild, cleanInputs } from "../helpers/evidence-fixture.js";
 import { approveLegacy, setupGoal } from "../helpers/goal.js";
 import { makeGitRepo, makeTempDir } from "../helpers/tmp.js";
@@ -144,6 +145,82 @@ describe("readUiSnapshot", () => {
     expect(snapshot.goals[0]?.work_items).toEqual([]);
     expect(snapshot.goals[0]?.work_counts.ready).toBe(0);
     expect(snapshot.goals[0]?.warnings).toContain("work_projection_invalid");
+    expect(snapshot.goals[0]?.warnings).toContain("needs_human_unavailable");
+  });
+
+  it.each(["needs_reapproval", "tampered", "invalid"] as const)(
+    "derives closed attention from %s goal audit state",
+    (state) => {
+      const fx = fixture(true);
+      if (state === "needs_reapproval")
+        writeFileSync(fx.goalFile, readFileSync(fx.goalFile, "utf8").replace("value: 250", "value: 987654321"));
+      if (state === "tampered")
+        writeFileSync(
+          join(fx.location.dir, "vault", "metrics", "g-fast", "goal.lock.json"),
+          JSON.stringify({ private: SECRET }),
+        );
+      if (state === "invalid") writeFileSync(fx.goalFile, SECRET);
+      const snapshot = readUiSnapshot(fx.repo, fx.env);
+      const goal = snapshot.goals[0];
+      expect(goal?.audit_state).toBe(state);
+      expect(goal?.needs_human).toContainEqual({
+        code: state === "needs_reapproval" ? "J1" : state === "tampered" ? "goal_integrity_attention" : "goal_invalid",
+        work_id: null,
+      });
+      if (state !== "needs_reapproval")
+        expect(goal?.warnings).toContain(state === "tampered" ? "goal_integrity_attention" : "goal_invalid");
+      if (state === "tampered") expect(goal?.needs_human).not.toContainEqual({ code: "J1", work_id: null });
+      expect(JSON.stringify(snapshot)).not.toContain(SECRET);
+      expect(JSON.stringify(snapshot)).not.toContain("987654321");
+    },
+  );
+
+  it("marks the attention queue unknown when a goal audit cannot run", () => {
+    const fx = fixture();
+    vi.spyOn(audit, "auditGoal").mockImplementation(() => {
+      throw new Error(SECRET);
+    });
+    const snapshot = readUiSnapshot(fx.repo, fx.env);
+    expect(snapshot.goals[0]?.audit_state).toBe("unavailable");
+    expect(snapshot.goals[0]?.warnings).toContain("goal_unavailable");
+    expect(snapshot.goals[0]?.warnings).toContain("needs_human_unavailable");
+    expect(JSON.stringify(snapshot)).not.toContain(SECRET);
+  });
+
+  it("marks the attention queue unknown for corrupt work metadata and work projection read failures", () => {
+    const fx = fixture(true);
+    const item = createRecorded(fx.ledger, fx.store, makeNewItem());
+    writeFileSync(join(item.dir, "item.md"), SECRET);
+    const malformed = readUiSnapshot(fx.repo, fx.env);
+    expect(malformed.goals[0]?.work_items).toEqual([]);
+    expect(malformed.goals[0]?.warnings).toContain("work_projection_invalid");
+    expect(malformed.goals[0]?.warnings).toContain("needs_human_unavailable");
+    expect(JSON.stringify(malformed)).not.toContain(SECRET);
+    vi.spyOn(workProjection, "verifiedItems").mockImplementation(() => {
+      throw new Error(SECRET);
+    });
+    const unavailable = readUiSnapshot(fx.repo, fx.env);
+    expect(unavailable.goals[0]?.warnings).toContain("work_projection_invalid");
+    expect(unavailable.goals[0]?.warnings).toContain("needs_human_unavailable");
+    expect(JSON.stringify(unavailable)).not.toContain(SECRET);
+  });
+
+  it("projects the existing goal.audit_failed event without its private reasons payload", () => {
+    const fx = fixture();
+    const event = fx.ledger.append({
+      actor: "omf",
+      type: "goal.audit_failed",
+      payload: { goal_id: "g-fast", reasons: [SECRET] },
+    });
+    const snapshot = readUiSnapshot(fx.repo, fx.env);
+    expect(snapshot.events).toContainEqual({
+      seq: event.seq,
+      at: event.ts,
+      type: "goal.audit_failed",
+      goal_id: "g-fast",
+      work_id: null,
+    });
+    expect(JSON.stringify(snapshot)).not.toContain(SECRET);
   });
 
   it("fails closed on a corrupt ledger and never includes error text", () => {

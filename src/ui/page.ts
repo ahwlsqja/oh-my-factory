@@ -880,7 +880,15 @@ export const UI_JS = `
     if (text !== undefined) element.textContent = String(text);
     return element;
   };
-  const label = (value) => String(value).replaceAll("_", " ").replaceAll(".", " · ");
+  const label = (value) => {
+    switch (value) {
+      case "needs_reapproval": return "needs re-approval";
+      case "finish": return "Success candidate · awaiting human sign-off";
+      case "goal_integrity_attention": return "Goal integrity needs inspection";
+      case "goal_invalid": return "Goal definition needs attention";
+      default: return String(value).replaceAll("_", " ").replaceAll(".", " · ");
+    }
+  };
   const date = (value) => {
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? "Time unavailable" : parsed.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -896,6 +904,8 @@ export const UI_JS = `
     symlink_refused: "A state path could not be read safely.",
     concurrent_change: "Factory state changed while reading. Refresh to retry a consistent snapshot.",
     goal_unavailable: "Some goal state is unavailable.",
+    goal_integrity_attention: "Goal integrity needs inspection in the CLI before deciding how to proceed.",
+    goal_invalid: "The goal definition is invalid or unreadable. Inspect it in the CLI.",
     work_projection_invalid: "Some work state could not be verified and is omitted.",
     evidence_unavailable: "Some evidence is unavailable.",
     needs_human_unavailable: "Human-attention state is unavailable; an empty list does not prove no action is needed.",
@@ -919,19 +929,24 @@ export const UI_JS = `
     const states = ["ready", "awaiting_approval", "in_progress", "awaiting_review"];
     const open = goals.reduce((total, goal) => total + states.reduce((count, state) => count + (goal.work_counts[state] || 0), 0), 0);
     const human = goals.reduce((total, goal) => total + goal.needs_human.length, 0);
-    const running = goals.filter((goal) => goal.run_state === "running").length;
-    const stats = [["Tracked goals", goals.length, "In this snapshot"], ["Running", running, "Goal run state"], ["Open work", open, "Across visible goals"], ["Needs human", human, "Recorded attention items"]];
+    const humanUnknown = goals.some((goal) => goal.warnings.includes("needs_human_unavailable"));
+    const running = goals.filter((goal) => goal.audit_state === "approved" && goal.run_state === "running").length;
+    const stats = [["Tracked goals", goals.length, "In this snapshot"], ["Running", running, "Approved and running"], ["Open work", open, "Across visible goals"], ["Needs human", humanUnknown ? "Unknown" : human, humanUnknown ? human + " recorded · state incomplete" : "Recorded attention items"]];
     byId("overview").replaceChildren(...stats.map(([title, value, foot], index) => {
-      const card = node("div", "stat-card" + (index === 3 && value > 0 ? " attention" : ""));
+      const card = node("div", "stat-card" + (index === 3 && (human > 0 || humanUnknown) ? " attention" : ""));
       card.append(node("p", "stat-label", title), node("strong", "stat-value", value), node("p", "stat-foot", foot));
       return card;
     }));
   }
   function renderGoals() {
+    const list = byId("goal-list");
+    if (snapshot.status === "corrupt" || snapshot.status === "unavailable") {
+      byId("goal-count").textContent = "—";
+      return empty(list, "Goal list withheld until verification succeeds.");
+    }
     const query = byId("goal-filter").value.toLowerCase();
     const goals = snapshot.goals.filter((goal) => goal.goal_id.toLowerCase().includes(query));
     byId("goal-count").textContent = String(snapshot.goals.length);
-    const list = byId("goal-list");
     if (!goals.length) return empty(list, query ? "No matching goal IDs." : "No goals to display.");
     list.replaceChildren(...goals.map((goal) => {
       const button = node("button", "goal-button");
@@ -984,8 +999,9 @@ export const UI_JS = `
   }
   function renderHuman(goal) {
     const target = byId("needs-human");
-    byId("human-count").textContent = String(goal.needs_human.length);
-    if (!goal.needs_human.length) return empty(target, goal.warnings.includes("needs_human_unavailable") ? "Attention state unavailable. Check the terminal." : "No human-attention items recorded in this snapshot.");
+    const unknown = goal.warnings.includes("needs_human_unavailable");
+    byId("human-count").textContent = unknown ? "Unknown" : String(goal.needs_human.length);
+    if (!goal.needs_human.length) return empty(target, unknown ? "Attention state unknown. Continue in CLI to inspect unavailable state." : "No human-attention items recorded in this snapshot.");
     const list = node("ul", "data-list");
     for (const need of goal.needs_human) {
       const row = node("li", "data-row");
@@ -999,6 +1015,7 @@ export const UI_JS = `
       list.append(row);
     }
     target.replaceChildren(list);
+    if (unknown) target.prepend(node("p", "empty", "Additional attention state is unknown. Continue in CLI to inspect unavailable state."));
   }
   function fact(title, value) {
     const group = node("div");
@@ -1013,7 +1030,7 @@ export const UI_JS = `
     for (const work of works) {
       const evidence = work.evidence;
       const row = node("li", "evidence-row");
-      row.append(fact("Work item", work.work_id), fact("Recommendation", label(evidence.recommendation)), fact("Report verification", "Details withheld · inspect in CLI"), fact("Human approval", "Not established by this view"));
+      row.append(fact("Work item", work.work_id), fact("Agent recommendation", label(evidence.recommendation)), fact("Report verification", "Details withheld · inspect in CLI"), fact("Human approval", "Not established by this view"));
       list.append(row);
     }
     target.replaceChildren(list, node("p", "gap-note", "Ledger integrity verifies the record chain. It does not independently verify evidence quality or authorize a merge."));
