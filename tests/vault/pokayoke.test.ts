@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { chmodSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, sep } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { resolveProject } from "../../src/core/paths.js";
 import { initProject } from "../../src/core/project.js";
 import {
@@ -13,7 +13,7 @@ import {
   scanWorktreeCanaries,
   sealedProblem,
 } from "../../src/vault/pokayoke.js";
-import { makeGitRepo, makeTempDir } from "../helpers/tmp.js";
+import { makeGitRepo, makeTempDir, removeTempDirs } from "../helpers/tmp.js";
 
 /** Built at run time: a full canary literal in this file would trip OMF run on OMF. */
 const canary = (): string => `omf-canary-${randomBytes(16).toString("hex")}`;
@@ -37,10 +37,20 @@ interface Row {
 const summary = (findings: readonly Row[]): string[] => findings.map((f) => `${f.where}:${f.kind}:${f.path}`).sort();
 
 describe("scanForSealed: large checkouts", () => {
+  const made: string[] = [];
+  // These tests build their trees with makeTempDir (through realDir), which tracks every directory;
+  // removeTempDirs deletes them, and this hook proves they are gone instead of assuming it.
+  afterAll(() => {
+    expect(made.length).toBeGreaterThan(0);
+    removeTempDirs();
+    for (const dir of made) expect(existsSync(dir)).toBe(false);
+  });
+
   /** 40 directories of 25 files, plus .gitignore and one extra file: 1 + 1 + 40 + 1000 = 1042 entries. */
   function bigTree(): { repo: string; state: string; entries: number } {
     const state = realDir("omf-state-");
     const repo = realDir("omf-repo-");
+    made.push(state, repo);
     put(repo, ".gitignore", "ignored-out/\n");
     put(repo, "top.txt");
     let entries = 2;
@@ -56,6 +66,17 @@ describe("scanForSealed: large checkouts", () => {
 
   it("supports a checkout of up to one million entries by default", () => {
     expect(DEFAULT_MAX_SCAN_ENTRIES).toBe(1_000_000);
+  });
+
+  it("uses the default cap when no maxEntries option is given", () => {
+    // A small tree is complete with no option, and the same tree is refused by an explicit cap below its size:
+    // the default is what lets the first scan pass. If the default dropped below the tree size the first
+    // expectation fails; the constant check above pins the value itself.
+    const { repo, state, entries } = bigTree();
+    expect(DEFAULT_MAX_SCAN_ENTRIES).toBeGreaterThan(entries);
+    expect(scanForSealed({ repo, worktrees: [] }, { stateRoot: state })).toEqual({ findings: [], canary_hits: [] });
+    const capped = scanForSealed({ repo, worktrees: [] }, { stateRoot: state, maxEntries: entries - 1 });
+    expect(capped.findings.map((f) => f.kind)).toEqual(["scan_incomplete"]);
   });
 
   it("completes when the entry count equals the cap and blocks one entry below it", () => {
@@ -90,6 +111,7 @@ describe("scanForSealed: large checkouts", () => {
   it("shares one entry budget between the repository and its worktrees", () => {
     const { repo, state, entries } = bigTree();
     const wt = realDir("omf-wt-");
+    made.push(wt);
     put(wt, "a.txt");
     put(wt, "b.txt");
     const result = scanForSealed({ repo, worktrees: [wt] }, { stateRoot: state, maxEntries: entries + 1 });
