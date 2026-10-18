@@ -4,6 +4,7 @@ import type { ProjectLocation } from "../core/paths.js";
 import { canonicalize, sha256Hex } from "../core/canonical-json.js";
 import { BandsError, bandsLockInfo } from "./bands.js";
 import { staleReason } from "./stale-mark.js";
+import { parseDuration } from "./duration.js";
 import { wallTimeLimitMs } from "./wall-time.js";
 import { type GoalFront, GoalFileError, readGoal, referencedMetrics, semanticHash } from "./goal-file.js";
 import { type GoalApproval, type GoalLock, GoalLockError, latestApproval, readGoalLock } from "./goal-lock.js";
@@ -39,6 +40,28 @@ export interface AuditReport {
   locked: { goal: GoalLock; metrics: MetricLock[] } | null;
   budget: BudgetState | null;
   wall_time_exceeded: boolean;
+  /** Advice that does not stop approval or measurement, for example a wall time that cannot cover the minimum observation. */
+  warnings: string[];
+}
+
+/**
+ * Success needs readings that span the minimum observation, and wall time is calendar time from the first
+ * approval, so a wall time at or below the minimum observation can never reach success inside its own cap.
+ * This only advises: the person may still approve, then raise the cap (J8) and resume (J6) when it runs out.
+ */
+export function observationWarning(minObservation: string, wallLimitMs: number, wallLabel: string): string | null {
+  let observationMs: number;
+  try {
+    observationMs = parseDuration(minObservation);
+  } catch {
+    return null;
+  }
+  if (wallLimitMs > observationMs) return null;
+  return (
+    `wall time ${wallLabel} is not longer than the minimum observation ${minObservation}, so the goal cannot reach ` +
+    "success before wall time runs out; set a longer wall_time in goal.md before approving, or later raise it " +
+    "with omf budget raise <goal_id> wall_time <duration> and continue with omf goal resume <goal_id>"
+  );
 }
 
 function safeSemanticHash(lock: GoalLock): string | null {
@@ -179,6 +202,14 @@ function bandsChanges(dir: string, goalId: string, approval: GoalApproval, lock:
   return changed.length === 0 ? [] : [`bands changed: ${changed.join(", ")}`];
 }
 
+function wallWarning(minObservation: string, wallTime: string): string | null {
+  try {
+    return observationWarning(minObservation, parseDuration(wallTime), wallTime);
+  } catch {
+    return null;
+  }
+}
+
 function draftProblems(dir: string, front: GoalFront): string[] {
   const problems: string[] = [];
   for (const id of referencedMetrics(front)) {
@@ -216,6 +247,7 @@ export function auditGoal(location: ProjectLocation, goalId: string, now: Date =
     locked: null,
     budget: null,
     wall_time_exceeded: false,
+    warnings: [],
   };
 
   let front: GoalFront;
@@ -231,6 +263,8 @@ export function auditGoal(location: ProjectLocation, goalId: string, now: Date =
   if (approval === null) {
     report.state = "draft";
     report.problems.push(...draftProblems(location.dir, front));
+    const draftWarning = wallWarning(front.prereg.min_observation, front.budget.wall_time);
+    if (draftWarning !== null) report.warnings.push(draftWarning);
     return report;
   }
   report.approval = approval;
@@ -261,6 +295,9 @@ export function auditGoal(location: ProjectLocation, goalId: string, now: Date =
   if (goalLock !== null || approval.wall_time !== null) {
     const limit = wallTimeLimitMs(events, goalId, approval, goalLock);
     report.wall_time_exceeded = now.getTime() - Date.parse(approval.first_approved_at) > limit;
+    const observation = goalLock?.semantic.prereg.min_observation ?? front.prereg.min_observation;
+    const warning = observationWarning(observation, limit, `limit of ${Math.round(limit / 60_000)}m`);
+    if (warning !== null) report.warnings.push(warning);
   }
   // Problems first: a goal whose locks do not verify is tampered even when it also has regime changes.
   if (report.problems.length > 0) report.state = "tampered";

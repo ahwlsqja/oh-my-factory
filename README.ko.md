@@ -217,7 +217,7 @@ goal g-demo: Say what this goal is in a few words
 objective: The outcome you want, in plain words
 target: m-demo <= 5 ms
 leading: none; lagging: m-demo; guardrails: none
-budget: 10 rounds, 72h wall time, at most 2 open work items
+budget: 10 rounds, 14d wall time, at most 2 open work items
 decision rule: target met for 2 consecutive measurements and no guardrail breach (minimum observation 7d)
 metric m-demo: ["sh","-c","echo 7"] -> ms; watches none
 bands m-demo: none (not monitored)
@@ -235,6 +235,12 @@ warning: measured on the host without isolation (--runner host)
 재승인 화면은 먼저 왜 필요한지 보여 줍니다. 잠금 문제, 체제 변경, 바뀐 감시 경로의 diff 입니다. 읽는 동안
 목표나 지표가 바뀌면 아무것도 승인되지 않습니다. 재승인은 예산을 바꾸지 않습니다. `goal.md` 의 라운드 수나
 벽시계 시간이 이미 적용된 값과 다르면 `omf goal approve` 가 거부하고, 늘리는 것은 별도 결정(J8)입니다.
+
+벽시계 시간은 첫 승인부터 흐르는 달력 시간이고, 성공 판정에는 최소 관찰 기간에 걸친 측정이 필요합니다. 그래서
+생성되는 `goal.md` 는 최소 관찰 7d 에 벽시계 시간 14d 를 짝지어 둡니다. 벽시계 시간을 최소 관찰 기간보다 길지
+않게 정하면 `omf goal audit` 과 승인 화면이 "예산이 끝나기 전에는 성공에 닿을 수 없다"고 경고합니다. 거부가
+아니라 경고입니다. 그대로 승인할 수 있고, 예산이 다 되면 `omf budget raise <id> wall_time <기간>` 으로 늘린 뒤
+`omf goal resume <id>` 로 이어 갑니다. 예산을 대신 늘리거나 경과 시간을 되돌리는 일은 없습니다.
 
 "지표 코드는 조용히 바뀌지 않습니다" 의 한계:
 

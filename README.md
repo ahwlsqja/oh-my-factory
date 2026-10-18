@@ -223,7 +223,7 @@ goal g-demo: Say what this goal is in a few words
 objective: The outcome you want, in plain words
 target: m-demo <= 5 ms
 leading: none; lagging: m-demo; guardrails: none
-budget: 10 rounds, 72h wall time, at most 2 open work items
+budget: 10 rounds, 14d wall time, at most 2 open work items
 decision rule: target met for 2 consecutive measurements and no guardrail breach (minimum observation 7d)
 metric m-demo: ["sh","-c","echo 7"] -> ms; watches none
 bands m-demo: none (not monitored)
@@ -242,6 +242,13 @@ Re-approval first shows why it is needed: lock problems, the regime changes, and
 watched path. If the goal or a metric changes while you read it, nothing is approved. Re-approval never changes
 the budgets: if `goal.md` differs from the rounds or wall time already in force, `omf goal approve` refuses, and
 raising either is a separate decision (J8).
+
+Wall time is calendar time from the first approval, and success needs readings that span the minimum observation,
+so the generated `goal.md` pairs a 7d minimum observation with a 14d wall time. If you set a wall time that is not
+longer than the minimum observation, `omf goal audit` and the approval screen warn that the goal cannot reach
+success before the budget ends. It is a warning, not a refusal: approve anyway, then when the budget runs out raise
+it with `omf budget raise <id> wall_time <duration>` and continue with `omf goal resume <id>`. Nothing raises the
+budget or resets elapsed time for you.
 
 Known limits of "metric code cannot change quietly":
 

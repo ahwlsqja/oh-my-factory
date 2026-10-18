@@ -136,7 +136,7 @@ prereg:
   metrics_judged: 1
 budget:
   rounds: 10
-  wall_time: 72h
+  wall_time: 14d
   max_open_work_items: 2
 state_source: markdown
 ---
