@@ -527,3 +527,38 @@ describe("runDoctor: implementer readiness advisory", () => {
     });
   });
 });
+
+describe("runDoctor: author readiness advisory", () => {
+  const SENTINEL = "sk-codex-doctor-sentinel-0123456789";
+
+  it("names the key variable and whether it is set, never its value, and never moves ok", () => {
+    const repo = makeGitRepo();
+    const e = env(makeTempDir("omf-home-"), stubBin({ dockerDaemon: true }));
+    initProject(repo, e);
+    const baseline = runDoctor(repo, e);
+    expect(baseline.author).toMatchObject({
+      advisory: true,
+      declared: "L2",
+      image_configured: false,
+      key_variable: "OMF_AUTHOR_API_KEY",
+      key_present: false,
+    });
+    writeFileSync(join(projectDir(repo, e), "config.toml"), `[author]\nimage = "sha256:${"a".repeat(64)}"\n`);
+    const ready = runDoctor(repo, { ...e, OMF_AUTHOR_API_KEY: SENTINEL });
+    expect(ready.author).toMatchObject({ image_configured: true, key_present: true });
+    expect(JSON.stringify(ready)).not.toContain(SENTINEL);
+    expect(readFileSync(join(projectDir(repo, e), "preflight.json"), "utf8")).not.toContain(SENTINEL);
+    expect([ready.ok, ready.problems, ready.warnings]).toEqual([baseline.ok, baseline.problems, baseline.warnings]);
+    for (const phrase of ["not enforced", "spend limit", "dedicated docker context", "open network"]) {
+      expect(ready.author.note).toContain(phrase);
+    }
+  });
+
+  it("counts only OMF_AUTHOR_API_KEY: another vendor's variable does not make the author ready", () => {
+    const repo = makeGitRepo();
+    const e = env(makeTempDir("omf-home-"), stubBin({ dockerDaemon: true }));
+    const others = { OPENAI_API_KEY: "x", CODEX_API_KEY: "x", OMF_IMPLEMENTER_API_KEY: "x", ANTHROPIC_API_KEY: "x" };
+    expect(runDoctor(repo, { ...e, ...others }).author).toMatchObject({ key_present: false, image_configured: false });
+    expect(runDoctor(repo, { ...e, OMF_AUTHOR_API_KEY: " padded " }).author.key_present).toBe(false);
+  });
+});

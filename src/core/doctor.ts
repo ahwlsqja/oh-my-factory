@@ -67,6 +67,34 @@ export function implementerAdvisory(env: NodeJS.ProcessEnv, project: ProbeProjec
 }
 
 /**
+ * Whether the sealing author could start, by name and by presence only, like `ImplementerAdvisory`: the image is configured or
+ * not, the key variable is set and usable or not, no value is ever copied into the report. Advisory: it never changes `ok`, and
+ * the level of the author container is measured per seal pass from the ledger, never here.
+ */
+export interface AuthorAdvisory {
+  advisory: true;
+  declared: "L2";
+  image_configured: boolean;
+  key_variable: string;
+  key_present: boolean;
+  note: string;
+}
+
+export const AUTHOR_NOTE =
+  "advisory, not enforced: the author container is measured per seal pass from the ledger, never here. Code running in it can read and use the key and the container has open network access, so use a dedicated key with a provider-side spend limit, and a dedicated docker context or colima profile, because the default bridge reaches other containers and the host gateway of the context in use";
+
+export function authorAdvisory(env: NodeJS.ProcessEnv, project: ProbeProject | null): AuthorAdvisory {
+  return {
+    advisory: true,
+    declared: "L2",
+    image_configured: project !== null && project.config.author.image !== null,
+    key_variable: CREDENTIAL_SOURCE_ENV.codex,
+    key_present: readCredential("codex", env) !== null,
+    note: AUTHOR_NOTE,
+  };
+}
+
+/**
  * What a probe may look at: the initialized project and its config. `null` when the repository has no initialized project or
  * its config.toml cannot be read (the probe then says it cannot measure; doctor adds no problem for it).
  */
@@ -103,6 +131,7 @@ export interface PreflightReport {
   project: { initialized: boolean; dir: string | null; ledger: VerifyResult | null };
   isolation: AdvisoryIsolation;
   implementer: ImplementerAdvisory;
+  author: AuthorAdvisory;
   ok: boolean;
   problems: string[];
   warnings: string[];
@@ -408,6 +437,7 @@ function buildReport(
     project: { initialized, dir, ledger: ledgerResult },
     isolation: safeIsolation(probeIsolation, env, reported, project),
     implementer: implementerAdvisory(env, project),
+    author: authorAdvisory(env, project),
     ok: problemList.length === 0,
     problems: problemList.map((finding) => finding.message),
     warnings: warningList.map((finding) => finding.message),
