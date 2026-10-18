@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { acquireLock, releaseLock } from "../../src/core/lock.js";
 import { approveGoal } from "../../src/goal/approve.js";
-import { ESCALATIONS, escalate, nextSteps } from "../../src/goal/lifecycle.js";
+import { ESCALATIONS, escalate, nextSteps, terminate } from "../../src/goal/lifecycle.js";
+import { lockFile } from "../../src/goal/metrics.js";
 import { tickLockFile } from "../../src/goal/tick-lock.js";
 import { omf } from "../helpers/cli.js";
 import { setupGoal } from "../helpers/goal.js";
@@ -129,6 +130,56 @@ describe("omf goal status", () => {
     writeFileSync(fx.goalFile, readFileSync(fx.goalFile, "utf8").replace("value: 250", "value: 400"));
     const text = omf(["goal", "status", G], fx.repo, fx.home);
     expect(text.stdout).toContain(`goal ${G}: blocked_on_user (audit: needs re-approval`);
+  });
+
+  it.each([
+    ["failed", "omf", "tick_error"],
+    ["finish", "omf", "target_reached"],
+    ["cancelled", "human:dev", "cancelled_by_user"],
+  ] as const)("keeps its own status text for a %s goal", (state, actor, reason) => {
+    const fx = setupGoal();
+    approveGoal(fx.location, G, "human:dev");
+    terminate(fx.ledger, G, state, null, reason, actor);
+    const text = omf(["goal", "status", G], fx.repo, fx.home);
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain(`goal ${G}: ${state} (audit: approved`);
+    expect(text.stdout).not.toContain("approved, no tick has run yet");
+    expect(JSON.parse(omf(["goal", "status", G, "--json"], fx.repo, fx.home).stdout).state).toBe(state);
+  });
+
+  it("spends no budget and appends no ledger event", () => {
+    const fx = setupGoal();
+    approveGoal(fx.location, G, "human:dev");
+    const eventsBefore = fx.ledger.readVerified().length;
+    const counts = () => {
+      const b = JSON.parse(omf(["budget", "show", G, "--json"], fx.repo, fx.home).stdout);
+      expect(b.rounds).toBeDefined();
+      return { rounds: b.rounds, disclosure: b.disclosure };
+    };
+    const budgetBefore = counts();
+    const first = JSON.parse(omf(["goal", "status", G, "--json"], fx.repo, fx.home).stdout);
+    omf(["goal", "status", G], fx.repo, fx.home);
+    const second = JSON.parse(omf(["goal", "status", G, "--json"], fx.repo, fx.home).stdout);
+    expect(second.rounds).toEqual(first.rounds);
+    expect(second.disclosure).toEqual(first.disclosure);
+    expect(first.rounds.consumed).toBe(0);
+    expect(counts()).toEqual(budgetBefore);
+    expect(fx.ledger.readVerified().length).toBe(eventsBefore);
+  });
+
+  it("says the audit found problems and points at audit first, without claiming approve repairs it", () => {
+    const fx = setupGoal();
+    approveGoal(fx.location, G, "human:dev");
+    const file = lockFile(fx.location.dir, G, "m-p95");
+    const lock = JSON.parse(readFileSync(file, "utf8")) as { command: string[] };
+    lock.command = ["sh", "-c", "echo 1"];
+    writeFileSync(file, JSON.stringify(lock));
+    const text = omf(["goal", "status", G], fx.repo, fx.home);
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain(`goal ${G}: stopped, the audit found problems (audit: tampered`);
+    expect(text.stdout).toContain(`omf goal audit ${G}`);
+    expect(text.stdout).not.toContain("omf goal approve");
+    expect(text.stdout).not.toContain("does not match the ledger");
   });
 
   it("exits 2 for an unknown goal", () => {

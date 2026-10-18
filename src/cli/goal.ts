@@ -197,7 +197,7 @@ function headline(report: GoalStatusReport): string {
     case "needs_reapproval":
       return "reapproval required, no new work until you approve again";
     case "tampered":
-      return "stopped, a lock does not match the ledger";
+      return "stopped, the audit found problems";
     case "invalid":
       return "not runnable, the goal file is invalid";
     default:
@@ -215,7 +215,7 @@ function auditNextSteps(report: GoalStatusReport): string[] {
     case "needs_reapproval":
       return [`omf goal audit ${id} (shows what changed), then omf goal approve ${id}`];
     case "tampered":
-      return [`omf goal approve ${id} (repairs the lock after you review it)`];
+      return [`omf goal audit ${id} (lists the problems; review them before you decide anything else)`];
     case "invalid":
       return [`omf goal audit ${id} (lists the problems to fix in goal.md)`];
     default:
