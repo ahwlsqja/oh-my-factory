@@ -43,7 +43,7 @@ function printAudit(report: AuditReport): void {
   }
   if (report.state === "tampered") {
     console.log(
-      `a lock does not match the ledger and measurement is stopped; run omf goal approve ${report.goal_id} to repair it`,
+      `measurement is stopped; approving again repairs a changed goal.md or watched path, other problems are listed below`,
     );
   }
   if (report.budget !== null) {
@@ -207,11 +207,16 @@ function headline(report: GoalStatusReport): string {
 
 /** What to do next when the audit, not the run state, is what holds the goal back (text only). */
 function auditNextSteps(report: GoalStatusReport): string[] {
-  if (report.state !== "running") return [];
   const id = report.goal_id;
+  if (report.state !== "running") {
+    // Blocked, failed, finish and cancelled goals still need the audit when it found problems or a changed goal.
+    return report.audit_state === "tampered" || report.audit_state === "needs_reapproval"
+      ? [`omf goal audit ${id} (shows what the audit found)`]
+      : [];
+  }
   switch (report.audit_state) {
     case "draft":
-      return [`omf goal audit ${id} (then omf goal approve ${id} when it says ready for J1)`];
+      return [`omf goal audit ${id} (then omf goal approve ${id} if it reports no problems)`];
     case "needs_reapproval":
       return [`omf goal audit ${id} (shows what changed), then omf goal approve ${id}`];
     case "tampered":

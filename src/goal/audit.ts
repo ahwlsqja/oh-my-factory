@@ -21,7 +21,7 @@ import {
 /**
  * `tampered`: an approval exists but a lock, the budget events or the goal lock do not verify against the
  * ledger (E1). It is never `approved`, so nothing that branches on the state treats the goal as sound;
- * approving again repairs it.
+ * approving again repairs a changed goal.md or watched path; other problems are listed in the report.
  */
 export type GoalState = "invalid" | "draft" | "approved" | "needs_reapproval" | "tampered";
 

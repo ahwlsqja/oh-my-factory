@@ -164,7 +164,9 @@ describe("omf goal audit", () => {
     expect(audit.code).toBe(1);
     expect(audit.stdout).toContain("goal g-fast: tampered (regime 1)");
     expect(audit.stdout).toContain("- metric lock tampered: m-p95");
-    expect(audit.stdout).toContain("run omf goal approve g-fast to repair it");
+    expect(audit.stdout).toContain(
+      "approving again repairs a changed goal.md or watched path, other problems are listed below",
+    );
     const json = omf(["goal", "audit", "g-fast", "--json"], fx.repo, fx.home);
     expect((JSON.parse(json.stdout) as { state: string }).state).toBe("tampered");
 

@@ -130,6 +130,20 @@ describe("omf goal status", () => {
     writeFileSync(fx.goalFile, readFileSync(fx.goalFile, "utf8").replace("value: 250", "value: 400"));
     const text = omf(["goal", "status", G], fx.repo, fx.home);
     expect(text.stdout).toContain(`goal ${G}: blocked_on_user (audit: needs re-approval`);
+    expect(text.stdout).toContain(`omf goal audit ${G}`);
+  });
+
+  it("points a cancelled goal with a tampered lock at audit", () => {
+    const fx = setupGoal();
+    approveGoal(fx.location, G, "human:dev");
+    terminate(fx.ledger, G, "cancelled", null, "cancelled_by_user", "human:dev");
+    const file = lockFile(fx.location.dir, G, "m-p95");
+    const lock = JSON.parse(readFileSync(file, "utf8")) as { command: string[] };
+    lock.command = ["sh", "-c", "echo 1"];
+    writeFileSync(file, JSON.stringify(lock));
+    const text = omf(["goal", "status", G], fx.repo, fx.home);
+    expect(text.stdout).toContain(`goal ${G}: cancelled (audit: tampered`);
+    expect(text.stdout).toContain(`omf goal audit ${G}`);
   });
 
   it.each([
@@ -179,7 +193,7 @@ describe("omf goal status", () => {
     expect(text.stdout).toContain(`goal ${G}: stopped, the audit found problems (audit: tampered`);
     expect(text.stdout).toContain(`omf goal audit ${G}`);
     expect(text.stdout).not.toContain("omf goal approve");
-    expect(text.stdout).not.toContain("does not match the ledger");
+    expect(text.stdout).toContain("stopped, the audit found problems");
   });
 
   it("exits 2 for an unknown goal", () => {
