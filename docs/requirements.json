@@ -592,6 +592,27 @@
           "proves": "behavior"
         }
       ]
+    },
+    {
+      "id": "S7.unmeasured-stage-no-claim",
+      "source": "spec §7",
+      "claim": "A stage that no container measured leaves the run-level isolation label unmeasured, and the CLI prints no L2 or sealed claim for the run.",
+      "real_world": false,
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-cli-fake-docker-unmeasured.test.ts",
+          "proves": "behavior"
+        },
+        {
+          "path": "tests/enforcement/W-no-fake-switch.test.ts",
+          "proves": "behavior"
+        },
+        {
+          "path": "tests/acceptance/cli-fake-docker.test.ts",
+          "proves": "wiring_only"
+        }
+      ]
     }
   ]
 }

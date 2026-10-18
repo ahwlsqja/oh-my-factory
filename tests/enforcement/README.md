@@ -6,7 +6,7 @@ without a test is labeled "not enforced" in the spec.
 ## Requirement states
 
 <!-- requirements:start -->
-Requirement states, generated from `docs/requirements.json` (34 covered, 5 unproven, 7 deferred, 0 missing). The full table is [the conformance matrix](../../docs/conformance-matrix.md).
+Requirement states, generated from `docs/requirements.json` (35 covered, 5 unproven, 7 deferred, 0 missing). The full table is [the conformance matrix](../../docs/conformance-matrix.md).
 
 - unproven: `F6.vault-host-only`, `S5.4.implementer-container`, `S7.l2-label`, `S7.docker-client-trusted`, `S5.3.author-measured-before-key`
 - deferred: `F4.goal-closes-by-signature`, `F11.autonomy-dial`, `S7.l3-label`, `S11.1.plugin-dir-shells`, `S11.2.ship-only-pushes`, `S11.3.public-artifacts-in-worktree`, `S11.6.break-glass-events`
@@ -127,6 +127,8 @@ are hand-written.
 | `W-cli-idempotent-run-report.test.ts` | `omf run` on an item that already ran says so, exits 0 and changes nothing; `omf report` prints the evidence rendered from the validated `evidence.json`, twice with the same bytes, writes nothing, and never prints a hand-edited `evidence.md`. | spec §5.0 |
 | `W-cli-order.test.ts` | The W verbs refuse out of order and name the missing gate: `omf run` before GATE-1 passes exits 3 and names GATE-1, with no seal exits 2 and names GATE-2 and `omf seal`, and on an unknown item exits 2 and names the id; a standing seal passes the check with a warning, a decision change refuses it again, and a refusal writes nothing to the ledger. | spec §5.0 |
 | `W-cli-usage-drift.test.ts` | Every leaf command's `--help` text is reproduced byte for byte in `docs/cli-usage.md` and has a README row; a command without a block, or a block that differs, fails the build and names the verb, and the check script exits 1 when the file is missing. | spec §13 |
+| `W-no-fake-switch.test.ts` | The offline acceptance ends `unmeasured` because of the fixture it plants, never because of a switch: no environment name, config key or command flag can stand in for the container probe, and the detector is shown to catch a switch-shaped name. | spec §7 |
+| `W-cli-fake-docker-unmeasured.test.ts` | The shipped CLI walked against a fake docker whose author was never measured warns before it spends, ends blocked at GATE-3 with a J7 handoff and exit 2, leaves the run-level isolation label `unmeasured` and prints no L2 or sealed claim, reports the same evidence byte for byte twice, and publishes only the candidate branch while the key and every container stay out of the user's repository. | spec §7 |
 
 The leak tests use `tests/helpers/reconciler-stub.mjs` in `leaky` mode and the planted strings in
 `tests/helpers/canary.ts`. A change to what the goal loop discloses is a change to E2: update the

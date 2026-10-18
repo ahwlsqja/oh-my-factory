@@ -3,7 +3,7 @@ import { delimiter, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ProcessResult } from "../../src/adapters/process-group.js";
 import { HARNESS_BASE, SUT_BASE } from "./container-fixture.js";
-import { type FakeCall, type FakeHooks, type FakeState, addImage, handle, newState } from "./fake-docker-core.mjs";
+import { addImage, type FakeCall, type FakeHooks, type FakeState, handle, newState } from "./fake-docker-core.mjs";
 import { makeTempDir } from "./tmp.js";
 
 /** Structurally the `DockerRunner` of src/container/docker-cli.ts. */
@@ -96,9 +96,10 @@ export interface FakeDockerBin {
  * A stateful `docker` program on PATH, for the tests that need state across processes (the doctor probe, the kill test).
  * The wrapper is generated in a private temp dir next to its state file, because the client is started with PATH and
  * DOCKER_CONFIG only and a state path could not travel in the environment. It is a CommonJS script on purpose: outside the
- * package it needs no package.json, and `env` adds no variable to the client's environment.
+ * package it needs no package.json, and `env` adds no variable to the client's environment. With `hooks` (an absolute
+ * path to an .mjs module) the program answers `docker exec` through it.
  */
-export function fakeDockerBin(): FakeDockerBin {
+export function fakeDockerBin(options: { hooks?: string } = {}): FakeDockerBin {
   const dir = makeTempDir("omf-fake-docker-");
   const statePath = join(dir, "fake-docker-state.json");
   const wrapper = join(dir, "docker");
@@ -113,6 +114,8 @@ export function fakeDockerBin(): FakeDockerBin {
   );
   chmodSync(wrapper, 0o755);
   writeFileSync(statePath, JSON.stringify(defaultState()));
+  // The path travels as a file URL in a sidecar file; see docker.mjs. The module's own config is written by its owner into `dir`.
+  if (options.hooks !== undefined) writeFileSync(`${statePath}.hooks`, pathToFileURL(options.hooks).href);
   const read = (): FakeState => JSON.parse(readFileSync(statePath, "utf8")) as FakeState;
   return {
     dir,
