@@ -68,7 +68,28 @@ export const PREPARE_SCRIPT: string = script([
  * Every process of the container except the idle entrypoint and the shell that runs this command. The kernel leaves out PID 1
  * and the caller on its own, so the exec survives to report its status. Only a container is ever given this command.
  */
-export const KILL_ALL_ARGV: readonly string[] = ["sh", "-c", "kill -9 -1"];
+export const KILL_ALL_ARGV: readonly string[] = [
+  "sh",
+  "-c",
+  [
+    // With no process left to signal, `kill -9 -1` prints "No such process" and exits 1, so its own status and message are
+    // ignored. What decides is the process table: the exec succeeds only when nothing but PID 1 and this shell is still alive
+    // (a zombie is dead and does not count). The kill is asynchronous, so the table is polled for a short while.
+    "kill -9 -1 2>/dev/null",
+    "n=0",
+    "while [ $n -lt 20 ]; do",
+    "  left=0",
+    "  for d in /proc/[0-9]*; do",
+    '    p=${d#/proc/}; [ "$p" = 1 ] && continue; [ "$p" = "$$" ] && continue',
+    '    st=""; while read -r k v _; do [ "$k" = "State:" ] && st=$v; done < "$d/status" 2>/dev/null',
+    '    [ -n "$st" ] && [ "$st" != Z ] && left=1',
+    "  done;",
+    "  [ $left -eq 0 ] && exit 0",
+    "  n=$((n+1)); kill -9 -1 2>/dev/null; sleep 0.1 2>/dev/null || sleep 1",
+    "done;",
+    "exit 1",
+  ].join("\n"),
+];
 
 /**
  * Commits what the implementer left uncommitted and writes the bundle of `HEAD`. Hooks are switched off on the command line
