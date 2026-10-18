@@ -10,7 +10,7 @@ import {
   roleLimits,
   roleTmpfs,
 } from "../../src/container/spec.js";
-import { CONFIG_DEFAULTS, type ImplementerConfig } from "../../src/core/config.js";
+import { type AuthorConfig, CONFIG_DEFAULTS, type ImplementerConfig } from "../../src/core/config.js";
 
 // Invented ids and digests; nothing here names a real image, path or home.
 export const FIXTURE_WORK_ID = "w-0123456789ab";
@@ -18,6 +18,7 @@ export const FIXTURE_RUN_ID = "r-20261015T120000Z-ab12";
 export const SUT_BASE = `example.test/omf/sut-base@sha256:${"a".repeat(64)}`;
 export const HARNESS_BASE = `example.test/omf/harness-base@sha256:${"b".repeat(64)}`;
 export const IMPLEMENTER_BASE = `example.test/omf/implementer-base@sha256:${"c".repeat(64)}`;
+export const AUTHOR_BASE = `example.test/omf/author-base@sha256:${"d".repeat(64)}`;
 
 /** Explicit numbers, so the pinned argv of the implementer does not move when a default of `[implementer]` does. */
 export const FIXTURE_IMPLEMENTER_LIMITS: ImplementerConfig = {
@@ -30,6 +31,18 @@ export const FIXTURE_IMPLEMENTER_LIMITS: ImplementerConfig = {
   agent_tmpfs_mb: 256,
 };
 
+/** Explicit numbers, so the pinned argv of the author does not move when a default of `[author]` does. */
+export const FIXTURE_AUTHOR_LIMITS: AuthorConfig = {
+  ...CONFIG_DEFAULTS.author,
+  memory_mb: 1024,
+  cpus: 1,
+  pids_limit: 256,
+  tmp_tmpfs_mb: 64,
+  in_tmpfs_mb: 16,
+  out_tmpfs_mb: 16,
+  agent_tmpfs_mb: 128,
+};
+
 export const labelsFor = (role: ContainerRole, round = 1): OwnedLabels => ({
   work_id: FIXTURE_WORK_ID,
   run_id: FIXTURE_RUN_ID,
@@ -37,14 +50,22 @@ export const labelsFor = (role: ContainerRole, round = 1): OwnedLabels => ({
   role,
 });
 
-/** The limits the stations pass for `role`: `[judge]` defaults for a judge role, the fixture numbers for the implementer. */
+/** The limits the stations pass for `role`: `[judge]` defaults for a judge role, the fixture numbers for an agent role. */
 export const limitsFor = (role: ContainerRole): RoleLimits =>
   role === "implementer"
     ? { kind: "implementer", implementer: FIXTURE_IMPLEMENTER_LIMITS }
-    : { kind: "judge", judge: CONFIG_DEFAULTS.judge };
+    : role === "author"
+      ? { kind: "author", author: FIXTURE_AUTHOR_LIMITS }
+      : { kind: "judge", judge: CONFIG_DEFAULTS.judge };
 
 const imageFor = (role: ContainerRole): string =>
-  role === "harness" ? HARNESS_BASE : role === "implementer" ? IMPLEMENTER_BASE : SUT_BASE;
+  role === "harness"
+    ? HARNESS_BASE
+    : role === "implementer"
+      ? IMPLEMENTER_BASE
+      : role === "author"
+        ? AUTHOR_BASE
+        : SUT_BASE;
 
 export function specFor(role: ContainerRole, serial = 1, round = 1): ContainerSpec {
   const labels = labelsFor(role, round);

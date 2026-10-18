@@ -267,6 +267,18 @@
         { "path": "tests/enforcement/W-same-vendor-refused.test.ts", "proves": "behavior" },
         { "path": "tests/core/roles.test.ts", "proves": "behavior" }
       ]
+    },
+    {
+      "id": "S5.3.author-container-argv",
+      "source": "spec §5.3, §7",
+      "claim": "The sealing author's container is made by the one reviewed argv builder: tmpfs-only /tmp, /in, /out and /agent, no bind mount or volume, a fixed environment, no secret at create time; a container that deviates from its golden is measured below L2 before it starts.",
+      "real_world": false,
+      "surfaces": [],
+      "tests": [
+        { "path": "tests/enforcement/W-author-argv-golden.test.ts", "proves": "behavior" },
+        { "path": "tests/enforcement/W-seal-no-forbidden-mounts.test.ts", "proves": "behavior" },
+        { "path": "tests/container/author-role.test.ts", "proves": "behavior" }
+      ]
     }
   ]
 }

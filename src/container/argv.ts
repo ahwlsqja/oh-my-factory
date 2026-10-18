@@ -2,6 +2,8 @@ import { isAbsolute } from "node:path";
 import { isDigestPinned } from "./image-ref.js";
 import type { PinnedImage } from "./image-ref.js";
 import {
+  AUTHOR_FIXED_ENV,
+  type ContainerRole,
   type ContainerSpec,
   ContainerSpecError,
   IDLE_ARGS,
@@ -9,6 +11,7 @@ import {
   IMPLEMENTER_FIXED_ENV,
   type ImageId,
   type OwnedLabels,
+  ROLE_NETWORK,
   SANDBOX_USER,
   SECRET_ENV_NAMES,
   type SecretEnvName,
@@ -55,9 +58,16 @@ function tmpfsOption(tmpfs: TmpfsSpec): string {
   return `${tmpfs.destination}:rw,size=${tmpfs.size_mb}m,nosuid,nodev${tmpfs.exec ? ",exec" : ""}${tmpfs.owned ? `,uid=${owner}` : ""}`;
 }
 
+/** The create-time environment a role carries besides `LC_ALL`: constants of spec.ts, never caller input. */
+function fixedEnvOf(role: ContainerRole): readonly (readonly [name: string, value: string])[] {
+  if (role === "implementer") return IMPLEMENTER_FIXED_ENV;
+  if (role === "author") return AUTHOR_FIXED_ENV;
+  return [];
+}
+
 /**
- * Every role gets the same hardening flags. The implementer differs in exactly two values: it is the only role on a network
- * (`bridge`, so the vendor CLI can reach its API; spec §7 L2) and it carries the fixed environment of `IMPLEMENTER_FIXED_ENV`.
+ * Every role gets the same hardening flags. The two agent roles differ in exactly two values: they are the only roles on a
+ * network (`bridge`, so the vendor CLI can reach its API; spec §7 L2) and each carries its own fixed environment.
  */
 export function createArgv(spec: ContainerSpec, context: string | null): string[] {
   assertSpec(spec);
@@ -71,7 +81,7 @@ export function createArgv(spec: ContainerSpec, context: string | null): string[
     "never",
     ...labelArgs(spec.labels),
     "--network",
-    spec.labels.role === "implementer" ? "bridge" : "none",
+    ROLE_NETWORK[spec.labels.role],
     "--cap-drop",
     "ALL",
     "--security-opt",
@@ -89,9 +99,7 @@ export function createArgv(spec: ContainerSpec, context: string | null): string[
     "1",
     "--env",
     "LC_ALL=C",
-    ...(spec.labels.role === "implementer"
-      ? IMPLEMENTER_FIXED_ENV.flatMap(([name, value]) => ["--env", `${name}=${value}`])
-      : []),
+    ...fixedEnvOf(spec.labels.role).flatMap(([name, value]) => ["--env", `${name}=${value}`]),
     ...spec.tmpfs.flatMap((tmpfs) => ["--tmpfs", tmpfsOption(tmpfs)]),
     "--entrypoint",
     IDLE_ENTRYPOINT,

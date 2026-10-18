@@ -62,7 +62,7 @@ describe("a bad spec or argument throws before any argv exists", () => {
     ["a fractional round", () => createArgv({ ...sut, labels: { ...sut.labels, round: 1.5 } }, null), "invalid_label"],
     [
       "a role that is not a role",
-      () => createArgv({ ...sut, labels: { ...sut.labels, role: "author" as ContainerRole } }, null),
+      () => createArgv({ ...sut, labels: { ...sut.labels, role: "judge" as ContainerRole } }, null),
       "invalid_label",
     ],
     [

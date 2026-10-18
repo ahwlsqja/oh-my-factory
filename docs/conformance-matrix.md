@@ -7,7 +7,7 @@ Generated from `docs/requirements.json` by `node scripts/conformance-matrix.mjs 
 - **deferred**: the design states it and v0.1 does not implement it. It has no test, and the documents say `not implemented`.
 - **missing**: no test counts, or a mapped file is absent. CI fails.
 
-Totals: 22 covered, 4 unproven, 7 deferred, 0 missing.
+Totals: 23 covered, 4 unproven, 7 deferred, 0 missing.
 
 | Id | State | Last recorded | Tests | Claim |
 |---|---|---|---|---|
@@ -44,3 +44,4 @@ Totals: 22 covered, 4 unproven, 7 deferred, 0 missing.
 | `S11.5.governance-unreadable-stops` | covered | - | 2 offline | When a governance file cannot be read or fails verification, OMF stops instead of falling back to defaults. |
 | `S11.6.break-glass-events` | deferred (M4) | - | none | A break-glass exception is a J7 ledger event with a reason and an expiry. |
 | `S5.3.same-vendor-refused` | covered | - | 2 offline | Author and implementer on the same vendor are refused with a reason that names both roles, and the [seal] same_vendor key is refused whatever its value, so no acknowledgement path exists. |
+| `S5.3.author-container-argv` | covered | - | 3 offline | The sealing author's container is made by the one reviewed argv builder: tmpfs-only /tmp, /in, /out and /agent, no bind mount or volume, a fixed environment, no secret at create time; a container that deviates from its golden is measured below L2 before it starts. |
