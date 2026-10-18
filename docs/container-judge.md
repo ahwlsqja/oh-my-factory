@@ -1,6 +1,6 @@
 # The container judge (M3f)
 
-How a candidate commit is judged in two disposable containers, how every container is measured before candidate code runs in it, and what none of that proves. Offline tests use a fake Docker. Runs against a real container are gated (`npm run test:gated`), and nothing here is enforced against a real container until `docs/evidence/gated-runs.json` records a passing run. Until then it is not enforced.
+How a candidate commit is judged in two disposable containers, how every container is measured before candidate code runs in it, and what none of that proves. Offline tests use a fake Docker. Runs against a real container are gated (`npm run test:gated`), and a claim here is enforced against a real container only where `docs/evidence/gated-runs.json` records a passing run of a suite that covers it. Otherwise it is not enforced.
 
 ## What exists
 
@@ -44,7 +44,7 @@ With `docker_context` unset every container operation is refused. `omf doctor` r
 
 ## Gated runs
 
-`npm run test:gated` starts the colima profile `omf-m3f` (2 CPU, 4 GiB), runs `tests/gated` with `OMF_GATED=docker` against the `colima-omf-m3f` context only, and stops the profile. `--record` appends one record per fully passed suite to `docs/evidence/gated-runs.json`. The script is `scripts/gated-docker.mjs`. A skipped gated test is not evidence. Until both `G-real-isolation-probe` and `G-two-container-roundtrip` are recorded, every claim on this page is not enforced against a real container.
+`npm run test:gated` starts the colima profile `omf-m3f` (2 CPU, 4 GiB), runs `tests/gated` with `OMF_GATED=docker` against the `colima-omf-m3f` context only, and stops the profile. `--record` appends one record per fully passed suite to `docs/evidence/gated-runs.json`. The script is `scripts/gated-docker.mjs`. A skipped gated test is not evidence. Both `G-real-isolation-probe` and `G-two-container-roundtrip` are recorded in `docs/evidence/gated-runs.json`; a claim on this page that no recorded suite covers is still not enforced against a real container.
 
 ## Limits
 
