@@ -1,10 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 // A first-time reader must be told, next to the first command that records a person, that the configured Git email
 // is shown in output and stored in local host state, and how to redact it before sharing.
 const ROOT = new URL("../../", import.meta.url);
+const ROOT_PATH = fileURLToPath(ROOT);
 const read = (path: string): string => readFileSync(new URL(path, ROOT), "utf8");
 
 /** The text between the "Define and measure a goal" heading and the first "omf metric propose" console line. */
@@ -64,7 +67,7 @@ describe("actor identity disclosure", () => {
 
   it("tracked text files carry only fictional email addresses", () => {
     const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
-      cwd: new URL(ROOT).pathname,
+      cwd: ROOT_PATH,
       encoding: "utf8",
     })
       .split("\0")
@@ -75,7 +78,9 @@ describe("actor identity disclosure", () => {
     const packageVersion = /^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/;
     const found: string[] = [];
     for (const file of files) {
-      const buffer = readFileSync(new URL(file, ROOT));
+      const absolute = join(ROOT_PATH, file);
+      if (!existsSync(absolute)) continue; // tracked but deleted in the working tree
+      const buffer = readFileSync(absolute);
       if (buffer.includes(0)) continue; // binary
       const text = buffer.toString("utf8");
       for (const match of text.matchAll(email)) {
