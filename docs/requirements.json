@@ -297,9 +297,9 @@
     {
       "id": "S7.docker-client-trusted",
       "source": "spec §7",
-      "claim": "A substituted docker client or a lying daemon cannot make a stage measure L2.",
+      "claim": "The measurement trusts the docker client on PATH and the configured context; a substituted client or a lying daemon can make a stage measure L2.",
       "real_world": true,
-      "surfaces": ["docs/isolation-and-gates.md"],
+      "surfaces": ["docs/isolation-and-gates.md", "docs/author.md"],
       "tests": [
         {
           "path": "tests/enforcement/W-inspect-deviation-lowers-level.test.ts"
@@ -497,7 +497,7 @@
     {
       "id": "S5.3.standing-seal-rule",
       "source": "spec §5.3",
-      "claim": "A seal stands only while its vault set matches its digest, the decisions are unchanged, GATE-2 passed it, and its author stage reads L2.",
+      "claim": "A seal stands only while its vault set matches its digest, the decisions are unchanged and the latest GATE-2 passed it; its author counts as measured only when an L2 author measurement is bound to exactly that seal.",
       "real_world": false,
       "surfaces": ["docs/isolation-and-gates.md"],
       "tests": [

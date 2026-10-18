@@ -1,6 +1,6 @@
 # The implementer container
 
-How OMF runs the implementer (Claude Code) in a measured container, what crosses the boundary in each direction, what the credential exposes, and what none of it proves. The implementer exists as library code (`src/implementer/`): no command runs it yet. Every claim below about a real container or a real model is not enforced until the gated suites in the table are recorded in `docs/evidence/gated-runs.json`.
+How OMF runs the implementer (Claude Code) in a measured container, what crosses the boundary in each direction, what the credential exposes, and what none of it proves. `omf run` runs the implementer as the S3 station of the line (`src/implementer/`). Every claim below about a real container or a real model is not enforced until the gated suites in the table are recorded in `docs/evidence/gated-runs.json`.
 
 ## Status
 

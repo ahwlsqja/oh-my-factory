@@ -490,6 +490,7 @@ ledger, 지표 제안, J1 잠금 파일에도 제안하거나 승인한 사람�
 - [출처와 읽은 상태](docs/design/references.md)
 - [강제 시험과 그 시험이 확인하는 주장](tests/enforcement/README.md)
 - [명령 사용법](docs/cli-usage.md): 모든 명령의 `--help` 출력 그대로. 빌드된 CLI 와 대조해 시험합니다 (영어)
+- [봉인 작성자 컨테이너](docs/author.md): 작성자의 이미지, 키, 경계, 한계 (영어)
 - [적합성 표](docs/conformance-matrix.md): 요구사항마다 covered, unproven, missing 상태 (영어)
 - [목표 루프의 결정과 열린 질문 (M2b 부록, 영어)](docs/design/2026-10-12-omf-m2b-addendum.md)
 - [`examples/hello-goal`](examples/hello-goal/README.md): 목표 루프를 오프라인으로 끝까지 돌려 보는 예제 (영어)

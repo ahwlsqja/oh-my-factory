@@ -39,7 +39,7 @@ describe("W-conformance-matrix", () => {
     const f6 = row("F6.vault-host-only");
     const smoke = f6?.tests.find((test) => test.path.endsWith("E6-station-smoke.test.ts"));
     expect(smoke).toMatchObject({ proves: "wiring_only", counts: false });
-    // No test maps the claim that a substituted docker client cannot fake a level, so it stays unproven.
+    // The claim is a known limit that only a real run can show; its offline test does not count without a gated record, so it stays unproven.
     expect(row("S7.docker-client-trusted")?.state).toBe("unproven");
   });
 

@@ -33,7 +33,7 @@ Totals: 34 covered, 5 unproven, 7 deferred, 0 missing.
 | `S5.8.evidence-no-pass-by-default` | covered | - | 2 offline | A clean line ends success with human_needed and lists noise_check_not_evaluated as unverified, so merge_recommended is unreachable in v0.1. |
 | `S7.isolation-measured` | covered | 2026-10-18 | 2 offline, 1 gated | The isolation level comes from measurements in the ledger, and a daemon-reported deviation lowers it. |
 | `S7.l2-label` | unproven | - | 1 offline, 1 gated | The label "sealed (container)" appears only when every stage of a run measured L2. |
-| `S7.docker-client-trusted` | unproven | - | 1 offline | A substituted docker client or a lying daemon cannot make a stage measure L2. |
+| `S7.docker-client-trusted` | unproven | - | 1 offline | The measurement trusts the docker client on PATH and the configured context; a substituted client or a lying daemon can make a stage measure L2. |
 | `S7.l3-label` | deferred (v0.3) | - | none | L3 adds an egress allowlist and a leak red-team on every run, and earns its own label. |
 | `S11.1.non-pollution` | covered | - | 1 offline | OMF only reads the user's agent configuration, keeps its state out of the repository and the agent config homes, and writes nothing there. |
 | `S11.1.plugin-dir-shells` | deferred (after v0.1) | - | none | Shells prefer --plugin-dir injection, and marketplace installation is opt-in and labeled. |
@@ -50,7 +50,7 @@ Totals: 34 covered, 5 unproven, 7 deferred, 0 missing.
 | `S5.3.author-measured-before-key` | unproven | - | 1 offline | The author key reaches a container only after that container measured golden; a container that does not measure golden never receives it. |
 | `S4.6.author-answer-closed` | covered | - | 1 offline | Only one string field of a closed answer envelope leaves the author container; a malformed answer or one holding the key is dropped, and a failed run leaves a closed code. |
 | `S5.3.author-measurement-bound` | covered | - | 1 offline | The author container measurement counts only for the seal it was made for; a later or superseded seal is never attested by it. |
-| `S5.3.standing-seal-rule` | covered | - | 1 offline | A seal stands only while its vault set matches its digest, the decisions are unchanged, GATE-2 passed it, and its author stage reads L2. |
+| `S5.3.standing-seal-rule` | covered | - | 1 offline | A seal stands only while its vault set matches its digest, the decisions are unchanged and the latest GATE-2 passed it; its author counts as measured only when an L2 author measurement is bound to exactly that seal. |
 | `S5.3.seal-refuses-out-of-order` | covered | - | 2 offline | omf seal refuses before it spends anything when GATE-1 is not passing, the item is unknown, claimed by a run or started without an author-measured seal, and names the missing gate. |
 | `S5.3.seal-idempotent-when-measured` | covered | - | 1 offline | omf seal on a seal that is current and author-measured does nothing: exit 0, no key, no docker call, no ledger event. |
 | `S5.0.verbs-thin-adapters` | covered | - | 1 offline | The W verbs are thin adapters registered through one function; main.ts holds one import and one call. |

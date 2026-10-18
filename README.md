@@ -512,6 +512,7 @@ To uninstall, run `npm unlink -g oh-my-factory` and delete `~/.omf`.
 - [Sources and reading status](docs/design/references.md)
 - [Enforcement tests and the claims they cover](tests/enforcement/README.md)
 - [Command usage](docs/cli-usage.md): the exact `--help` text of every command, checked against the built CLI
+- [The sealing author container](docs/author.md): the author's image, key, boundary and limits
 - [Conformance matrix](docs/conformance-matrix.md): every requirement as covered, unproven or missing
 - [Goal-loop decisions and open questions (M2b addendum)](docs/design/2026-10-12-omf-m2b-addendum.md)
 - [`examples/hello-goal`](examples/hello-goal/README.md): the goal loop end to end, offline
