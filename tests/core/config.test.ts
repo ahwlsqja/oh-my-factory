@@ -287,6 +287,21 @@ describe("[judge]", () => {
     );
   });
 
+  it("refuses an implementer model the container run cannot pass on, before any container is built", () => {
+    for (const model of ["claude-sonnet-4-5[1m]", "-leading-dash", "has space", "a".repeat(81)]) {
+      expect(() => parseConfig(`[roles]\nimplementer = { vendor = "claude", model = "${model}" }\n`)).toThrow(
+        /config\.toml is invalid/,
+      );
+    }
+    expect(
+      parseConfig('[roles]\nimplementer = { vendor = "claude", model = "claude-sonnet-4-5.1:beta" }\n').roles
+        .implementer.model,
+    ).toBe("claude-sonnet-4-5.1:beta");
+    expect(parseConfig('[roles]\nauthor = { vendor = "claude", model = "any model[1m]" }\n').roles.author.model).toBe(
+      "any model[1m]",
+    );
+  });
+
   it("refuses tmpfs sizes that do not fit in memory_mb, because tmpfs is charged to the container", () => {
     // The work copy holds tmp (64) plus work (256) = 320 MiB.
     expect(() => parseConfig("[judge]\nmemory_mb = 256\n")).toThrow(

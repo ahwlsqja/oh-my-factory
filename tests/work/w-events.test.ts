@@ -3,14 +3,14 @@ import { describe, expect, it } from "vitest";
 import { Ledger } from "../../src/core/ledger.js";
 import { schemaUrl, validate } from "../../src/core/schema.js";
 import {
-  RUN_ID_PATTERN,
-  W_EVENT_TYPES,
-  W_REASON_CODES,
-  type WEvent,
   classifyWEvent,
   lastStateEvent,
   newRunId,
+  RUN_ID_PATTERN,
   targetOf,
+  W_EVENT_TYPES,
+  W_REASON_CODES,
+  type WEvent,
   wEvent,
 } from "../../src/work/w-events.js";
 import { findForbiddenKey } from "../../src/work/work-item.js";
@@ -266,6 +266,19 @@ describe("gates_failed and disclosure_unavailable", () => {
     expect(at("disclosure_unavailable")).toBe(at("gates_failed") + 1);
     expect(schemaDoc().$defs.reason_code?.enum).toEqual([...W_REASON_CODES]);
     for (const reason_code of ["gates_failed", "disclosure_unavailable"]) {
+      expect(accepts("work.failed", { ...scope, outcome: "flawed", reason_code }), reason_code).toBe(true);
+      expect(accepts("work.parked", { ...scope, outcome: "blocked", reason_code }), reason_code).toBe(true);
+    }
+  });
+});
+
+describe("plan_missing and implementer_request", () => {
+  it("are appended after disclosure_unavailable, in this order, in the list and in the schema", () => {
+    const at = (code: string): number => (W_REASON_CODES as readonly string[]).indexOf(code);
+    expect(at("plan_missing")).toBe(at("disclosure_unavailable") + 1);
+    expect(at("implementer_request")).toBe(at("plan_missing") + 1);
+    expect(schemaDoc().$defs.reason_code?.enum).toEqual([...W_REASON_CODES]);
+    for (const reason_code of ["plan_missing", "implementer_request"]) {
       expect(accepts("work.failed", { ...scope, outcome: "flawed", reason_code }), reason_code).toBe(true);
       expect(accepts("work.parked", { ...scope, outcome: "blocked", reason_code }), reason_code).toBe(true);
     }

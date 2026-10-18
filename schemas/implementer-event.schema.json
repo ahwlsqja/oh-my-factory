@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OMF implementer events and conflict request file (spec §5.1, §5.6, §7)",
+  "description": "Validates { type, payload } of an implementer.* ledger event, and the request.json the implementer may commit. Every event string is an id, a digest, a commit sha, a model name from a closed pattern or a member of a closed list, and every number is a count, so no log, plan, note or path text can enter. Cross-field rules (plan_why exactly when the plan is missing; a published candidate has a head, a clean scan and no import failure) are checked by src/implementer/events.ts in the writer and in every fold. The note of request_file is the one free-text field and is never stored.",
+  "$defs": {
+    "goal_id": { "type": "string", "pattern": "^g-[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },
+    "work_id": { "type": "string", "pattern": "^w-[0-9a-f]{12}$" },
+    "run_id": { "type": "string", "pattern": "^r-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}$" },
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "commit_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "image_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "model": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,80}$" },
+    "count": { "type": "integer", "minimum": 0 },
+    "round": { "type": "integer", "minimum": 1 },
+    "session_outcome": {
+      "enum": ["completed", "timeout", "spawn_failed", "nonzero_exit", "output_limit", "misconfigured"]
+    },
+    "secret_name": { "enum": ["ANTHROPIC_API_KEY"] },
+    "plan_why": { "enum": ["no_commits", "first_commit_not_plan_only", "plan_empty", "plan_not_text"] },
+    "import_failure": {
+      "enum": [
+        "bundle_invalid",
+        "fsck_failed",
+        "head_missing",
+        "too_many_commits",
+        "history_not_linear",
+        "root_tree_mismatch",
+        "context_mismatch"
+      ]
+    },
+    "base_fixed_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "run_id", "base_sha", "base_tree_sha"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "base_sha": { "$ref": "#/$defs/commit_sha" },
+        "base_tree_sha": { "$ref": "#/$defs/commit_sha" }
+      }
+    },
+    "session_completed_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goal_id",
+        "work_id",
+        "run_id",
+        "round",
+        "vendor",
+        "model",
+        "outcome",
+        "duration_ms",
+        "image_id",
+        "prompt_sha256",
+        "settings_sha256",
+        "log_sha256",
+        "log_bytes",
+        "cost_micro_usd",
+        "workspace",
+        "log_credential_hits",
+        "injected_secret_names"
+      ],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "round": { "$ref": "#/$defs/round" },
+        "vendor": { "enum": ["claude", "stub"] },
+        "model": { "anyOf": [{ "$ref": "#/$defs/model" }, { "type": "null" }] },
+        "outcome": { "$ref": "#/$defs/session_outcome" },
+        "duration_ms": { "$ref": "#/$defs/count" },
+        "image_id": { "$ref": "#/$defs/image_id" },
+        "prompt_sha256": { "$ref": "#/$defs/digest" },
+        "settings_sha256": { "$ref": "#/$defs/digest" },
+        "log_sha256": { "$ref": "#/$defs/digest" },
+        "log_bytes": { "$ref": "#/$defs/count" },
+        "cost_micro_usd": { "anyOf": [{ "$ref": "#/$defs/count" }, { "type": "null" }] },
+        "workspace": { "enum": ["captured", "incomplete", "not_captured"] },
+        "log_credential_hits": { "$ref": "#/$defs/count" },
+        "injected_secret_names": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/secret_name" }
+        }
+      }
+    },
+    "publish_intended_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "run_id", "round", "head_sha"],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "round": { "$ref": "#/$defs/round" },
+        "head_sha": { "$ref": "#/$defs/commit_sha" }
+      }
+    },
+    "candidate_checked_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goal_id",
+        "work_id",
+        "run_id",
+        "round",
+        "head_sha",
+        "context_sha",
+        "commits",
+        "plan",
+        "plan_why",
+        "request",
+        "scan",
+        "import_failure",
+        "published"
+      ],
+      "properties": {
+        "goal_id": { "$ref": "#/$defs/goal_id" },
+        "work_id": { "$ref": "#/$defs/work_id" },
+        "run_id": { "$ref": "#/$defs/run_id" },
+        "round": { "$ref": "#/$defs/round" },
+        "head_sha": { "anyOf": [{ "$ref": "#/$defs/commit_sha" }, { "type": "null" }] },
+        "context_sha": { "anyOf": [{ "$ref": "#/$defs/commit_sha" }, { "type": "null" }] },
+        "commits": { "$ref": "#/$defs/count" },
+        "plan": { "enum": ["ok", "missing", "not_checked"] },
+        "plan_why": { "anyOf": [{ "$ref": "#/$defs/plan_why" }, { "type": "null" }] },
+        "request": { "enum": ["none", "raised", "invalid", "not_checked"] },
+        "scan": { "enum": ["clean", "credential", "canary", "incomplete", "not_run"] },
+        "import_failure": { "anyOf": [{ "$ref": "#/$defs/import_failure" }, { "type": "null" }] },
+        "published": { "type": "boolean" }
+      }
+    },
+    "request_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "paths"],
+      "properties": {
+        "kind": { "enum": ["test_conflict", "spec_conflict"] },
+        "paths": { "type": "array", "maxItems": 10, "items": { "type": "string", "minLength": 1, "maxLength": 300 } },
+        "note": { "type": "string", "maxLength": 2000 }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": {
+        "type": { "const": "implementer.base_fixed" },
+        "payload": { "$ref": "#/$defs/base_fixed_payload" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": {
+        "type": { "const": "implementer.session_completed" },
+        "payload": { "$ref": "#/$defs/session_completed_payload" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": {
+        "type": { "const": "implementer.publish_intended" },
+        "payload": { "$ref": "#/$defs/publish_intended_payload" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "payload"],
+      "properties": {
+        "type": { "const": "implementer.candidate_checked" },
+        "payload": { "$ref": "#/$defs/candidate_checked_payload" }
+      }
+    }
+  ]
+}

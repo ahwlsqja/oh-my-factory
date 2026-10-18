@@ -2,10 +2,13 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { textSurface } from "../../src/audit/canary-scan.js";
 import { CONTAINER_PROBE_ARGV } from "../../src/container/measure.js";
+import type { ContainerRuntime } from "../../src/container/runtime.js";
 import { declareBudget } from "../../src/core/budget.js";
+import type { ProjectLocation } from "../../src/core/paths.js";
+import { type ImplementerStations, combineLineEnd } from "../../src/implementer/station.js";
 import type { CandidateRef } from "../../src/judge/candidate.js";
 import { HARNESS_EXEC_ARGV, type HarnessRequest } from "../../src/judge/harness-protocol.js";
-import { createFeedbackSlot } from "../../src/judge/round-state.js";
+import { type FeedbackSlot, createFeedbackSlot } from "../../src/judge/round-state.js";
 import { judgeStations } from "../../src/judge/stations.js";
 import { foldSeals } from "../../src/scenario/events.js";
 import { s2Station } from "../../src/seal/s2-station.js";
@@ -30,6 +33,16 @@ export interface JudgeLineOptions {
   acceptsContradiction?: boolean;
   /** The stamp the stub author puts on its seal. */
   authorIsolation?: "host_command" | "container";
+  /** Answers a `docker exec` before the judge roles do; null falls through. How a real S3 sits behind the same daemon. */
+  preExec?: (call: FakeExecCall) => FakeResult | null;
+  /** Builds the real S3 and its candidate source over this fixture's runtime and feedback slot; replaces the stub S3 and the fixed candidate. */
+  implementer?: (parts: ImplementerParts) => ImplementerStations;
+}
+export interface ImplementerParts {
+  location: ProjectLocation;
+  runtime: ContainerRuntime;
+  feedback: FeedbackSlot;
+  workId: string;
 }
 export interface JudgeLineFixture {
   l: LineFixture;
@@ -39,6 +52,10 @@ export interface JudgeLineFixture {
   sutRecording(): string;
   /** The containers still in the fake daemon. */
   liveContainers(): string[];
+  /** The fake daemon and the runtime over it: tests read its recorded calls and add images to it. */
+  fake: FakeDocker;
+  runtime: ContainerRuntime;
+  /** Passed to `runLine` as `onLineEnd`; with `implementer` it is `combineLineEnd(judge, implementer)`. Idempotent. */
   dispose(): Promise<void>;
 }
 
@@ -103,6 +120,8 @@ export function setupJudgeLine(options: JudgeLineOptions = {}): JudgeLineFixture
   const harness = new HarnessDouble({ passJsonPath: options.acceptsContradiction === true });
 
   const exec = (call: FakeExecCall): FakeResult => {
+    const pre = options.preExec?.(call) ?? null;
+    if (pre !== null) return pre;
     if (equal(call.argv, CONTAINER_PROBE_ARGV)) return reply(0, "socket:0\nend\n");
     const stdin = call.stdin?.toString("utf8") ?? "";
     if (call.name.startsWith("omf-harness-")) {
@@ -137,7 +156,9 @@ export function setupJudgeLine(options: JudgeLineOptions = {}): JudgeLineFixture
   const runtime = fakeRuntime(fake, CONTEXT);
 
   // The stations. One judgeStations() instance builds S2's entry check, S4, S5, S6 and the dispose.
-  const js = judgeStations({ location: fx.location, runtime, candidates, feedback: createFeedbackSlot() });
+  const feedback = createFeedbackSlot();
+  const impl = options.implementer?.({ location: fx.location, runtime, feedback, workId });
+  const js = judgeStations({ location: fx.location, runtime, candidates: impl?.candidates ?? candidates, feedback });
   const session = {
     ...sealDeps(l, writeYaml(l, "round2.yaml", ROUND2)).session,
     isolation: options.authorIsolation ?? "host_command",
@@ -145,7 +166,7 @@ export function setupJudgeLine(options: JudgeLineOptions = {}): JudgeLineFixture
   const stations: Record<StationId, Station> = {
     S1: station("S1"),
     S2: js.withEntryCheck(s2Station({ location: fx.location, session, ids: l.ids })),
-    S3: station("S3"),
+    S3: impl?.S3 ?? station("S3"),
     S4: js.S4,
     S5: js.S5,
     S6: js.S6,
@@ -156,6 +177,8 @@ export function setupJudgeLine(options: JudgeLineOptions = {}): JudgeLineFixture
     stations,
     sutRecording: () => recording.join("\n"),
     liveContainers: () => Object.keys(fake.state.containers),
-    dispose: () => js.dispose(),
+    fake,
+    runtime,
+    dispose: impl === undefined ? () => js.dispose() : combineLineEnd(() => js.dispose(), impl.dispose),
   };
 }

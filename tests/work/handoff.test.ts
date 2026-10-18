@@ -1,12 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Ledger } from "../../src/core/ledger.js";
 import { validate } from "../../src/core/schema.js";
 import type { Classification } from "../../src/work/classify.js";
 import {
-  HANDOFF_ROUTES,
   buildHandoff,
+  HANDOFF_ROUTES,
   handoffFile,
   markerToRan,
   owedPredecessors,
@@ -16,15 +16,15 @@ import {
 import {
   GATE_IDS,
   LINE_ORDER,
-  STATION_IDS,
   type NodeId,
+  STATION_IDS,
   type UnverifiedArea,
   type UnverifiedCode,
 } from "../../src/work/line-types.js";
 import { type ReasonCode, W_REASON_CODES } from "../../src/work/w-events.js";
 import { CANARY, canaryHits } from "../helpers/canary.js";
 import { makeTempDir } from "../helpers/tmp.js";
-import { T0, recordW } from "../helpers/work.js";
+import { recordW, T0 } from "../helpers/work.js";
 
 const GOAL = "g-fast";
 const WORK = "w-0123456789ab";
@@ -113,6 +113,8 @@ describe("HANDOFF_ROUTES", () => {
       scenarios_exhausted: "J3",
       gates_failed: "J4",
       disclosure_unavailable: "J8",
+      plan_missing: "J4",
+      implementer_request: "J2",
     });
   });
 
@@ -140,6 +142,16 @@ describe("HANDOFF_ROUTES", () => {
     const options = HANDOFF_ROUTES.scenarios_need_review.options(WORK, GOAL);
     expect(options).toEqual([`omf work show ${WORK}`, `omf veto ${WORK}`]);
     expect(options.join("\n")).not.toContain(" run ");
+  });
+
+  it("reviews a missing plan at J4, and sends an implementer request to J2 with decide, veto and a real rerun", () => {
+    expect(HANDOFF_ROUTES.plan_missing.options(WORK, GOAL)).toEqual([`omf work show ${WORK}`, `omf veto ${WORK}`]);
+    expect(HANDOFF_ROUTES.implementer_request.options(WORK, GOAL)).toEqual([
+      `omf decide show ${WORK}`,
+      `omf veto ${WORK}`,
+      `after M3h: omf run ${WORK}`,
+    ]);
+    expect(HANDOFF_ROUTES.implementer_request.question).toContain("implementer");
   });
 
   it("offers no rerun for the states a rerun cannot clear", () => {

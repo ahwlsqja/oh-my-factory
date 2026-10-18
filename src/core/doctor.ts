@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
+import { CREDENTIAL_SOURCE_ENV, readCredential } from "../implementer/credential.js";
 import type { IsolationLevel, MeasuredLevel } from "../isolation/types.js";
 import { sealedProblem } from "../vault/pokayoke.js";
 import { ConfigError, type OmfConfig, readConfig } from "./config.js";
@@ -35,6 +36,34 @@ export interface AdvisoryIsolation {
   advisory: true;
   note: string;
   failure: string | null;
+}
+
+/**
+ * Whether the implementer could start, by name and by presence only: the image is configured or not, the key variable is set and
+ * usable or not. No value is ever copied into the report. Advisory like `isolation`: it never changes `ok`, and the level of the
+ * implementer container is measured per run from the ledger, never here.
+ */
+export interface ImplementerAdvisory {
+  advisory: true;
+  declared: "L2";
+  image_configured: boolean;
+  key_variable: string;
+  key_present: boolean;
+  note: string;
+}
+
+export const IMPLEMENTER_NOTE =
+  "advisory, not enforced: the implementer container is measured per run from the ledger, never here. Code running in it can read and use the key and the container has open network access, so use a dedicated key with a provider-side spend limit, and a dedicated docker context or colima profile, because the default bridge reaches other containers and the host gateway of the context in use";
+
+export function implementerAdvisory(env: NodeJS.ProcessEnv, project: ProbeProject | null): ImplementerAdvisory {
+  return {
+    advisory: true,
+    declared: "L2",
+    image_configured: project !== null && project.config.implementer.image !== null,
+    key_variable: CREDENTIAL_SOURCE_ENV.claude,
+    key_present: readCredential("claude", env) !== null,
+    note: IMPLEMENTER_NOTE,
+  };
 }
 
 /**
@@ -73,6 +102,7 @@ export interface PreflightReport {
   repo: { is_git_repo: boolean; toplevel: string | null };
   project: { initialized: boolean; dir: string | null; ledger: VerifyResult | null };
   isolation: AdvisoryIsolation;
+  implementer: ImplementerAdvisory;
   ok: boolean;
   problems: string[];
   warnings: string[];
@@ -377,6 +407,7 @@ function buildReport(
     repo: { is_git_repo: toplevel !== null, toplevel },
     project: { initialized, dir, ledger: ledgerResult },
     isolation: safeIsolation(probeIsolation, env, reported, project),
+    implementer: implementerAdvisory(env, project),
     ok: problemList.length === 0,
     problems: problemList.map((finding) => finding.message),
     warnings: warningList.map((finding) => finding.message),

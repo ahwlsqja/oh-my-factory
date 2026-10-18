@@ -1,11 +1,13 @@
-import { rmSync, readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { canonicalize, sha256Hex } from "../core/canonical-json.js";
 import { writePrivateFileAtomic } from "../core/private-fs.js";
+import { safeText } from "../core/safe-text.js";
 import { validateDef } from "../core/schema.js";
+import type { ConflictRequest } from "../implementer/request.js";
 import type { Gate1Reason, Gate1Result } from "./gate1.js";
-import { INTERFACE_DECISION_ID } from "./types.js";
 import type { DecisionScope } from "./types.js";
+import { INTERFACE_DECISION_ID } from "./types.js";
 
 /**
  * The J2 persist-and-exit record (spec §6.2, M3-D7). GATE-1 found something only a person can settle; OMF
@@ -175,4 +177,88 @@ export function clearNeedsHuman(itemDir: string): void {
 export function syncNeedsHuman(itemDir: string, scope: DecisionScope, gate: Gate1Result, now: Date): void {
   if (gate.status === "pass") clearNeedsHuman(itemDir);
   else persistNeedsHuman(itemDir, needsHumanFor(scope, gate, now));
+}
+
+/**
+ * The implementer stopped to ask a person (J2). Kept apart from `needs-human.json`: that file belongs to GATE-1, which
+ * rewrites and clears it on every lint, and a request must survive that. Only the kind and the validated paths are stored;
+ * the implementer's note is free text from a container and is dropped.
+ */
+export interface ImplementerRequestRecord {
+  work_id: string;
+  kind: "test_conflict" | "spec_conflict";
+  paths: string[];
+  /** Fixed template with the kind, the path count and the paths (escaped, cut to fit). */
+  question: string;
+  /** The same commands the J2 handoff of this stop offers; a rerun clears this record and starts a new implementer run. */
+  options: string[];
+  /** sha256Hex(canonicalize({work_id, kind, paths})), first 32 hex: the same request always gets the same token. */
+  resume_token: string;
+  created_at: string;
+}
+
+export const IMPLEMENTER_REQUEST_FILE = "needs-human-implementer.json";
+
+/** <itemDir>/needs-human-implementer.json, next to needs-human.json. */
+export function implementerRequestFile(itemDir: string): string {
+  return join(itemDir, IMPLEMENTER_REQUEST_FILE);
+}
+
+/** The question must stay within the schema's 1000 characters, so the paths shown are cut to this many. */
+const SHOWN_PATHS_MAX_CHARS = 700;
+
+/** The paths of a request as one escaped line, as many as fit, then how many were left out. */
+function pathsLine(paths: readonly string[]): string {
+  const shown: string[] = [];
+  let length = 0;
+  for (const path of paths) {
+    const text = safeText(path);
+    const next = length + text.length + (shown.length === 0 ? 0 : 2);
+    if (next > SHOWN_PATHS_MAX_CHARS) break;
+    shown.push(text);
+    length = next;
+  }
+  const left = paths.length - shown.length;
+  return `${shown.join(", ")}${left > 0 ? ` (+${left} more)` : ""}`;
+}
+
+/** Atomic write at 0600. A new request replaces an older one: the line clears the old record when a new implementer run starts. */
+export function writeImplementerRequest(
+  itemDir: string,
+  scope: DecisionScope,
+  request: ConflictRequest,
+  now: Date,
+): ImplementerRequestRecord {
+  const id = scope.work_id;
+  const record: ImplementerRequestRecord = {
+    work_id: id,
+    kind: request.kind,
+    paths: [...request.paths],
+    question: `Work item ${id}: the implementer stopped and raised a ${request.kind} conflict that names ${request.paths.length} path(s)${request.paths.length === 0 ? "" : `: ${pathsLine(request.paths)}`} (J2).`,
+    options: [`omf decide show ${id}`, `omf veto ${id}`, `after M3h: omf run ${id}`],
+    resume_token: sha256Hex(canonicalize({ work_id: id, kind: request.kind, paths: request.paths })).slice(0, 32),
+    created_at: now.toISOString(),
+  };
+  const check = validateDef("decision.schema.json", "implementer_request", record);
+  if (!check.ok) throw new Error(`invalid implementer request record: ${check.errors}`);
+  writePrivateFileAtomic(implementerRequestFile(itemDir), `${JSON.stringify(record, null, 2)}\n`);
+  return record;
+}
+
+/** The persisted record, or null when the file is missing, unparsable or fails the schema. */
+export function readImplementerRequest(itemDir: string): ImplementerRequestRecord | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(implementerRequestFile(itemDir), "utf8"));
+  } catch {
+    return null;
+  }
+  return validateDef("decision.schema.json", "implementer_request", parsed).ok
+    ? (parsed as ImplementerRequestRecord)
+    : null;
+}
+
+/** Removes the file; a missing file is fine. Called at the start of every implementer run. */
+export function clearImplementerRequest(itemDir: string): void {
+  rmSync(implementerRequestFile(itemDir), { force: true });
 }

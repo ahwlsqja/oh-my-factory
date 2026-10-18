@@ -486,3 +486,44 @@ describe("runDoctor: advisory isolation and an atomic preflight.json", () => {
     expect(readdirSync(projectDir).filter((name) => name.endsWith(".tmp"))).toEqual([]);
   });
 });
+
+describe("runDoctor: implementer readiness advisory", () => {
+  const SENTINEL = "sk-ant-doctor-sentinel-0123456789";
+
+  it("names the key variable and whether it is set, never its value, and never moves ok", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const e = env(home, stubBin({ dockerDaemon: true }));
+    initProject(repo, e);
+    const baseline = runDoctor(repo, e);
+    expect(baseline.implementer).toMatchObject({
+      advisory: true,
+      declared: "L2",
+      image_configured: false,
+      key_variable: "OMF_IMPLEMENTER_API_KEY",
+      key_present: false,
+    });
+    writeFileSync(join(projectDir(repo, e), "config.toml"), `[implementer]\nimage = "sha256:${"a".repeat(64)}"\n`);
+    const ready = runDoctor(repo, { ...e, OMF_IMPLEMENTER_API_KEY: SENTINEL });
+    expect(ready.implementer).toMatchObject({ image_configured: true, key_present: true });
+    expect(JSON.stringify(ready)).not.toContain(SENTINEL);
+    expect(readFileSync(join(projectDir(repo, e), "preflight.json"), "utf8")).not.toContain(SENTINEL);
+    expect([ready.ok, ready.problems, ready.warnings]).toEqual([baseline.ok, baseline.problems, baseline.warnings]);
+    for (const phrase of ["not enforced", "spend limit", "dedicated docker context", "default bridge"]) {
+      expect(ready.implementer.note).toContain(phrase);
+    }
+  });
+
+  it.each([
+    ["empty", ""],
+    ["padded with a space", " sk-ant-x "],
+    ["over 512 characters", "k".repeat(513)],
+  ])("a key that is %s counts as absent, and with no project the image is not configured", (_label, value) => {
+    const repo = makeGitRepo();
+    const e = env(makeTempDir("omf-home-"), stubBin({ dockerDaemon: true }));
+    expect(runDoctor(repo, { ...e, OMF_IMPLEMENTER_API_KEY: value }).implementer).toMatchObject({
+      key_present: false,
+      image_configured: false,
+    });
+  });
+});
