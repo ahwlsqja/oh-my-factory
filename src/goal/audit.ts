@@ -4,7 +4,7 @@ import type { ProjectLocation } from "../core/paths.js";
 import { canonicalize, sha256Hex } from "../core/canonical-json.js";
 import { BandsError, bandsLockInfo } from "./bands.js";
 import { staleReason } from "./stale-mark.js";
-import { parseDuration } from "./duration.js";
+import { formatDuration, parseDuration } from "./duration.js";
 import { wallTimeLimitMs } from "./wall-time.js";
 import { type GoalFront, GoalFileError, readGoal, referencedMetrics, semanticHash } from "./goal-file.js";
 import { type GoalApproval, type GoalLock, GoalLockError, latestApproval, readGoalLock } from "./goal-lock.js";
@@ -47,7 +47,7 @@ export interface AuditReport {
 /**
  * Success needs readings that span the minimum observation, and wall time is calendar time from the first
  * approval, so a wall time at or below the minimum observation can never reach success inside its own cap.
- * This only advises: the person may still approve, then raise the cap (J8) and resume (J6) when it runs out.
+ * This only advises: the person may still approve, then raise the cap and resume the goal when it runs out.
  */
 export function observationWarning(minObservation: string, wallLimitMs: number, wallLabel: string): string | null {
   let observationMs: number;
@@ -204,7 +204,8 @@ function bandsChanges(dir: string, goalId: string, approval: GoalApproval, lock:
 
 function wallWarning(minObservation: string, wallTime: string): string | null {
   try {
-    return observationWarning(minObservation, parseDuration(wallTime), wallTime);
+    const limit = parseDuration(wallTime);
+    return observationWarning(minObservation, limit, formatDuration(limit));
   } catch {
     return null;
   }
@@ -296,7 +297,7 @@ export function auditGoal(location: ProjectLocation, goalId: string, now: Date =
     const limit = wallTimeLimitMs(events, goalId, approval, goalLock);
     report.wall_time_exceeded = now.getTime() - Date.parse(approval.first_approved_at) > limit;
     const observation = goalLock?.semantic.prereg.min_observation ?? front.prereg.min_observation;
-    const warning = observationWarning(observation, limit, `limit of ${Math.round(limit / 60_000)}m`);
+    const warning = observationWarning(observation, limit, formatDuration(limit));
     if (warning !== null) report.warnings.push(warning);
   }
   // Problems first: a goal whose locks do not verify is tampered even when it also has regime changes.

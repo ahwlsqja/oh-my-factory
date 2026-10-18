@@ -294,6 +294,7 @@ describe("auditGoal observation against wall time", () => {
     const before = auditGoal(fx.location, "g-fast");
     expect(before.state).toBe("approved");
     expect(before.warnings).toHaveLength(1);
+    expect(before.warnings[0]).toContain("wall time 72h is not longer than");
     raiseWallTime(fx.ledger, "g-fast", "100h", "human:dev");
     const after = auditGoal(fx.location, "g-fast");
     expect(after.warnings).toEqual([]);
