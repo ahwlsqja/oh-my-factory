@@ -122,7 +122,7 @@ export const PLACEHOLDER_APPROACH_MARKER = "Replace this line";
 
 export function goalTemplate(goalId: string): string {
   return `---
-# The fields between the two --- lines are what you approve (J1) and OMF locks, except title and objective.
+# The fields between the two --- lines are what you approve with omf goal approve and OMF locks, except title and objective.
 # A model sees only objective and the text under "## Approach" below, so write those in words:
 # no numbers, no thresholds and no metric ids, or the goal cannot be used.
 # Lines starting with # are notes for you and are not read.

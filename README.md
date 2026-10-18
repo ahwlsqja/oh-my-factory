@@ -136,7 +136,7 @@ or **designed** and not built yet.
 | `omf ledger verify [--json]` | Checks the ledger's hash chain. On a corrupt ledger, stderr line 2 gives the path, the line and the next step; `--json` gives the same as fields. With `--json` every error is `{ "ok": false, "error": { "code": "...", "message": "..." } }` (codes: `not_initialized`, `ledger_corrupt`, `not_a_git_repository`, `git_not_found`, `unsupported_repository`, `symlink_refused`, `cannot_run`); keys are snake_case. Exit 2 before `omf init`. |
 | `omf goal new <id>` | Creates `goal.md` in host state from a template. |
 | `omf metric propose <id> --unit <u> -- <command>` | Proposes a metric: the command that prints its value, the unit, and the paths whose change is a regime change. |
-| `omf goal audit <id>` | Checks the goal, its locks and the ledger, and reports regime changes. Writes nothing. |
+| `omf goal audit <id>` | Checks the goal, its locks and the ledger, reports regime changes, and lists template text you have not replaced yet (`placeholders` in `--json`). Writes nothing. |
 | `omf goal approve <id>` | J1: shows what will be locked (metrics and their bands) and approves it after you type the goal id in a terminal. |
 | `omf goal measure <id>` | Runs the locked metrics (in Docker, or on the host with `--runner host`), computes the gap to target and the control bands, and writes a gap report to host state. |
 | `omf goal tick <id>` | One pass of the goal loop (spec §4.4): audit, measure, ask a model for work, filter its candidates with code, dispatch work items, check staleness and the loop guards. Needs a reconciler (see "Run the goal loop"). |

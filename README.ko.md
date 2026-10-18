@@ -130,7 +130,7 @@ OMF 는 루프 두 개를 돌립니다.
 | `omf ledger verify [--json]` | 원장의 해시 체인을 확인합니다. 원장이 손상됐으면 stderr 둘째 줄에 경로, 줄 번호, 다음 행동이 나오고 `--json` 은 같은 내용을 필드로 냅니다. `--json` 의 오류는 모두 `{ "ok": false, "error": { "code": "...", "message": "..." } }` 형태입니다(code: `not_initialized`, `ledger_corrupt`, `not_a_git_repository`, `git_not_found`, `unsupported_repository`, `symlink_refused`, `cannot_run`). 키는 snake_case 입니다. `omf init` 전에는 종료 코드 2 입니다. |
 | `omf goal new <id>` | 템플릿으로 호스트 상태에 `goal.md` 를 만듭니다. |
 | `omf metric propose <id> --unit <u> -- <command>` | 지표를 제안합니다. 값을 출력하는 명령, 단위, 바뀌면 체제 변경(regime change)이 되는 경로를 적습니다. |
-| `omf goal audit <id>` | 목표, 잠금, 원장을 점검하고 체제 변경을 알려 줍니다. 아무것도 쓰지 않습니다. |
+| `omf goal audit <id>` | 목표, 잠금, 원장을 점검하고 체제 변경을 알려 주며, 아직 바꾸지 않은 템플릿 문구도 나열합니다(`--json` 의 `placeholders`). 아무것도 쓰지 않습니다. |
 | `omf goal approve <id>` | J1: 잠글 내용(지표와 그 관리 한계)을 보여 주고, 터미널에서 목표 id 를 직접 입력하면 승인합니다. |
 | `omf goal measure <id>` | 잠긴 지표를 실행하고(Docker, 또는 `--runner host` 로 호스트에서), 목표값까지의 차이와 관리 한계(control band)를 계산해 격차 보고서를 호스트 상태에 씁니다. |
 | `omf goal tick <id>` | 목표 루프를 한 바퀴 돕니다(명세 §4.4). 점검, 측정, 모델에게 작업 요청, 후보를 코드로 걸러 내기, 작업 항목 내보내기, 낡음과 루프 보호 장치 확인. 조정 모델이 필요합니다("목표 루프 돌리기" 참고). |

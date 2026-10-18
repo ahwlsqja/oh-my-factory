@@ -50,8 +50,16 @@ describe("goal.md", () => {
     // The budget values share one note on the block, and operator sits with value's note.
     expect(notesAbove("budget")).toMatch(/OMF defaults you may keep: the three budget values/);
     expect(notesAbove("value")).toMatch(/operator/);
-    // Comments only: the parsed front matter has no extra keys, so the hash input is unchanged.
-    expect(Object.keys(parseGoal(goalTemplate("g-a")).front)).not.toContain("Your decision");
+    // Comments carry no value: stripping every YAML comment line leaves the J1 semantic hash unchanged.
+    const template = goalTemplate("g-a");
+    const end = template.indexOf("\n---", 4);
+    const stripped = `${template
+      .slice(0, end)
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("#"))
+      .join("\n")}${template.slice(end)}`;
+    expect(stripped).not.toBe(template);
+    expect(semanticHash(parseGoal(template).front)).toBe(semanticHash(parseGoal(stripped).front));
   });
 
   it("lists every placeholder a fresh goal still has, and none once they are replaced", () => {
