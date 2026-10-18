@@ -24,7 +24,12 @@
 > budgets that never reset), defining, approving and measuring goals (J1 locks, the gap to the
 > target, control bands), the J8 budget commands, the work-item store with its `work` and `veto`
 > commands, and the goal loop: `omf goal tick` turns the gap into work items with a model that
-> never sees the numbers. The verification line that does the work is designed but not built yet.
+> never sees the numbers. The verification line exists only as library code with offline tests:
+> sealed scenarios and GATE-2, the implementer container, the judge, audit and test-split stations
+> (S4 to S6) and GATE-3. The command that runs the line (`omf run`, with `omf seal` and `omf report`)
+> and the real-model gated runs are not built yet. Gated container runs are recorded for the `docker
+> inspect` parser, the work copy, the two-container round trip and the real isolation probe; none is
+> recorded for the implementer container or for any suite that calls a model.
 > See [What works today](#what-works-today).
 
 ---
@@ -113,8 +118,8 @@ or **designed** and not built yet.
   system under test and a harness; no network, no `docker.sock`, no mounted path; the harness holds the scenarios,
   loaded over stdin, and the SUT never sees an expectation) and measures each with
   `docker inspect` before candidate code runs in it. GATE-3 reads those measurements from the ledger. Only the offline
-  form against a fake Docker is tested: a level measured on a real container is not enforced until a gated run is
-  recorded in `docs/evidence/gated-runs.json`. The implementer container exists as library code that no command runs yet
+  form against a fake Docker is tested, and what a real container does is not enforced beyond the gated runs recorded in
+  `docs/evidence/gated-runs.json` (the real isolation probe and the two-container round trip); the implementer container has no recorded run. The implementer container exists as library code that no command runs yet
   ([`docs/implementer.md`](docs/implementer.md)) and the author container does not exist, so a real line still stops at GATE-3 as `isolation_unmeasured` ([`docs/container-judge.md`](docs/container-judge.md)).
 - **Empty means fail.** *Partly built.* The line skeleton (`E7a`), GATE-2 (`E7b`) and the gate line, the
   audit and GATE-3 (`E7c`) read a missing measurement as a failure, never as a pass. The judge's verdict
