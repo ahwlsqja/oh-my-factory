@@ -91,6 +91,30 @@ export interface ImplementerConfig {
   max_workspace_bytes: number;
 }
 
+/**
+ * The sealing author (Codex, one container per seal pass). `image` is a digest reference or a local image id, like the
+ * implementer's; `null` means "not configured", and `omf seal` then stops with a closed reason instead of guessing.
+ * The Docker context is `judge.docker_context`. There is no key field: the author's key comes from the environment of
+ * the one command that runs it and is never stored. `/in` holds the item's intent, spec and interface contract and
+ * `/out` the answer; every mount is tmpfs and together they are charged to `memory_mb`.
+ */
+export interface AuthorConfig {
+  image: string | null;
+  /** One author call. */
+  timeout_ms: number;
+  memory_mb: number;
+  cpus: number;
+  pids_limit: number;
+  /** `/tmp`. */
+  tmp_tmpfs_mb: number;
+  /** `/in`: intent, spec and the interface contract. */
+  in_tmpfs_mb: number;
+  /** `/out`: the answer file. */
+  out_tmpfs_mb: number;
+  /** `/agent`: the Codex client's home. */
+  agent_tmpfs_mb: number;
+}
+
 export interface OmfConfig {
   isolation: { declared: "L2" };
   roles: Record<RoleName, { vendor: Vendor; model?: string; effort?: string }>;
@@ -98,7 +122,19 @@ export interface OmfConfig {
   w: WConfig;
   judge: JudgeConfig;
   implementer: ImplementerConfig;
+  author: AuthorConfig;
 }
+
+/**
+ * Why the `[seal] same_vendor` key is refused. A same-vendor pairing of author and implementer is not runnable in
+ * this version (spec §5.3 names the other vendor as the author; §14 item 2 leaves a same-vendor mode open), and a
+ * switch for it would have to be a recorded human act, not a flag in a file anyone can edit; so the key is recognised
+ * only to say that.
+ */
+export const SAME_VENDOR_KEY_REFUSAL =
+  "[seal] same_vendor is not available: no same-vendor pairing is runnable in v0.1";
+
+const NOT_MADE_YET = "is not available: it needs a credential decision that is not made yet";
 
 export class ConfigError extends Error {}
 
@@ -153,6 +189,17 @@ export const CONFIG_DEFAULTS: OmfConfig = {
     max_log_bytes: 64 * 1024 * 1024,
     max_workspace_bytes: 256 * 1024 * 1024,
   },
+  author: {
+    image: null,
+    timeout_ms: 600_000,
+    memory_mb: 1024,
+    cpus: 1,
+    pids_limit: 256,
+    tmp_tmpfs_mb: 64,
+    in_tmpfs_mb: 16,
+    out_tmpfs_mb: 16,
+    agent_tmpfs_mb: 128,
+  },
 };
 
 interface RawConfig {
@@ -162,6 +209,7 @@ interface RawConfig {
   w?: Partial<WConfig>;
   judge?: Partial<JudgeConfig>;
   implementer?: Partial<ImplementerConfig>;
+  author?: Partial<AuthorConfig>;
 }
 
 /** `sha256:` and 64 lowercase hex digits, as `docker image inspect` reports a local image id. */
@@ -196,6 +244,14 @@ function requireImplementerTmpfsFits(implementer: ImplementerConfig): void {
   }
 }
 
+/** The same rule as the judge and the implementer, for the author's four mounts. */
+function requireAuthorTmpfsFits(author: AuthorConfig): void {
+  const total = author.tmp_tmpfs_mb + author.in_tmpfs_mb + author.out_tmpfs_mb + author.agent_tmpfs_mb;
+  if (total > author.memory_mb) {
+    throw new ConfigError(`author tmpfs sizes (${total} MiB) exceed author.memory_mb (${author.memory_mb})`);
+  }
+}
+
 function table(parent: Record<string, unknown> | undefined, key: string): Record<string, unknown> | undefined {
   const value = parent?.[key];
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -204,8 +260,8 @@ function table(parent: Record<string, unknown> | undefined, key: string): Record
 }
 
 /**
- * TOML text -> schema validation -> defaults per missing section. Codex and `login_file` are refused before
- * the schema runs so the message says why (they need a container, M3), not just "not allowed".
+ * TOML text -> schema validation -> defaults per missing section. Codex, `login_file` and `[seal] same_vendor` are refused
+ * before the schema runs so the message says why, not just "not allowed".
  */
 export function parseConfig(text: string): OmfConfig {
   let root: Record<string, unknown>;
@@ -218,12 +274,16 @@ export function parseConfig(text: string): OmfConfig {
     if (name in root) throw new ConfigError(`[${name}] is not configurable in M2b`);
   }
   const reconcilerTable = table(root, "reconciler");
-  if (reconcilerTable?.kind === "codex") throw new ConfigError('reconciler.kind "codex" needs a container; M3');
-  if (reconcilerTable?.auth === "login_file")
-    throw new ConfigError('reconciler.auth "login_file" needs a container; M3');
-  if (table(table(root, "roles"), "reconciler")?.vendor === "codex") {
-    throw new ConfigError('roles.reconciler.vendor "codex" needs a container; M3');
+  if (reconcilerTable?.kind === "codex") throw new ConfigError(`reconciler.kind "codex" ${NOT_MADE_YET}`);
+  if (reconcilerTable?.auth === "login_file") {
+    throw new ConfigError(`reconciler.auth "login_file" ${NOT_MADE_YET}`);
   }
+  if (table(table(root, "roles"), "reconciler")?.vendor === "codex") {
+    throw new ConfigError(`roles.reconciler.vendor "codex" ${NOT_MADE_YET}`);
+  }
+  // Refused with its reason before the schema runs, whatever the value: the key is never read.
+  const sealTable = table(root, "seal");
+  if (sealTable !== undefined && "same_vendor" in sealTable) throw new ConfigError(SAME_VENDOR_KEY_REFUSAL);
   // A tag can be re-pointed under the judge, so an unpinned image is refused with its name before the schema runs.
   const judgeTable = table(root, "judge");
   for (const key of ["sut_base_image", "harness_base_image"] as const) {
@@ -243,6 +303,11 @@ export function parseConfig(text: string): OmfConfig {
       "implementer.image must be pinned by digest or be a local image id (sha256: and 64 hex digits)",
     );
   }
+  // Same reason as the other images: a tag can be re-pointed under a run. A local image id is as immutable as a digest.
+  const authorImage = table(root, "author")?.image;
+  if (typeof authorImage === "string" && !isDigestPinned(authorImage) && !LOCAL_IMAGE_ID.test(authorImage)) {
+    throw new ConfigError("author.image must be pinned by digest or be a local image id (sha256: and 64 hex digits)");
+  }
   const checked = validate("config.schema.json", root);
   if (!checked.ok) throw new ConfigError(`config.toml is invalid: ${checked.errors}`);
 
@@ -258,6 +323,8 @@ export function parseConfig(text: string): OmfConfig {
   requireTmpfsFits(judge);
   const implementer: ImplementerConfig = { ...CONFIG_DEFAULTS.implementer, ...raw.implementer };
   requireImplementerTmpfsFits(implementer);
+  const author: AuthorConfig = { ...CONFIG_DEFAULTS.author, ...raw.author };
+  requireAuthorTmpfsFits(author);
   return {
     isolation: { ...CONFIG_DEFAULTS.isolation, ...raw.isolation },
     roles,
@@ -265,6 +332,7 @@ export function parseConfig(text: string): OmfConfig {
     w: { ...CONFIG_DEFAULTS.w, ...raw.w },
     judge,
     implementer,
+    author,
   };
 }
 

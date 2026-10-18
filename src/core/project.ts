@@ -47,6 +47,14 @@ max_model_usd = 5.0
 # memory_mb = 2048                       # tmp_tmpfs_mb, work_tmpfs_mb and agent_tmpfs_mb together must fit inside it
 # max_log_bytes = 67108864               # cap of the session log (64 MiB)
 # The vendor key is never configured here: it is read from the environment of the one command that runs it.
+
+# Optional. The sealing author (Codex, in a container). Without an image no author runs. It uses the
+# docker_context of [judge].
+# [author]
+# image = "name@sha256:..."              # pinned by digest, or a local image id ("sha256:" and 64 hex digits)
+# timeout_ms = 600000                    # one author call, 60000..3600000
+# memory_mb = 1024                       # tmp_tmpfs_mb, in_tmpfs_mb, out_tmpfs_mb and agent_tmpfs_mb together must fit inside it
+# The author's key is never configured here either: it is read from OMF_AUTHOR_API_KEY in the environment of the one command that runs it.
 `;
 
 export const PROJECT_INITIALIZED = "project.initialized";

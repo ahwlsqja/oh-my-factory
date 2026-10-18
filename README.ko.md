@@ -288,7 +288,7 @@ kind = "claude"          # 또는 "command": 프롬프트를 stdin 으로 읽고
 `kind = "claude"` 는 호스트에서 `claude` CLI 를 도구를 모두 끈 채, 세션을 저장하지 않고, 빈 임시 폴더를 작업
 폴더로 삼아, 환경 변수는 `ANTHROPIC_API_KEY` 하나만 넘겨 실행합니다. 틱을 돌리기 전에 그 변수를 지정하세요.
 키체인이나 로그인 파일 로그인은 쓰지 않습니다. `kind = "command"` 는 `command` 에 적은 argv 를 실행하며,
-시험과 예제가 씁니다. `kind = "codex"` 와 `auth = "login_file"` 은 컨테이너 실행기가 생길 때까지 거부됩니다.
+시험과 예제가 씁니다. `kind = "codex"` 와 `auth = "login_file"` 은 아직 내리지 않은 자격 증명 결정이 필요해 거부됩니다.
 
 구현자 컨테이너는 일부러 다르게 다룹니다. 구현자가 컨테이너 안에서 쓰고 실행하는 코드는 받은 키를 읽을 수 있으므로,
 그 키는 조정 모델용 `ANTHROPIC_API_KEY` 가 아닙니다. 사용 한도를 건 별도의 Anthropic 워크스페이스 키를 만들어,

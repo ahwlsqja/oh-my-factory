@@ -297,8 +297,8 @@ kind = "claude"          # or "command": a program that reads the prompt on stdi
 `kind = "claude"` runs the `claude` CLI on the host with every tool disabled, no saved session, an empty
 temporary directory as its working directory and only `ANTHROPIC_API_KEY` in its environment, so export that
 variable before a tick. Keychain and login-file logins are not used. `kind = "command"` runs the argv you list
-under `command`; the tests and the example use it. `kind = "codex"` and `auth = "login_file"` are refused until
-the container runner exists.
+under `command`; the tests and the example use it. `kind = "codex"` and `auth = "login_file"` are refused: they
+need a credential decision that is not made yet.
 
 The `claude` kind is unverified against a real model; `scripts/smoke-reconciler.sh` is the manual check. It does
 not pass `--json-schema` (Claude Code implements that with an extra tool-call turn, which the one-turn check
