@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Ledger } from "../../src/core/ledger.js";
@@ -201,6 +202,24 @@ describe("omf goal measure", () => {
     expect(result.stdout).toContain("target m-p95: 312 ms; target <= 250 ms; gap 62 (decrease, medium)");
     expect(result.stdout).toContain("guardrail m-errors: unevaluated");
     expect(result.stderr).toContain("warning: measured on the host without isolation (--runner host)");
+  });
+
+  it("prints the revision, dirty state, directory contract and capture time, and no absolute temp path", () => {
+    const fx = setupGoal();
+    lockGoal(fx.location, "g-fast", "human:dev");
+    writeFileSync(join(fx.repo, "scratch.txt"), "x\n");
+    const result = omf(["goal", "measure", "g-fast", "--runner", "host"], fx.repo, fx.home);
+    expect(result.code).toBe(0);
+    const head = gitIn(fx.repo, "rev-parse", "HEAD").trim();
+    expect(result.stdout).toContain(`measured at revision ${head.slice(0, 12)} (dirty, 1 changed path), observed `);
+    expect(result.stdout).toMatch(/observed \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/);
+    expect(result.stdout).toContain("working directory: repository root (host, no isolation)");
+    // The `report:` line names the host-state file by design and predates provenance; every other line must be path-free.
+    const rest = result.stdout
+      .split("\n")
+      .filter((line) => !line.startsWith("report: "))
+      .join("\n");
+    for (const path of [fx.repo, fx.home, tmpdir()]) expect(rest).not.toContain(path);
   });
 
   it("uses Docker by default and fails metrics that have no image", () => {

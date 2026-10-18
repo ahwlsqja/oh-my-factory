@@ -6,7 +6,7 @@ import { summarizeGap } from "../../src/goal/gap-summary.js";
 import { parseGoal, goalTemplate } from "../../src/goal/goal-file.js";
 import { lockGoal } from "../../src/goal/goal-lock.js";
 import { type GapReport, measureGoal } from "../../src/goal/measure.js";
-import { PROVENANCE_LIMITS, provenanceLines } from "../../src/goal/provenance.js";
+import { PROVENANCE_LIMITS, provenanceLines, provenanceOf } from "../../src/goal/provenance.js";
 import { buildReconcilerInput } from "../../src/goal/reconcile.js";
 import { forbiddenTermsFor } from "../../src/work/seed-lint.js";
 import { gitIn } from "../helpers/tmp.js";
@@ -88,6 +88,30 @@ describe("measurement provenance", () => {
     const after = await measured(fx);
     expect(after.provenance.fingerprint).toBe(before.provenance.fingerprint);
     expect(provenanceLines(after.provenance).join("\n")).toMatch(/not file contents/);
+  });
+
+  it("states the read-only /work mount for a Docker run without running Docker", () => {
+    const p = provenanceOf(
+      { head: "a".repeat(40), changedPaths: 0, fingerprint: "b".repeat(64) },
+      new Date("2026-10-19T00:00:00.000Z"),
+      "docker",
+    );
+    expect(p.working_directory).toBe("/work (repository root, read-only mount)");
+    expect(p.tree).toBe("clean");
+    expect(provenanceLines(p)).toContain("working directory: /work (repository root, read-only mount)");
+  });
+
+  it("takes the capture time when the tree is observed, before any metric runs", async () => {
+    const fx = setupGoal();
+    lockGoal(fx.location, "g-fast", "human:dev");
+    let tick = 0;
+    const now = (): Date => new Date(Date.UTC(2026, 9, 19, 0, 0, 0) + tick++ * 1000);
+    const { report } = await measureGoal(fx.location, "g-fast", { runner: "host", now });
+    const events = new Ledger(fx.location.dir).readVerified().filter((e) => e.type === "metric.measured");
+    expect(events.length).toBeGreaterThan(0);
+    for (const event of events) {
+      expect(Date.parse(report.provenance.captured_at)).toBeLessThan(Date.parse(event.ts));
+    }
   });
 
   it("prints a human block with a short revision, dirty state, directory and limits", () => {
