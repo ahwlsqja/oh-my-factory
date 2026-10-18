@@ -7,7 +7,7 @@ Generated from `docs/requirements.json` by `node scripts/conformance-matrix.mjs 
 - **deferred**: the design states it and v0.1 does not implement it. It has no test, and the documents say `not implemented`.
 - **missing**: no test counts, or a mapped file is absent. CI fails.
 
-Totals: 26 covered, 5 unproven, 7 deferred, 0 missing.
+Totals: 28 covered, 5 unproven, 7 deferred, 0 missing.
 
 | Id | State | Last recorded | Tests | Claim |
 |---|---|---|---|---|
@@ -49,3 +49,5 @@ Totals: 26 covered, 5 unproven, 7 deferred, 0 missing.
 | `S5.3.author-one-shot-ephemeral` | covered | - | 2 offline | The Codex author runs as one ephemeral exec whose prompt arrives on a pipe; nothing about the invocation is interactive. |
 | `S5.3.author-measured-before-key` | unproven | - | 1 offline | The author key reaches a container only after that container measured golden; a container that does not measure golden never receives it. |
 | `S4.6.author-answer-closed` | covered | - | 1 offline | Only one string field of a closed answer envelope leaves the author container; a malformed answer or one holding the key is dropped, and a failed run leaves a closed code. |
+| `S5.3.author-measurement-bound` | covered | - | 1 offline | The author container measurement counts only for the seal it was made for; a later or superseded seal is never attested by it. |
+| `S5.3.standing-seal-rule` | covered | - | 1 offline | A seal stands only while its vault set matches its digest, the decisions are unchanged, GATE-2 passed it, and its author stage reads L2. |

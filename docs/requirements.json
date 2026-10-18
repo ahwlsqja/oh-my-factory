@@ -480,6 +480,32 @@
           "proves": "behavior"
         }
       ]
+    },
+    {
+      "id": "S5.3.author-measurement-bound",
+      "source": "spec §5.3",
+      "claim": "The author container measurement counts only for the seal it was made for; a later or superseded seal is never attested by it.",
+      "real_world": false,
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-author-measurement-bound-to-seal.test.ts",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.3.standing-seal-rule",
+      "source": "spec §5.3",
+      "claim": "A seal stands only while its vault set matches its digest, the decisions are unchanged, GATE-2 passed it, and its author stage reads L2.",
+      "real_world": false,
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "tests": [
+        {
+          "path": "tests/author/standing.test.ts",
+          "proves": "behavior"
+        }
+      ]
     }
   ]
 }
