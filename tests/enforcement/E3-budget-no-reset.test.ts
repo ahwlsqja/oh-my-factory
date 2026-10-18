@@ -1,3 +1,4 @@
+// covers: F3.code-controls-loop
 import { describe, expect, it } from "vitest";
 import {
   BudgetError,

@@ -49,6 +49,23 @@ a run directory are views of those events.
 - A level measured on a real container is not enforced until a gated run is recorded in `docs/evidence/gated-runs.json`. The `docker inspect` parser is tested against recorded real output and the stage evaluator against fixtures; a fake Docker stands in everywhere else.
 - The author container does not exist, and nothing runs the implementer yet: the implementer container, the git boundary and the credential handling exist as library code (`src/implementer/`, see `docs/implementer.md`) and are tested offline against a fake Docker and a real git. Their behaviour in a real container and with a real model is not enforced until `G-implementer-boundary-real`, `G-implementer-real-run` and `G-e6-l2-leak-redteam` are recorded in `docs/evidence/gated-runs.json`. The golden values of the SUT and harness stages and the harness image digest are not enforced until their gated runs are recorded.
 - A scenario set that is sealed against the implementer is not enforced by this page; see the design spec.
+- Requirement states are generated into [the conformance matrix](conformance-matrix.md). A requirement that needs a real container or model stays unproven until a gated run is recorded:
+  - F6.vault-host-only: no agent session or container reads the vault. [not enforced: F6.vault-host-only]
+  - S5.4.implementer-container: the implementer container on a real daemon with a real model. [not enforced: S5.4.implementer-container]
+  - S7.l2-label: the label "sealed (container)" on a real run. [not enforced: S7.l2-label]
+  - S7.docker-client-trusted: the measurement trusts the `docker` client on PATH and the configured context, so a substituted client can make a stage measure L2. [not enforced: S7.docker-client-trusted]
+
+## Not implemented
+
+The design states these requirements and v0.1 does not implement them. Each is a `deferred_to` entry in `docs/requirements.json`.
+
+- F4.goal-closes-by-signature: not implemented (deferred to M4)
+- F11.autonomy-dial: not implemented (deferred to after v0.1)
+- S7.l3-label: not implemented (deferred to v0.3)
+- S11.1.plugin-dir-shells: not implemented (deferred to after v0.1)
+- S11.2.ship-only-pushes: not implemented (deferred to M4)
+- S11.3.public-artifacts-in-worktree: not implemented (deferred to M4)
+- S11.6.break-glass-events: not implemented (deferred to M4)
 
 ## Known limits
 

@@ -1,3 +1,4 @@
+// covers: F6.vault-host-only
 import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { describe, expect, it } from "vitest";

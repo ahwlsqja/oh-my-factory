@@ -1,3 +1,5 @@
+// covers: F6.vault-host-only
+// covers: S7.l2-label
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { it } from "vitest";

@@ -1,3 +1,4 @@
+// covers: F7.unevaluated-undetermined
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { readConfig } from "../../src/core/config.js";

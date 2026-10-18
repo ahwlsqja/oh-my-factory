@@ -1,3 +1,4 @@
+// covers: S11.5.governance-unreadable-stops
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

@@ -1,3 +1,4 @@
+// covers: F10.wip-and-stop-if
 import { describe, expect, it } from "vitest";
 import { terminate } from "../../src/goal/lifecycle.js";
 import { verifiedItems } from "../../src/work/ledger-verify.js";

@@ -1,3 +1,4 @@
+// covers: S5.0.empty-means-fail
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { JudgeRoundError } from "../../src/judge/round.js";
 import { runRound, scenarioOf, stepOf } from "../helpers/judge-fixture.js";

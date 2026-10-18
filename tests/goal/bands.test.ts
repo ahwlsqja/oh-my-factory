@@ -1,3 +1,4 @@
+// covers: F5.bands-detect-regression
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { describe, expect, it } from "vitest";

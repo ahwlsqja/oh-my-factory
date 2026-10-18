@@ -1,3 +1,4 @@
+// covers: S5.4.implementer-container
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { MeasureError, NotGoldenError, createMeasured } from "../../src/container/measure.js";

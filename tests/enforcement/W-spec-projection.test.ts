@@ -1,3 +1,4 @@
+// covers: S5.1.spec-is-projection
 import { readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { runDecideDefer, runDecideNa } from "../../src/cli/decide.js";

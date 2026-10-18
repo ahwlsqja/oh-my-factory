@@ -1,3 +1,5 @@
+// covers: S7.isolation-measured
+// covers: S7.l2-label
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";

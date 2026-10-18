@@ -1,3 +1,4 @@
+// covers: S5.7.masked-feedback
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { BudgetError, budgetConsumedEvent, declareBudget, raiseBudget } from "../../src/core/budget.js";

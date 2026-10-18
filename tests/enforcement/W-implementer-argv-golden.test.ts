@@ -1,3 +1,4 @@
+// covers: S5.4.implementer-container
 import { describe, expect, it } from "vitest";
 import { createArgv, execArgv } from "../../src/container/argv.js";
 import { containerSpecFor } from "../../src/container/golden.js";

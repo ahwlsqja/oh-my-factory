@@ -1,0 +1,261 @@
+{
+  "schema_version": 1,
+  "requirements": [
+    {
+      "id": "F1.goal-is-top-unit",
+      "source": "spec §2 F1",
+      "claim": "Work items belong to a goal: a work item carries its goal id, and the goal file is the entry point of the loop.",
+      "tests": [{ "path": "tests/work/work-item.test.ts" }]
+    },
+    {
+      "id": "F2.metric-lock-before-measure",
+      "source": "spec §2 F2, §4.1",
+      "claim": "A metric that nobody approved is never measured, and an edited metric lock, bands file or goal.md stops measurement until J1 approves again.",
+      "tests": [{ "path": "tests/enforcement/E1-metric-tamper-stops.test.ts" }]
+    },
+    {
+      "id": "F3.code-controls-loop",
+      "source": "spec §2 F3",
+      "claim": "Budgets and visit caps live in the host ledger and in code, not in a session, and nothing extends them on its own.",
+      "tests": [
+        { "path": "tests/enforcement/E3-budget-no-reset.test.ts" },
+        { "path": "tests/enforcement/W-visit-cap.test.ts" }
+      ]
+    },
+    {
+      "id": "F4.goal-closes-by-signature",
+      "source": "spec §2 F4",
+      "claim": "Agents produce at most a candidate; a goal closes only by a person's signature (J5).",
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "deferred_to": "M4"
+    },
+    {
+      "id": "F5.bands-detect-regression",
+      "source": "spec §2 F5, §4.3",
+      "claim": "Control bands detect a drift after launch and record a breach event.",
+      "tests": [{ "path": "tests/goal/bands.test.ts" }]
+    },
+    {
+      "id": "F6.vault-host-only",
+      "source": "spec §2 F6",
+      "claim": "No agent session or container can read the vault; only the harness container reads it, during S4.",
+      "real_world": true,
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "tests": [
+        { "path": "tests/enforcement/E2-g-canary-no-leak.test.ts" },
+        { "path": "tests/enforcement/E2-w-seal-canary-no-leak.test.ts" },
+        { "path": "tests/enforcement/W-vault-symlink-refused.test.ts" },
+        { "path": "tests/enforcement/E6-station-smoke.test.ts", "proves": "wiring_only" },
+        { "path": "tests/gated/e6-l2-leak-redteam.test.ts", "gated": "G-e6-l2-leak-redteam" },
+        { "path": "tests/gated/implementer-boundary-real.test.ts", "gated": "G-implementer-boundary-real" }
+      ]
+    },
+    {
+      "id": "F7.unevaluated-undetermined",
+      "source": "spec §2 F7",
+      "claim": "A guardrail that was not evaluated is undetermined, never passing.",
+      "tests": [{ "path": "tests/enforcement/E4-unevaluated-is-undetermined.test.ts" }]
+    },
+    {
+      "id": "F8.open-decision-blocks",
+      "source": "spec §2 F8, §5.0",
+      "claim": "Work does not run while a required decision is open.",
+      "tests": [{ "path": "tests/enforcement/W-gate1-open-blocks.test.ts" }]
+    },
+    {
+      "id": "F9.unverified-areas-first",
+      "source": "spec §2 F9, §5.8",
+      "claim": "The evidence report lists the unverified areas, and nothing that nobody produced reads as passed.",
+      "tests": [
+        { "path": "tests/enforcement/W-evidence-no-pass-by-default.test.ts" },
+        { "path": "tests/enforcement/W-noise-unverified-stays.test.ts" }
+      ]
+    },
+    {
+      "id": "F10.wip-and-stop-if",
+      "source": "spec §2 F10, §6.1",
+      "claim": "New production stops when unreviewed evidence piles up; the work-in-progress cap and STOP_IF are reachable through real commands.",
+      "tests": [{ "path": "tests/enforcement/W-stop-if-reachable.test.ts" }]
+    },
+    {
+      "id": "F11.autonomy-dial",
+      "source": "spec §2 F11",
+      "claim": "Autonomy is a dial by risk tier and widens only on recorded evidence.",
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "deferred_to": "after v0.1"
+    },
+    {
+      "id": "S5.0.empty-means-fail",
+      "source": "spec §5.0",
+      "claim": "Empty means fail: zero scenarios, a missing gate, a missing verdict or outcome file and a gate never visited all count as not passed.",
+      "tests": [
+        { "path": "tests/enforcement/E7a-empty-means-fail.test.ts" },
+        { "path": "tests/enforcement/E7b-empty-means-fail.test.ts" },
+        { "path": "tests/enforcement/E7c-empty-means-fail.test.ts" },
+        { "path": "tests/enforcement/E7d-verdict-missing-means-fail.test.ts" }
+      ]
+    },
+    {
+      "id": "S5.1.spec-is-projection",
+      "source": "spec §5.1",
+      "claim": "spec.md is a projection of the decision ledger, byte for byte.",
+      "tests": [{ "path": "tests/enforcement/W-spec-projection.test.ts" }]
+    },
+    {
+      "id": "S5.2.decisions-human-only",
+      "source": "spec §5.2",
+      "claim": "Only a person closes a decision; the writers refuse an agent actor.",
+      "tests": [{ "path": "tests/enforcement/W-decision-human-only.test.ts" }]
+    },
+    {
+      "id": "S5.3.seal-inputs-closed",
+      "source": "spec §5.3",
+      "claim": "What the sealing author receives is a closed set: intent, spec and the interface contract, never a plan or code.",
+      "tests": [{ "path": "tests/enforcement/W-seal-inputs-closed.test.ts" }]
+    },
+    {
+      "id": "S5.4.implementer-container",
+      "source": "spec §5.4, §7",
+      "claim": "The implementer runs in a measured container with one vendor key, no vault and no other credential.",
+      "real_world": true,
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "tests": [
+        { "path": "tests/enforcement/W-implementer-argv-golden.test.ts" },
+        { "path": "tests/enforcement/W-implementer-env-allowlist.test.ts" },
+        { "path": "tests/enforcement/W-implementer-measure-before-key.test.ts" },
+        { "path": "tests/gated/implementer-boundary-real.test.ts", "gated": "G-implementer-boundary-real" },
+        { "path": "tests/gated/implementer-real-run.test.ts", "gated": "G-implementer-real-run" }
+      ]
+    },
+    {
+      "id": "S5.5.judge-two-container",
+      "source": "spec §5.5",
+      "claim": "The judge runs the candidate and the harness in two measured containers, and the harness is the only reader of the vault.",
+      "real_world": true,
+      "tests": [
+        { "path": "tests/enforcement/W-judge-argv-golden.test.ts" },
+        { "path": "tests/enforcement/W-judge-measure-before-start.test.ts" },
+        { "path": "tests/gated/two-container-roundtrip.test.ts", "gated": "G-two-container-roundtrip" }
+      ]
+    },
+    {
+      "id": "S5.5.null-implementation-fails",
+      "source": "spec §5.5, §12",
+      "claim": "A null implementation never reaches success: the judge fails it.",
+      "tests": [{ "path": "tests/enforcement/W-null-impl-fails.test.ts" }]
+    },
+    {
+      "id": "S5.7.masked-feedback",
+      "source": "spec §5.7",
+      "claim": "Feedback released to the implementer is masked, and releases are counted per goal in the host ledger.",
+      "tests": [
+        { "path": "tests/enforcement/E2-w-b-canary-no-leak-feedback.test.ts" },
+        { "path": "tests/enforcement/W-ladder-no-reset.test.ts" }
+      ]
+    },
+    {
+      "id": "S5.8.evidence-no-pass-by-default",
+      "source": "spec §5.8",
+      "claim": "A clean line ends success with human_needed and lists noise_check_not_evaluated as unverified, so merge_recommended is unreachable in v0.1.",
+      "tests": [
+        { "path": "tests/enforcement/W-evidence-no-pass-by-default.test.ts" },
+        { "path": "tests/enforcement/W-noise-unverified-stays.test.ts" }
+      ]
+    },
+    {
+      "id": "S7.isolation-measured",
+      "source": "spec §7",
+      "claim": "The isolation level comes from measurements in the ledger, and a daemon-reported deviation lowers it.",
+      "real_world": true,
+      "tests": [
+        { "path": "tests/enforcement/W-gate3-isolation.test.ts" },
+        { "path": "tests/enforcement/W-inspect-deviation-lowers-level.test.ts" },
+        { "path": "tests/gated/isolation-probe.test.ts", "gated": "G-real-isolation-probe" }
+      ]
+    },
+    {
+      "id": "S7.l2-label",
+      "source": "spec §7",
+      "claim": "The label \"sealed (container)\" appears only when every stage of a run measured L2.",
+      "real_world": true,
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "tests": [
+        { "path": "tests/enforcement/W-gate3-isolation.test.ts" },
+        { "path": "tests/gated/e6-l2-leak-redteam.test.ts", "gated": "G-e6-l2-leak-redteam" }
+      ]
+    },
+    {
+      "id": "S7.docker-client-trusted",
+      "source": "spec §7",
+      "claim": "A substituted docker client or a lying daemon cannot make a stage measure L2.",
+      "real_world": true,
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "tests": [{ "path": "tests/enforcement/W-inspect-deviation-lowers-level.test.ts" }]
+    },
+    {
+      "id": "S7.l3-label",
+      "source": "spec §7",
+      "claim": "L3 adds an egress allowlist and a leak red-team on every run, and earns its own label.",
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "deferred_to": "v0.3"
+    },
+    {
+      "id": "S11.1.non-pollution",
+      "source": "spec §11 rule 1",
+      "claim": "OMF only reads the user's agent configuration, keeps its state out of the repository and the agent config homes, and writes nothing there.",
+      "tests": [{ "path": "tests/enforcement/E5-init-non-pollution.test.ts" }]
+    },
+    {
+      "id": "S11.1.plugin-dir-shells",
+      "source": "spec §11 rule 1",
+      "claim": "Shells prefer --plugin-dir injection, and marketplace installation is opt-in and labeled.",
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "deferred_to": "after v0.1"
+    },
+    {
+      "id": "S11.2.never-merges",
+      "source": "spec §11 rule 2",
+      "claim": "OMF never commits to a user branch and never merges; a candidate adds exactly one ref and nothing writes done.",
+      "tests": [
+        { "path": "tests/enforcement/W-user-git-untouched.test.ts" },
+        { "path": "tests/enforcement/W-no-complete-in-m3.test.ts" }
+      ]
+    },
+    {
+      "id": "S11.2.ship-only-pushes",
+      "source": "spec §11 rule 2",
+      "claim": "Push and pull request creation happen only through omf ship.",
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "deferred_to": "M4"
+    },
+    {
+      "id": "S11.3.public-artifacts-in-worktree",
+      "source": "spec §11 rule 3",
+      "claim": "Public artifacts are written into the OMF worktree and committed by people through the normal pull request flow.",
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "deferred_to": "M4"
+    },
+    {
+      "id": "S11.4.sealed-not-in-repo",
+      "source": "spec §11 rule 4",
+      "claim": "OMF refuses to run when sealed material appears inside the repository.",
+      "tests": [{ "path": "tests/enforcement/W-pokayoke-sealed-in-repo.test.ts" }]
+    },
+    {
+      "id": "S11.5.governance-unreadable-stops",
+      "source": "spec §11 rule 5",
+      "claim": "When a governance file cannot be read or fails verification, OMF stops instead of falling back to defaults.",
+      "tests": [
+        { "path": "tests/enforcement/ledger-tamper-stops.test.ts" },
+        { "path": "tests/enforcement/E1-metric-tamper-stops.test.ts" }
+      ]
+    },
+    {
+      "id": "S11.6.break-glass-events",
+      "source": "spec §11 rule 6",
+      "claim": "A break-glass exception is a J7 ledger event with a reason and an expiry.",
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "deferred_to": "M4"
+    }
+  ]
+}

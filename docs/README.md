@@ -23,6 +23,8 @@ Start with the top-level [README](../README.md) for what OMF is and the command 
 
 - [Enforcement tests](../tests/enforcement/README.md): which test backs each control claim in the spec. A claim
   without a test is labelled "not enforced" in the spec.
+- [Conformance matrix](conformance-matrix.md): every control claim by id, with its state (covered, unproven, deferred,
+  missing) and the date of the gated run behind it. Generated from `docs/requirements.json`.
 
 ## Verification line
 

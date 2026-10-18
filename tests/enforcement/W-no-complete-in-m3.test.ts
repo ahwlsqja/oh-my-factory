@@ -1,3 +1,4 @@
+// covers: S11.2.never-merges
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";

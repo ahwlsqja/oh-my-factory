@@ -1,3 +1,4 @@
+// covers: S7.isolation-measured
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { writeFileSync } from "node:fs";

@@ -1,3 +1,4 @@
+// covers: S11.1.non-pollution
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { delimiter, join, relative } from "node:path";

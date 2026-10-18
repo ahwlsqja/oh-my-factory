@@ -1,3 +1,5 @@
+// covers: F9.unverified-areas-first
+// covers: S5.8.evidence-no-pass-by-default
 import { describe, expect, it } from "vitest";
 import { runDecideAdd, runDecideResolve } from "../../src/cli/decide.js";
 import {
