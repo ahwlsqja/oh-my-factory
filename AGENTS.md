@@ -14,11 +14,13 @@ Product contracts remain in [docs/design](docs/design/); this file routes contri
   and destructive actions require existing user authority; do not ask again when it already covers them.
 - Kernel PRs are an exception to agent merge authority: a human must inspect the current diff and
   personally merge. Agents must not merge them; follow the workflow's protected path manifest.
+  This is contributor policy, not an implemented GitHub gate; record the inspected head SHA in human evidence.
 - Maintainer agent-led roles: **Builder** leads, plans, writes code/tests, integrates and owns task state;
   **Explorer** performs scoped, independent, read-only searches in parallel when useful; **Reviewer**
   reviews important plans, recurring errors and final omissions in substantive changes, not routine writing.
   Select the session/request's [model profile](docs/maintainers/development-workflow.md#execution-and-roles);
-  the Codex default remains Sol 6.1 / Luna 6 / Astra; Claude uses Sonnet / Haiku / Opus.
+  the Codex aliases Sol 6.1 / Luna 6 / Astra map to `gpt-6.1-sol` / `gpt-6-luna` / `gpt-6-astra`.
+  Claude uses Sonnet / Haiku / Opus families at the already-selected session/maintainer versions.
   External contributors follow the ordinary issue/PR/evidence rules; maintainers arrange required reviews.
   Contributors do not need to purchase or run these models.
 - Give reviewers the goal/acceptance, revision/diff, relevant contracts, validation and specific questions,

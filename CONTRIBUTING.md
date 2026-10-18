@@ -1,9 +1,11 @@
 # Contributing to oh-my-factory
 
 OMF is pre-alpha. Follow the [development workflow](docs/maintainers/development-workflow.md): start
-from an agreed goal and evidence, scope meaningful work in a GitHub issue, then implement and verify a
+from an agreed goal and evidence, scope material work in a GitHub issue, then implement and verify a
 bounded PR. Task completion does not establish goal achievement. The workflow defines readiness,
-completion, review, worktrees, permissions and the trivial-docs/private-security exceptions.
+completion, review, worktrees and permissions. Features, behavior bug fixes (even one line), refactors,
+CI/security changes and document policy changes need issues; only nonbehavioral copy/link fixes,
+narrow generated maintenance PRs and private security response use its documented exceptions.
 
 Security problems do not go in issues or pull requests. Follow [`SECURITY.md`](SECURITY.md).
 
@@ -61,6 +63,8 @@ which lands in a sibling pull request), so do not add colour output.
 - Say in the pull request how you checked the change, using the commands above.
 - If an AI tool wrote much of the change, say so in the description. You must be able to explain every
   line you submit.
+- Credit actual substantial collaboration with appropriate `Co-Authored-By` attribution when its identity
+  is known; never invent an identity. Attribution is separate from Lore's decision context and AI disclosure.
 
 ## Tests
 

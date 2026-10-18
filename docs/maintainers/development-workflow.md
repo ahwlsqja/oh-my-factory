@@ -30,13 +30,16 @@ work autonomously within its authorized scope. Changes to goals, acceptance, pro
 or new dependencies need the appropriate human decision. Models review reasoning; they do not replace
 empirical validation. People review decisions and evidence, with targeted review of high-risk code.
 These principles follow the design's F1–F11 and [reference notes](../design/references.md).
+Contributor goals/plans here are coordination records, not the product's `goal.md`, J1 locks or runtime artifacts.
 
 ## Issue contract
 
-Create or reuse an issue before implementing a feature, bug fix, refactor, CI/security change or document
+Create or reuse an issue before implementing a feature, behavior bug fix (even one line), refactor, CI/security change or document
 policy change. Reporting a bug need not supply an implementation plan: a maintainer completes the
 contract before Ready. Small typo/link fixes that change no behavior or policy may use the PR as their
 work record; write `Issue exception: trivial docs` and the reason. Do not bundle behavior changes into it.
+Narrow generated Dependabot/release-please PRs may likewise be their work record instead of a prior issue;
+record the exception and validation there. Unrelated changes need an issue; kernel human merge still applies.
 Vulnerabilities and sensitive response instead use the private record required by
 [SECURITY.md](../../SECURITY.md) until safe public linkage; never require a public vulnerability issue.
 
@@ -105,12 +108,12 @@ and final reviews. External contributors need not purchase, access or execute th
 
 | Session profile | Builder | Explorer | Reviewer |
 |---|---|---|---|
-| Codex (default in Codex sessions) | Sol 6.1 | Luna 6 | Astra |
+| Codex (default in Codex sessions) | Sol 6.1 (`gpt-6.1-sol`) | Luna 6 (`gpt-6-luna`) | Astra (`gpt-6-astra`) |
 | Claude | Sonnet | Haiku | Opus |
 
 The active session/request selects the profile; an explicit user choice takes precedence. The Codex
-mapping preserves the maintainer's chosen models. Claude names denote model families: the maintainer
-pins available versions when starting work and records the selected mapping in the task note. Do not
+mapping preserves the maintainer's chosen models. Claude names denote families: the active session or maintainer
+pins available versions and records the mapping in the task note; do not ask again if already selected. Do not
 silently fall back between models or providers. A profile changes staffing, not authority or review gates.
 
 After a failure with the same apparent cause recurs following a fix attempt, consult the Reviewer with the
@@ -164,15 +167,19 @@ Issue links, manual state, model-role/review and goal-observation rules here are
 ## Kernel changes require a human merge
 
 The verification/trust kernel is defined by [kernel-paths.txt](kernel-paths.txt), a repository-relative
-POSIX-style glob manifest. Check all changed paths against the base revision's manifest, including
+picomatch glob manifest evaluated with `dot: true`. Check all changed paths against the base revision's manifest, including
 deletions and both names of renames. A match makes the entire PR a kernel PR; mixed PRs inherit the rule.
 Whole design directories conservatively cover principles/gates. The manifest and policy instructions
 protect themselves because changing them could weaken this requirement.
+Whole `package.json`, lockfile and Vitest configuration protection deliberately includes version/dependency
+updates, release bots and coverage-threshold raises: the conservative path rule has no semantic exceptions.
 
 A human must inspect the **current diff** and personally merge a kernel PR. Agents may prepare, test
 and review it but must never merge it, even with general merge authority. Bot/model approvals or counts
 of peer reviews do not establish human inspection or satisfy personal merge. Relevant new changes need
 fresh human inspection. This policy change itself touches protected instructions and needs human merge.
+The inspecting human records the inspected head SHA in the PR body or a comment. A same-account GitHub
+approval is not required (authors cannot approve their own PR); AI-authored comments cannot replace this evidence.
 
 Record the classification and required handoff in the PR. The manifest defines scope; it is not a CI
 classifier or proof of enforcement. Automatic classification/enforcement requires separate implementation.
@@ -197,4 +204,6 @@ Tested: regression test and typecheck
 
 PRs explain the problem/result, issue relationship, decisions, current validation and limitations.
 Disclose substantial AI authorship as required by [CONTRIBUTING.md](../../CONTRIBUTING.md).
+`Co-Authored-By` credits actual substantial collaboration where identity is known; do not invent it.
+It is orthogonal to Lore and AI disclosure, not a claim about mandatory attribution in historical commits.
 Keep temporary plans local; retain durable decisions in the appropriate design, workflow or issue/PR.
