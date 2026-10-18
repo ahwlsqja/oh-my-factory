@@ -1,0 +1,9 @@
+#!/bin/sh
+# The only docker the outer suite puts on PATH. It answers like a client whose daemon is stopped, so a contract
+# that needs a runtime proves "no runtime, no claim". The stateful fake daemon lives in tests/helpers, not here.
+if [ "$1" = "--version" ]; then
+  echo "Docker version 0.0.0, build omf-outer-refusing"
+  exit 0
+fi
+echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running? (omf outer refusing docker)" >&2
+exit 1

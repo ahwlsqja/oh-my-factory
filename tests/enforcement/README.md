@@ -6,7 +6,7 @@ without a test is labeled "not enforced" in the spec.
 ## Requirement states
 
 <!-- requirements:start -->
-Requirement states, generated from `docs/requirements.json` (35 covered, 5 unproven, 7 deferred, 0 missing). The full table is [the conformance matrix](../../docs/conformance-matrix.md).
+Requirement states, generated from `docs/requirements.json` (36 covered, 5 unproven, 7 deferred, 0 missing). The full table is [the conformance matrix](../../docs/conformance-matrix.md).
 
 - unproven: `F6.vault-host-only`, `S5.4.implementer-container`, `S7.l2-label`, `S7.docker-client-trusted`, `S5.3.author-measured-before-key`
 - deferred: `F4.goal-closes-by-signature`, `F11.autonomy-dial`, `S7.l3-label`, `S11.1.plugin-dir-shells`, `S11.2.ship-only-pushes`, `S11.3.public-artifacts-in-worktree`, `S11.6.break-glass-events`
@@ -130,6 +130,7 @@ are hand-written.
 | `W-no-fake-switch.test.ts` | The offline acceptance ends `unmeasured` because of the fixture it plants, never because of a switch: no environment name, config key or command flag can stand in for the container probe, and the detector is shown to catch a switch-shaped name. | spec §7 |
 | `W-cli-fake-docker-unmeasured.test.ts` | The shipped CLI walked against a fake docker whose author was never measured warns before it spends, ends blocked at GATE-3 with a J7 handoff and exit 2, leaves the run-level isolation label `unmeasured` and prints no L2 or sealed claim, reports the same evidence byte for byte twice, and publishes only the candidate branch while the key and every container stay out of the user's repository. | spec §7 |
 | `W-skeleton-seam.test.ts` | The seam test names itself a seam, appends the author measurement itself and so may show the line's logic but is never read as sealing evidence: the conformance matrix cannot count it, and it cannot assert `merge_recommended` (a success is capped at `human_needed`). | spec §5.0 |
+| `W-outer-no-src-import.test.ts` | The outer contract suite stays independent of the code it checks: nothing under `outer/` imports `src/`, `dist/`, `tests/` or a package (only `node:` modules and files inside `outer/`), so a kernel defect cannot hide inside the check and the previous release's copy can run against a new build. | spec §11.5 |
 
 The leak tests use `tests/helpers/reconciler-stub.mjs` in `leaky` mode and the planted strings in
 `tests/helpers/canary.ts`. A change to what the goal loop discloses is a change to E2: update the

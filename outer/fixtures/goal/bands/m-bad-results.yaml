@@ -1,0 +1,8 @@
+metric: m-bad-results
+baseline: rolling_7d
+rules: western_electric
+tiers:
+  2sigma:
+    action: log
+  3sigma:
+    action: propose

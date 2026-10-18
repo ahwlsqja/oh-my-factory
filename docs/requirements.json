@@ -613,6 +613,23 @@
           "proves": "wiring_only"
         }
       ]
+    },
+    {
+      "id": "S11.5.outer-contracts-hold",
+      "source": "spec §11.5; owner decision 2026-10-19",
+      "claim": "The kernel promises checked from outside (ledger tamper stop, no approval without a terminal, exit codes, state outside the repository, out-of-order refusals, no sealing without a runtime) hold for the built executable, checked by a suite that imports none of the code it checks.",
+      "real_world": false,
+      "surfaces": ["docs/maintainers/outer-suite.md"],
+      "tests": [
+        {
+          "path": "tests/outer/outer-suite.test.ts",
+          "proves": "behavior"
+        },
+        {
+          "path": "tests/enforcement/W-outer-no-src-import.test.ts",
+          "proves": "behavior"
+        }
+      ]
     }
   ]
 }
