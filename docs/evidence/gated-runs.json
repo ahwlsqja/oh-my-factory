@@ -33,6 +33,17 @@
         "context": "colima-omf-m3f",
         "arch": "aarch64"
       }
+    },
+    {
+      "test": "G-real-isolation-probe",
+      "result": "pass",
+      "at": "2026-10-18T16:21:01.618Z",
+      "omf_commit": "af03825cb23f3511b83cbb2be0b2b148b80b4c86",
+      "docker": {
+        "server_version": "29.2.1",
+        "context": "colima-omf-m3f",
+        "arch": "aarch64"
+      }
     }
   ]
 }
