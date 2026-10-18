@@ -256,6 +256,17 @@
       "claim": "A break-glass exception is a J7 ledger event with a reason and an expiry.",
       "surfaces": ["docs/isolation-and-gates.md"],
       "deferred_to": "M4"
+    },
+    {
+      "id": "S5.3.same-vendor-refused",
+      "source": "spec §5.3, §14 item 2",
+      "claim": "Author and implementer on the same vendor are refused with a reason that names both roles, and the [seal] same_vendor key is refused whatever its value, so no acknowledgement path exists.",
+      "real_world": false,
+      "surfaces": [],
+      "tests": [
+        { "path": "tests/enforcement/W-same-vendor-refused.test.ts", "proves": "behavior" },
+        { "path": "tests/core/roles.test.ts", "proves": "behavior" }
+      ]
     }
   ]
 }
