@@ -235,7 +235,7 @@ export function writeImplementerRequest(
     kind: request.kind,
     paths: [...request.paths],
     question: `Work item ${id}: the implementer stopped and raised a ${request.kind} conflict that names ${request.paths.length} path(s)${request.paths.length === 0 ? "" : `: ${pathsLine(request.paths)}`} (J2).`,
-    options: [`omf decide show ${id}`, `omf veto ${id}`, `after M3h: omf run ${id}`],
+    options: [`omf decide show ${id}`, `omf veto ${id}`, `omf run ${id}`],
     resume_token: sha256Hex(canonicalize({ work_id: id, kind: request.kind, paths: request.paths })).slice(0, 32),
     created_at: now.toISOString(),
   };

@@ -16,7 +16,7 @@ import { Ledger, type LedgerEvent } from "../core/ledger.js";
 import type { ProjectLocation } from "../core/paths.js";
 import { requireProject } from "../core/project.js";
 import { parseDuration } from "../goal/duration.js";
-import { GoalFileError, assertGoalId, goalFile } from "../goal/goal-file.js";
+import { assertGoalId, GoalFileError, goalFile } from "../goal/goal-file.js";
 import { type GoalLock, GoalLockError, latestApproval, readGoalLock } from "../goal/goal-lock.js";
 import { raiseWallTime, wallTimeLimitMs } from "../goal/wall-time.js";
 import { type ClaimStatus, claimStatus } from "../work/claim.js";
@@ -24,9 +24,9 @@ import { renderIntent } from "../work/intent-md.js";
 import { verifiedItems, verifyItemAgainstLedger } from "../work/ledger-verify.js";
 import { canTransition } from "../work/transitions.js";
 import { OPEN_STATES, TERMINAL_WORK_STATES, type WorkItem, type WorkState } from "../work/types.js";
+import { type LimitKind, microUsd, openItemBudget, raiseWorkLimit, WorkBudgetError } from "../work/w-budget.js";
 import { renderWorkItem } from "../work/work-item.js";
-import { type LimitKind, WorkBudgetError, microUsd, openItemBudget, raiseWorkLimit } from "../work/w-budget.js";
-import { type PromptStreams, type TerminalStreams, confirmByTyping, requireTerminal } from "./confirm.js";
+import { confirmByTyping, type PromptStreams, requireTerminal, type TerminalStreams } from "./confirm.js";
 
 /** What a person typed after `omf budget declare|raise`: strings, because validation is `parseBudgetArgs`'s job. */
 export interface BudgetArgs {
@@ -197,7 +197,7 @@ export function workLimitLines(location: ProjectLocation, workId: string): strin
  * Everything `omf budget raise <work_id> --rounds|--usd` does after parsing: a terminal, the limits in force,
  * the person retypes the work id, then the J8 write. Returns the exit code: 0 raised, 1 declined. Streams and
  * `print` are parameters so a test runs the whole path without a terminal. It resumes nothing; a person then
- * runs the item again (`omf run`, after M3h).
+ * runs the item again (`omf run`).
  */
 export async function workLimitRaiseFlow(
   location: ProjectLocation,

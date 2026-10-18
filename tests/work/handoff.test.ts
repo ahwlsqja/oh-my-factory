@@ -77,7 +77,7 @@ const ALLOWED_OPTIONS: readonly RegExp[] = [
   /^omf budget raise w-[0-9a-f]{12} --rounds <n>$/,
   /^omf budget raise w-[0-9a-f]{12} --usd <amount>$/,
   /^omf budget (declare|raise) g-[a-z0-9]+(-[a-z0-9]+)* disclosure <n>$/,
-  /^after M3h: omf run w-[0-9a-f]{12}$/,
+  /^omf (run|seal) w-[0-9a-f]{12}$/,
 ];
 
 describe("HANDOFF_ROUTES", () => {
@@ -149,7 +149,7 @@ describe("HANDOFF_ROUTES", () => {
     expect(HANDOFF_ROUTES.implementer_request.options(WORK, GOAL)).toEqual([
       `omf decide show ${WORK}`,
       `omf veto ${WORK}`,
-      `after M3h: omf run ${WORK}`,
+      `omf run ${WORK}`,
     ]);
     expect(HANDOFF_ROUTES.implementer_request.question).toContain("implementer");
   });
@@ -167,11 +167,19 @@ describe("HANDOFF_ROUTES", () => {
     }
   });
 
-  it("names a command that runs the line again only with the 'after M3h' prefix", () => {
+  it("names omf run to run the line again and omf seal only where the seal is what is missing", () => {
     for (const code of W_REASON_CODES) {
-      for (const option of HANDOFF_ROUTES[code].options(WORK, GOAL)) {
-        if (option.includes(" run ")) expect(option.startsWith("after M3h: omf run "), `${code}: ${option}`).toBe(true);
-      }
+      const options = HANDOFF_ROUTES[code].options(WORK, GOAL);
+      expect(
+        options.some((option) => option.startsWith("after M3h")),
+        code,
+      ).toBe(false);
+      const runs = options.filter((option) => option.includes(" run "));
+      expect(
+        runs.every((option) => option === `omf run ${WORK}`),
+        code,
+      ).toBe(true);
+      expect(options.includes(`omf seal ${WORK}`), code).toBe(code === "j2_open" || code === "gate2_exhausted");
     }
   });
 });

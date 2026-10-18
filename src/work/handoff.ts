@@ -47,16 +47,18 @@ interface Route {
   options: (workId: string, goalId: string) => string[];
 }
 
-// The only commands an option may name. Each exists today; a command that needs the line to run again
-// carries "after M3h:" because `omf run` arrives with M3h. `omf cancel` is absent on purpose: no such
-// command exists for a work item, and `omf veto` ends an open item from any state.
+// The only commands an option may name. Each exists today. `omf run` runs the line again on a sealed item and
+// `omf seal` seals or reseals it, so an option names `omf seal` only where the seal is what is missing.
+// `omf cancel` is absent on purpose: no such command exists for a work item, and `omf veto` ends an open item
+// from any state.
 const show = (id: string): string => `omf work show ${id}`;
 const decideShow = (id: string): string => `omf decide show ${id}`;
 const decideResolve = (id: string): string => `omf decide resolve ${id} <decision_id> --file <resolution.json>`;
 const veto = (id: string): string => `omf veto ${id}`;
 const raiseRounds = (id: string): string => `omf budget raise ${id} --rounds <n>`;
 const raiseUsd = (id: string): string => `omf budget raise ${id} --usd <amount>`;
-const rerun = (id: string): string => `after M3h: omf run ${id}`;
+const rerun = (id: string): string => `omf run ${id}`;
+const reseal = (id: string): string => `omf seal ${id}`;
 // The disclosure budget belongs to the goal, so these two name the goal id and not the work id.
 const declareDisclosure = (goalId: string): string => `omf budget declare ${goalId} disclosure <n>`;
 const raiseDisclosure = (goalId: string): string => `omf budget raise ${goalId} disclosure <n>`;
@@ -76,13 +78,13 @@ export const HANDOFF_ROUTES: Readonly<Record<ReasonCode, Route>> = {
     j: "J2",
     state: "A design question of this item is still open, so the line stopped before any work started.",
     question: "Which answer do you give to the open design question?",
-    options: (id) => [decideShow(id), decideResolve(id), veto(id), rerun(id)],
+    options: (id) => [decideShow(id), decideResolve(id), veto(id), reseal(id)],
   },
   gate2_exhausted: {
     j: "J3",
     state: "The sealed-scenario loop used all its visits before any implementation started.",
     question: "Should the scenarios be reworked, or should the item be dropped?",
-    options: retry,
+    options: (id) => [show(id), veto(id), reseal(id)],
   },
   scenarios_need_review: {
     j: "J3",

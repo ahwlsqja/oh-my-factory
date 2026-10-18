@@ -49,7 +49,7 @@ describe("W-implementer-request-j2", () => {
     expect(done.handoff?.decision_required).toEqual({
       j: "J2",
       question: "Which answer do you give to the implementer's request?",
-      options: [`omf decide show ${line.workId}`, `omf veto ${line.workId}`, `after M3h: omf run ${line.workId}`],
+      options: [`omf decide show ${line.workId}`, `omf veto ${line.workId}`, `omf run ${line.workId}`],
     });
     expect(readImplementerRequest(line.itemDir)).toMatchObject({ kind: "test_conflict", paths: ["tests/a.test.ts"] });
     for (const text of [
