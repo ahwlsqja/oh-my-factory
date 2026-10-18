@@ -273,7 +273,9 @@ number (`3`, `0.25`, `-1`, `1e3`). Anything printed before that line is ignored,
 summary first. The measurement fails, with a reason, and records no value when the command prints nothing, the
 last line is not a number, the command exits non-zero, runs longer than two minutes, or prints more than 1 MiB.
 `omf goal measure` then exits 1, so a script that cannot read its tool must exit non-zero rather than print a
-guess.
+guess. The script below follows that rule for Biome itself: if Biome exits non-zero (for example because a file
+has a lint error), the script exits 1 and reports no value, even though Biome still prints a summary. Fix the
+errors first; a warnings count taken next to errors would be a number nobody asked for.
 
 **Choose the quantity first.** Biome counts warnings and infos separately, and the plain `biome lint` output
 ends with a line for each (`Found N warnings.` and `Found N infos.`). Those are different quantities, and the
@@ -314,6 +316,10 @@ if (run.error) {
   console.error(`could not run biome: ${run.error.message}`);
   process.exit(1);
 }
+if (run.status !== 0) {
+  console.error(`biome exited with ${run.status}; fix its errors first, no value is reported`);
+  process.exit(1);
+}
 let summary;
 try {
   summary = JSON.parse(run.stdout).summary;
@@ -329,7 +335,7 @@ console.log(`warnings: ${summary.warnings} (measured), infos: ${summary.infos} (
 console.log(summary.warnings);
 ```
 
-Set it up (`git init`, add Biome with `npm install --save-dev @biomejs/biome`, then create the three files) and
+Set it up (`git init`, add Biome with `npm install --save-dev --save-exact @biomejs/biome@2.5.15`, then create the three files) and
 check the script before OMF sees it. `npx biome lint .` should report 3 warnings and 1 info, and the script
 should end with `3`. Commit the files too: J1 approval refuses to lock a metric while a path it watches has
 uncommitted changes.
@@ -349,12 +355,14 @@ $ omf init
 $ omf goal new g-biome-zero
 $ omf metric propose m-biome-warnings --unit warnings --watch scripts/count-biome-warnings.mjs --watch biome.json -- node scripts/count-biome-warnings.mjs
 $ omf goal audit g-biome-zero
+$ git add biome.json scripts src
+$ git -c user.email=dev@example.com -c user.name=Dev commit -m "Add the Biome fixture"
 $ omf goal approve g-biome-zero
 $ omf goal measure g-biome-zero --runner host
 ```
 
 `omf goal approve` needs a terminal and you type the goal id yourself; nothing here approves for you. The
-measurement should read `target m-biome-warnings: 3 warnings; target <= 0 warnings; gap 3`, the same number the
+measurement should read `target m-biome-warnings: 3 warnings; target <= 0 warnings; gap 3 (decrease, large)`, the same number the
 script printed.
 
 **Choose what to watch.** `--watch` is repeatable and names the files whose change must be a regime change: here

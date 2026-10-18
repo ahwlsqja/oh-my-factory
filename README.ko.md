@@ -264,7 +264,9 @@ warning: measured on the host without isolation (--runner host)
 (`3`, `0.25`, `-1`, `1e3`). 그 앞에 출력한 것은 무시하므로 사람이 읽는 요약을 먼저 찍어도 됩니다. 명령이 아무것도
 출력하지 않거나, 마지막 줄이 숫자가 아니거나, 0 이 아닌 코드로 끝나거나(exits non-zero), 2분을 넘기거나, 1 MiB 를
 넘게 출력하면 측정은 이유와 함께 실패하고 값은 기록되지 않습니다. 이때 `omf goal measure` 는 1 로 끝납니다. 도구를
-읽지 못한 스크립트는 짐작한 값을 찍지 말고 0 이 아닌 코드로 끝나야 합니다.
+읽지 못한 스크립트는 짐작한 값을 찍지 말고 0 이 아닌 코드로 끝나야 합니다. 아래 스크립트는 Biome 에 대해서도 이 규칙을 따릅니다. Biome 가 0 이 아닌 코드로
+끝나면(예: 파일에 lint 오류가 있을 때) Biome 가 요약을 출력하더라도 스크립트는 1 로 끝나고 값을 보고하지 않습니다.
+오류를 먼저 고치세요. 오류가 있는 채로 센 warnings 값은 아무도 요청하지 않은 숫자입니다.
 
 **먼저 무엇을 잴지 정하세요.** Biome 는 warnings 와 infos 를 따로 셉니다. 보통의 `biome lint` 출력도 각각 한 줄씩
 (`Found N warnings.`, `Found N infos.`)으로 끝납니다. 서로 다른 양이므로 목표는 하나를 골라야 합니다. 아래
@@ -304,6 +306,10 @@ if (run.error) {
   console.error(`could not run biome: ${run.error.message}`);
   process.exit(1);
 }
+if (run.status !== 0) {
+  console.error(`biome exited with ${run.status}; fix its errors first, no value is reported`);
+  process.exit(1);
+}
 let summary;
 try {
   summary = JSON.parse(run.stdout).summary;
@@ -319,7 +325,7 @@ console.log(`warnings: ${summary.warnings} (measured), infos: ${summary.infos} (
 console.log(summary.warnings);
 ```
 
-준비(`git init`, `npm install --save-dev @biomejs/biome` 로 Biome 추가, 위 파일 세 개 만들기)를 마치고, OMF 에
+준비(`git init`, `npm install --save-dev --save-exact @biomejs/biome@2.5.15` 로 Biome 추가, 위 파일 세 개 만들기)를 마치고, OMF 에
 맡기기 전에 스크립트부터 확인하세요. `npx biome lint .` 은 warnings 3, infos 1 을 보고해야 하고 스크립트는 `3` 으로
 끝나야 합니다. 파일은 커밋도 해 두세요. 감시하는 경로에 커밋하지 않은 변경이 있으면 J1 승인이 지표 잠금을
 거부합니다.
@@ -339,12 +345,14 @@ $ omf init
 $ omf goal new g-biome-zero
 $ omf metric propose m-biome-warnings --unit warnings --watch scripts/count-biome-warnings.mjs --watch biome.json -- node scripts/count-biome-warnings.mjs
 $ omf goal audit g-biome-zero
+$ git add biome.json scripts src
+$ git -c user.email=dev@example.com -c user.name=Dev commit -m "Add the Biome fixture"
 $ omf goal approve g-biome-zero
 $ omf goal measure g-biome-zero --runner host
 ```
 
 `omf goal approve` 는 터미널이 필요하고 목표 id 를 직접 입력해야 합니다. 여기서 대신 승인해 주는 것은 없습니다.
-측정 결과는 `target m-biome-warnings: 3 warnings; target <= 0 warnings; gap 3` 처럼 읽혀야 하며, 스크립트가 찍은 숫자와
+측정 결과는 `target m-biome-warnings: 3 warnings; target <= 0 warnings; gap 3 (decrease, large)` 처럼 읽혀야 하며, 스크립트가 찍은 숫자와
 같습니다.
 
 **무엇을 감시할지 정하세요.** `--watch` 는 반복할 수 있고, 바뀌면 체제 변경이어야 하는 파일을 지정합니다. 여기서는

@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { requireProject } from "../../src/core/project.js";
 import { approveGoal } from "../../src/goal/approve.js";
@@ -13,7 +14,7 @@ import { gitIn, makeGitRepo, makeTempDir } from "../helpers/tmp.js";
 // (the terminal path is covered in tests/cli/confirm.test.ts). No Docker and no model are involved.
 const ROOT = new URL("../../", import.meta.url);
 const read = (path: string): string => readFileSync(new URL(path, ROOT), "utf8");
-const BIOME_BIN_DIR = new URL("node_modules/", ROOT).pathname;
+const BIOME_BIN_DIR = fileURLToPath(new URL("node_modules/", ROOT));
 
 const section = (text: string, heading: string): string => {
   const start = text.indexOf(`\n${heading}\n`);
@@ -62,6 +63,7 @@ describe("README: Measure without Docker", () => {
       "package.json",
       "re-approval",
       "exits non-zero",
+      "if Biome exits non-zero",
       "uncommitted",
     ]) {
       expect(EN.toLowerCase(), phrase).toContain(phrase.toLowerCase());
@@ -80,7 +82,7 @@ describe("README: Measure without Docker", () => {
     symlinkSync(BIOME_BIN_DIR, join(repo, "node_modules"));
     // J1 refuses watched paths with uncommitted changes, so the walkthrough commits the fixture.
     gitIn(repo, "add", "biome.json", "scripts", "src");
-    gitIn(repo, "commit", "-m", "fixture");
+    gitIn(repo, "-c", "user.email=dev@example.com", "-c", "user.name=Dev", "commit", "-m", "Add the Biome fixture");
 
     // The tool's own numbers, from its JSON summary.
     const direct = spawnSync(
@@ -121,7 +123,11 @@ describe("README: Measure without Docker", () => {
     must(["goal", "audit", "g-biome-zero"]);
     approveGoal(requireProject(repo, { HOME: home }), "g-biome-zero", "human:docs@example.invalid");
     const measured = must((measure as string).slice(2).split(" ").slice(1));
-    expect(measured.stdout).toContain(`target m-biome-warnings: ${summary.warnings} warnings`);
+    // The README quotes this line as printed, including the direction and size at the end.
+    const gapLine = `target m-biome-warnings: ${summary.warnings} warnings; target <= 0 warnings; gap ${summary.warnings} (decrease, large)`;
+    expect(measured.stdout).toContain(gapLine);
+    expect(EN).toContain(gapLine);
+    expect(KO).toContain(gapLine);
     expect(measured.stderr).toContain("measured on the host without isolation");
   }, 90_000);
 
@@ -131,8 +137,28 @@ describe("README: Measure without Docker", () => {
       mkdirSync(dirname(join(repo, name)), { recursive: true });
       writeFileSync(join(repo, name), body);
     }
-    const script = spawnSync(process.execPath, ["scripts/count-biome-warnings.mjs"], { cwd: repo, encoding: "utf8" });
+    // A PATH holding only the node binary directory: no global Biome can be found, whatever the machine has.
+    const env = { PATH: dirname(process.execPath), HOME: makeTempDir("omf-home-") };
+    const script = spawnSync(process.execPath, ["scripts/count-biome-warnings.mjs"], {
+      cwd: repo,
+      encoding: "utf8",
+      env,
+    });
     expect(script.status).not.toBe(0);
     expect(script.stdout.trim()).toBe("");
+  }, 60_000);
+
+  it("fails with no value when biome exits non-zero, even though it still prints a summary", () => {
+    const repo = makeTempDir("omf-script-");
+    for (const [name, body] of files) {
+      mkdirSync(dirname(join(repo, name)), { recursive: true });
+      writeFileSync(join(repo, name), body);
+    }
+    writeFileSync(join(repo, "src/bad.js"), "debugger;\n");
+    symlinkSync(BIOME_BIN_DIR, join(repo, "node_modules"));
+    const script = spawnSync(process.execPath, ["scripts/count-biome-warnings.mjs"], { cwd: repo, encoding: "utf8" });
+    expect(script.status).toBe(1);
+    expect(script.stdout.trim()).toBe("");
+    expect(script.stderr).toContain("biome exited with");
   }, 60_000);
 });
