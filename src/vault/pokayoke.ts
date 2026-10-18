@@ -44,7 +44,7 @@ export interface PokaYokeScope {
 
 export interface ScanOptions {
   stateRoot: string;
-  /** Default 300_000 entries across the repository and every worktree. */
+  /** Default DEFAULT_MAX_SCAN_ENTRIES entries across the repository and every worktree. */
   maxEntries?: number;
   /** Default 1 MiB; a larger regular file is not read. */
   maxFileBytes?: number;
@@ -63,7 +63,13 @@ export interface ScanResult {
   canary_hits: CanaryHit[];
 }
 
-const DEFAULT_MAX_ENTRIES = 300_000;
+/**
+ * Entries (files, directories, links) the scan visits across the repository and every worktree before it gives up
+ * and reports `scan_incomplete`. Directories named in SKIP_NAMES count as one entry and are not descended into.
+ * One million covers a checkout with several hundred thousand untracked or ignored entries (build output,
+ * caches) while a runaway tree still stops the scan. Reaching the cap blocks; it never passes.
+ */
+export const DEFAULT_MAX_SCAN_ENTRIES = 1_000_000;
 const DEFAULT_MAX_FILE_BYTES = 1024 * 1024;
 
 /** Fixed dependency and cache directories, skipped at any depth. Nothing else is skipped. */
@@ -200,7 +206,7 @@ function scanRoot(
 function scanScope(scope: { repo: string | null; worktrees: readonly string[] }, options: ScanOptions): ScanResult {
   const limits: Limits = {
     stateRoot: options.stateRoot,
-    maxEntries: options.maxEntries ?? DEFAULT_MAX_ENTRIES,
+    maxEntries: options.maxEntries ?? DEFAULT_MAX_SCAN_ENTRIES,
     maxFileBytes: options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES,
     known: options.knownCanaries ?? new Set<string>(),
   };

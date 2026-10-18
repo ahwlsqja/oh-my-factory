@@ -1,10 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 import { resolveProject } from "../../src/core/paths.js";
 import { initProject } from "../../src/core/project.js";
 import {
+  DEFAULT_MAX_SCAN_ENTRIES,
   PokaYokeError,
   assertNoSealedInRepo,
   pokaYokeScopeFor,
@@ -34,6 +35,67 @@ interface Row {
   path: string;
 }
 const summary = (findings: readonly Row[]): string[] => findings.map((f) => `${f.where}:${f.kind}:${f.path}`).sort();
+
+describe("scanForSealed: large checkouts", () => {
+  /** 40 directories of 25 files, plus .gitignore and one extra file: 1 + 1 + 40 + 1000 = 1042 entries. */
+  function bigTree(): { repo: string; state: string; entries: number } {
+    const state = realDir("omf-state-");
+    const repo = realDir("omf-repo-");
+    put(repo, ".gitignore", "ignored-out/\n");
+    put(repo, "top.txt");
+    let entries = 2;
+    for (let d = 0; d < 40; d++) {
+      entries += 1;
+      for (let f = 0; f < 25; f++) {
+        put(repo, join(`d${String(d).padStart(2, "0")}`, `f${f}.txt`));
+        entries += 1;
+      }
+    }
+    return { repo, state, entries };
+  }
+
+  it("supports a checkout of up to one million entries by default", () => {
+    expect(DEFAULT_MAX_SCAN_ENTRIES).toBe(1_000_000);
+  });
+
+  it("completes when the entry count equals the cap and blocks one entry below it", () => {
+    const { repo, state, entries } = bigTree();
+    expect(scanForSealed({ repo, worktrees: [] }, { stateRoot: state, maxEntries: entries })).toEqual({
+      findings: [],
+      canary_hits: [],
+    });
+    const short = scanForSealed({ repo, worktrees: [] }, { stateRoot: state, maxEntries: entries - 1 });
+    expect(short.findings.map((f) => f.kind)).toEqual(["scan_incomplete"]);
+  });
+
+  it.each([
+    ["the first directory", "d00/new.txt"],
+    ["the middle", "d20/new.txt"],
+    ["the last directory", "d39/new.txt"],
+    ["a gitignored directory", "ignored-out/deep/log.txt"],
+  ])("still finds a canary in an ignored or untracked file in %s", (_label, rel) => {
+    const { repo, state, entries } = bigTree();
+    put(repo, rel, `leak ${canary()}\n`);
+    const result = scanForSealed({ repo, worktrees: [] }, { stateRoot: state, maxEntries: entries + 10 });
+    expect(summary(result.findings)).toEqual([`repo:canary:${rel.split("/").join(sep)}`]);
+  });
+
+  it("blocks, and never passes a canary by omission, when the cap runs out before the canary is reached", () => {
+    const { repo, state } = bigTree();
+    put(repo, "d39/new.txt", `leak ${canary()}\n`);
+    const result = scanForSealed({ repo, worktrees: [] }, { stateRoot: state, maxEntries: 100 });
+    expect(result.findings.map((f) => f.kind)).toContain("scan_incomplete");
+  });
+
+  it("shares one entry budget between the repository and its worktrees", () => {
+    const { repo, state, entries } = bigTree();
+    const wt = realDir("omf-wt-");
+    put(wt, "a.txt");
+    put(wt, "b.txt");
+    const result = scanForSealed({ repo, worktrees: [wt] }, { stateRoot: state, maxEntries: entries + 1 });
+    expect(result.findings.map((f) => f.kind)).toEqual(["scan_incomplete"]);
+  });
+});
 
 describe("scanForSealed: repository scope", () => {
   it("passes a clean tree", () => {
