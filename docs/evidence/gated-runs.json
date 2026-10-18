@@ -44,6 +44,17 @@
         "context": "colima-omf-m3f",
         "arch": "aarch64"
       }
+    },
+    {
+      "test": "G-implementer-boundary-real",
+      "result": "pass",
+      "at": "2026-10-18T16:45:51.896Z",
+      "omf_commit": "2caed5cccc29cbe984525a268265729379923e65",
+      "docker": {
+        "server_version": "29.2.1",
+        "context": "colima-omf-m3f",
+        "arch": "aarch64"
+      }
     }
   ]
 }
