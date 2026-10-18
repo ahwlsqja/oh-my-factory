@@ -54,6 +54,7 @@ a run directory are views of those events.
   - S5.4.implementer-container: the implementer container on a real daemon with a real model. [not enforced: S5.4.implementer-container]
   - S7.l2-label: the label "sealed (container)" on a real run. [not enforced: S7.l2-label]
   - S7.docker-client-trusted: the measurement trusts the `docker` client on PATH and the configured context, so a substituted client can make a stage measure L2. [not enforced: S7.docker-client-trusted]
+  - S5.3.author-measured-before-key: the author key reaches a container only after that container measured golden, on a real daemon with the real Codex CLI. [not enforced: S5.3.author-measured-before-key]
 
 ## Not implemented
 

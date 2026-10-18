@@ -7,7 +7,7 @@ Generated from `docs/requirements.json` by `node scripts/conformance-matrix.mjs 
 - **deferred**: the design states it and v0.1 does not implement it. It has no test, and the documents say `not implemented`.
 - **missing**: no test counts, or a mapped file is absent. CI fails.
 
-Totals: 24 covered, 4 unproven, 7 deferred, 0 missing.
+Totals: 26 covered, 5 unproven, 7 deferred, 0 missing.
 
 | Id | State | Last recorded | Tests | Claim |
 |---|---|---|---|---|
@@ -46,3 +46,6 @@ Totals: 24 covered, 4 unproven, 7 deferred, 0 missing.
 | `S5.3.same-vendor-refused` | covered | - | 2 offline | Author and implementer on the same vendor are refused with a reason that names both roles, and the [seal] same_vendor key is refused whatever its value, so no acknowledgement path exists. |
 | `S5.3.author-container-argv` | covered | - | 3 offline | The sealing author's container is made by the one reviewed argv builder: tmpfs-only /tmp, /in, /out and /agent, no bind mount or volume, a fixed environment, no secret at create time; a container that deviates from its golden is measured below L2 before it starts. |
 | `S5.3.role-bound-secrets` | covered | - | 1 offline | A vendor key reaches a container only as a name-only environment flag on an exec, and only the role it belongs to may carry it: the implementer the Anthropic key, the author the Codex key. Every other pairing is refused before a process starts or the value is read. |
+| `S5.3.author-one-shot-ephemeral` | covered | - | 2 offline | The Codex author runs as one ephemeral exec whose prompt arrives on a pipe; nothing about the invocation is interactive. |
+| `S5.3.author-measured-before-key` | unproven | - | 1 offline | The author key reaches a container only after that container measured golden; a container that does not measure golden never receives it. |
+| `S4.6.author-answer-closed` | covered | - | 1 offline | Only one string field of a closed answer envelope leaves the author container; a malformed answer or one holding the key is dropped, and a failed run leaves a closed code. |

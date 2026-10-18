@@ -6,9 +6,9 @@ without a test is labeled "not enforced" in the spec.
 ## Requirement states
 
 <!-- requirements:start -->
-Requirement states, generated from `docs/requirements.json` (24 covered, 4 unproven, 7 deferred, 0 missing). The full table is [the conformance matrix](../../docs/conformance-matrix.md).
+Requirement states, generated from `docs/requirements.json` (26 covered, 5 unproven, 7 deferred, 0 missing). The full table is [the conformance matrix](../../docs/conformance-matrix.md).
 
-- unproven: `F6.vault-host-only`, `S5.4.implementer-container`, `S7.l2-label`, `S7.docker-client-trusted`
+- unproven: `F6.vault-host-only`, `S5.4.implementer-container`, `S7.l2-label`, `S7.docker-client-trusted`, `S5.3.author-measured-before-key`
 - deferred: `F4.goal-closes-by-signature`, `F11.autonomy-dial`, `S7.l3-label`, `S11.1.plugin-dir-shells`, `S11.2.ship-only-pushes`, `S11.3.public-artifacts-in-worktree`, `S11.6.break-glass-events`
 - missing: none
 <!-- requirements:end -->
@@ -121,6 +121,7 @@ are hand-written.
 | `W-secret-role-bound.test.ts` | A vendor key reaches a container only as a name-only `--env NAME` on an exec, the value read by the docker client from its own environment for that one child, and only the role it belongs to may carry it (the implementer the Anthropic key, the author the Codex key); any other role and key pairing is refused before a process starts or the value is read. | spec §7 |
 | `W-author-no-interactive.test.ts` | The author is a one-shot ephemeral exec: `refuseInteractive` rejects any interactive shape of the argv, and no `docker exec` of the session allocates a terminal or attaches stdin except where input is piped. | spec §5.3, §7 |
 | `W-codex-argv-golden.test.ts` | The sealing author's Codex command is pinned byte for byte (one ephemeral `codex exec` with the user config ignored, a read-only sandbox, the closed answer schema and the prompt on stdin); a change to it is a reviewed change to what runs in the author container. | spec §5.3, §7 |
+| `W-author-measure-before-key.test.ts` | The author's key is handed to a container only after that container measured golden: for a container that is not golden or whose measurement fails, no call carried the key and the container is removed. | spec §5.3, §7 |
 
 The leak tests use `tests/helpers/reconciler-stub.mjs` in `leaky` mode and the planted strings in
 `tests/helpers/canary.ts`. A change to what the goal loop discloses is a change to E2: update the
