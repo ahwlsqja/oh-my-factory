@@ -1,3 +1,5 @@
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { acquireLock, releaseLock } from "../../src/core/lock.js";
 import { approveGoal } from "../../src/goal/approve.js";
@@ -6,6 +8,7 @@ import { tickLockFile } from "../../src/goal/tick-lock.js";
 import { omf } from "../helpers/cli.js";
 import { setupGoal } from "../helpers/goal.js";
 import { seedRepairable, setupTick } from "../helpers/tick.js";
+import { commitAll } from "../helpers/tmp.js";
 
 const G = "g-fast";
 const TICK = "t-20261012T000000Z-0a1b";
@@ -70,6 +73,62 @@ describe("omf goal status", () => {
     const text = omf(["goal", "status", "g-fast"], fx.repo, fx.home);
     expect(text.code).toBe(0);
     expect(text.stdout).toContain("malformed 1, repairable 1");
+  });
+
+  it("says a draft goal is not approved and names the next step, without changing the JSON or the ledger", () => {
+    const fx = setupGoal();
+    const before = fx.ledger.verify();
+    const text = omf(["goal", "status", G], fx.repo, fx.home);
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain(`goal ${G}: not approved yet, no work has started (audit: draft; 0 ticks)`);
+    expect(text.stdout).not.toContain(": running");
+    expect(text.stdout).toContain(`omf goal approve ${G}`);
+    const json = JSON.parse(omf(["goal", "status", G, "--json"], fx.repo, fx.home).stdout);
+    expect(json).toMatchObject({ state: "running", audit_state: "draft", ticks: 0, next_steps: [] });
+    expect(fx.ledger.verify()).toEqual(before);
+  });
+
+  it("says an approved goal with no tick yet is approved, not running", () => {
+    const fx = setupGoal();
+    approveGoal(fx.location, G, "human:dev");
+    const before = fx.ledger.verify();
+    const text = omf(["goal", "status", G], fx.repo, fx.home);
+    expect(text.stdout).toContain(`goal ${G}: approved, no tick has run yet (audit: approved; 0 ticks)`);
+    expect(text.stdout).not.toContain("next steps");
+    expect(fx.ledger.verify()).toEqual(before);
+  });
+
+  it("says reapproval is required after goal.md changes and points at audit and approve", () => {
+    const fx = setupGoal();
+    approveGoal(fx.location, G, "human:dev");
+    writeFileSync(fx.goalFile, readFileSync(fx.goalFile, "utf8").replace("value: 250", "value: 400"));
+    const before = fx.ledger.verify();
+    const text = omf(["goal", "status", G], fx.repo, fx.home);
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain(`goal ${G}: reapproval required`);
+    expect(text.stdout).toContain("audit: needs re-approval");
+    expect(text.stdout).toContain(`omf goal approve ${G}`);
+    expect(JSON.parse(omf(["goal", "status", G, "--json"], fx.repo, fx.home).stdout).state).toBe("running");
+    expect(fx.ledger.verify()).toEqual(before);
+  });
+
+  it("says reapproval is required after a watched metric file changes", () => {
+    const fx = setupGoal();
+    approveGoal(fx.location, G, "human:dev");
+    writeFileSync(join(fx.repo, "bench", "p95.sh"), "echo 100\n");
+    commitAll(fx.repo, "faster benchmark");
+    const text = omf(["goal", "status", G], fx.repo, fx.home);
+    expect(text.stdout).toContain(`goal ${G}: reapproval required`);
+    expect(text.stdout).toContain(`omf goal approve ${G}`);
+  });
+
+  it("keeps a blocked goal's own name even when the audit also needs reapproval", () => {
+    const fx = setupGoal();
+    approveGoal(fx.location, G, "human:dev");
+    escalate(fx.ledger, G, TICK, "no_progress", null);
+    writeFileSync(fx.goalFile, readFileSync(fx.goalFile, "utf8").replace("value: 250", "value: 400"));
+    const text = omf(["goal", "status", G], fx.repo, fx.home);
+    expect(text.stdout).toContain(`goal ${G}: blocked_on_user (audit: needs re-approval`);
   });
 
   it("exits 2 for an unknown goal", () => {

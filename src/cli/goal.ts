@@ -184,10 +184,49 @@ function budgetLine(kind: string, state: BudgetState | null): string {
     : `${kind}: ${state.remaining} of ${state.declared + state.raised} left`;
 }
 
+/**
+ * The headline of `omf goal status`. The run-state fold says "running" for any goal that is not stopped, even before
+ * J1 has approved it, so while the run state is "running" the audit state decides the words. Blocked, failed and
+ * final states keep their own names. Only this text changes; the JSON keeps the raw run state and audit state.
+ */
+function headline(report: GoalStatusReport): string {
+  if (report.state !== "running") return report.state;
+  switch (report.audit_state) {
+    case "draft":
+      return "not approved yet, no work has started";
+    case "needs_reapproval":
+      return "reapproval required, no new work until you approve again";
+    case "tampered":
+      return "stopped, a lock does not match the ledger";
+    case "invalid":
+      return "not runnable, the goal file is invalid";
+    default:
+      return report.ticks === 0 ? "approved, no tick has run yet" : "running";
+  }
+}
+
+/** What to do next when the audit, not the run state, is what holds the goal back (text only). */
+function auditNextSteps(report: GoalStatusReport): string[] {
+  if (report.state !== "running") return [];
+  const id = report.goal_id;
+  switch (report.audit_state) {
+    case "draft":
+      return [`omf goal audit ${id} (then omf goal approve ${id} when it says ready for J1)`];
+    case "needs_reapproval":
+      return [`omf goal audit ${id} (shows what changed), then omf goal approve ${id}`];
+    case "tampered":
+      return [`omf goal approve ${id} (repairs the lock after you review it)`];
+    case "invalid":
+      return [`omf goal audit ${id} (lists the problems to fix in goal.md)`];
+    default:
+      return [];
+  }
+}
+
 function printStatus(report: GoalStatusReport): void {
   const audit = report.audit_state.replace("needs_reapproval", "needs re-approval");
   console.log(
-    `goal ${report.goal_id}: ${report.state} (audit: ${audit}; ${report.ticks} ${report.ticks === 1 ? "tick" : "ticks"})`,
+    `goal ${report.goal_id}: ${headline(report)} (audit: ${audit}; ${report.ticks} ${report.ticks === 1 ? "tick" : "ticks"})`,
   );
   if (report.open_escalation !== null) {
     console.log(
@@ -202,7 +241,7 @@ function printStatus(report: GoalStatusReport): void {
       .map(([name, count]) => `${name.replace(/_/g, " ")} ${count}`)
       .join(", ")}`,
   );
-  printList("next steps", report.next_steps);
+  printList("next steps", [...auditNextSteps(report), ...report.next_steps]);
 }
 
 /** What `omf goal tick` may print or emit as JSON: the TickResult without the model's titles (D29). */
