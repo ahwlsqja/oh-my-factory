@@ -68,6 +68,21 @@ describe("README: Measure without Docker", () => {
     ]) {
       expect(EN.toLowerCase(), phrase).toContain(phrase.toLowerCase());
     }
+    // The Korean twin carries the same claims: the contract line, the failure handling and the missing isolation.
+    for (const phrase of [
+      "last non-empty line",
+      "warnings",
+      "infos",
+      "no isolation",
+      "package.json",
+      "재승인",
+      "exits non-zero",
+      "Biome 가 0 이 아닌 코드로",
+      "값을 보고하지 않습니다",
+      "커밋하지 않은",
+    ]) {
+      expect(KO, phrase).toContain(phrase);
+    }
   });
 
   it("runs end to end without Docker and measures the warnings, not the infos", () => {
@@ -137,8 +152,11 @@ describe("README: Measure without Docker", () => {
       mkdirSync(dirname(join(repo, name)), { recursive: true });
       writeFileSync(join(repo, name), body);
     }
-    // A PATH holding only the node binary directory: no global Biome can be found, whatever the machine has.
-    const env = { PATH: dirname(process.execPath), HOME: makeTempDir("omf-home-") };
+    // A PATH that is a fresh directory holding only a symlink to the node binary: no Biome can be found there,
+    // even if the directory node was installed in also holds a global Biome.
+    const bin = makeTempDir("omf-bin-");
+    symlinkSync(process.execPath, join(bin, "node"));
+    const env = { PATH: bin, HOME: makeTempDir("omf-home-") };
     const script = spawnSync(process.execPath, ["scripts/count-biome-warnings.mjs"], {
       cwd: repo,
       encoding: "utf8",
