@@ -312,6 +312,10 @@ describe("auditGoal observation against wall time", () => {
     expect(auditGoal(fx.location, "g-fast", at(173)).wall_time_exceeded).toBe(true);
   });
 
+  it("prints the minimum observation through the same duration formatter", () => {
+    expect(observationWarning("10080m", 1000, "1000m")).toContain("the minimum observation 7d,");
+  });
+
   it("stays quiet when a duration cannot be read", () => {
     expect(observationWarning("soon", 1000, "1s")).toBeNull();
   });

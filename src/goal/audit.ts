@@ -58,7 +58,7 @@ export function observationWarning(minObservation: string, wallLimitMs: number, 
   }
   if (wallLimitMs > observationMs) return null;
   return (
-    `wall time ${wallLabel} is not longer than the minimum observation ${minObservation}, so the goal cannot reach ` +
+    `wall time ${wallLabel} is not longer than the minimum observation ${formatDuration(observationMs)}, so the goal cannot reach ` +
     "success before wall time runs out; set a longer wall_time in goal.md before approving, or later raise it " +
     "with omf budget raise <goal_id> wall_time <duration> and continue with omf goal resume <goal_id>"
   );
