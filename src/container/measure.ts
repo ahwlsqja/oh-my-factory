@@ -110,13 +110,29 @@ export function judgeObserved(
   return evaluateStage(stage, { facts, checks }, golden, at);
 }
 
-export interface MeasureDeps {
+interface MeasureBase {
   runtime: ContainerRuntime;
+  now: () => Date;
+}
+
+/** The default: the judgment is written to the ledger and the item's `isolation.json` as soon as it is made. */
+export interface RecordingMeasureDeps extends MeasureBase {
   sink: RecordSink;
   scope: RunScope;
   itemDir: string;
-  now: () => Date;
 }
+
+/**
+ * The judgment of a golden container goes to `defer` instead of the ledger. The sealing author is measured before it may
+ * receive its key, but its measurement is bound to the seal it produces, and that seal does not exist yet; the caller records it
+ * once it does. A container that is not golden is never handed over: it is not recorded either (there is no seal to bind it to),
+ * and `NotGoldenError` carries the violation codes for the caller to report.
+ */
+export interface DeferredMeasureDeps extends MeasureBase {
+  defer: (measurement: StageMeasurement) => void;
+}
+
+export type MeasureDeps = RecordingMeasureDeps | DeferredMeasureDeps;
 
 export interface MeasuredContainer {
   handle: ContainerHandle;
@@ -130,6 +146,9 @@ export interface MeasuredContainer {
  * entrypoint nor the probe's `sh` ran. A probe-only violation records L1, removes and throws. A parse or probe failure removes
  * the container and records nothing. Only a golden container is returned, still running, for the caller to use and remove. An
  * error from `create` (no context, a remote endpoint) propagates as the runtime raised it: no container exists yet.
+ *
+ * With `defer` (see `DeferredMeasureDeps`) nothing is recorded here: a golden container's full judgment goes to the callback,
+ * and an L1 outcome only throws. A callback that throws removes the container like any other failure.
  */
 export async function createMeasured(
   deps: MeasureDeps,
@@ -150,7 +169,7 @@ export async function createMeasured(
     }
     const pre = judgeFacts(stage, facts, golden, deps.now());
     if (pre.violations.length > 0) {
-      recordStageMeasurement(deps.sink, deps.scope, deps.itemDir, pre);
+      if (!("defer" in deps)) recordStageMeasurement(deps.sink, deps.scope, deps.itemDir, pre);
       throw new NotGoldenError(pre.violations);
     }
     try {
@@ -164,7 +183,11 @@ export async function createMeasured(
       maxOutputBytes: PROBE_MAX_BYTES,
     });
     const measurement = judgeObserved(stage, facts, probeChecks(answer), golden, deps.now());
-    recordStageMeasurement(deps.sink, deps.scope, deps.itemDir, measurement);
+    if ("defer" in deps) {
+      if (measurement.violations.length === 0) deps.defer(measurement);
+    } else {
+      recordStageMeasurement(deps.sink, deps.scope, deps.itemDir, measurement);
+    }
     if (measurement.violations.length > 0) throw new NotGoldenError(measurement.violations);
     keep = true;
     return { handle, measurement };
