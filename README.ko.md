@@ -150,6 +150,7 @@ OMF 는 루프 두 개를 돌립니다.
 | `omf decide defer <work-id> <decision-id> --file <deferral.json>` | 서명된 기본값과 만료일을 두고 결정을 미룹니다. 대화형 터미널이 필요합니다. |
 | `omf decide lint <work-id> [--json] [--render]` | 결정을 검사하고 GATE-1 을 계산합니다. 종료 코드 0 정상, 1 문제, 3 사람을 기다림(J2, `needs-human.json` 도 기록). `--render` 는 `spec.md` 를 다시 씁니다. |
 | `omf decide show <work-id> [--json]` | 상태별 결정, GATE-1 판정, `spec.md` 가 원장과 같은지 출력합니다. 아무것도 쓰지 않습니다. |
+| `omf seal <work-id> [--json]` | GATE-1 을 통과한 작업 항목의 봉인 작성자를 측정된 컨테이너에서 실행하고, 봉인된 시나리오를 GATE-2 에서 확인합니다. `[author]` 이미지, `judge.docker_context`, 이 명령 하나의 환경에 `OMF_AUTHOR_API_KEY` 가 필요합니다. 이미 최신이고 작성자 격리가 측정된 봉인에서는 아무것도 하지 않습니다. 종료 코드 `0` 봉인됨(또는 이미 봉인됨), `1` 작성자 실패 또는 격리 미측정, `2` 거부되었거나 실행할 수 없음, `3` 사람을 기다림(GATE-1 열림, J2). 실제 모델이나 실제 데몬으로는 아직 실행하지 않았습니다. |
 
 종료 코드: `0` 정상, `1` 확인이 필요함(문제 발견, 거절된 확인, 멈췄거나 승인을 기다리는 틱), `2` 명령을 실행할 수 없음, `3` 사람을 기다림(`omf decide lint`: 열린 설계 결정).
 

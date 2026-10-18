@@ -506,6 +506,49 @@
           "proves": "behavior"
         }
       ]
+    },
+    {
+      "id": "S5.3.seal-refuses-out-of-order",
+      "source": "spec §5.3",
+      "real_world": false,
+      "surfaces": ["README.md"],
+      "claim": "omf seal refuses before it spends anything when GATE-1 is not passing, the item is unknown, claimed by a run or started without an author-measured seal, and names the missing gate.",
+      "tests": [
+        {
+          "path": "tests/cli/w-assembly.test.ts",
+          "proves": "behavior"
+        },
+        {
+          "path": "tests/cli/seal-run-report.test.ts",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.3.seal-idempotent-when-measured",
+      "source": "spec §5.3",
+      "real_world": false,
+      "surfaces": ["README.md"],
+      "claim": "omf seal on a seal that is current and author-measured does nothing: exit 0, no key, no docker call, no ledger event.",
+      "tests": [
+        {
+          "path": "tests/cli/seal-run-report.test.ts",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.0.verbs-thin-adapters",
+      "source": "spec §5.0",
+      "real_world": false,
+      "surfaces": ["README.md"],
+      "claim": "The W verbs are thin adapters registered through one function; main.ts holds one import and one call.",
+      "tests": [
+        {
+          "path": "tests/enforcement/W-main-ts-minimal.test.ts",
+          "proves": "behavior"
+        }
+      ]
     }
   ]
 }

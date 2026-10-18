@@ -6,7 +6,7 @@ without a test is labeled "not enforced" in the spec.
 ## Requirement states
 
 <!-- requirements:start -->
-Requirement states, generated from `docs/requirements.json` (28 covered, 5 unproven, 7 deferred, 0 missing). The full table is [the conformance matrix](../../docs/conformance-matrix.md).
+Requirement states, generated from `docs/requirements.json` (31 covered, 5 unproven, 7 deferred, 0 missing). The full table is [the conformance matrix](../../docs/conformance-matrix.md).
 
 - unproven: `F6.vault-host-only`, `S5.4.implementer-container`, `S7.l2-label`, `S7.docker-client-trusted`, `S5.3.author-measured-before-key`
 - deferred: `F4.goal-closes-by-signature`, `F11.autonomy-dial`, `S7.l3-label`, `S11.1.plugin-dir-shells`, `S11.2.ship-only-pushes`, `S11.3.public-artifacts-in-worktree`, `S11.6.break-glass-events`
@@ -123,6 +123,7 @@ are hand-written.
 | `W-codex-argv-golden.test.ts` | The sealing author's Codex command is pinned byte for byte (one ephemeral `codex exec` with the user config ignored, a read-only sandbox, the closed answer schema and the prompt on stdin); a change to it is a reviewed change to what runs in the author container. | spec §5.3, §7 |
 | `W-author-measure-before-key.test.ts` | The author's key is handed to a container only after that container measured golden: for a container that is not golden or whose measurement fails, no call carried the key and the container is removed. | spec §5.3, §7 |
 | `W-author-measurement-bound-to-seal.test.ts` | The author container's measurement counts only for the seal it was made for: it is recorded inside the seal lock, bound to that seal's ledger position and set digest, written for no seal that is no longer the latest or never completed, and a reseal moves the binding so the older measurement never attests the new seal. | spec §5.3 |
+| `W-main-ts-minimal.test.ts` | `src/cli/main.ts` stays minimal while the read-only `omf ui` work edits it in parallel: it holds exactly one import and one call of `registerWCommands`, names none of the W verbs and imports none of their modules, and each verb is registered in its own file. | spec §5.0 |
 
 The leak tests use `tests/helpers/reconciler-stub.mjs` in `leaky` mode and the planted strings in
 `tests/helpers/canary.ts`. A change to what the goal loop discloses is a change to E2: update the

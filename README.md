@@ -156,6 +156,7 @@ or **designed** and not built yet.
 | `omf decide defer <work-id> <decision-id> --file <deferral.json>` | Defers a decision with a signed default and an expiry date, in an interactive terminal. |
 | `omf decide lint <work-id> [--json] [--render]` | Checks the decisions and evaluates GATE-1. Exit 0 clean, 1 problems, 3 blocked on a person (J2), which also writes `needs-human.json`. `--render` rewrites `spec.md`. |
 | `omf decide show <work-id> [--json]` | Prints the decisions by status, the GATE-1 verdict and whether `spec.md` matches the ledger. Writes nothing. |
+| `omf seal <work-id> [--json]` | Runs the sealing author for a work item whose GATE-1 passes, in a measured container, and checks the sealed scenarios at GATE-2. It needs an `[author]` image, `judge.docker_context` and `OMF_AUTHOR_API_KEY` in the environment of this one command. Running it again on a seal that is current and author-measured does nothing. Exit `0` sealed or already sealed, `1` author failure or an unmeasured author, `2` refused or could not run, `3` blocked on a person (GATE-1 open, J2). Not yet run against a real model or a real daemon. |
 
 Exit codes: `0` ok, `1` needs attention (problems found, a declined confirmation, a tick that stopped or is waiting for your approval), `2` the command could not run, `3` blocked on a person (`omf decide lint`: open design decisions).
 

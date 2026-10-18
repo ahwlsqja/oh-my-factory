@@ -10,6 +10,7 @@ import { exitFor } from "./exit.js";
 import { registerDecideCommands } from "./decide.js";
 import { registerDecideSigningCommands } from "./decide-sign.js";
 import { registerGoalCommands } from "./goal.js";
+import { registerWCommands } from "./w-commands.js";
 import { registerBudgetCommands, registerWorkCommands } from "./work.js";
 import { NOT_INITIALIZED_MESSAGE, initProject, readProjectStatus } from "../core/project.js";
 
@@ -152,6 +153,7 @@ registerWorkCommands(program);
 registerBudgetCommands(program);
 registerDecideCommands(program);
 registerDecideSigningCommands(program);
+registerWCommands(program);
 
 const CORRUPT_MESSAGE = /^ledger corrupt at seq (\d+): /;
 
