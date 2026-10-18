@@ -129,6 +129,7 @@ are hand-written.
 | `W-cli-usage-drift.test.ts` | Every leaf command's `--help` text is reproduced byte for byte in `docs/cli-usage.md` and has a README row; a command without a block, or a block that differs, fails the build and names the verb, and the check script exits 1 when the file is missing. | spec §13 |
 | `W-no-fake-switch.test.ts` | The offline acceptance ends `unmeasured` because of the fixture it plants, never because of a switch: no environment name, config key or command flag can stand in for the container probe, and the detector is shown to catch a switch-shaped name. | spec §7 |
 | `W-cli-fake-docker-unmeasured.test.ts` | The shipped CLI walked against a fake docker whose author was never measured warns before it spends, ends blocked at GATE-3 with a J7 handoff and exit 2, leaves the run-level isolation label `unmeasured` and prints no L2 or sealed claim, reports the same evidence byte for byte twice, and publishes only the candidate branch while the key and every container stay out of the user's repository. | spec §7 |
+| `W-skeleton-seam.test.ts` | The seam test names itself a seam, appends the author measurement itself and so may show the line's logic but is never read as sealing evidence: the conformance matrix cannot count it, and it cannot assert `merge_recommended` (a success is capped at `human_needed`). | spec §5.0 |
 
 The leak tests use `tests/helpers/reconciler-stub.mjs` in `leaky` mode and the planted strings in
 `tests/helpers/canary.ts`. A change to what the goal loop discloses is a change to E2: update the
