@@ -138,3 +138,5 @@ function lineOrder(input: {
       ];
   return { ok: true, item, warnings };
 }
+
+export { assembleLine, exitForLine, judgeLine, type LineAssembly } from "./w-line.js";
