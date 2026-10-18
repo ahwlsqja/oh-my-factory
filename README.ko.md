@@ -233,9 +233,11 @@ warning: measured on the host without isolation (--runner host)
 ```
 
 생성된 `goal.md` 는 front matter 안의 `#` 메모로 각 필드를 설명합니다. `## Approach` 아래에는 채울 소제목 셋
-(`### Why`, `### Constraints`, `### Done when`)이 있습니다. 이 섹션과 `objective` 만 모델에 보이므로, 숫자나 지표 id 없이
+(`### Why`, `### Constraints`, `### Done when`)이 있습니다. 이 섹션과 `objective` 만 모델에 보이므로("목표 루프 돌리기" 참고), 숫자나 지표 id 없이
 말로 쓰세요. `omf goal audit` 은 아직 바꾸지 않은 템플릿 문구(예: 자리표시자 지표 id `m-replace-me`)도 나열합니다.
 이 목록은 안내일 뿐 감사 결과를 바꾸지 않습니다.
+같은 목록이 `omf goal audit --json` 의 `placeholders` 필드입니다.
+템플릿의 `#` 메모는 OMF 기본값이라 그대로 둬도 되는 값(예산)과 직접 정해야 하는 값(목표값과 연산자, `min_observation`, `decision_rule`)도 구분해 둡니다.
 
 재승인 화면은 먼저 왜 필요한지 보여 줍니다. 잠금 문제, 체제 변경, 바뀐 감시 경로의 diff 입니다. 읽는 동안
 목표나 지표가 바뀌면 아무것도 승인되지 않습니다. 재승인은 예산을 바꾸지 않습니다. `goal.md` 의 라운드 수나

@@ -33,6 +33,27 @@ describe("goal.md", () => {
     expect(text).toMatch(/^\s*#.*Placeholder/m);
   });
 
+  it("labels each field as an OMF default the author may keep or a decision the author must make", () => {
+    const lines = goalTemplate("g-a").split("\n");
+    // The contiguous # note lines directly above the first line that starts with `key`.
+    const notesAbove = (key: string): string => {
+      const at = lines.findIndex((line) => line.trimStart().startsWith(`${key}:`));
+      expect(at, `${key} is in the template`).toBeGreaterThan(0);
+      const notes: string[] = [];
+      for (let i = at - 1; i >= 0 && (lines[i] ?? "").trimStart().startsWith("#"); i--) notes.unshift(lines[i] ?? "");
+      return notes.join("\n");
+    };
+    for (const key of ["value", "min_observation", "decision_rule"]) {
+      expect(notesAbove(key), key).toMatch(/Your decision/);
+      expect(notesAbove(key), key).not.toMatch(/OMF defaults you may keep/);
+    }
+    // The budget values share one note on the block, and operator sits with value's note.
+    expect(notesAbove("budget")).toMatch(/OMF defaults you may keep: the three budget values/);
+    expect(notesAbove("value")).toMatch(/operator/);
+    // Comments only: the parsed front matter has no extra keys, so the hash input is unchanged.
+    expect(Object.keys(parseGoal(goalTemplate("g-a")).front)).not.toContain("Your decision");
+  });
+
   it("lists every placeholder a fresh goal still has, and none once they are replaced", () => {
     const fresh = placeholdersIn(parseGoal(goalTemplate("g-a")));
     expect(fresh).toHaveLength(6);

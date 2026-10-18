@@ -140,6 +140,7 @@ target:
   # You then define how it is measured with omf metric propose.
   metric_id: ${PLACEHOLDER_METRIC_ID}
   operator: "<="
+  # Your decision, not an OMF default: set the operator and the number you want to reach.
   # Placeholder: 0 is only a default. Set the number you want to reach.
   value: 0
   # Placeholder: must match the unit you give omf metric propose (for example ms, warnings, tests).
@@ -150,11 +151,13 @@ lagging: [${PLACEHOLDER_METRIC_ID}]
 link_hypothesis: "${PLACEHOLDER_LINK_HYPOTHESIS}"
 guardrails: []
 prereg:
-  # How long to keep observing before the goal can be judged (for example 7d).
+  # Your decision: how long to keep observing before the goal can be judged (for example 7d).
   min_observation: 7d
+  # Your decision: the rule that says the goal is reached; write it for your own goal.
   decision_rule: "target met for 2 consecutive measurements and no guardrail breach"
   # metrics_judged: how many metrics the decision rule judges (1 is right for a single target).
   metrics_judged: 1
+# OMF defaults you may keep: the three budget values below are safe starting limits.
 budget:
   rounds: 10
   wall_time: 72h
