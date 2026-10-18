@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { authorSessionCompletedEvent } from "../../src/author/events.js";
 import {
   auditCompletedEvent,
   gate3EvaluatedEvent,
@@ -13,6 +14,7 @@ import {
 } from "../../src/implementer/events.js";
 import { judgeRoundEvent } from "../../src/judge/events.js";
 import { HEAD_SHA } from "../helpers/audit-diff-fixture.js";
+import { AUTHOR_FACTS } from "../helpers/author-events.js";
 import { cleanAudit, GREEN_LINE, gateRunOf, measurement } from "../helpers/gate3-parts.js";
 import { CANDIDATE_FACTS, SESSION_FACTS } from "../helpers/implementer-events.js";
 import { setupW } from "../helpers/w-verbs-fixture.js";
@@ -78,6 +80,18 @@ describe("gate, audit and isolation events do not touch the W verifier", () => {
       for (const event of events) fx.ledger.append({ ...event, actor });
       expect(fx.ledger.verify()).toMatchObject({ ok: true, count: fx.events().length });
       expect(fx.events().filter((event) => event.type.startsWith("implementer."))).toHaveLength(4);
+      expect({ verdict: fx.verdict(), verified: fx.verified() }).toEqual(before);
+    },
+  );
+
+  it.each(["omf", "human:dev"])(
+    "appending author.session_completed as %s changes no verdict and no verified item",
+    (actor) => {
+      const fx = setupW();
+      const before = { verdict: fx.verdict(), verified: fx.verified() };
+      fx.ledger.append({ ...authorSessionCompletedEvent(fx.scope, AUTHOR_FACTS), actor });
+      expect(fx.ledger.verify()).toMatchObject({ ok: true, count: fx.events().length });
+      expect(fx.events().filter((event) => event.type === "author.session_completed")).toHaveLength(1);
       expect({ verdict: fx.verdict(), verified: fx.verified() }).toEqual(before);
     },
   );
