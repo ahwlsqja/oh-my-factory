@@ -208,7 +208,7 @@ initialized ~/.omf/projects/3186047891f1f0a0
 
 $ omf goal new g-demo
 created ~/.omf/projects/3186047891f1f0a0/goals/g-demo/goal.md
-edit it, propose its metrics with omf metric propose, then run omf goal audit g-demo
+edit it (the comments in the file explain each field), propose its metrics with omf metric propose, then run omf goal audit g-demo
 
 $ # edit goal.md: target m-demo <= 5 ms, lagging: [m-demo]
 $ omf metric propose m-demo --unit ms -- sh -c 'echo 7'
@@ -237,6 +237,12 @@ target m-demo: 7 ms; target <= 5 ms; gap 2 (decrease, medium)
 report: ~/.omf/projects/3186047891f1f0a0/goals/g-demo/reports/2026-10-12T06-27-24-995Z-gap.json
 warning: measured on the host without isolation (--runner host)
 ```
+
+The generated `goal.md` explains each field in `#` notes inside the front matter. Under `## Approach` it has three
+subsections to fill in: `### Why`, `### Constraints` and `### Done when`. That section and `objective` are the only
+text a model sees (see "Run the goal loop"), so write them in words, without numbers or metric ids.
+`omf goal audit` also lists any template text you have not replaced yet (for example the placeholder metric id
+`m-replace-me`); this list is advice and does not change the audit result.
 
 Re-approval first shows why it is needed: lock problems, the regime changes, and the diff of any changed
 watched path. If the goal or a metric changes while you read it, nothing is approved. Re-approval never changes

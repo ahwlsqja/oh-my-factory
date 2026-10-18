@@ -7,6 +7,7 @@ import {
   createGoal,
   goalTemplate,
   parseGoal,
+  placeholdersIn,
   readGoal,
   referencedMetrics,
   semanticHash,
@@ -19,6 +20,30 @@ describe("goal.md", () => {
     expect(doc.front.goal_id).toBe("g-fast-search");
     expect(doc.front.target).toEqual({ metric_id: "m-replace-me", operator: "<=", value: 0, unit: "ms" });
     expect(doc.body).toContain("## Approach");
+  });
+
+  it("guides the author through Why, Constraints and Done when under Approach, and explains the fields", () => {
+    const text = goalTemplate("g-fast-search");
+    const body = parseGoal(text).body;
+    expect(body).toMatch(/^## Approach\n/);
+    for (const heading of ["### Why", "### Constraints", "### Done when"]) expect(body).toContain(heading);
+    for (const word of ["mode", "kind", "state_source", "metrics_judged", "unit", "leading"]) {
+      expect(text).toMatch(new RegExp(`^\\s*#.*${word}`, "m"));
+    }
+    expect(text).toMatch(/^\s*#.*Placeholder/m);
+  });
+
+  it("lists every placeholder a fresh goal still has, and none once they are replaced", () => {
+    const fresh = placeholdersIn(parseGoal(goalTemplate("g-a")));
+    expect(fresh).toHaveLength(5);
+    expect(fresh[0]).toMatch(/^metric id m-replace-me is a placeholder/);
+    const edited = goalTemplate("g-a")
+      .replace(/m-replace-me/g, "m-warnings")
+      .replace("Say what this goal is in a few words", "Fewer lint warnings")
+      .replace("The outcome you want, in plain words", "Keep the code base tidy")
+      .replace("Why moving the leading metrics should move the lagging ones", "Warnings hide real problems")
+      .replace(/Replace this line/g, "Write");
+    expect(placeholdersIn(parseGoal(edited))).toEqual([]);
   });
 
   it("rejects a file without front matter, invalid YAML, or a schema violation", () => {

@@ -5,7 +5,14 @@ import { canonicalize, sha256Hex } from "../core/canonical-json.js";
 import { BandsError, bandsLockInfo } from "./bands.js";
 import { staleReason } from "./stale-mark.js";
 import { wallTimeLimitMs } from "./wall-time.js";
-import { type GoalFront, GoalFileError, readGoal, referencedMetrics, semanticHash } from "./goal-file.js";
+import {
+  type GoalFront,
+  GoalFileError,
+  placeholdersIn,
+  readGoal,
+  referencedMetrics,
+  semanticHash,
+} from "./goal-file.js";
 import { type GoalApproval, type GoalLock, GoalLockError, latestApproval, readGoalLock } from "./goal-lock.js";
 import { changedPathsSince, matchWatched } from "./git.js";
 import {
@@ -34,6 +41,8 @@ export interface AuditReport {
   regime_changes: string[];
   /** The watched paths behind the "watched path changed" entries, for showing the diff. */
   watched_paths_changed: string[];
+  /** Template text still in goal.md, each with what to replace. Advisory: it never changes the state or the exit code. */
+  placeholders: string[];
   approval: GoalApproval | null;
   /** The locked goal and metrics, present only when every lock verifies. */
   locked: { goal: GoalLock; metrics: MetricLock[] } | null;
@@ -212,6 +221,7 @@ export function auditGoal(location: ProjectLocation, goalId: string, now: Date =
     problems: [],
     regime_changes: [],
     watched_paths_changed: [],
+    placeholders: [],
     approval: null,
     locked: null,
     budget: null,
@@ -220,7 +230,9 @@ export function auditGoal(location: ProjectLocation, goalId: string, now: Date =
 
   let front: GoalFront;
   try {
-    front = readGoal(location.dir, goalId).front;
+    const doc = readGoal(location.dir, goalId);
+    front = doc.front;
+    report.placeholders = placeholdersIn(doc);
   } catch (err) {
     if (!(err instanceof GoalFileError)) throw err;
     report.problems.push(err.message);

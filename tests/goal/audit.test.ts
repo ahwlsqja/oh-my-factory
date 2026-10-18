@@ -2,6 +2,7 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { auditGoal } from "../../src/goal/audit.js";
+import { goalTemplate } from "../../src/goal/goal-file.js";
 import { goalLockFile, lockGoal } from "../../src/goal/goal-lock.js";
 import { lockFile, proposeMetric } from "../../src/goal/metrics.js";
 import { raiseWallTime } from "../../src/goal/wall-time.js";
@@ -13,6 +14,16 @@ describe("auditGoal", () => {
     const report = auditGoal(fx.location, "g-fast");
     expect(report.state).toBe("draft");
     expect(report.problems).toEqual(["metric m-unknown has no proposal; run omf metric propose m-unknown"]);
+  });
+
+  it("lists template placeholders apart from the problems, and keeps the existing check", () => {
+    const fx = setupGoal();
+    writeFileSync(fx.goalFile, goalTemplate("g-fast"));
+    const report = auditGoal(fx.location, "g-fast");
+    expect(report.state).toBe("draft");
+    expect(report.problems).toEqual(["metric m-replace-me has no proposal; run omf metric propose m-replace-me"]);
+    expect(report.placeholders[0]).toMatch(/^metric id m-replace-me is a placeholder/);
+    expect(report.placeholders.length).toBeGreaterThan(1);
   });
 
   it("reports a draft that is ready for J1", () => {
