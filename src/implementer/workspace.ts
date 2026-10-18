@@ -83,10 +83,10 @@ export const KILL_ALL_ARGV: readonly string[] = [
     '    p=${d#/proc/}; [ "$p" = 1 ] && continue; [ "$p" = "$$" ] && continue',
     '    st=""; while read -r k v _; do [ "$k" = "State:" ] && st=$v; done < "$d/status" 2>/dev/null',
     '    [ -n "$st" ] && [ "$st" != Z ] && left=1',
-    "  done;",
+    "  done",
     "  [ $left -eq 0 ] && exit 0",
     "  n=$((n+1)); kill -9 -1 2>/dev/null; sleep 0.1 2>/dev/null || sleep 1",
-    "done;",
+    "done",
     "exit 1",
   ].join("\n"),
 ];
