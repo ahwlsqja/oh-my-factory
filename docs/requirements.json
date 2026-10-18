@@ -279,6 +279,14 @@
         { "path": "tests/enforcement/W-seal-no-forbidden-mounts.test.ts", "proves": "behavior" },
         { "path": "tests/container/author-role.test.ts", "proves": "behavior" }
       ]
+    },
+    {
+      "id": "S5.3.role-bound-secrets",
+      "source": "spec §7",
+      "claim": "A vendor key reaches a container only as a name-only environment flag on an exec, and only the role it belongs to may carry it: the implementer the Anthropic key, the author the Codex key. Every other pairing is refused before a process starts or the value is read.",
+      "real_world": false,
+      "surfaces": [],
+      "tests": [{ "path": "tests/enforcement/W-secret-role-bound.test.ts", "proves": "behavior" }]
     }
   ]
 }

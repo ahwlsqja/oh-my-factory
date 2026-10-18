@@ -69,10 +69,20 @@ export const AUTHOR_ENV_NAMES: readonly string[] = AUTHOR_FIXED_ENV.map(([name])
 /**
  * The only environment variable names an exec may inherit from the OMF process, and only through a `SecretHandle`:
  * the value is read by the docker client from its own environment and never appears in an argv or a create-time
- * setting. A name outside this set can never be passed on.
+ * setting. A name outside this set can never be passed on. Each name belongs to one role (ROLE_SECRET).
  */
 export const SECRET_ENV_NAMES = ["ANTHROPIC_API_KEY", "CODEX_API_KEY"] as const;
 export type SecretEnvName = (typeof SECRET_ENV_NAMES)[number];
+
+/**
+ * Which secret a role's exec may carry, and so which roles may carry one at all. Candidate code runs in the judge roles and can
+ * read whatever its container is given; only the two agent roles, each measured for that before the key is handed over, ever
+ * receive a key, and each only its own vendor's. Any other pairing is refused by the runtime before a process starts.
+ */
+export const ROLE_SECRET: Readonly<Partial<Record<ContainerRole, SecretEnvName>>> = {
+  implementer: "ANTHROPIC_API_KEY",
+  author: "CODEX_API_KEY",
+};
 
 /**
  * Closed set of credential-shaped variable names. An implementer or author image that declares any of them (or any name of

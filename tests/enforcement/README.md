@@ -6,7 +6,7 @@ without a test is labeled "not enforced" in the spec.
 ## Requirement states
 
 <!-- requirements:start -->
-Requirement states, generated from `docs/requirements.json` (23 covered, 4 unproven, 7 deferred, 0 missing). The full table is [the conformance matrix](../../docs/conformance-matrix.md).
+Requirement states, generated from `docs/requirements.json` (24 covered, 4 unproven, 7 deferred, 0 missing). The full table is [the conformance matrix](../../docs/conformance-matrix.md).
 
 - unproven: `F6.vault-host-only`, `S5.4.implementer-container`, `S7.l2-label`, `S7.docker-client-trusted`
 - deferred: `F4.goal-closes-by-signature`, `F11.autonomy-dial`, `S7.l3-label`, `S11.1.plugin-dir-shells`, `S11.2.ship-only-pushes`, `S11.3.public-artifacts-in-worktree`, `S11.6.break-glass-events`
@@ -118,6 +118,7 @@ are hand-written.
 | `W-same-vendor-refused.test.ts` | Exactly one author and implementer pairing is runnable (a codex author with a claude implementer); the same vendor on both roles is refused with a reason naming both roles, and the `[seal] same_vendor` key is refused whatever its value, so no acknowledgement path exists in `src` or `schemas`. | spec §5.3, §14 |
 | `W-seal-no-forbidden-mounts.test.ts` | The author's create argv and golden carry no host path: no bind, volume or device flag, only the four tmpfs destinations with empty sources; a daemon that reports a bind mount is measured L1 before the container starts. | spec §5.3, §7 |
 | `W-author-argv-golden.test.ts` | The sealing author's container is made by the same reviewed argv function as every other role and its create argv is pinned byte for byte: tmpfs-only /tmp, /in, /out and /agent (none executable), no bind mount or volume, one bridge network, the fixed environment, and no secret at create time. | spec §5.3, §7 |
+| `W-secret-role-bound.test.ts` | A vendor key reaches a container only as a name-only `--env NAME` on an exec, the value read by the docker client from its own environment for that one child, and only the role it belongs to may carry it (the implementer the Anthropic key, the author the Codex key); any other role and key pairing is refused before a process starts or the value is read. | spec §7 |
 
 The leak tests use `tests/helpers/reconciler-stub.mjs` in `leaky` mode and the planted strings in
 `tests/helpers/canary.ts`. A change to what the goal loop discloses is a change to E2: update the

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { ROLE_SECRET } from "../../src/container/spec.js";
 import type { LedgerEvent, NewEvent } from "../../src/core/ledger.js";
 import { schemaUrl, validate } from "../../src/core/schema.js";
 import {
@@ -91,7 +92,7 @@ describe("implementer events", () => {
     expect($defs.plan_why?.enum).toEqual(why);
     expect($defs.import_failure?.enum).toEqual(failures);
     expect($defs.session_outcome?.enum).toEqual(["completed", ...outcomes]);
-    expect($defs.secret_name?.enum).toEqual(["ANTHROPIC_API_KEY"]);
+    expect($defs.secret_name?.enum).toEqual([ROLE_SECRET.implementer]);
   });
 });
 

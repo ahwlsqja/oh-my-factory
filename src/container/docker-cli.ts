@@ -26,7 +26,7 @@ import {
   RuntimeError,
   type SecretHandle,
 } from "./runtime.js";
-import { ContainerSpecError, isImageId } from "./spec.js";
+import { ContainerSpecError, ROLE_SECRET, isImageId } from "./spec.js";
 
 export type DockerRunner = (
   argv: readonly string[],
@@ -284,9 +284,10 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
     async exec(handle, spec) {
       const name = await requireLocal();
       const { secret } = spec;
-      // Candidate code runs in every other role, and it can read whatever its container is given: only the
-      // implementer, which is measured for that, ever receives a key.
-      if (secret !== undefined && handle.role !== "implementer") throw new ContainerSpecError("invalid_exec");
+      // Candidate code runs in every judge role, and it can read whatever its container is given: only an agent role, which is
+      // measured for that, ever receives a key, and only the key of its own vendor.
+      if (secret !== undefined && ROLE_SECRET[handle.role] !== secret.name)
+        throw new ContainerSpecError("invalid_exec");
       // The argv is built (and `spec.env` and the secret name validated) before the value is read.
       const argv = execArgv(
         handle.name,
