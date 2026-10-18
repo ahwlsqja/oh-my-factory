@@ -1,7 +1,9 @@
 # Contributing to oh-my-factory
 
-OMF is pre-alpha, so issues and design discussion are the most useful contributions right now. Please
-open an issue before starting a large change, so we can agree on the direction first.
+OMF is pre-alpha. Follow the [development workflow](docs/maintainers/development-workflow.md): start
+from an agreed goal and evidence, scope meaningful work in a GitHub issue, then implement and verify a
+bounded PR. Task completion does not establish goal achievement. The workflow defines readiness,
+completion, review, worktrees, permissions and the trivial-docs/private-security exceptions.
 
 Security problems do not go in issues or pull requests. Follow [`SECURITY.md`](SECURITY.md).
 
@@ -30,12 +32,16 @@ npm ci
 
 ## Checks
 
-Run these before every commit. CI will run the same ones.
+Run these for code or behavior changes before committing. Documentation/templates-only changes use
+the workflow's [lightweight checks](docs/maintainers/development-workflow.md#validation-and-review-evidence).
+Full CI still applies.
 
 ```sh
 npm run typecheck   # source and tests
 npm test            # builds dist/ from scratch and runs the whole suite
 npm run build       # production build
+npm run lint
+npm run format:check
 ```
 
 ## Output and colour
@@ -48,7 +54,10 @@ which lands in a sibling pull request), so do not add colour output.
 - Use [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): subject`, for example
   `fix(ledger): report a missing seq`. Common types are `feat`, `fix`, `docs`, `test`, `refactor` and
   `chore`.
-- One change per pull request. Do not mix a refactor, a feature and a docs sweep.
+- One bounded issue/change per pull request; follow the workflow for parent/child splits and exceptions.
+  Use `Closes #N` only when the PR completes the issue's full acceptance; partial work uses `Refs #N`.
+- Add relevant [Lore decision trailers](docs/maintainers/development-workflow.md#commits-and-handoff)
+  to Conventional Commit subjects. Do not mix a refactor, a feature and a docs sweep.
 - Say in the pull request how you checked the change, using the commands above.
 - If an AI tool wrote much of the change, say so in the description. You must be able to explain every
   line you submit.
@@ -58,7 +67,7 @@ which lands in a sibling pull request), so do not add colour output.
 Every behavior change needs a test, and we expect test-driven development: write a failing test,
 make it pass, then clean up. A bug fix starts with a test that reproduces the bug.
 
-Tests never call a real model and never touch your real home directory:
+The default offline test suite never calls a real model; tests never touch your real home directory:
 
 - The global setup puts `claude` and `codex` shims first on `PATH`
   (`tests/helpers/bin-shims`). They exit with an error, so a test that reaches for a real agent CLI

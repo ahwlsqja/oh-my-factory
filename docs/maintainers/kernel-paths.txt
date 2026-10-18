@@ -1,0 +1,31 @@
+# Verification/trust kernel: repository-relative POSIX-style globs, one per line.
+# Match changed paths, including deletions and both old/new names in renames.
+# Classify against the base revision's manifest; candidate edits cannot remove their own protection.
+src/core/ledger.ts
+src/gate/**
+src/judge/**
+src/seal/**
+src/vault/**
+src/isolation/**
+src/audit/**
+src/container/**
+src/implementer/**
+src/work/risk.ts
+src/work/classify.ts
+harness/**
+schemas/**
+tests/enforcement/**
+.github/workflows/**
+.github/CODEOWNERS
+package.json
+vitest.config.*
+scripts/gated-docker.mjs
+docs/evidence/gated-runs.json
+# Whole design paths conservatively cover principles/gates and their Korean mirrors.
+docs/design/**
+docs/ko/design/**
+# Self-protect the manifest and instructions that define the human-merge requirement.
+docs/maintainers/kernel-paths.txt
+docs/maintainers/development-workflow.md
+AGENTS.md
+CLAUDE.md
