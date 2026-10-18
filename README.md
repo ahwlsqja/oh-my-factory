@@ -26,8 +26,8 @@
 > commands, and the goal loop: `omf goal tick` turns the gap into work items with a model that
 > never sees the numbers. The verification line exists only as library code with offline tests:
 > sealed scenarios and GATE-2, the implementer container, the judge, audit and test-split stations
-> (S4 to S6) and GATE-3. The command that runs the line (`omf run`, with `omf seal` and `omf report`)
-> and the real-model gated runs are not built yet. Gated container runs are recorded for the `docker
+> (S4 to S6) and GATE-3. The command that runs the line (`omf run`, with `omf report`)
+> and the real-model gated runs are not built yet. `omf seal` exists and runs the Codex author in a measured container, but it has not been run against a real daemon or model. Gated container runs are recorded for the `docker
 > inspect` parser, the work copy, the two-container round trip and the real isolation probe; none is
 > recorded for the implementer container or for any suite that calls a model.
 > See [What works today](#what-works-today).
@@ -120,7 +120,7 @@ or **designed** and not built yet.
   `docker inspect` before candidate code runs in it. GATE-3 reads those measurements from the ledger. Only the offline
   form against a fake Docker is tested, and what a real container does is not enforced beyond the gated runs recorded in
   `docs/evidence/gated-runs.json` (the real isolation probe and the two-container round trip); the implementer container has no recorded run. The implementer container exists as library code that no command runs yet
-  ([`docs/implementer.md`](docs/implementer.md)) and the author container does not exist, so a real line still stops at GATE-3 as `isolation_unmeasured` ([`docs/container-judge.md`](docs/container-judge.md)).
+  ([`docs/implementer.md`](docs/implementer.md)) and the author container is started only by `omf seal`, which has not been run against a real daemon or model, so a real line still stops at GATE-3 as `isolation_unmeasured` until `omf run` exists and the gated author runs are recorded ([`docs/container-judge.md`](docs/container-judge.md)).
 - **Empty means fail.** *Partly built.* The line skeleton (`E7a`), GATE-2 (`E7b`) and the gate line, the
   audit and GATE-3 (`E7c`) read a missing measurement as a failure, never as a pass. The judge's verdict
   (`E7d`) is the same: a missing, malformed or foreign verdict ends the round and is never a pass.
@@ -160,11 +160,11 @@ or **designed** and not built yet.
 
 Exit codes: `0` ok, `1` needs attention (problems found, a declined confirmation, a tick that stopped or is waiting for your approval), `2` the command could not run, `3` blocked on a person (`omf decide lint`: open design decisions).
 
-Sealed scenarios and GATE-2 exist as library code only, with no command yet. After GATE-1 passes, an author session writes scenarios, OMF stamps them and stores them in a vault outside the repository (`vault/scenarios/<work-id>/<seal-id>/`), and GATE-2 refuses a set that is empty, lacks a split, passes against a program that does nothing, has no contradiction canary (`canary_missing`), or leaves a resolved decision unlinked. Today the author is a stub process on the host, so the author stage is reported as unmeasured and sealing is not enforced. See [`docs/m3c-spec-deviations.md`](docs/m3c-spec-deviations.md).
+Sealed scenarios and GATE-2 run through `omf seal`, which has not been run against a real daemon or model. After GATE-1 passes, an author session writes scenarios, OMF stamps them and stores them in a vault outside the repository (`vault/scenarios/<work-id>/<seal-id>/`), and GATE-2 refuses a set that is empty, lacks a split, passes against a program that does nothing, has no contradiction canary (`canary_missing`), or leaves a resolved decision unlinked. `omf seal` runs the author in a measured container; that is not enforced until the `G-author-*` gated runs are recorded. See [`docs/m3c-spec-deviations.md`](docs/m3c-spec-deviations.md).
 
 The judge stations exist as library code only, with no command yet. S4 judges the stored train split and the contradiction canaries in two disposable containers, k times; S5 runs the gates and prove-test in a container work copy and audits; S6 spends the test split once. Everything is tested offline against a fake Docker, and a real-container run is gated and not enforced until it is recorded. See [`docs/container-judge.md`](docs/container-judge.md).
 
-Not built yet: the author container, the command that runs the line (`omf run`; the implementer container it will use exists as library code, see [`docs/implementer.md`](docs/implementer.md)), evidence reports, `omf ship`, goal sign-off (`omf goal sign`) and asking people for input in the middle of a run. The
+Not built yet: the command that runs the line (`omf run`; the implementer container it will use exists as library code, see [`docs/implementer.md`](docs/implementer.md)), evidence reports, `omf ship`, goal sign-off (`omf goal sign`) and asking people for input in the middle of a run. The
 [design](docs/design/2026-10-12-omf-v0-design.md) describes all of them.
 
 ## Quick start
