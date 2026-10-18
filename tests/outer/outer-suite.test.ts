@@ -37,7 +37,8 @@ function runSuite(omf: string, args: readonly string[] = [], env: NodeJS.Process
     env: { ...process.env, ...env },
     maxBuffer: 16 * 1024 * 1024,
   });
-  if (result.stdout === "") throw new Error(`outer/run.mjs printed nothing (exit ${result.status}): ${result.stderr}`);
+  if (result.stdout === "")
+    throw new Error(`outer/run.mjs printed nothing (exit ${result.status}): ${result.stderr}`);
   return { status: result.status, report: JSON.parse(result.stdout) as Suite["report"] };
 }
 
@@ -54,7 +55,9 @@ function brokenBuild(patches: readonly Patch[]): string {
   for (const [file, from, to] of patches) {
     const path = join(dir, "dist", file);
     const text = readFileSync(path, "utf8");
-    expect(text, `dist/${file} no longer contains the patch target; update this test`).toContain(from);
+    expect(text, `dist/${file} no longer contains the patch target; update this test`).toContain(
+      from,
+    );
     writeFileSync(path, text.replace(from, to));
   }
   return join(dir, "dist", "cli", "main.js");
@@ -74,19 +77,25 @@ describe("outer contract suite", () => {
     if (HAS_PYTHON) expect(suite.report.contracts.filter((c) => c.skipped > 0)).toEqual([]);
   });
 
-  it("reports a missing terminal driver as a skip with its reason, and --require-tty as a failure", {
-    timeout: 120_000,
-  }, () => {
-    const env = { OMF_OUTER_PYTHON: "/nonexistent/python3" };
-    const skipped = runSuite(BUILT, ["--only", "K07"], env);
-    expect(skipped.status).toBe(0);
-    expect(skipped.report.contracts.map((c) => c.skipped)).toEqual([1]);
-    expect(skipped.report.contracts.flatMap((c) => c.skip_reasons).join(" ")).toContain("python3");
+  it(
+    "reports a missing terminal driver as a skip with its reason, and --require-tty as a failure",
+    {
+      timeout: 120_000,
+    },
+    () => {
+      const env = { OMF_OUTER_PYTHON: "/nonexistent/python3" };
+      const skipped = runSuite(BUILT, ["--only", "K07"], env);
+      expect(skipped.status).toBe(0);
+      expect(skipped.report.contracts.map((c) => c.skipped)).toEqual([1]);
+      expect(skipped.report.contracts.flatMap((c) => c.skip_reasons).join(" ")).toContain(
+        "python3",
+      );
 
-    const required = runSuite(BUILT, ["--only", "K07", "--require-tty"], env);
-    expect(required.status).toBe(1);
-    expect(failedIds(required)).toEqual(["K07"]);
-  });
+      const required = runSuite(BUILT, ["--only", "K07", "--require-tty"], env);
+      expect(required.status).toBe(1);
+      expect(failedIds(required)).toEqual(["K07"]);
+    },
+  );
 
   it("strips locations and credentials from what a contract's child inherits", () => {
     const script = `import { cleanEnv } from ${JSON.stringify(pathToFileURL(HARNESS).href)};
@@ -115,35 +124,56 @@ console.log(JSON.stringify(Object.keys(cleanEnv(process.env)).sort()));`;
     expect(kept).toEqual(expect.arrayContaining(["HOME", "KEEP_ME", "PATH"]));
     // Whatever else the operating system adds (macOS adds __CF_USER_TEXT_ENCODING), none of the planted names survives.
     expect(
-      kept.filter((name) => /^(GIT_|OMF_|XDG_|CODEX|CLAUDE|ANTHROPIC_|OPENAI_|GITHUB_|DOCKER_)|SECRET$/.test(name)),
+      kept.filter((name) =>
+        /^(GIT_|OMF_|XDG_|CODEX|CLAUDE|ANTHROPIC_|OPENAI_|GITHUB_|DOCKER_)|SECRET$/.test(name),
+      ),
     ).toEqual([]);
   });
 
-  // K01 needs no terminal, so its broken-build proof runs on every host.
-  it("K01 fails against a build whose ledger verification is patched out", { timeout: 240_000 }, () => {
-    const omf = brokenBuild([["core/ledger.js", "if (hashEvent(body) !== hash)", "if (false)"]]);
-    const suite = runSuite(omf, ["--only", "K01"]);
-    expect(suite.status).toBe(1);
-    expect(failedIds(suite)).toEqual(["K01"]);
-  });
+  // K01's fixture drives a terminal, so without python3 and pty the proof is skipped with its reason; with
+  // OMF_OUTER_REQUIRE_TTY=1 the missing driver fails the test instead.
+  it(
+    "K01 fails against a build whose ledger verification is patched out",
+    { timeout: 240_000 },
+    (context) => {
+      if (!HAS_PYTHON) {
+        if (process.env.OMF_OUTER_REQUIRE_TTY === "1") {
+          throw new Error(
+            "K01 needs python3 with pty and OMF_OUTER_REQUIRE_TTY=1 forbids skipping it",
+          );
+        }
+        context.skip("no python3 with pty: the K01 broken-build proof did not run");
+      }
+      const omf = brokenBuild([["core/ledger.js", "if (hashEvent(body) !== hash)", "if (false)"]]);
+      const suite = runSuite(omf, ["--only", "K01"]);
+      expect(suite.status).toBe(1);
+      expect(failedIds(suite)).toEqual(["K01"]);
+    },
+  );
 
   // K03 drives a terminal. Without python3 and pty the proof is skipped with its reason, never silently; with
   // OMF_OUTER_REQUIRE_TTY=1 (what CI sets, like the runner's --require-tty) the missing driver fails the test instead.
-  it("K03 fails against a build that approves without a terminal", { timeout: 240_000 }, (context) => {
-    if (!HAS_PYTHON) {
-      if (process.env.OMF_OUTER_REQUIRE_TTY === "1") {
-        throw new Error("K03 needs python3 with pty and OMF_OUTER_REQUIRE_TTY=1 forbids skipping it");
+  it(
+    "K03 fails against a build that approves without a terminal",
+    { timeout: 240_000 },
+    (context) => {
+      if (!HAS_PYTHON) {
+        if (process.env.OMF_OUTER_REQUIRE_TTY === "1") {
+          throw new Error(
+            "K03 needs python3 with pty and OMF_OUTER_REQUIRE_TTY=1 forbids skipping it",
+          );
+        }
+        context.skip("no python3 with pty: the K03 broken-build proof did not run");
       }
-      context.skip("no python3 with pty: the K03 broken-build proof did not run");
-    }
-    const omf = brokenBuild([
-      ["cli/confirm.js", "if (!streams.stdin.isTTY || !streams.stdout.isTTY) {", "if (false) {"],
-      ["cli/confirm.js", "return answer.trim() === expected;", "return true;"],
-    ]);
-    const suite = runSuite(omf, ["--only", "K03"]);
-    expect(suite.status).toBe(1);
-    expect(failedIds(suite)).toEqual(["K03"]);
-  });
+      const omf = brokenBuild([
+        ["cli/confirm.js", "if (!streams.stdin.isTTY || !streams.stdout.isTTY) {", "if (false) {"],
+        ["cli/confirm.js", "return answer.trim() === expected;", "return true;"],
+      ]);
+      const suite = runSuite(omf, ["--only", "K03"]);
+      expect(suite.status).toBe(1);
+      expect(failedIds(suite)).toEqual(["K03"]);
+    },
+  );
 
   it("K02 fails against a build that writes into ~/.claude", { timeout: 120_000 }, () => {
     const shebang = "#!/usr/bin/env node\n";
