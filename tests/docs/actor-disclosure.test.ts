@@ -2,8 +2,8 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-// Issue #45: the READMEs must tell a first-time reader, next to the first command that records a person, that the
-// configured Git email is shown in output and stored in local host state, and how to redact it before sharing.
+// A first-time reader must be told, next to the first command that records a person, that the configured Git email
+// is shown in output and stored in local host state, and how to redact it before sharing.
 const ROOT = new URL("../../", import.meta.url);
 const read = (path: string): string => readFileSync(new URL(path, ROOT), "utf8");
 
@@ -62,19 +62,26 @@ describe("actor identity disclosure", () => {
     );
   });
 
-  it("tracked Markdown carries only fictional email addresses", () => {
+  it("tracked text files carry only fictional email addresses", () => {
     const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
       cwd: new URL(ROOT).pathname,
       encoding: "utf8",
     })
       .split("\0")
-      .filter((f) => f.endsWith(".md") && !f.startsWith("docs/plans/"));
+      .filter((f) => f.length > 0);
+    const email = /[A-Za-z0-9._+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z0-9-]+/g;
+    const fictionalDomain = /^example\.(?:com|org|net|invalid)$/i;
+    // name@1.2.3 or name@1.2.3-beta.1: a package version, never a mailbox.
+    const packageVersion = /^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/;
     const found: string[] = [];
     for (const file of files) {
-      for (const match of read(file).matchAll(/[A-Za-z0-9._+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g)) {
+      const buffer = readFileSync(new URL(file, ROOT));
+      if (buffer.includes(0)) continue; // binary
+      const text = buffer.toString("utf8");
+      for (const match of text.matchAll(email)) {
         const address = match[0];
-        if (/@(example\.(com|org|net|invalid)|users\.noreply\.github\.com|sha256)/.test(address)) continue;
-        if (/^[a-z0-9._-]+@[a-z0-9._-]+$/.test(address) && !/\.[a-z]{2,}$/.test(address)) continue;
+        const domain = address.slice(address.indexOf("@") + 1);
+        if (fictionalDomain.test(domain) || packageVersion.test(domain)) continue;
         found.push(`${file}: ${address}`);
       }
     }
