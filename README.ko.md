@@ -228,9 +228,23 @@ $ omf goal measure g-demo --runner host
 goal g-demo (regime 1), runner host
 target m-demo: 7 ms; target <= 5 ms; gap 2 (decrease, medium)
   m-demo [target, lagging]: 7 ms
+measured at revision 4f1c9a0e7b2d (clean), observed 2026-10-12T06:27:24.995Z
+working directory: repository root (host, no isolation)
+fingerprint: 9be03c51a7d2 (recorded in the ledger as input_sha256)
+limit: The tree was observed once, before the first metric ran; it was not watched while the metrics ran.
+limit: The fingerprint covers HEAD and the list of changed paths, not file contents: an edit to a file that was already modified keeps the same fingerprint.
+limit: An edit made while a metric runs can change its value without changing this record.
+limit: Gitignored files are not part of the observation.
 report: ~/.omf/projects/3186047891f1f0a0/goals/g-demo/reports/2026-10-12T06-27-24-995Z-gap.json
 warning: measured on the host without isolation (--runner host)
 ```
+
+출처(provenance) 줄은 보고서에도 `provenance` 로 저장되며, 어느 커밋을 측정했는지, 작업 트리가 깨끗했는지 아니면
+바뀐 경로가 몇 개인지, 지표가 어디서 돌았는지(호스트에서는 저장소 루트, Docker 에서는 읽기 전용으로 마운트한
+`/work`)를 알려 줍니다. 보고서의 나머지와 같이 호스트 전용입니다. 지문(fingerprint)은 원장이 이미 기록하는
+`input_sha256` 과 같은 값이고 첫 지표를 돌리기 전에 한 번 잡습니다. 지표가 도는 동안 파일이 그대로였다는 증명은
+아니며, 이미 수정된 파일을 다시 수정해도 구별하지 못합니다. 그러므로 체크아웃을 편집하는 동안 측정한 값은 표시된
+리비전과 다를 수 있습니다.
 
 재승인 화면은 먼저 왜 필요한지 보여 줍니다. 잠금 문제, 체제 변경, 바뀐 감시 경로의 diff 입니다. 읽는 동안
 목표나 지표가 바뀌면 아무것도 승인되지 않습니다. 재승인은 예산을 바꾸지 않습니다. `goal.md` 의 라운드 수나

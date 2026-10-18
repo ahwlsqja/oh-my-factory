@@ -234,9 +234,23 @@ $ omf goal measure g-demo --runner host
 goal g-demo (regime 1), runner host
 target m-demo: 7 ms; target <= 5 ms; gap 2 (decrease, medium)
   m-demo [target, lagging]: 7 ms
+measured at revision 4f1c9a0e7b2d (clean), observed 2026-10-12T06:27:24.995Z
+working directory: repository root (host, no isolation)
+fingerprint: 9be03c51a7d2 (recorded in the ledger as input_sha256)
+limit: The tree was observed once, before the first metric ran; it was not watched while the metrics ran.
+limit: The fingerprint covers HEAD and the list of changed paths, not file contents: an edit to a file that was already modified keeps the same fingerprint.
+limit: An edit made while a metric runs can change its value without changing this record.
+limit: Gitignored files are not part of the observation.
 report: ~/.omf/projects/3186047891f1f0a0/goals/g-demo/reports/2026-10-12T06-27-24-995Z-gap.json
 warning: measured on the host without isolation (--runner host)
 ```
+
+The provenance lines (also stored in the gap report as `provenance`) say which commit was measured, whether
+the tree was clean or dirty with a count of changed paths, and where the metric ran: the repository root on the
+host, or `/work`, a read-only mount of it, in Docker. They are host-only, like the rest of the report. The
+fingerprint is the `input_sha256` the ledger already records, taken once before the first metric ran. It does not
+prove that files stayed unchanged while the metrics ran, and it cannot tell two edits of an already modified file
+apart, so a value measured while you or an agent edit the checkout may not match the revision shown.
 
 Re-approval first shows why it is needed: lock problems, the regime changes, and the diff of any changed
 watched path. If the goal or a metric changes while you read it, nothing is approved. Re-approval never changes

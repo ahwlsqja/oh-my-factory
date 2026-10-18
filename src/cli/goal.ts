@@ -15,6 +15,7 @@ import { createGoal, readGoal, referencedMetrics, semanticHash } from "../goal/g
 import { diffStat } from "../goal/git.js";
 import type { ApprovalExpectation } from "../goal/goal-lock.js";
 import { type GapReport, measureGoal } from "../goal/measure.js";
+import { provenanceLines } from "../goal/provenance.js";
 import { metricSha256, proposeMetric, readProposal } from "../goal/metrics.js";
 import { createMarkdownStore } from "../adapters/state-markdown.js";
 import { type BudgetState, budgetStateFromEvents } from "../core/budget.js";
@@ -160,6 +161,7 @@ function printGap(report: GapReport, file: string): void {
   for (const g of report.guardrails) console.log(`guardrail ${g.metric_id}: ${g.status}`);
   printList("needs re-approval (J1)", report.regime_changes);
   if (report.wall_time_exceeded) console.log("wall time exceeded (J6)");
+  for (const line of provenanceLines(report.provenance)) console.log(line);
   console.log(`report: ${file}`);
 }
 
