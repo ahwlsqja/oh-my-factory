@@ -12,7 +12,7 @@ Totals: 31 covered, 5 unproven, 7 deferred, 0 missing.
 | Id | State | Last recorded | Tests | Claim |
 |---|---|---|---|---|
 | `F1.goal-is-top-unit` | covered | - | 1 offline | Work items belong to a goal: a work item carries its goal id, and the goal file is the entry point of the loop. |
-| `F2.metric-lock-before-measure` | covered | - | 1 offline | A metric that nobody approved is never measured, and an edited metric lock, bands file or goal.md stops measurement until J1 approves again. |
+| `F2.metric-lock-before-measure` | covered | - | 1 offline | A metric nobody approved is never measured, and a tampered metric or goal lock stops measurement. Editing goal.md, a bands file or a metric is a regime change: measurements carry needs_reapproval until J1 approves again, and the locked target stays. |
 | `F3.code-controls-loop` | covered | - | 2 offline | Budgets and visit caps live in the host ledger and in code, not in a session, and nothing extends them on its own. |
 | `F4.goal-closes-by-signature` | deferred (M4) | - | none | Agents produce at most a candidate; a goal closes only by a person's signature (J5). |
 | `F5.bands-detect-regression` | covered | - | 1 offline | Control bands detect a drift after launch and record a breach event. |

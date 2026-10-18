@@ -14,7 +14,7 @@
     {
       "id": "F2.metric-lock-before-measure",
       "source": "spec §2 F2, §4.1",
-      "claim": "A metric that nobody approved is never measured, and an edited metric lock, bands file or goal.md stops measurement until J1 approves again.",
+      "claim": "A metric nobody approved is never measured, and a tampered metric or goal lock stops measurement. Editing goal.md, a bands file or a metric is a regime change: measurements carry needs_reapproval until J1 approves again, and the locked target stays.",
       "tests": [
         {
           "path": "tests/enforcement/E1-metric-tamper-stops.test.ts"
