@@ -293,6 +293,33 @@ describe("runDoctor", () => {
     expect(report.problem_details[0]?.fix).toContain("omf ledger verify --json");
   });
 
+  it("tells a planted canary in an ordinary file apart from vault files and never advises moving source", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const e = env(home, stubBin({ dockerDaemon: true }));
+    initProject(repo, e);
+    // Built at run time: a full canary literal in this file would trip OMF run on OMF.
+    writeFileSync(join(repo, "fixture.test.ts"), `const c = "omf-canary-${"ab".repeat(16)}";\n`);
+    const report = runDoctor(repo, e);
+    const found = report.problem_details.find((p) => p.message.startsWith("sealed material"));
+    expect(found?.message).toContain("canary: fixture.test.ts");
+    expect(found?.fix).toContain("canary-shaped");
+    expect(found?.fix).toContain("at run time");
+    expect(found?.fix).not.toMatch(/move the listed vault files/);
+    expect(found?.fix).toContain("do not move source or tests into the vault");
+  });
+
+  it("keeps the move-out advice for real vault files", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const e = env(home, stubBin({ dockerDaemon: true }));
+    initProject(repo, e);
+    writeFileSync(join(repo, "goal.lock.json"), "{}\n");
+    const found = runDoctor(repo, e).problem_details.find((p) => p.message.startsWith("sealed material"));
+    expect(found?.fix).toContain("move the listed vault files out of the repository");
+    expect(found?.fix).not.toContain("canary-shaped");
+  });
+
   it("reports when not inside a git repository", () => {
     const home = makeTempDir("omf-home-");
     const report = runDoctor(makeTempDir(), env(home, stubBin({ dockerDaemon: true })));
