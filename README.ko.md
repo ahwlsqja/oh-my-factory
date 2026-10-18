@@ -150,9 +150,9 @@ OMF 는 루프 두 개를 돌립니다.
 | `omf decide defer <work-id> <decision-id> --file <deferral.json>` | 서명된 기본값과 만료일을 두고 결정을 미룹니다. 대화형 터미널이 필요합니다. |
 | `omf decide lint <work-id> [--json] [--render]` | 결정을 검사하고 GATE-1 을 계산합니다. 종료 코드 0 정상, 1 문제, 3 사람을 기다림(J2, `needs-human.json` 도 기록). `--render` 는 `spec.md` 를 다시 씁니다. |
 | `omf decide show <work-id> [--json]` | 상태별 결정, GATE-1 판정, `spec.md` 가 원장과 같은지 출력합니다. 아무것도 쓰지 않습니다. |
-| `omf run <work-id> [--json]` | 봉인된 작업 항목 하나에 검증 라인을 실행합니다(구현자 컨테이너, 심판, 감사, 게이트). 끝나면 `evidence.json` 을 씁니다. 순서가 틀리면 빠진 게이트 이름을 대며 거부합니다. GATE-1(열린 설계 결정)이 막으면 종료 코드 3, 통과한 봉인이 없으면 2(`omf seal` 을 먼저 실행). 종료 코드 0 성공, 1 결함, 3 사람을 기다림, 2 라인을 실행하지 못했거나 환경 때문에 멈춤(J7). 이미 실행한 항목은 "already ran" 을 출력하고 0 으로 끝납니다. |
-| `omf report <work-id> [--json]` | 항목의 마지막 실행 증거를 출력합니다. 원장이 인정한 뒤에 검증된 `evidence.json` 으로 다시 렌더링한 내용입니다. 아무것도 쓰지 않습니다. 믿을 수 있는 증거가 없으면 종료 코드 2(`omf run` 을 먼저 실행). |
-| `omf seal <work-id> [--json]` | GATE-1 을 통과한 작업 항목의 봉인 작성자를 측정된 컨테이너에서 실행하고, 봉인된 시나리오를 GATE-2 에서 확인합니다. `[author]` 이미지, `judge.docker_context`, 이 명령 하나의 환경에 `OMF_AUTHOR_API_KEY` 가 필요합니다. 이미 최신이고 작성자 격리가 측정된 봉인에서는 아무것도 하지 않습니다. 종료 코드 `0` 봉인됨(또는 이미 봉인됨), `1` 작성자 실패 또는 격리 미측정, `2` 거부되었거나 실행할 수 없음, `3` 사람을 기다림(GATE-1 열림, J2). 실제 모델이나 실제 데몬으로는 아직 실행하지 않았습니다. |
+| `omf seal <work-id> [--json]` | 작업 항목의 봉인 작성자(Codex)를, 격리를 먼저 측정한 컨테이너 안에서 돌립니다. 작성자는 항목의 의도, 명세, 인터페이스 계약만 받습니다. 시나리오는 금고에 저장하고 GATE-2 를 계산합니다. `[judge] docker_context`, `[author] image` 와, 이 명령 하나를 위한 `OMF_AUTHOR_API_KEY` 가 필요합니다(`docs/author.md` 참고). 멱등입니다. 결정에 맞는 봉인이 있고 작성자 단계가 측정돼 있으면 키도 모델 호출도 없이 `already_sealed` 로 0 을 냅니다. 종료 코드 0 봉인됨 또는 이미 봉인됨(작성자 단계 측정됨), 1 작성자 단계가 측정되지 않은 채 저장됨, 작성자 답이 실패함 또는 GATE-2 가 되돌림, 2 거절되었거나 실행할 수 없거나 환경 때문에 멈춤(J7), 3 사람을 기다림. |
+| `omf run <work-id> [--json]` | 현재 봉인이 있는 작업 항목의 검증 라인을 돌립니다. 컨테이너에서 구현하고, 일회용 컨테이너 둘에서 심판하고, 감사하고, 테스트 분할을 한 번 쓰고, 증거를 씁니다. 순서가 어긋나면 거절하고 빠진 게이트를 말합니다(GATE-1: `omf decide lint`, GATE-2: `omf seal`). 종료 코드 0 성공, 1 결함, 2 중단·거절·환경 때문에 멈춤(J7), 3 사람을 기다림. 이미 끝난 항목은 `already ran` 을 출력하고 0 을 냅니다. |
+| `omf report <work-id> [--json]` | 끝난 실행의 증거를 출력합니다. 검증된 `evidence.json` 에서 다시 만든 글이고(`evidence.md` 의 바이트는 출력하지 않습니다), 심판은 결정적 검사뿐이라는 줄과 실행의 격리 수준을 함께 보여 줍니다. 읽기 전용입니다. 종료 코드 0 믿을 수 있는 증거를 보여 줌, 2 증거가 없거나 믿을 수 없음(먼저 `omf run`). |
 
 종료 코드: `0` 정상, `1` 확인이 필요함(문제 발견, 거절된 확인, 멈췄거나 승인을 기다리는 틱), `2` 명령을 실행할 수 없음, `3` 사람을 기다림(`omf decide lint`: 열린 설계 결정).
 
@@ -489,6 +489,8 @@ ledger, 지표 제안, J1 잠금 파일에도 제안하거나 승인한 사람�
 - [설계 명세](docs/ko/design/2026-10-12-omf-v0-design.md) ([English](docs/design/2026-10-12-omf-v0-design.md))
 - [출처와 읽은 상태](docs/design/references.md)
 - [강제 시험과 그 시험이 확인하는 주장](tests/enforcement/README.md)
+- [명령 사용법](docs/cli-usage.md): 모든 명령의 `--help` 출력 그대로. 빌드된 CLI 와 대조해 시험합니다 (영어)
+- [적합성 표](docs/conformance-matrix.md): 요구사항마다 covered, unproven, missing 상태 (영어)
 - [목표 루프의 결정과 열린 질문 (M2b 부록, 영어)](docs/design/2026-10-12-omf-m2b-addendum.md)
 - [`examples/hello-goal`](examples/hello-goal/README.md): 목표 루프를 오프라인으로 끝까지 돌려 보는 예제 (영어)
 

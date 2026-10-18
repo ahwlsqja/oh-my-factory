@@ -101,6 +101,13 @@ error fails the pull request. Run `npx biome format --write .` before committing
 - Format: the whole repository was formatted in one commit, which is listed in `.git-blame-ignore-revs`. Run
   `git config blame.ignoreRevsFile .git-blame-ignore-revs` once so `git blame` skips it.
 
+## Command usage file
+
+`docs/cli-usage.md` holds the exact `--help` text of every leaf command and is generated. After changing a command (an
+option, a description or a new verb), run `npm run build && node scripts/cli-usage.mjs --write` and commit the result.
+`tests/enforcement/W-cli-usage-drift.test.ts` fails when the file and the built CLI disagree and names the verb. A new
+command also needs a README row, which `tests/cli/help-drift.test.ts` checks.
+
 ## Docker-gated tests
 
 Suites under `tests/gated` need a real Docker daemon and are skipped unless `OMF_GATED=docker`; a skipped suite is not

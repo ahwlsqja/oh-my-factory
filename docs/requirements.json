@@ -575,6 +575,23 @@
           "proves": "behavior"
         }
       ]
+    },
+    {
+      "id": "S13.cli-usage-drift",
+      "source": "spec §13",
+      "claim": "Every leaf command's --help text is reproduced byte for byte in docs/cli-usage.md and has a README row; a command without a block, or a block that differs, fails the build and names the verb.",
+      "real_world": false,
+      "surfaces": ["docs/cli-usage.md", "README.md"],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-cli-usage-drift.test.ts",
+          "proves": "behavior"
+        },
+        {
+          "path": "tests/cli/help-drift.test.ts",
+          "proves": "behavior"
+        }
+      ]
     }
   ]
 }
