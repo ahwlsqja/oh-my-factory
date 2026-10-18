@@ -46,7 +46,7 @@ export const IMPLEMENTER_ENV_NAMES: readonly string[] = IMPLEMENTER_FIXED_ENV.ma
  * the value is read by the docker client from its own environment and never appears in an argv or a create-time
  * setting. A name outside this set can never be passed on.
  */
-export const SECRET_ENV_NAMES = ["ANTHROPIC_API_KEY"] as const;
+export const SECRET_ENV_NAMES = ["ANTHROPIC_API_KEY", "CODEX_API_KEY"] as const;
 export type SecretEnvName = (typeof SECRET_ENV_NAMES)[number];
 
 /**
@@ -56,6 +56,7 @@ export type SecretEnvName = (typeof SECRET_ENV_NAMES)[number];
  */
 export const CREDENTIAL_SHAPED_ENV_NAMES: readonly string[] = [
   "ANTHROPIC_API_KEY",
+  "CODEX_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
   "CLAUDE_CODE_OAUTH_TOKEN",
   "OPENAI_API_KEY",

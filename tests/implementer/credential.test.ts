@@ -20,10 +20,10 @@ function mint(value = KEY): Credential {
 }
 
 describe("closed env-name tables", () => {
-  it("names exactly one secret, ANTHROPIC_API_KEY, which is also credential-shaped", () => {
-    expect([...SECRET_ENV_NAMES]).toEqual(["ANTHROPIC_API_KEY"]);
-    expect(CREDENTIAL_ENV).toEqual({ claude: "ANTHROPIC_API_KEY" });
-    expect(CREDENTIAL_SOURCE_ENV).toEqual({ claude: "OMF_IMPLEMENTER_API_KEY" });
+  it("names two secrets, one per vendor, and both are credential-shaped", () => {
+    expect([...SECRET_ENV_NAMES]).toEqual(["ANTHROPIC_API_KEY", "CODEX_API_KEY"]);
+    expect(CREDENTIAL_ENV).toEqual({ claude: "ANTHROPIC_API_KEY", codex: "CODEX_API_KEY" });
+    expect(CREDENTIAL_SOURCE_ENV).toEqual({ claude: "OMF_IMPLEMENTER_API_KEY", codex: "OMF_AUTHOR_API_KEY" });
     for (const name of SECRET_ENV_NAMES) expect(CREDENTIAL_SHAPED_ENV_NAMES).toContain(name);
   });
 
@@ -94,6 +94,67 @@ describe("readCredential", () => {
         CLAUDE_CODE_OAUTH_TOKEN: "x",
       }),
     ).toBeNull();
+  });
+});
+
+describe("readCredential for the author", () => {
+  const AUTHOR_KEY = "sk-codex-test-0123456789abcdef";
+
+  it("returns a credential named CODEX_API_KEY from OMF_AUTHOR_API_KEY and reads no other variable", () => {
+    const reads: string[] = [];
+    const probed = new Proxy<NodeJS.ProcessEnv>(
+      {
+        OMF_AUTHOR_API_KEY: AUTHOR_KEY,
+        OPENAI_API_KEY: "other",
+        CODEX_API_KEY: "other",
+        OMF_IMPLEMENTER_API_KEY: "other",
+        ANTHROPIC_API_KEY: "other",
+      },
+      {
+        get(target, prop, receiver) {
+          reads.push(String(prop));
+          return Reflect.get(target, prop, receiver);
+        },
+      },
+    );
+    const credential = readCredential("codex", probed);
+    expect(credential?.name).toBe("CODEX_API_KEY");
+    expect(credential?.reveal()).toBe(AUTHOR_KEY);
+    expect(reads).toEqual(["OMF_AUTHOR_API_KEY"]);
+  });
+
+  it("never takes another variable for the author, and the implementer never takes this one", () => {
+    expect(
+      readCredential("codex", {
+        OPENAI_API_KEY: "x",
+        CODEX_API_KEY: "x",
+        OMF_IMPLEMENTER_API_KEY: "x",
+        ANTHROPIC_API_KEY: "x",
+      }),
+    ).toBeNull();
+    expect(readCredential("claude", { OMF_AUTHOR_API_KEY: AUTHOR_KEY })).toBeNull();
+  });
+
+  it.each([
+    ["empty", ""],
+    ["longer than 512", "a".repeat(513)],
+    ["padded with a trailing newline", `${AUTHOR_KEY}\n`],
+    ["holding a space", "sk codex"],
+    ["not ASCII", "sk-é-x"],
+  ])("returns null for a value that is %s", (_name, value) => {
+    expect(readCredential("codex", { OMF_AUTHOR_API_KEY: value })).toBeNull();
+  });
+
+  it("never prints its value", () => {
+    const credential = readCredential("codex", { OMF_AUTHOR_API_KEY: AUTHOR_KEY });
+    const outputs = [
+      JSON.stringify({ credential }),
+      `${credential}`,
+      inspect(credential),
+      format("%s %j", credential, credential),
+    ];
+    for (const output of outputs) expect(output).not.toContain(AUTHOR_KEY);
+    expect(`${credential}`).toBe("[credential]");
   });
 });
 
