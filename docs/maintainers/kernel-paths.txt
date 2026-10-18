@@ -1,10 +1,17 @@
 # Verification/trust kernel: repository-relative picomatch globs (dot: true), one per line.
 # Match changed paths, including deletions and both old/new names in renames.
 # Classify against the base revision's manifest; candidate edits cannot remove their own protection.
-src/core/ledger.ts
+# Hashing, actor/state verification, approval locks, measurements and goal success govern trusted outcomes.
+src/core/**
+src/goal/**
+src/work/**
+# Scenario validation/GATE-2 and feedback disclosure are part of the independent verification boundary.
+src/scenario/**
+src/feedback/**
 # Human decision/signature records (including J2), host Git and process/state adapters are trust boundaries.
 src/decision/**
 src/cli/decide-sign.ts
+src/cli/confirm.ts
 src/git/**
 src/adapters/**
 src/gate/**
@@ -15,9 +22,8 @@ src/isolation/**
 src/audit/**
 src/container/**
 src/implementer/**
-src/work/risk.ts
-src/work/classify.ts
 harness/**
+fixtures/**
 schemas/**
 tests/enforcement/**
 # Test startup and CLI shields keep the default suite away from real credentials, models and Docker.

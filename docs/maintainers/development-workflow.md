@@ -183,6 +183,8 @@ approval is not required (authors cannot approve their own PR); AI-authored comm
 
 Record the classification and required handoff in the PR. The manifest defines scope; it is not a CI
 classifier or proof of enforcement. Automatic classification/enforcement requires separate implementation.
+New, unclassified `src` roots require explicit classification and human review; they are not implicitly
+non-kernel. The manifest test checks source-root coverage, not GitHub merge decisions or personal human merge.
 
 ## Commits and handoff
 

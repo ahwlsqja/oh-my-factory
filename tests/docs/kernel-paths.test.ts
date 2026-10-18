@@ -9,19 +9,31 @@ const MANIFEST = new URL("../../docs/maintainers/kernel-paths.txt", import.meta.
 const lines = readFileSync(MANIFEST, "utf8").split("\n");
 const patterns = lines.slice(0, -1).filter((line) => !line.startsWith("#"));
 const options = { dot: true, strictBrackets: true };
+const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
+  cwd: ROOT,
+  encoding: "utf8",
+})
+  .split("\0")
+  .filter(Boolean);
+// Only the CLI presentation/entrypoint root is partly non-kernel; sensitive CLI files are protected explicitly.
+const NON_KERNEL_ROOTS = new Set(["cli"]);
+
+function unclassifiedSourceRoots(paths: readonly string[]): string[] {
+  const matches = picomatch(patterns, options);
+  const unclassified = new Set<string>();
+  for (const path of paths) {
+    if (!path.startsWith("src/")) continue;
+    const root = path.split("/")[1] ?? "";
+    if (!NON_KERNEL_ROOTS.has(root) && !matches(path)) unclassified.add(root);
+  }
+  return [...unclassified].sort();
+}
 
 describe("kernel path manifest", () => {
   it("contains unique, valid relative picomatch patterns that name current repository paths", () => {
     expect(lines.at(-1), "manifest must end with a newline").toBe("");
     expect(patterns.length).toBeGreaterThan(0);
     expect(new Set(patterns).size, "duplicate kernel pattern").toBe(patterns.length);
-    const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
-      cwd: ROOT,
-      encoding: "utf8",
-    })
-      .split("\0")
-      .filter(Boolean);
-
     for (const pattern of patterns) {
       expect(pattern, "blank or padded pattern").toBe(pattern.trim());
       expect(pattern.length, "blank pattern").toBeGreaterThan(0);
@@ -37,17 +49,32 @@ describe("kernel path manifest", () => {
     }
   });
 
+  it("classifies each current source root and rejects a newly added unclassified root", () => {
+    expect(files.some((path) => path.startsWith("src/cli/"))).toBe(true);
+    expect(unclassifiedSourceRoots(files), "new source roots need explicit classification and human review").toEqual(
+      [],
+    );
+    expect(unclassifiedSourceRoots([...files, "src/new-trust-boundary/entry.ts"])).toEqual(["new-trust-boundary"]);
+  });
+
   it("covers trust-boundary regressions and self-protection without classifying all documentation as kernel", () => {
     const matches = picomatch(patterns, options);
     const criticalPaths = [
       "src/core/ledger.ts",
+      "src/core/canonical-json.ts",
+      "src/goal/approve.ts",
+      "src/scenario/gate2.ts",
+      "src/feedback/release.ts",
+      "src/work/outcome.ts",
       "src/decision/gate1.ts",
       "src/cli/decide-sign.ts",
+      "src/cli/confirm.ts",
       "src/git/hardened.ts",
       "src/adapters/process-group.ts",
       "src/container/measure.ts",
       "src/work/classify.ts",
       "harness/main.mjs",
+      "fixtures/echo-everything.mjs",
       "tests/global-setup.ts",
       "tests/helpers/bin-shims/claude",
       ".github/workflows/ci.yml",
