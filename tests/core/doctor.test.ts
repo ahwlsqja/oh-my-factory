@@ -307,6 +307,23 @@ describe("runDoctor", () => {
     expect(found?.fix).toContain("at run time");
     expect(found?.fix).not.toMatch(/move the listed vault files/);
     expect(found?.fix).toContain("do not move source or tests into the vault");
+    expect(found?.fix).toContain("treat the sealed set as burned");
+    expect(found?.fix).toContain("git history");
+  });
+
+  it("gives both the vault advice and the canary advice when the findings are mixed", () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-home-");
+    const e = env(home, stubBin({ dockerDaemon: true }));
+    initProject(repo, e);
+    writeFileSync(join(repo, "fixture.test.ts"), `const c = "omf-canary-${"ab".repeat(16)}";\n`);
+    writeFileSync(join(repo, "goal.lock.json"), "{}\n");
+    const found = runDoctor(repo, e).problem_details.find((p) => p.message.startsWith("sealed material"));
+    expect(found?.message).toContain("canary: fixture.test.ts");
+    expect(found?.fix).toContain("move the listed vault files out of the repository");
+    expect(found?.fix).toContain("for a canary finding,");
+    expect(found?.fix).toContain("canary-shaped");
+    expect(found?.fix).toContain("treat the sealed set as burned");
   });
 
   it("keeps the move-out advice for real vault files", () => {

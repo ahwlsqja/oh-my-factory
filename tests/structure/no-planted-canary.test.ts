@@ -1,13 +1,16 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CANARY_SEARCH } from "../../src/scenario/types.js";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 
+// A source tarball has no .git, so there is no file list to scan: skip with that reason.
+const HAS_GIT = existsSync(join(ROOT, ".git"));
+
 describe("a clean OMF checkout", () => {
-  it("holds no complete canary literal in any tracked or untracked-but-not-ignored text file", () => {
+  it.skipIf(!HAS_GIT)("holds no complete canary literal in any tracked or untracked-but-not-ignored text file", () => {
     const listed = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
       cwd: ROOT,
       encoding: "utf8",
