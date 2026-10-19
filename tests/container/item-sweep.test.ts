@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createDockerRuntime } from "../../src/container/docker-cli.js";
 import { removeStagingDirs, sweepItemOrphans } from "../../src/container/item-sweep.js";
 import { claimItem, releaseItem } from "../../src/work/claim.js";
@@ -186,6 +186,79 @@ describe("the run-start sweep does not follow a symlink either", () => {
     expect(result.staging).toBe(1);
     expect(existsSync(join(outside, "keep", "file"))).toBe(true);
     expect(existsSync(join(outside, "judge", "file"))).toBe(true);
+  });
+});
+
+describe("host staging is removed only on the real state path", () => {
+  const OUTSIDE_RUN = "r-20261001T090000Z-dddd";
+
+  /** An item whose written path goes through a symlink: `<state>/goals/<link>/work/<id>` really lives in `outside`. */
+  function linked(kind: "goal" | "work") {
+    const state = realTempDir("omf-sweep-state-");
+    const outside = realTempDir("omf-sweep-outside-");
+    const target = join(outside, "target");
+    const workDir = join(target, "work", "w1");
+    put(workDir, `runs/${OUTSIDE_RUN}/judge/ctx`, "x");
+    put(workDir, `runs/${OUTSIDE_RUN}/implementer-stage/tree`, "x");
+    mkdirSync(join(state, "goals", "g1"), { recursive: true });
+    if (kind === "goal") {
+      symlinkSync(target, join(state, "goals", "g2"));
+      return { itemDir: join(state, "goals", "g2", "work", "w1"), workDir, state };
+    }
+    mkdirSync(join(state, "goals", "g1", "work"), { recursive: true });
+    symlinkSync(join(target, "work", "w1"), join(state, "goals", "g1", "work", "w1"));
+    return { itemDir: join(state, "goals", "g1", "work", "w1"), workDir, state };
+  }
+  const survives = (workDir: string): boolean =>
+    existsSync(join(workDir, "runs", OUTSIDE_RUN, "judge", "ctx")) &&
+    existsSync(join(workDir, "runs", OUTSIDE_RUN, "implementer-stage", "tree"));
+
+  it.each(["goal", "work"] as const)(
+    "a symlinked %s directory: the item sweep removes no staging outside the state tree, but still removes the container",
+    async (kind) => {
+      const { itemDir, workDir } = linked(kind);
+      const memory = new MemoryRuntime();
+      memory.owned = [
+        { kind: "container", name: `omf-implementer-${OUTSIDE_RUN}-1-1`, run_id: OUTSIDE_RUN, work_id: X },
+      ];
+      expect(await sweepItemOrphans({ runtime: memory, itemDir, workId: X })).toBe(1);
+      expect(memory.owned).toEqual([]);
+      expect(survives(workDir)).toBe(true);
+    },
+  );
+
+  it.each(["goal", "work"] as const)(
+    "a symlinked %s directory: the run-start sweep removes no staging outside the state tree",
+    async (kind) => {
+      const { itemDir, workDir } = linked(kind);
+      const result = await sweepOrphans({ runtime: new MemoryRuntime(), itemDir, workId: X, currentRunId: CURRENT });
+      expect(result.staging).toBe(0);
+      expect(survives(workDir)).toBe(true);
+    },
+  );
+
+  it.each(["goal", "work"] as const)("a symlinked %s directory: removeStagingDirs removes nothing", (kind) => {
+    const { itemDir, workDir } = linked(kind);
+    expect(removeStagingDirs(join(itemDir, "runs"), [OUTSIDE_RUN])).toBe(0);
+    expect(survives(workDir)).toBe(true);
+  });
+
+  it("a symlinked OMF home is not a symlink in the state tree: the staging under it is removed", async () => {
+    const real = realTempDir("omf-sweep-home-real-");
+    const parent = realTempDir("omf-sweep-home-link-");
+    const home = join(parent, "omf");
+    symlinkSync(real, home);
+    const itemDir = join(home, "projects", "p1", "goals", "g1", "work", "w1");
+    put(join(real, "projects", "p1", "goals", "g1", "work", "w1"), `runs/${OUTSIDE_RUN}/judge/ctx`, "x");
+    vi.stubEnv("OMF_HOME", home);
+    try {
+      expect(removeStagingDirs(join(itemDir, "runs"), [OUTSIDE_RUN])).toBe(1);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(existsSync(join(real, "projects", "p1", "goals", "g1", "work", "w1", "runs", OUTSIDE_RUN, "judge"))).toBe(
+      false,
+    );
   });
 });
 

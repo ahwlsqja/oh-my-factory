@@ -1,5 +1,6 @@
-import { existsSync, lstatSync, readdirSync, rmSync, statSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, lstatSync, readdirSync, realpathSync, rmSync, statSync, unlinkSync } from "node:fs";
+import { join, relative, resolve, sep } from "node:path";
+import { omfHome } from "../core/paths.js";
 import type { ContainerRuntime } from "./runtime.js";
 import { type ImageId, assertName } from "./spec.js";
 import { UNREADABLE_GRACE_MS, isLockHeld, sealLockFile } from "../core/lock.js";
@@ -40,12 +41,40 @@ function isSymlink(path: string): boolean {
 }
 
 /**
+ * Whether `runsDir` really lives where it is written: the real path of `runsDir` equals the path as written under the project
+ * OMF state root (the real path of the OMF home plus the part of the written path below it, so a symlinked home is no
+ * symlink in the tree). A symlink anywhere above `runs` (`goals`, `goals/<g>`, `work`, the work id directory) makes the real
+ * path differ, and the staging below it may be a directory outside the state tree. A `runsDir` that is not under the OMF home
+ * (a caller that hands its own item directory) is compared with itself as written. Any failure to resolve says no.
+ */
+export function runsOnStatePath(runsDir: string): boolean {
+  try {
+    const written = resolve(runsDir);
+    let expected = written;
+    try {
+      const home = resolve(omfHome());
+      const below = relative(home, written);
+      if (below !== "" && below !== ".." && !below.startsWith(`..${sep}`) && resolve(home, below) === written) {
+        expected = join(realpathSync.native(home), below);
+      }
+    } catch {
+      // no usable OMF home: the written path itself is the expectation
+    }
+    return realpathSync.native(runsDir) === expected;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Removes the staging directories of the given runs, without following a symlink: a run directory that is not a plain directory
  * is skipped, and a staging entry that is a symlink is unlinked, never entered. Returns how many it removed. Best effort per
  * entry: one that cannot be removed is left for the next sweep. The run logs under `runs/<id>/implementer/` are not touched.
+ * Nothing is removed unless `runsDir` is on the real state path (`runsOnStatePath`): a symlink above `runs` could point the
+ * staging at a directory outside the state tree, which every caller (the item sweep and the run-start sweep) is then spared.
  */
 export function removeStagingDirs(runsDir: string, runIds: Iterable<string>): number {
-  if (!isPlainDir(runsDir)) return 0;
+  if (!isPlainDir(runsDir) || !runsOnStatePath(runsDir)) return 0;
   let removed = 0;
   for (const runId of runIds) {
     const runDir = join(runsDir, runId);
