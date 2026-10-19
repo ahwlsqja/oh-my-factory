@@ -60,6 +60,11 @@ export interface ContainerFacts {
   volumes_from: string[];
   sysctls: string[];
   runtime: string;
+  /**
+   * `HostConfig.Init`: the create argv says `--init=false`, so the daemon reports false even when it is configured with `init: true`.
+   * `null` is the key unset (omitted by the daemon), which leaves the daemon default in force and so is not golden.
+   */
+  init: boolean | null;
 }
 
 /** What an in-container probe found. */
@@ -97,6 +102,7 @@ export const VIOLATION_CODES = [
   "volumes_from",
   "sysctl_set",
   "runtime_unexpected",
+  "init_not_disabled",
 ] as const;
 export type ViolationCode = (typeof VIOLATION_CODES)[number];
 

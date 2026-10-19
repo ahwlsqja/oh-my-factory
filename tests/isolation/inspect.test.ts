@@ -29,6 +29,7 @@ const GOLDEN_FACTS = {
   volumes_from: [],
   sysctls: [],
   runtime: "runc",
+  init: false,
 };
 
 function without(path: string): unknown {
@@ -118,6 +119,19 @@ describe("containerFactsFromInspect", () => {
     "HostConfig.VolumesFrom",
   ];
 
+  it("reads HostConfig.Init: false and true as they are, and unset (which leaves the daemon default) as null", () => {
+    const doc = goldenInspect() as unknown as { HostConfig: Record<string, unknown> };
+    expect(containerFactsFromInspect(doc).init).toBe(false);
+    doc.HostConfig.Init = true;
+    expect(containerFactsFromInspect(doc).init).toBe(true);
+    delete doc.HostConfig.Init;
+    expect(containerFactsFromInspect(doc).init).toBeNull();
+    doc.HostConfig.Init = null;
+    expect(containerFactsFromInspect(doc).init).toBeNull();
+    doc.HostConfig.Init = "false";
+    expect(() => containerFactsFromInspect(doc)).toThrow(/HostConfig\.Init/);
+  });
+
   it("reads a realistic inspect that omits the keys the Engine API leaves out when unset", () => {
     const doc = goldenInspect() as unknown as { HostConfig: Record<string, unknown> };
     delete doc.HostConfig.Sysctls;
@@ -166,15 +180,14 @@ describe("containerFactsFromInspect", () => {
 
 describe("omitempty keys and null slices", () => {
   // Docker omits these HostConfig keys when they are unset (Go `omitempty`). None of them can hide a
-  // weakening by being absent, so absent, null and empty all leave the facts unchanged. StorageOpt,
-  // Annotations and Init are never read at all: no value of theirs can matter to isolation.
+  // weakening by being absent, so absent, null and empty all leave the facts unchanged. StorageOpt and
+  // Annotations are never read at all: no value of theirs can matter to isolation. Init is read (above): unset is not golden.
   const NEUTRAL: ReadonlyArray<[string, unknown[]]> = [
     ["Tmpfs", [undefined, null, {}]],
     ["Sysctls", [undefined, null, {}]],
     ["Mounts", [undefined, null, []]],
     ["StorageOpt", [undefined, null, {}]],
     ["Annotations", [undefined, null, {}]],
-    ["Init", [undefined, null, true, false]],
   ];
 
   it.each(NEUTRAL)("HostConfig.%s: unset in every form reads as the golden facts", (key, variants) => {

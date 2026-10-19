@@ -314,6 +314,8 @@ describe("evaluateStage", () => {
     ["volumes from", { volumes_from: ["other"] }, {}, "volumes_from"],
     ["sysctl set", { sysctls: ["net.ipv4.ip_forward"] }, {}, "sysctl_set"],
     ["unexpected runtime", { runtime: "runsc" }, {}, "runtime_unexpected"],
+    ["a daemon default of init true", { init: true }, {}, "init_not_disabled"],
+    ["init left unset, so the daemon default applies", { init: null }, {}, "init_not_disabled"],
   ];
   it.each(SINGLE)("%s gives exactly one violation", (_name, facts, checks, code) => {
     expect(codes(facts, checks)).toEqual([code]);

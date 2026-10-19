@@ -50,6 +50,7 @@ describe("real docker inspect fixtures", () => {
       "root_user",
       "rootfs_writable",
       "no_new_privileges_missing",
+      "init_not_disabled",
     ]);
   });
 
@@ -65,6 +66,7 @@ describe("real docker inspect fixtures", () => {
       devices: [],
       sysctls: [],
       runtime: "runc",
+      init: false,
     });
     expect(facts("hardened").security_opt.some((option) => option.startsWith("no-new-privileges"))).toBe(true);
     expect(judge("hardened").violations).toEqual([]);

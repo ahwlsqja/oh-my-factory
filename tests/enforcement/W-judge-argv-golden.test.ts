@@ -30,7 +30,7 @@ type JudgeRole = (typeof JUDGE_ROLES)[number];
 // byte, and the spec type cannot express a mount, a volume, a privilege or a network (spec §7, M3f-D2). What the daemon
 // then reports about the container is judged by the per-run measurement.
 const HEAD = (role: JudgeRole): string =>
-  `--context colima-omf-m3f create --name omf-${role}-${FIXTURE_RUN_ID}-1-1 --pull never --label omf.owner=omf --label omf.work=${FIXTURE_WORK_ID} --label omf.run=${FIXTURE_RUN_ID} --label omf.round=1 --label omf.role=${role} --network none --cap-drop ALL --security-opt no-new-privileges --read-only --user 65532:65532 --pids-limit 256 --memory 512m --cpus 1 --stop-timeout 1 --env LC_ALL=C`;
+  `--context colima-omf-m3f create --name omf-${role}-${FIXTURE_RUN_ID}-1-1 --pull never --label omf.owner=omf --label omf.work=${FIXTURE_WORK_ID} --label omf.run=${FIXTURE_RUN_ID} --label omf.round=1 --label omf.role=${role} --network none --cap-drop ALL --security-opt no-new-privileges --read-only --user 65532:65532 --pids-limit 256 --memory 512m --cpus 1 --stop-timeout 1 --init=false --env LC_ALL=C`;
 const OWNED = "nosuid,nodev,uid=65532,gid=65532";
 
 const GOLDEN: Record<JudgeRole, string> = {

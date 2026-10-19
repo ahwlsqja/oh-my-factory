@@ -73,7 +73,8 @@ export interface StopDecision {
  * A candidate CAN end its own container. The SUT runs from a round image whose build ran candidate code as root, and
  * `--entrypoint sleep` is looked up through the image PATH, so the candidate can install its own `sleep`; PID 1 runs as the same
  * uid as the candidate and is dumpable, so the candidate can raise `/proc/1/oom_score_adj` and then exceed the memory limit;
- * and a daemon configured with `init: true` makes PID 1 docker-init with `sleep` as a killable child. So a container that is gone is not infrastructure by default: the host decides by what it
+ * and a daemon configured with `init: true` would make PID 1 docker-init with `sleep` as a killable child (`--init=false`
+ * overrides that, and the facts measure it). So a container that is gone is not infrastructure by default: the host decides by what it
  * knows. It removed or stopped the container itself, or the container's lifetime had elapsed on the host clock (measured from
  * the start recorded when `docker start` returned, less `LIFETIME_SLACK_MS`), then it is the host's; otherwise it stopped early on
  * its own and that is the candidate's doing, OOM kill included.

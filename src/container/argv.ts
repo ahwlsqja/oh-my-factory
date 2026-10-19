@@ -97,6 +97,8 @@ export function createArgv(spec: ContainerSpec, context: string | null): string[
     String(limits.cpus),
     "--stop-timeout",
     "1",
+    // A daemon configured with `init: true` would put docker-init at PID 1 with the sleep as a killable child; this overrides it.
+    "--init=false",
     "--env",
     "LC_ALL=C",
     ...fixedEnvOf(spec.labels.role).flatMap(([name, value]) => ["--env", `${name}=${value}`]),

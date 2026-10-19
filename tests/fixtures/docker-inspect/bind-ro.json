@@ -68,6 +68,7 @@
       "UsernsMode": "",
       "ShmSize": 67108864,
       "Runtime": "runc",
+      "Init": false,
       "Isolation": "",
       "CpuShares": 0,
       "Memory": 0,
