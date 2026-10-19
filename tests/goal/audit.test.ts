@@ -16,6 +16,16 @@ describe("auditGoal", () => {
     expect(report.problems).toEqual(["metric m-unknown has no proposal; run omf metric propose m-unknown"]);
   });
 
+  it("lists template placeholders apart from the problems, and keeps the existing check", () => {
+    const fx = setupGoal();
+    writeFileSync(fx.goalFile, goalTemplate("g-fast"));
+    const report = auditGoal(fx.location, "g-fast");
+    expect(report.state).toBe("draft");
+    expect(report.problems).toEqual(["metric m-replace-me has no proposal; run omf metric propose m-replace-me"]);
+    expect(report.placeholders[0]).toMatch(/^metric id m-replace-me is a placeholder/);
+    expect(report.placeholders.length).toBeGreaterThan(1);
+  });
+
   it("reports a draft that is ready for J1", () => {
     const report = auditGoal(setupGoal().location, "g-fast");
     expect(report).toMatchObject({ state: "draft", problems: [], regime_changes: [], approval: null });

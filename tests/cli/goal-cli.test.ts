@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Ledger } from "../../src/core/ledger.js";
 import { projectDir } from "../../src/core/paths.js";
+import { approveGoal } from "../../src/goal/approve.js";
+import { goalTemplate } from "../../src/goal/goal-file.js";
 import { lockGoal } from "../../src/goal/goal-lock.js";
 import { lockFile, proposalFile, readProposal } from "../../src/goal/metrics.js";
 import { omf } from "../helpers/cli.js";
@@ -123,6 +125,35 @@ describe("omf metric propose", () => {
 });
 
 describe("omf goal audit", () => {
+  it("keeps template placeholders and short-wall-time advice together without blocking approval", () => {
+    const fx = setupGoal();
+    const template = goalTemplate("g-fast").replace(/m-replace-me/g, "m-p95");
+    writeFileSync(fx.goalFile, template);
+    const auditJson = () => JSON.parse(omf(["goal", "audit", "g-fast", "--json"], fx.repo, fx.home).stdout);
+    const fresh = auditJson();
+    expect(template).toContain("wall_time: 14d");
+    expect(fresh).toMatchObject({ state: "draft", problems: [], warnings: [] });
+    expect(fresh.placeholders.length).toBeGreaterThan(0);
+
+    writeFileSync(fx.goalFile, template.replace("wall_time: 14d", "wall_time: 72h"));
+    const short = auditJson();
+    expect(short).toMatchObject({ state: "draft", problems: [], placeholders: fresh.placeholders });
+    expect(short.warnings).toHaveLength(1);
+    const text = omf(["goal", "audit", "g-fast"], fx.repo, fx.home);
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain("still template text in goal.md (replace before you approve):");
+    expect(text.stdout).toContain("warnings:");
+    expect(text.stdout).toContain("wall time 72h is not longer than the minimum observation 7d");
+
+    expect(approveGoal(fx.location, "g-fast", "human:dev").created).toBe(true);
+    expect(auditJson()).toMatchObject({
+      state: "approved",
+      problems: [],
+      placeholders: fresh.placeholders,
+      warnings: short.warnings,
+    });
+  });
+
   it("reports a draft that is ready for J1", () => {
     const fx = setupGoal();
     const result = omf(["goal", "audit", "g-fast"], fx.repo, fx.home);

@@ -113,37 +113,102 @@ export function referencedMetrics(source: GoalSemantic): string[] {
   return [...new Set([source.target.metric_id, ...source.leading, ...source.lagging, ...source.guardrails])];
 }
 
+/** The placeholder text `omf goal new` writes. `placeholdersIn` looks for exactly these, so keep them in step with the template. */
+export const PLACEHOLDER_METRIC_ID = "m-replace-me";
+export const PLACEHOLDER_TITLE = "Say what this goal is in a few words";
+export const PLACEHOLDER_OBJECTIVE = "The outcome you want, in plain words";
+export const PLACEHOLDER_LINK_HYPOTHESIS = "Why moving the leading metrics should move the lagging ones";
+export const PLACEHOLDER_APPROACH_MARKER = "Replace this line";
+
 export function goalTemplate(goalId: string): string {
   return `---
+# The fields between the two --- lines are what you approve with omf goal approve and OMF locks, except title and objective.
+# A model sees only objective and the text under "## Approach" below, so write those in words:
+# no numbers, no thresholds and no metric ids, or the goal cannot be used.
+# Lines starting with # are notes for you and are not read.
 schema_version: 1
 goal_id: ${goalId}
-title: "Say what this goal is in a few words"
+# Free text, not locked, not shown to a model.
+title: "${PLACEHOLDER_TITLE}"
+# The mode line: build works toward the target; watch keeps an already-good metric from slipping.
 mode: build
+# The kind line: default is an ordinary goal; migration is a goal that moves from one implementation to another.
 kind: default
-objective: "The outcome you want, in plain words"
+objective: "${PLACEHOLDER_OBJECTIVE}"
 target:
-  metric_id: m-replace-me
+  # Placeholder: replace with the id of your own metric (m-<lowercase-words>), here and in lagging below.
+  # You then define how it is measured with omf metric propose.
+  metric_id: ${PLACEHOLDER_METRIC_ID}
   operator: "<="
+  # Your decision, not an OMF default: set the operator and the number you want to reach.
+  # Placeholder: 0 is only a default. Set the number you want to reach.
   value: 0
+  # Placeholder: must match the unit you give omf metric propose (for example ms, warnings, tests).
   unit: ms
+# leading, lagging, guardrails are lists of metric ids: leading moves first, lagging shows the result, guardrails must not get worse.
 leading: []
-lagging: [m-replace-me]
-link_hypothesis: "Why moving the leading metrics should move the lagging ones"
+lagging: [${PLACEHOLDER_METRIC_ID}]
+link_hypothesis: "${PLACEHOLDER_LINK_HYPOTHESIS}"
 guardrails: []
 prereg:
+  # Your decision: how long to keep observing before the goal can be judged (for example 7d).
   min_observation: 7d
+  # Your decision: the rule that says the goal is reached; write it for your own goal.
   decision_rule: "target met for 2 consecutive measurements and no guardrail breach"
+  # metrics_judged: how many metrics the decision rule judges (1 is right for a single target).
   metrics_judged: 1
+# OMF defaults you may keep: the three budget values below are safe starting limits.
 budget:
   rounds: 10
   wall_time: 14d
   max_open_work_items: 2
+# state_source: where work items are kept. markdown is the only choice today; leave it.
 state_source: markdown
 ---
 ## Approach
 
-How the work should move the metric, and what is out of scope.
+### Why
+
+${PLACEHOLDER_APPROACH_MARKER} with the reason this goal matters.
+
+### Constraints
+
+${PLACEHOLDER_APPROACH_MARKER} with what must not change and what is out of scope.
+
+### Done when
+
+${PLACEHOLDER_APPROACH_MARKER} with what you could observe in the product when the goal is reached.
 `;
+}
+
+/**
+ * Template placeholders still present in a goal. Each entry says what to replace. Advisory: this only reads
+ * text and never decides whether a goal may be approved.
+ */
+export function placeholdersIn(doc: GoalDoc): string[] {
+  const found: string[] = [];
+  const { front, body } = doc;
+  if (referencedMetrics(front).includes(PLACEHOLDER_METRIC_ID)) {
+    found.push(
+      `metric id ${PLACEHOLDER_METRIC_ID} is a placeholder: use your own metric id in target and lagging, and set target.unit to its unit`,
+    );
+  }
+  if (front.target.unit === "ms" && front.target.value === 0) {
+    found.push(
+      "target unit ms and value 0 are template defaults: set the value you want to reach and the unit your metric uses",
+    );
+  }
+  if (front.title === PLACEHOLDER_TITLE) found.push("title is still the template text: say what the goal is");
+  if (front.objective === PLACEHOLDER_OBJECTIVE) {
+    found.push("objective is still the template text: describe the outcome in plain words");
+  }
+  if (front.link_hypothesis === PLACEHOLDER_LINK_HYPOTHESIS) {
+    found.push("link_hypothesis is still the template text: say why the leading metrics move the lagging ones");
+  }
+  if (body.includes(PLACEHOLDER_APPROACH_MARKER)) {
+    found.push("## Approach still has template lines: fill in Why, Constraints and Done when");
+  }
+  return found;
 }
 
 /** Writes a new goal.md in host state (v0.1 keeps goals out of the repository). Refuses to overwrite. */
