@@ -19,7 +19,9 @@ import type { Credential } from "../implementer/credential.js";
 import { failureCodeOf, outputOf } from "../implementer/session.js";
 import type { StageMeasurement } from "../isolation/types.js";
 import { judgeForbiddenPaths } from "../judge/forbidden.js";
-import { type AuthorFailureCode, MAX_AUTHOR_OUTPUT_BYTES } from "../scenario/types.js";
+import { intakeAuthored, randomIds } from "../scenario/intake.js";
+import { type AuthorFailureCode, type AuthorStamp, MAX_AUTHOR_OUTPUT_BYTES } from "../scenario/types.js";
+import { renderScenarioFile } from "../vault/vault.js";
 import { SealInputError, type SealInputs, buildSealPrompt } from "../seal/prompt.js";
 import type { AgentSession, AuthorOutcome, AuthorRequest } from "../seal/session.js";
 import {
@@ -113,22 +115,47 @@ const YAML_OPTIONS = { schema: "core", uniqueKeys: true, maxAliasCount: 0 } as c
 
 /**
  * What intake will store, decoded the way intake decodes it: each YAML document of the answer as plain data, written as
- * JSON. A key spelled with YAML double-quoted `\x`/`\u` escapes or joined by a line continuation is plain here. A stream
- * that does not parse is left to intake to reject; it stores nothing.
+ * JSON. A key spelled with YAML double-quoted `\x`/`\u` escapes or joined by a line continuation is plain here. Each
+ * document is decoded on its own, as intake does it (a document with errors is skipped, no alias is resolved), so a bad
+ * document never stops the scan of the others. A stream that does not parse is left to intake to reject.
  */
 function decodedScenarioTexts(yaml: string): string[] {
+  let docs: ReturnType<typeof parseAllDocuments>;
   try {
-    return parseAllDocuments(yaml, YAML_OPTIONS).map((doc) => JSON.stringify(doc.toJS()));
+    docs = parseAllDocuments(yaml, YAML_OPTIONS);
   } catch {
     return [];
   }
+  const texts: string[] = [];
+  for (const doc of docs) {
+    if (doc.errors.length > 0) continue;
+    try {
+      texts.push(JSON.stringify(doc.toJS({ maxAliasCount: 0 })));
+    } catch {
+      // This document is not plain data; intake rejects it too. The others are still scanned.
+    }
+  }
+  return texts;
 }
 
-/** Occurrences of the key in the answer after the JSON decode and in the scenario documents after the YAML decode. */
-function decodedKeyHits(yaml: string, credential: Credential): number {
-  return (
-    keyHits(yaml, credential) + decodedScenarioTexts(yaml).reduce((hits, text) => hits + keyHits(text, credential), 0)
-  );
+/**
+ * The bytes the seal stage would store: the same intake it runs, with throwaway ids, over the answer, then each scenario it
+ * accepts rendered exactly as the vault renders it.
+ */
+function storedScenarioTexts(yaml: string, stamp: AuthorStamp): string[] {
+  const intake = intakeAuthored(yaml, { workId: "w-000000000000", author: stamp, ids: randomIds() });
+  return intake.stored.map((scenario) => renderScenarioFile(scenario));
+}
+
+/** Occurrences of the key in the answer, in the scenario files intake would store, and in each document after the YAML decode. */
+function decodedKeyHits(yaml: string, credential: Credential, stamp: AuthorStamp): number {
+  let stored: string[] = [];
+  try {
+    stored = storedScenarioTexts(yaml, stamp);
+  } catch {
+    // Intake refuses the whole answer or fails on its own: the decoded scan below is still run.
+  }
+  return [yaml, ...stored, ...decodedScenarioTexts(yaml)].reduce((hits, text) => hits + keyHits(text, credential), 0);
 }
 
 const fileEntry = (path: string, text: string): TarEntry => ({
@@ -352,7 +379,12 @@ export function createContainerAuthor(deps: ContainerAuthorDeps): ContainerAutho
         seen.answerBytes = Buffer.byteLength(text);
         const answer = parseAnswer(text);
         if (!answer.ok) return fail("no_output");
-        const decodedLeak = decodedKeyHits(answer.yaml, credential);
+        const decodedLeak = decodedKeyHits(answer.yaml, credential, {
+          vendor: "codex",
+          model: stampedModel,
+          at: deps.now().toISOString(),
+          isolation: "container",
+        });
         if (decodedLeak > 0) {
           seen.hits += decodedLeak;
           return fail("credential_in_output");

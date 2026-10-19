@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createContainerAuthor } from "../../src/author/codex-session.js";
+import { intakeAuthored, randomIds } from "../../src/scenario/intake.js";
 import { AUTHOR_KEY, authorCredential, authorDeps, authorDouble, authorRequest } from "../helpers/author-container.js";
 
 // The answer is scanned for the key and for the spellings a model could write without noticing it copies a key: base64,
@@ -97,5 +98,65 @@ describe("the key is searched after the answer is decoded", () => {
   it("still accepts an answer that has no key in any decoded form", async () => {
     const answer = `${JSON.stringify({ scenarios_yaml: 'note: "\\x68\\x69"\n' })}\n`;
     expect((await runRaw(answer)).outcome).toMatchObject({ ok: true });
+  });
+});
+
+// One bad YAML document must not stop the scan of the others: what is scanned is what would be stored.
+const scenarioWithNote = (note: string): string =>
+  [
+    "decision_refs: []",
+    "kind: behavior",
+    "split: train",
+    "interface: cli",
+    "steps:",
+    '  - invoke: { argv: ["echo"], stdin: "" }',
+    `    expect: { exit_code: 0, note: "${note}" }`,
+    "",
+  ].join("\n");
+
+const BAD_DOCUMENTS = [
+  ["an unresolved alias", "*nope\n"],
+  ["a circular alias", "&a [*a]\n"],
+] as const;
+
+const escapedKeys = [
+  ["\\x-escaped", yamlHex],
+  ["\\u-escaped", yamlUnicode],
+] as const;
+
+const joined = (good: string, bad: string, where: "before" | "after"): string =>
+  where === "before" ? `${bad}---\n${good}` : `${good}---\n${bad}`;
+
+describe("a bad document does not hide a key in a good one", () => {
+  it("the good document is one intake would store", () => {
+    const author = { vendor: "codex", model: "m", at: "2026-10-19T09:00:00Z", isolation: "container" } as const;
+    const result = intakeAuthored(joined(scenarioWithNote(yamlHex(KEY)), "*nope\n", "after"), {
+      workId: "w-000000000000",
+      author,
+      ids: randomIds(),
+    });
+    expect(result.stored).toHaveLength(1);
+    expect(JSON.stringify(result.stored)).toContain(KEY);
+  });
+
+  it.each(
+    escapedKeys.flatMap(([keyLabel, spell]) =>
+      BAD_DOCUMENTS.flatMap(([badLabel, bad]) =>
+        (["before", "after"] as const).map((where) => [keyLabel, badLabel, where, spell, bad] as const),
+      ),
+    ),
+  )("ends credential_in_output: a %s key, %s %s the good document", async (_k, _b, where, spell, bad) => {
+    const yaml = joined(scenarioWithNote(spell(KEY)), bad, where);
+    const answer = `${JSON.stringify({ scenarios_yaml: yaml })}\n`;
+    expect(answer).not.toContain(KEY);
+    const { outcome, facts } = await runRaw(answer);
+    expect(outcome).toMatchObject({ ok: false, code: "credential_in_output" });
+    expect(facts?.outcome).toBe("credential_in_output");
+    expect(facts?.credential_hits).toBeGreaterThan(0);
+  });
+
+  it.each(BAD_DOCUMENTS)("still accepts a keyless good document next to %s", async (_label, bad) => {
+    const yaml = joined(scenarioWithNote("fine"), bad, "after");
+    expect((await runRaw(`${JSON.stringify({ scenarios_yaml: yaml })}\n`)).outcome).toMatchObject({ ok: true });
   });
 });
