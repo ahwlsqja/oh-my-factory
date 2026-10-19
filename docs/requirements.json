@@ -566,7 +566,7 @@
     {
       "id": "S5.0.run-report-idempotent",
       "source": "spec §5.0; M3h",
-      "claim": "omf run on an item that already ran, and omf report, change nothing; omf report prints only evidence the verified ledger vouches for, rendered from the validated evidence.json.",
+      "claim": "omf run on an item that already ran, and omf report, change nothing. omf report refuses a recommendation, outcome or isolation level the ledger does not vouch for; its other fields are shown as recorded in the run's evidence file.",
       "real_world": false,
       "surfaces": ["README.md"],
       "tests": [
@@ -579,7 +579,7 @@
     {
       "id": "S13.cli-usage-drift",
       "source": "spec §13",
-      "claim": "Every leaf command's --help text is reproduced byte for byte in docs/cli-usage.md and has a README row; a command without a block, or a block that differs, fails the build and names the verb.",
+      "claim": "Every leaf command's --help text is reproduced byte for byte in docs/cli-usage.md and has a README row; a command without a block, or a block that differs, fails npm test and names the verb.",
       "real_world": false,
       "surfaces": ["docs/cli-usage.md", "README.md"],
       "tests": [
@@ -596,7 +596,7 @@
     {
       "id": "S7.unmeasured-stage-no-claim",
       "source": "spec §7",
-      "claim": "A stage that no container measured leaves the run-level isolation label unmeasured, and the CLI prints no L2 or sealed claim for the run.",
+      "claim": "A stage no container measured leaves the run's isolation label unmeasured. omf report refuses an isolation level above the ledger's measured one; its other fields are shown as recorded in the run's evidence file.",
       "real_world": false,
       "surfaces": ["docs/isolation-and-gates.md"],
       "tests": [
