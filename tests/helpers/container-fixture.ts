@@ -7,6 +7,7 @@ import {
   type RoleLimits,
   type SecretEnvName,
   containerName,
+  agentLifetimeSeconds,
   roleLimits,
   roleTmpfs,
 } from "../../src/container/spec.js";
@@ -70,12 +71,14 @@ const imageFor = (role: ContainerRole): string =>
 export function specFor(role: ContainerRole, serial = 1, round = 1): ContainerSpec {
   const labels = labelsFor(role, round);
   const limits = limitsFor(role);
+  const lifetime = agentLifetimeSeconds(role, limits);
   return {
     name: containerName(labels, serial),
     image: pinnedImage(imageFor(role)),
     labels,
     tmpfs: roleTmpfs(role, limits),
     limits: roleLimits(role, limits),
+    ...(lifetime === null ? {} : { lifetime_s: lifetime }),
   };
 }
 

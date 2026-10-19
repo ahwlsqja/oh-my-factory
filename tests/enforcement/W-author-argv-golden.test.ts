@@ -30,7 +30,7 @@ import {
 const NAME = `omf-author-${FIXTURE_RUN_ID}-1-1`;
 const OWNED = "nosuid,nodev,uid=65532,gid=65532";
 const FIXED_ENV = "--env HOME=/agent --env CODEX_HOME=/agent/codex --env NO_COLOR=1 --env OMF_TMP=/tmp";
-const GOLDEN_CREATE = `--context colima-omf-m3f create --name ${NAME} --pull never --label omf.owner=omf --label omf.work=${FIXTURE_WORK_ID} --label omf.run=${FIXTURE_RUN_ID} --label omf.round=1 --label omf.role=author --network bridge --cap-drop ALL --security-opt no-new-privileges --read-only --user 65532:65532 --pids-limit 256 --memory 1024m --cpus 1 --stop-timeout 1 --env LC_ALL=C ${FIXED_ENV} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /in:rw,size=16m,${OWNED} --tmpfs /out:rw,size=16m,${OWNED} --tmpfs /agent:rw,size=128m,${OWNED} --entrypoint sleep ${AUTHOR_BASE} 2147483647`;
+const GOLDEN_CREATE = `--context colima-omf-m3f create --name ${NAME} --pull never --label omf.owner=omf --label omf.work=${FIXTURE_WORK_ID} --label omf.run=${FIXTURE_RUN_ID} --label omf.round=1 --label omf.role=author --network bridge --cap-drop ALL --security-opt no-new-privileges --read-only --user 65532:65532 --pids-limit 256 --memory 1024m --cpus 1 --stop-timeout 1 --env LC_ALL=C ${FIXED_ENV} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /in:rw,size=16m,${OWNED} --tmpfs /out:rw,size=16m,${OWNED} --tmpfs /agent:rw,size=128m,${OWNED} --entrypoint sleep ${AUTHOR_BASE} 765`;
 
 const CLOSED_FLAGS = [
   "--cap-drop",

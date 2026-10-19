@@ -14,6 +14,14 @@ function onSigterm(): void {
   onSignal("SIGTERM");
 }
 
+function onSighup(): void {
+  onSignal("SIGHUP");
+}
+
+function onSigquit(): void {
+  onSignal("SIGQUIT");
+}
+
 /**
  * Runs every registered callback synchronously, `first` ones before the rest and each group in registration order (each in its own try/catch, so one failing callback cannot stop the others),
  * takes the handlers off so the signal has its default effect again, and re-raises it: the process still ends with the
@@ -38,16 +46,20 @@ function install(): void {
   installed = true;
   process.on("SIGINT", onSigint);
   process.on("SIGTERM", onSigterm);
+  process.on("SIGHUP", onSighup);
+  process.on("SIGQUIT", onSigquit);
 }
 
 function removeHandlers(): void {
   installed = false;
   process.off("SIGINT", onSigint);
   process.off("SIGTERM", onSigterm);
+  process.off("SIGHUP", onSighup);
+  process.off("SIGQUIT", onSigquit);
 }
 
 /**
- * One process-wide SIGINT/SIGTERM handler pair, installed on the first registration and removed on the last unregister.
+ * One process-wide handler set for SIGINT, SIGTERM, SIGHUP (the terminal closed) and SIGQUIT, installed on the first registration and removed on the last unregister.
  * `process-group.ts` (running commands), `proveTest` (tree copies) and the judge containers register here; none
  * installs its own handler. The callback must be synchronous and idempotent. Returns the unregister function.
  * `first` callbacks run before every other one on a signal, whatever the registration order: a process-group killer

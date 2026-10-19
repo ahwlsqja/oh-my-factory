@@ -105,7 +105,7 @@ export function createArgv(spec: ContainerSpec, context: string | null): string[
     "--entrypoint",
     IDLE_ENTRYPOINT,
     spec.image,
-    ...IDLE_ARGS,
+    ...(spec.lifetime_s === undefined ? IDLE_ARGS : [String(spec.lifetime_s)]),
   ];
 }
 

@@ -18,6 +18,7 @@ import {
   SECRET_ENV_NAMES,
   type TmpfsSpec,
   containerName,
+  agentLifetimeSeconds,
   roleLimits,
   roleTmpfs,
 } from "./spec.js";
@@ -45,12 +46,14 @@ export function containerSpecFor(input: {
   limits: RoleLimits;
 }): ContainerSpec {
   const labels: OwnedLabels = { ...input.labels, role: input.role };
+  const lifetime = agentLifetimeSeconds(input.role, input.limits);
   return {
     name: containerName(labels, input.serial),
     image: input.image,
     labels,
     tmpfs: roleTmpfs(input.role, input.limits),
     limits: roleLimits(input.role, input.limits),
+    ...(lifetime === null ? {} : { lifetime_s: lifetime }),
   };
 }
 

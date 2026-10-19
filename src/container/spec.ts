@@ -27,7 +27,42 @@ export const ROLE_NETWORK: Readonly<Record<ContainerRole, "none" | "bridge">> = 
 export const SANDBOX_USER = "65532:65532";
 /** Containers idle until `docker exec` gives them work. The base image must ship `sleep` (a stated limit). */
 export const IDLE_ENTRYPOINT = "sleep";
+/** What a judge container sleeps for: it is removed by the run, and a killed run's leftovers by the next sweep. */
 export const IDLE_ARGS: readonly string[] = ["2147483647"];
+
+/**
+ * Seconds of slack on top of an agent container's own bounds: the daemon's start-up, the time between the host's
+ * calls and the cap of each. The container stops itself this long after the last bound it can legitimately need.
+ */
+export const AGENT_LIFETIME_MARGIN_S = 60;
+/**
+ * The caps of the execs one author container serves besides the model call, in seconds: the isolation probe (15), the two
+ * `tar -x` uploads (30 each) and the answer read (30).
+ */
+export const AUTHOR_STEPS_S = 15 + 30 + 30 + 30;
+/**
+ * The caps of the execs one implementer container serves besides the session, in seconds: the isolation probe (15), the
+ * settings write (30), the workspace preparation (a 30 s tool check and four 120 s steps), the process kill (30), the
+ * capture (300) and the finalize (120).
+ */
+export const IMPLEMENTER_STEPS_S = 15 + 30 + (30 + 4 * 120) + 30 + 300 + 120;
+
+/**
+ * How long an agent container sleeps before it stops itself, so a host killed by SIGKILL cannot leave a container with a
+ * network and a vendor CLI running past its cap. The configured wall-time bound of the one model call, the caps of the other
+ * execs the container serves, and a margin. A judge role has no such bound (null).
+ */
+export function agentLifetimeSeconds(role: ContainerRole, limits: RoleLimits): number | null {
+  if (role === "author") {
+    if (limits.kind !== "author") throw new ContainerSpecError("invalid_limits");
+    return Math.ceil(limits.author.timeout_ms / 1000) + AUTHOR_STEPS_S + AGENT_LIFETIME_MARGIN_S;
+  }
+  if (role === "implementer") {
+    if (limits.kind !== "implementer") throw new ContainerSpecError("invalid_limits");
+    return Math.ceil(limits.implementer.timeout_ms / 1000) + IMPLEMENTER_STEPS_S + AGENT_LIFETIME_MARGIN_S;
+  }
+  return null;
+}
 
 /**
  * The create-time environment of the implementer: names and values are constants of this module, never caller input
@@ -155,6 +190,11 @@ export interface ContainerSpec {
   labels: OwnedLabels;
   tmpfs: readonly TmpfsSpec[];
   limits: { memory_mb: number; cpus: number; pids: number };
+  /**
+   * Seconds the container sleeps before it stops itself (`agentLifetimeSeconds`). Required for the two agent roles, refused
+   * for the judge roles, which keep the idle sleep.
+   */
+  lifetime_s?: number;
 }
 
 // The run id pattern of the W events and the work id pattern of the W verbs, repeated here so the container layer imports
@@ -234,6 +274,12 @@ export function assertSpec(spec: ContainerSpec): void {
     cpus > 0 &&
     cpus <= 64;
   if (!limitsOk) throw new ContainerSpecError("invalid_limits");
+  const agent = spec.labels.role === "implementer" || spec.labels.role === "author";
+  const { lifetime_s: lifetime } = spec;
+  if (agent !== (lifetime !== undefined)) throw new ContainerSpecError("invalid_limits");
+  if (lifetime !== undefined && !(Number.isInteger(lifetime) && lifetime >= 1 && lifetime <= 2147483647)) {
+    throw new ContainerSpecError("invalid_limits");
+  }
 }
 
 /**

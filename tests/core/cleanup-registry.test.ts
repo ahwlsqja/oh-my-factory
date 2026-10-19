@@ -83,6 +83,42 @@ describe("registerCleanup", () => {
     expect(existsSync(join(dir, "a"))).toBe(true);
   });
 
+  it.each(["SIGHUP", "SIGQUIT"] as const)(
+    "does the same for %s, so a closed terminal or a quit key cleans up too",
+    async (signal) => {
+      const dir = makeTempDir("omf-registry-");
+      const script = `
+      import { writeFileSync } from "node:fs";
+      import { registerCleanup } from ${REGISTRY};
+      registerCleanup(() => writeFileSync(${JSON.stringify(join(dir, "a"))}, "a"));
+      console.log("ready");
+      setInterval(() => {}, 60000);
+    `;
+      expect(await killedBy(script, signal)).toEqual({ code: null, signal });
+      expect(existsSync(join(dir, "a"))).toBe(true);
+    },
+  );
+
+  it("installs a listener for each of the four signals with the first registration and removes all with the last", async () => {
+    const script = `
+      import { registerCleanup } from ${REGISTRY};
+      const names = ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"];
+      const counts = () => Object.fromEntries(names.map((n) => [n, process.listenerCount(n)]));
+      const before = counts();
+      const off = registerCleanup(() => {});
+      const during = counts();
+      off();
+      console.log(JSON.stringify({ before, during, after: counts() }));
+    `;
+    const { code, out } = await runChild(script, []);
+    expect(code).toBe(0);
+    const seen = JSON.parse(out) as Record<string, Record<string, number>>;
+    for (const name of ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"]) {
+      expect(seen.during?.[name]).toBe((seen.before?.[name] ?? 0) + 1);
+      expect(seen.after?.[name]).toBe(seen.before?.[name]);
+    }
+  });
+
   it("a gate command under process-group and a registered copy cleanup are both handled on one SIGTERM", async () => {
     const dir = makeTempDir("omf-registry-");
     const copyDir = join(dir, "wc-copy");
