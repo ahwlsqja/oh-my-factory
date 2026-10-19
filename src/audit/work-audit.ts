@@ -63,10 +63,10 @@ const capRisk = (risk: RiskAssessment): RiskAssessment => ({
 });
 
 /** The test-weakening check on the real diff text. A diff that cannot be read in full (`output_limit`, a failure) gives `null`: the risk stays conservative. */
-async function testWeakening(input: AuditInput): Promise<string[] | null> {
+async function testWeakening(input: AuditInput, auditedPaths: readonly string[]): Promise<string[] | null> {
   try {
     const text = (await unifiedDiff(input.quarantine, input.base, input.head)).toString("utf8");
-    return findTestWeakening(text, input.explicitTestPaths);
+    return findTestWeakening(text, input.explicitTestPaths, auditedPaths);
   } catch {
     return null;
   }
@@ -91,7 +91,7 @@ export async function runAudit(input: AuditInput): Promise<WorkAudit> {
     facts,
     input.declaredRisk,
     { watchedGlobs: input.watchedGlobs, extraGlobs: input.extraGlobs },
-    await testWeakening(input),
+    await testWeakening(input, facts.paths),
   );
   return {
     schema_version: 1,

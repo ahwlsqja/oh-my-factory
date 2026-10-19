@@ -454,14 +454,24 @@ those stay in the report under host state.
 
 Dispatched items live in `goals/<id>/work/<work-id>/`. Risk is classified by code from the paths a candidate
 declares. CI, auth, migrations, lockfiles, goal and factory files and your watched paths are high risk. A test file is not
-high risk by itself: when the audit reads the real diff, only a change that weakens tests is (a deleted test file,
-removed assertions, an added skip, only or todo marker, or a lowered threshold). A declared test path has no diff yet,
-so it stays high at declaration, and so does a test change whose diff cannot be read. A high-risk item waits in `awaiting_approval` for `omf work approve`, any other item starts `ready`. You can
+high risk by itself, neither when a candidate declares it nor when the audit reads the real diff. A declared test path has
+no diff yet, so it does not make an item high at dispatch. After the implementation the audit runs a deterministic
+test-weakening check on the diff and raises the item to high only for a change that weakens tests: a deleted test file,
+removed assertions, an added skip, only, todo or x-prefixed marker (`xit`, `xdescribe`, `fit` and the like), a lowered
+threshold, or a new or edited test runner or coverage config under a test path (unless it only raises a number). When
+the check cannot run, for example the diff cannot be read in full, every test change stays high. Risk only rises between
+declaration and audit. The check reads changed lines and is not a proof; its known limits are listed below. A high-risk item waits in `awaiting_approval` for `omf work approve`, any other item starts `ready`. You can
 `omf veto <work-id>` anything that is open. The ledger, not the item file, decides whether an item was approved,
 vetoed or cancelled: an `item.md` edited by hand to look approved is listed by `omf work list` as malformed and
 is never dispatched.
 
 Known limits of the goal loop:
+
+- The test-weakening check is line based. It does not follow a block comment that spans lines, an early `return` or
+  `if (false)` that stops a test from running, a weaker matcher (`toBeTruthy` for `toBe(1)`), an assertion replaced by
+  one that is always true, edits to snapshots or fixtures, or an `include` or `exclude` that narrows which tests run.
+  A binary section has no lines to read. It counts removed and added assertion lines, so a rewrite that keeps the count
+  looks unchanged.
 
 - The seed lint catches numbers and metric names, not paraphrase. A model that restates a threshold in other
   words gets through.

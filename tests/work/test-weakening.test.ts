@@ -178,4 +178,184 @@ describe("findTestWeakening", () => {
     ].join("\n");
     expect(findTestWeakening(diff, [])).toEqual(['tests/a\tb"c.test.ts']);
   });
+
+  it("reads a name with a space, which git ends with a tab on the ---/+++ lines", () => {
+    const diff = [
+      "diff --git a/tests/my file.test.ts b/tests/my file.test.ts",
+      "deleted file mode 100644",
+      "index 1111111..0000000",
+      "--- a/tests/my file.test.ts\t",
+      "+++ /dev/null",
+      "@@ -1,1 +0,0 @@",
+      "-it('a', () => {});",
+      "",
+    ].join("\n");
+    expect(findTestWeakening(diff, [])).toEqual(["tests/my file.test.ts"]);
+    const edit = modify("tests/my file.test.ts", ["-  expect(a).toBe(1);"]).replace(
+      /^(--- a\/.*|\+\+\+ b\/.*)$/gm,
+      "$1\t",
+    );
+    expect(findTestWeakening(edit, [])).toEqual(["tests/my file.test.ts"]);
+  });
+
+  describe("cross-check against the audited path list", () => {
+    const diff = modify("tests/a.test.ts", ["-  expect(a).toBe(1);"]);
+
+    it("accepts a list that matches the sections", () => {
+      expect(findTestWeakening(diff, [], ["src/x.ts", "tests/a.test.ts"])).toEqual(["tests/a.test.ts"]);
+    });
+
+    it("gives null when a test path of the list has no section", () => {
+      expect(findTestWeakening(diff, [], ["tests/a.test.ts", "tests/missing.test.ts"])).toBeNull();
+    });
+
+    it("gives null when a coverage config path of the list has no section", () => {
+      expect(findTestWeakening(diff, [], ["tests/a.test.ts", "vitest.config.ts"])).toBeNull();
+    });
+
+    it("gives null when a flagged path is not in the list", () => {
+      expect(findTestWeakening(diff, [], ["src/x.ts"])).toBeNull();
+    });
+
+    it("ignores a source path of the list that has no section", () => {
+      expect(findTestWeakening(diff, [], ["src/x.ts", "tests/a.test.ts"])).toEqual(["tests/a.test.ts"]);
+    });
+  });
+
+  describe("comment lines", () => {
+    it.each([
+      "// expect(a).toBe(1);",
+      "  # assert x == 1",
+      "/* expect(a).toBe(1); */",
+      " * expect(a).toBe(1);",
+      "<!-- expect(a).toBe(1) -->",
+    ])("a removed comment line is not a lost assertion: %s", (line) => {
+      expect(findTestWeakening(modify("tests/a.test.ts", [`-${line}`]), [])).toEqual([]);
+    });
+
+    it("commenting out an assertion counts as losing it", () => {
+      const diff = modify("tests/a.test.ts", ["-  expect(a).toBe(1);", "+  // expect(a).toBe(1);"]);
+      expect(findTestWeakening(diff, [])).toEqual(["tests/a.test.ts"]);
+    });
+
+    it("a trailing comment does not hide the assertion before it, and does not count as one", () => {
+      expect(
+        findTestWeakening(
+          modify("tests/a.test.ts", ["-  expect(a).toBe(1); // keep", "+  expect(a).toBe(2); // keep"]),
+          [],
+        ),
+      ).toEqual([]);
+      expect(
+        findTestWeakening(modify("tests/a.test.ts", ["-  expect(a).toBe(1);", "+  doIt(); // expect(a).toBe(1);"]), []),
+      ).toEqual(["tests/a.test.ts"]);
+    });
+
+    it("a commented-out marker is not a marker", () => {
+      expect(findTestWeakening(modify("tests/a.test.ts", ["+// it.skip('a');", "+# @pytest.mark.skip"]), [])).toEqual(
+        [],
+      );
+    });
+
+    it("a Rust attribute starting with # is still a marker", () => {
+      expect(findTestWeakening(modify("tests/a.test.rs", ["+#[ignore]"]), [])).toEqual(["tests/a.test.rs"]);
+    });
+  });
+
+  it.each([
+    "it.skipIf(isCI)('a', () => {});",
+    "it.runIf(false)('a', () => {});",
+    "test.describe.skip('a', () => {});",
+    "describe.skip.each([1])('a', () => {});",
+    "bench.skip('a', () => {});",
+    "test('a', { skip: true }, () => {});",
+    "it('a', { todo: true }, () => {});",
+    "ctx.skip();",
+    "t.skip('later');",
+    "t.todo();",
+  ])("flags a conditional skip or widened marker form: %s", (line) => {
+    expect(findTestWeakening(modify("tests/a.test.ts", [`+${line}`]), [])).toEqual(["tests/a.test.ts"]);
+  });
+
+  describe("runner and coverage config under a test path", () => {
+    const added = (path: string, lines: string[]) =>
+      [
+        `diff --git a/${path} b/${path}`,
+        "new file mode 100644",
+        "index 0000000..2222222",
+        "--- /dev/null",
+        `+++ b/${path}`,
+        `@@ -0,0 +1,${lines.length} @@`,
+        ...lines.map((line) => `+${line}`),
+        "",
+      ].join("\n");
+
+    it("a new tests/pytest.ini is weakening", () => {
+      expect(findTestWeakening(added("tests/pytest.ini", ["[pytest]", "addopts = -k smoke"]), [])).toEqual([
+        "tests/pytest.ini",
+      ]);
+    });
+
+    it.each([
+      "tests/tox.ini",
+      "tests/setup.cfg",
+      "tests/pyproject.toml",
+      "tests/vitest.config.ts",
+      "tests/vite.config.ts",
+      "tests/jest.config.js",
+      "tests/karma.config.js",
+      "tests/vitest.workspace.ts",
+      "tests/.mocharc.json",
+      "tests/.nycrc",
+      "tests/.c8rc.json",
+      "tests/playwright.config.ts",
+    ])("an edit of %s is weakening", (path) => {
+      expect(findTestWeakening(modify(path, ["-  retries: 2", "+  retries: 0"]), [])).toEqual([path]);
+    });
+
+    it("an edit that only raises a number is not weakening", () => {
+      expect(
+        findTestWeakening(modify("tests/vitest.config.ts", ["-      lines: 80,", "+      lines: 90,"]), []),
+      ).toEqual([]);
+    });
+
+    it("an edit that lowers a number is weakening", () => {
+      expect(
+        findTestWeakening(modify("tests/vitest.config.ts", ["-      lines: 90,", "+      lines: 80,"]), []),
+      ).toEqual(["tests/vitest.config.ts"]);
+    });
+
+    it("an edit that raises a number and changes anything else is weakening", () => {
+      const diff = modify("tests/vitest.config.ts", [
+        "-      lines: 80,",
+        "+      lines: 90,",
+        "+      exclude: ['a'],",
+      ]);
+      expect(findTestWeakening(diff, [])).toEqual(["tests/vitest.config.ts"]);
+    });
+
+    it("a runner config outside a test path is only checked for thresholds", () => {
+      expect(findTestWeakening(modify("pytest.ini", ["-addopts = -x", "+addopts = -k smoke"]), [])).toEqual([]);
+    });
+  });
+
+  describe("assertion forms of other languages", () => {
+    it.each([
+      "assert x == 1",
+      "    assert response.ok",
+      't.Error("bad")',
+      't.Errorf("bad %v", x)',
+      "t.Fatal(err)",
+      't.Fatalf("bad %v", x)',
+      "t.Fail()",
+      "t.FailNow()",
+      "assert_eq!(a, b);",
+      "assert_that(x).is_true()",
+      "assert_equal 1, x",
+      "expectThat(x, equals(1));",
+      "expect_true(x)",
+      "expectEqual(a, b);",
+    ])("a removed line counts as an assertion: %s", (line) => {
+      expect(findTestWeakening(modify("tests/a.test.ts", [`-${line}`]), [])).toEqual(["tests/a.test.ts"]);
+    });
+  });
 });

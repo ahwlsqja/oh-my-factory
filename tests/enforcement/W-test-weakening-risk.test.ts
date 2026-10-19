@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { classifyLiteralPaths } from "../../src/work/risk.js";
+import { classifyLiteralPaths, classifyRisk } from "../../src/work/risk.js";
 
-// Owner decision on #65: a test change is not high risk by itself. The deterministic test-weakening check decides, and when it
+// A test change is not high risk by itself. The deterministic test-weakening check decides, and when it
 // cannot run (no diff text) a test change stays high.
 const base = { watchedGlobs: [], extraGlobs: [] };
 
 describe("W-test-weakening-risk", () => {
+  it("a declared test path is normal at dispatch: there is no diff to weaken yet", () => {
+    expect(classifyRisk({ ...base, declaredPaths: ["tests/new.test.ts"], tracked: [] }).class).toBe("normal");
+  });
+
   it("a test path the check did not flag is normal", () => {
     expect(classifyLiteralPaths({ ...base, paths: ["tests/new.test.ts"], weakeningPaths: [] }).class).toBe("normal");
   });

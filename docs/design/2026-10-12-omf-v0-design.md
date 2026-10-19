@@ -558,10 +558,19 @@ untrusted_fields: [plan_summary, implementer_notes]  # written by the implemente
 
 **Risk class is mechanical.** It is computed from the diff and paths, never chosen by an agent. The
 default high-risk paths are CI and workflow files, authentication, migrations, watched
-(instrumentation) paths, goal and factory files, and lockfiles. A test file is not high risk by itself:
-a deterministic test-weakening check raises the class to high when a change deletes a test file, removes
-assertion lines, adds a skip, only, todo or x-prefixed marker, or lowers a numeric threshold in a test or
-coverage config. When the diff text is not available, any test change stays high. People extend the list
+(instrumentation) paths, goal and factory files, and lockfiles. A test file is not high risk by itself,
+declared or changed. A declared test path has no diff to weaken yet, so it does not make an item high at dispatch. After
+the implementation, the audit runs a deterministic test-weakening check on the real diff and raises the class to high when
+a change deletes a test file, removes assertion lines, adds a skip, only, todo or x-prefixed marker, lowers a numeric
+threshold in a test or coverage config, or adds or edits a test runner or coverage config under a test path (unless it only
+raises a number). Comment lines count as neither assertions nor markers. When the check cannot run, because the diff text is
+not available or does not match the list of changed paths, any test change stays high. The audit only adds rules to the
+declared risk, so risk only rises between declaration and audit.
+
+Known limits of the line-based check: it does not follow a block comment spanning lines, an early return or `if (false)`
+that stops a test from running, a weaker matcher, an assertion replaced by one that is always true, snapshot or fixture
+edits, or an include or exclude that narrows which tests run. A binary section has no lines to read. It compares counts of
+removed and added assertion lines, so a rewrite that keeps the count looks unchanged. People extend the list
 at J3.
 
 ### 6.1 Back-pressure

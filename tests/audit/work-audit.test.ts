@@ -33,6 +33,25 @@ describe("runAudit test-weakening risk", () => {
     ).toBe("normal");
   });
 
+  it("raises a declared test-only item to high when its diff removes an assertion", async () => {
+    const fx = auditFixture(
+      { "tests/a.test.ts": "expect(a).toBe(1);\nexpect(b).toBe(2);\n" },
+      { "tests/a.test.ts": "expect(a).toBe(1);\n" },
+    );
+    const report = await runAudit(auditInput(fx));
+    expect(report.risk.declared.class).toBe("normal");
+    expect(report.risk.effective).toEqual({ class: "high", rules: ["test-weakening"], paths: ["tests/a.test.ts"] });
+    expect(report.risk.raised).toBe(true);
+  });
+
+  it("flags a deleted test file whose name has a space", async () => {
+    const risk = await effective(
+      { "src/a.ts": "1\n", "tests/my file.test.ts": "expect(a).toBe(1);\n" },
+      { "tests/my file.test.ts": null, "src/a.ts": "2\n" },
+    );
+    expect(risk).toEqual({ class: "high", rules: ["test-weakening"], paths: ["tests/my file.test.ts"] });
+  });
+
   it.each([
     [
       "a deleted test file",

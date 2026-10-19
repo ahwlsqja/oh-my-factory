@@ -89,8 +89,13 @@ function isClassifiable(raw: string, normalized: string): boolean {
 export function classifyRisk(input: RiskInput): RiskAssessment {
   if (input.declaredPaths.length === 0) return { class: "high", rules: ["undeclared"], paths: [] };
 
+  // A declared test path is not high by itself: before the implementation there is no diff to weaken. The audit adds the
+  // `test-weakening` rule (or the conservative `test` rule) from the real diff, and risk only rises from there.
   const rules: Array<{ rule: RiskRule; matches: (path: string) => boolean }> = [
-    ...DEFAULT_HIGH_RISK.map(({ rule, globs }) => ({ rule, matches: picomatch([...globs], MATCH_OPTIONS) })),
+    ...DEFAULT_HIGH_RISK.filter(({ rule }) => rule !== "test").map(({ rule, globs }) => ({
+      rule,
+      matches: picomatch([...globs], MATCH_OPTIONS),
+    })),
   ];
   if (input.watchedGlobs.length > 0)
     rules.push({ rule: "watched-path", matches: picomatch([...input.watchedGlobs], MATCH_OPTIONS) });

@@ -1,33 +1,57 @@
+import { normalizePath } from "./fingerprint.js";
 import { isTestPath } from "./risk.js";
 
 /**
- * A deterministic test-weakening check over a unified diff (`git diff`). It lists the test or coverage-config paths where
- * the change makes the tests weaker: the file is deleted, it loses more assertion lines than it gains, it gains more
- * skip/only/todo/x-prefixed markers than it loses, or a numeric threshold goes down. Touching a test file, or adding one, is
- * not weakening by itself.
+ * A deterministic, line-based test-weakening check over a unified diff (`git diff`). It lists the test or coverage-config
+ * paths where the change makes the tests weaker: the file is deleted, it loses more assertion lines than it gains, it gains
+ * more skip/only/todo/x-prefixed markers than it loses, a numeric threshold goes down, or a runner or coverage config under
+ * a test path is added or edited in any way other than raising a number. Comment lines count as neither assertions nor
+ * markers. Touching a test file, or adding one, is not weakening by itself.
  *
- * Returns the sorted paths, or `null` when a file section of the diff cannot be read. A caller treats `null` like a missing
- * diff: it stays conservative and keeps every test change high.
+ * Returns the sorted paths, or `null` when the diff cannot be read in full: a file section that does not parse, or, when
+ * `auditedPaths` is given, a test or coverage-config path of that list with no section, or a flagged path that is not in
+ * it. A caller treats `null` like a missing diff: it stays conservative and keeps every test change high.
  */
-export function findTestWeakening(diff: string, explicitTestPaths: readonly string[]): string[] | null {
+export function findTestWeakening(
+  diff: string,
+  explicitTestPaths: readonly string[],
+  auditedPaths?: readonly string[],
+): string[] | null {
   const found = new Set<string>();
+  const seen = new Set<string>();
   for (const section of splitSections(diff)) {
     const parsed = parseSection(section);
     if (parsed === null) return null;
     const { path, deleted, removed, added } = parsed;
+    seen.add(normalizePath(path));
     const isTest = isTestPath(path, explicitTestPaths);
     if (!isTest && !isCoverageConfig(path)) continue;
     if (isTest && (deleted || assertionsLost(removed, added) || markersGained(removed, added))) found.add(path);
+    else if (isTest && isRunnerConfig(path) && !onlyRaisesThresholds(removed, added)) found.add(path);
     else if (thresholdLowered(removed, added)) found.add(path);
+  }
+  if (auditedPaths !== undefined) {
+    const audited = new Set(auditedPaths.map((path) => normalizePath(path)));
+    for (const path of audited)
+      if ((isTestPath(path, explicitTestPaths) || isCoverageConfig(path)) && !seen.has(path)) return null;
+    for (const path of found) if (!audited.has(normalizePath(path))) return null;
   }
   return [...found].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
-const COVERAGE_CONFIG =
-  /^(vitest|vite|jest|karma)\.config\.[^/]+$|^\.?(nycrc|c8rc|coveragerc|codecov)(\.[^/]+)?$|^(codecov\.ya?ml|pytest\.ini|tox\.ini|setup\.cfg|pyproject\.toml|package\.json)$/i;
+const RUNNER_CONFIG =
+  /^(vitest|vite|jest|karma|playwright)\.config\.[^/]+$|^vitest\.workspace\.[^/]+$|^\.mocharc(\.[^/]+)?$|^\.?(nycrc|c8rc)(\.[^/]+)?$|^(pytest\.ini|tox\.ini|setup\.cfg|pyproject\.toml)$/i;
+const COVERAGE_CONFIG = /^\.?(coveragerc|codecov)(\.[^/]+)?$|^(codecov\.ya?ml|package\.json)$/i;
+
+const basename = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
+
+/** A test runner or coverage tool config: the file that decides which tests run and how much coverage is required. */
+function isRunnerConfig(path: string): boolean {
+  return RUNNER_CONFIG.test(basename(path));
+}
 
 function isCoverageConfig(path: string): boolean {
-  return COVERAGE_CONFIG.test(path.slice(path.lastIndexOf("/") + 1));
+  return isRunnerConfig(path) || COVERAGE_CONFIG.test(basename(path));
 }
 
 function splitSections(diff: string): string[][] {
@@ -61,6 +85,9 @@ function unquote(raw: string): string {
   return new TextDecoder().decode(Uint8Array.from(bytes));
 }
 
+/** Git ends a `---`/`+++` name with a tab when the name contains a space. */
+const stripTab = (name: string): string => (name.endsWith("\t") ? name.slice(0, -1) : name);
+
 function parseSection(lines: string[]): Section | null {
   let path: string | null = null;
   let deleted = false;
@@ -71,10 +98,10 @@ function parseSection(lines: string[]): Section | null {
     if (!inHunk) {
       if (line.startsWith("deleted file mode")) deleted = true;
       else if (line.startsWith("--- ") && line !== "--- /dev/null") {
-        const name = unquote(line.slice(4));
+        const name = unquote(stripTab(line.slice(4)));
         if (name.startsWith("a/")) path = name.slice(2);
       } else if (line.startsWith("+++ ") && line !== "+++ /dev/null") {
-        const name = unquote(line.slice(4));
+        const name = unquote(stripTab(line.slice(4)));
         if (name.startsWith("b/")) path = name.slice(2);
       }
       if (line.startsWith("@@")) inHunk = true;
@@ -96,10 +123,21 @@ function binaryOrModeOnly(lines: string[]): Section | null {
 }
 
 const ASSERTION =
-  /\b(expect|assert\w*|should|verify|require\.\w+)\s*[.(!]|\.should\b|\bt\.(is|not|true|false|ok|equal|deepEqual|throws|rejects)\w*\(|\bself\.assert\w*\(|\bassert_\w+!?\(|\bassert!?\(/;
+  /\b(expect|assert\w*|should|verify|require\.\w+)\s*[.(!]|\.should\b|\bt\.(is|not|true|false|ok|equal|deepEqual|throws|rejects)\w*\(|\bself\.assert\w*\(|\bassert_\w+!?\(|\bassert!?\(|^\s*assert\b|\bt\.(Error|Errorf|Fatal|Fatalf|Fail|FailNow)\(|\bassert_\w+\b|\bexpect\w*\s*\(/;
+
+const COMMENT_START = /^\s*(\/\/|#(?!\[)|\/\*|\*|<!--)/;
+
+/** The code part of a line, or null for a comment line. A trailing `// ...` comment (after whitespace) is cut off. */
+function codeOf(line: string): string | null {
+  if (COMMENT_START.test(line)) return null;
+  return line.replace(/\s\/\/.*$/, "");
+}
 
 function count(lines: readonly string[], pattern: RegExp): number {
-  return lines.filter((line) => pattern.test(line)).length;
+  return lines.filter((line) => {
+    const code = codeOf(line);
+    return code !== null && pattern.test(code);
+  }).length;
 }
 
 function assertionsLost(removed: readonly string[], added: readonly string[]): boolean {
@@ -107,7 +145,7 @@ function assertionsLost(removed: readonly string[], added: readonly string[]): b
 }
 
 const MARKER =
-  /\b(it|test|describe|suite|context)\.(skip|only|todo|fixme|fails)\b|\b(xit|xtest|xdescribe|fit|ftest|fdescribe)\s*\(|@pytest\.mark\.(skip|xfail)|\bpytest\.(skip|xfail)\(|@unittest\.skip|\bt\.Skip(Now)?\(|@Disabled\b|@Ignore\b|#\[ignore\]/;
+  /\b(it|test|describe|suite|context|bench)(\.\w+)*\.(skip|only|todo|fixme|fails|skipIf|runIf)\b|\{[^}]*\b(skip|todo|only)\s*:\s*true|\b(ctx|context|t)\.(skip|todo)\(|\b(xit|xtest|xdescribe|fit|ftest|fdescribe)\s*\(|@pytest\.mark\.(skip|xfail)|\bpytest\.(skip|xfail)\(|@unittest\.skip|\bt\.Skip(Now)?\(|@Disabled\b|@Ignore\b|#\[ignore\]/;
 
 function markersGained(removed: readonly string[], added: readonly string[]): boolean {
   return count(added, MARKER) > count(removed, MARKER);
@@ -127,6 +165,15 @@ function thresholds(lines: readonly string[]): Array<[string, number]> {
       out.push([key.toLowerCase(), Number(value)]);
   }
   return out;
+}
+
+/** True when the change to a config is a number going up, nothing else: every changed line is a threshold line, paired by key. */
+function onlyRaisesThresholds(removed: readonly string[], added: readonly string[]): boolean {
+  if (removed.length === 0 || removed.length !== added.length) return false;
+  const before = thresholds(removed);
+  const after = thresholds(added);
+  if (before.length !== removed.length || after.length !== added.length) return false;
+  return before.every(([key, value], index) => after[index]?.[0] === key && (after[index]?.[1] ?? -1) >= value);
 }
 
 function thresholdLowered(removed: readonly string[], added: readonly string[]): boolean {
