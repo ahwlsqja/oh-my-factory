@@ -43,7 +43,14 @@ function filesMentioningDone(): string[] {
  * hand-edited `done`) and the reconciler's outcome counts. If this test names another file, read it: it
  * may compare against "done", never assign it. Then add it here with the reason.
  */
-const MAY_NAME_DONE = ["goal/reconcile.ts", "work/ledger-verify.ts", "work/transitions.ts", "work/types.ts"];
+const MAY_NAME_DONE = [
+  "goal/reconcile.ts",
+  "work/ledger-verify.ts",
+  "work/transitions.ts",
+  "work/types.ts",
+  // Read-only work-state allowlist and counts; this projection never assigns the done state.
+  "ui/read-model.ts",
+];
 
 function commandNames(help: string): string[] {
   const lines = help.split("\n");

@@ -26,6 +26,7 @@ export const DEV_ONLY_TOP_LEVEL: readonly string[] = [
   "CLAUDE.md",
   "CODE_OF_CONDUCT.md",
   "CONTRIBUTING.md",
+  "DESIGN.md",
   "docs",
   "examples",
   "package-lock.json",
