@@ -33,9 +33,13 @@ Polling is opt-in because each refresh can repeat audits and Git reads. There is
 
 The browser receives an explicit projection of IDs, closed status/reason codes, counts, timestamps and coarse buckets. It does not receive goal objectives, work titles, decision questions, notes, raw metric values/names/units, commands, private paths, actor emails, logs, or sealed scenario content. All browser assets are local; no external fonts, analytics, or CDN are used.
 
-The printed URL grants access to that local server session. Authentication applies to the page, assets and snapshot endpoint. The server accepts the expected loopback host and same-origin browser requests; mutation methods are rejected. The token is session access control, not an invitation to expose the server through a remote proxy.
+The printed URL grants access to that local server session. Authentication applies to the page, assets and snapshot endpoint. The server validates the expected loopback host and any Origin header; mutation methods are rejected. It also allows capability-authenticated, cross-site, top-level GET navigation to the dashboard page so a local launch file can open it. This exception requires navigation/document metadata and does not apply to APIs, scripts or styles. It is not proof that the request came from a local file: another page with the capability can initiate the same navigation. The token is session access control, not an invitation to expose the server through a remote proxy.
 
-The command assumes a trusted local machine. Opening the browser passes the capability URL as an opener argument, so local process introspection can reveal it. The URL does not isolate access from other users or processes on the same host. Browser opening does not create a temporary redirect file.
+The command assumes a trusted local machine. To keep the capability out of operating-system opener arguments, automatic opening uses a temporary HTML redirect file. Its directory is owner-only (`0700`), and the file is owner-only (`0600`) before the URL is written. The opener receives only the file path, without shell interpolation. No script or external resource is needed for the redirect.
+
+The file stays available for the UI session even after the opener exits, because the browser may read it later. OMF removes it when opening fails, on normal process exit, or when the UI shuts down. Removal errors produce a generic warning and can be retried at process exit. Forced termination such as SIGKILL or a host crash may leave the private file behind; its URL stops working when that server session ends. `--no-open` creates no launch file. These temporary files do not change repository content or OMF state.
+
+The capability remains visible in terminal output and the browser URL/history. Owner permissions do not hide it from processes running as the same user or a privileged user. The URL does not provide shared-host isolation.
 
 ## Reading and output limits
 
