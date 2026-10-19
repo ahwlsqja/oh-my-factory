@@ -9,7 +9,7 @@ export interface RoleRefusal {
 /**
  * Whether the sealing author and the implementer sit on one vendor. That is always refused in this version: a leak
  * the author knows about could then pass unnoticed through code the same vendor writes, and the design leaves a
- * same-vendor mode open (spec §14 item 2) with no recorded way to allow it before M4. With today's vendor rules the other two
+ * same-vendor mode open (spec §14 item 2) with no recorded way to allow it before a later release. With today's vendor rules the other two
  * refusals already make every same-vendor pairing unrunnable, so this is defence in depth, and the one that names
  * both roles. The config parses a same-vendor pairing (every other command keeps working); only the station refuses.
  */

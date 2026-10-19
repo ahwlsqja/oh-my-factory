@@ -20,7 +20,7 @@ import type { WorkBudgetState } from "./w-budget.js";
 import { type Recommendation, lastStateEvent } from "./w-events.js";
 
 /**
- * The evidence document of one run (spec §5.8, M3b2). It goes to the repository and the PR, so it holds ids, closed
+ * The evidence document of one run (spec §5.8). It goes to the repository and the PR, so it holds ids, closed
  * codes, counts and two length-capped untrusted texts, and nothing a station could use to talk a reader into a merge:
  * a field nobody produced is "not run", the label says goal impact was not measured, and `merge_recommended` is
  * only ever stated when nothing is unverified.
@@ -33,7 +33,7 @@ const PATHS_MAX = 200;
 const PATH_MAX = 500;
 export const EVIDENCE_JSON = "evidence.json";
 export const EVIDENCE_MD = "evidence.md";
-/** Until the gated runs of M3e..M3h pass, sealing and isolation are labels, not controls (breakdown risk 3). */
+/** Until the gated container runs are recorded, sealing and isolation are labels, not controls. */
 export const NOT_ENFORCED_LINE = "sealing and isolation: not enforced (unmeasured)";
 
 export interface StageTime {
@@ -107,11 +107,11 @@ export class EvidenceError extends Error {
 
 /**
  * The quantitative decisions of the item, for the document. Evidence goes to the repository, so an id or a threshold
- * gets the M3a leak treatment first: a record that fails `recordProblems` for a leak, or whose id or threshold
+ * gets the decision leak treatment first: a record that fails `recordProblems` for a leak, or whose id or threshold
  * matches the current lock or any reading (a re-lock after the decision was written), is dropped and `masked` is
  * set. If the leak context cannot be loaded (no goal lock, damaged lock), nothing is listed and `masked` is set:
  * a check that cannot run never waves text through. Non-quantitative decisions are not listed on purpose; GATE-1
- * settled them and no measurement could confirm them (M3-D17).
+ * settled them and no measurement could confirm them.
  */
 export function evidenceDecisions(
   location: ProjectLocation,
@@ -487,7 +487,7 @@ const quiet = (recommendation: Recommendation): recommendation is "not_recommend
   recommendation !== "merge_recommended";
 
 /**
- * The only way a consumer learns a recommendation (M3b2-D8). The file must be valid, name this item, and match the
+ * The only way a consumer learns a recommendation. The file must be valid, name this item, and match the
  * ledger's last state event for the item by run id and outcome, and the item's state must be the one that event
  * leaves it in. For a submit the recommendation comes from the `work.submitted` event; a file that says something
  * else is "none" (so a file edited from human_needed to merge_recommended is worthless). Failed and parked events

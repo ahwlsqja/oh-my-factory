@@ -110,7 +110,7 @@ function plainValue(doc: Document.Parsed): { ok: true; value: unknown } | { ok: 
 }
 
 /**
- * The refusals of v0.1, in a fixed order so one document always gets one code: nfr (M3-D17), http, an expectation that
+ * The refusals of v0.1, in a fixed order so one document always gets one code: nfr, http, an expectation that
  * checks nothing, a pattern or json_path our own matcher cannot compile. Returns the code, or the normalized body.
  */
 function classify(doc: AuthoredScenario): IntakeRejectionCode | Body {

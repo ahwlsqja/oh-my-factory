@@ -23,11 +23,11 @@ export interface Gate1Context {
   intentQuestionIds: readonly string[];
 }
 
-/** A closing actor that counts: a person at a terminal (A6). `omf` and `agent:*` never close a decision. */
+/** A closing actor that counts: a person at a terminal. `omf` and `agent:*` never close a decision. */
 const HUMAN_ACTOR = /^human:\S+$/;
 
 /**
- * The ids the open questions of an intent are seeded under: `d-intent-q1` ... `d-intent-q<n>` (A15). Zero, or a
+ * The ids the open questions of an intent are seeded under: `d-intent-q1` ... `d-intent-q<n>`. Zero, or a
  * count that is not a positive whole number, gives no ids.
  */
 export function intentQuestionIds(openQuestionCount: number): string[] {
@@ -38,7 +38,7 @@ export function intentQuestionIds(openQuestionCount: number): string[] {
 /**
  * Every anomaly is a `ledger_anomaly`, including a closing event the fold refused. An anomaly stays in the state
  * for good, even after a person closes the decision the forged event tried to close, so no decision verb can clear
- * it: the J2 options name cancel or veto (A13). The `resolution_not_human` and `deferral_unsigned` reasons are only
+ * it: the J2 options name cancel or veto. The `resolution_not_human` and `deferral_unsigned` reasons are only
  * for a record that claims to be closed (`closureReason`).
  */
 function anomalyReason(code: AnomalyCode, decisionId: string | null): Gate1Reason {
@@ -47,7 +47,7 @@ function anomalyReason(code: AnomalyCode, decisionId: string | null): Gate1Reaso
 
 /**
  * The reason a record that claims to be closed is not, or null when it really is closed. The fold already refuses
- * non-human closing events; the checks here repeat it so a hand-built or future state cannot slip through (A6).
+ * non-human closing events; the checks here repeat it so a hand-built or future state cannot slip through.
  */
 function closureReason(record: DecisionRecord, now: Date): Gate1Reason | null {
   if (record.status === "resolved") {
@@ -80,11 +80,11 @@ function closureReason(record: DecisionRecord, now: Date): Gate1Reason | null {
  * 2. `d-interface` exists and is a human resolution with a body (a deferred or n/a interface is `interface_unresolved`;
  *    an open one is `required_open`; a resolved one with no body is `record_invalid`);
  * 3. every deferral is human-signed and `expires_at > now`;
- * 4. every id in `ctx.intentQuestionIds` is present and closed (F8, A15);
- * 5. a closed record must pass `recordProblems` under `ctx.leak` (A17).
+ * 4. every id in `ctx.intentQuestionIds` is present and closed (F8);
+ * 5. a closed record must pass `recordProblems` under `ctx.leak`.
  *
  * Every anomaly yields a reason, so a forged closing event cannot pass. No link input exists: the scenario-link rule
- * belongs to GATE-2 and would deadlock GATE-1 (A8).
+ * belongs to GATE-2 and would deadlock GATE-1.
  */
 export function evaluateGate1(state: DecisionState, now: Date, ctx: Gate1Context): Gate1Result {
   const reasons: Gate1Reason[] = [];

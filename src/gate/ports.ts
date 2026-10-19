@@ -8,7 +8,7 @@ export interface RunOptions {
 }
 
 /**
- * Where a declared command runs. M3f: the container that holds the candidate. M3e: a test fixture target. No `src/` module
+ * Where a declared command runs. A container that holds the candidate, or a test fixture target. No `src/` module
  * implements this by spawning on the host (a structural test enforces it).
  */
 export interface CommandTarget {

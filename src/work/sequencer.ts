@@ -73,7 +73,7 @@ import { WError, type WErrorCode } from "./w-verbs.js";
 /**
  * The station sequencer (spec §5.0, §4.4 step 5): an in-process state machine over S1..S7 and the gates
  * between them. It owns the order and nothing else. Stations and the gates after GATE-1 are injected, so
- * nothing here calls a model, starts a container or knows what a station does (M3b2).
+ * nothing here calls a model, starts a container or knows what a station does.
  */
 
 export type StationResult =
@@ -91,7 +91,7 @@ export interface StationContext {
   readonly round: number;
   /** The item was already in_progress at entry. */
   readonly resumed: boolean;
-  /** A station that seals (M3c S2) must not re-seal after the fact when this is "in_progress" (spec 5.3). */
+  /** A station that seals (S2) must not re-seal after the fact when this is "in_progress" (spec 5.3). */
   readonly entryState: "ready" | "in_progress";
   readonly item: WorkItem;
   readonly now: () => Date;
@@ -113,14 +113,14 @@ export interface LineOptions {
   stations: Partial<Record<StationId, Station>>;
   /**
    * Merged over defaultGates(); an absent key keeps the default. "GATE-1" is not accepted: a caller cannot
-   * swap out the item's governance gate. A gate given here is recorded as injected in the evidence (M3b2-D20).
+   * swap out the item's governance gate. A gate given here is recorded as injected in the evidence.
    */
   gates?: Partial<Record<"GATE-2" | "GATE-3", Gate>>;
   now?: () => Date;
   newRunId?: ((at: Date) => string) | undefined;
   store?: StateStore;
   /**
-   * Called once when the line ends, finished or aborted, while the claim is still held (M3f). A station that owns a
+   * Called once when the line ends, finished or aborted, while the claim is still held. A station that owns a
    * resource past its own run (the judge's per-round image) lets go of it here. A throw is ignored: cleanup never
    * changes what the line returns, and what it leaves behind is swept by the next run that judges.
    */
@@ -148,7 +148,7 @@ export type LineResult =
 
 type LineGates = Record<Exclude<GateId, "GATE-4">, Gate>;
 
-/** No re-entry facts at a node: they are checked once, at line entry (Task 8). */
+/** No re-entry facts at a node: they are checked once, at line entry. */
 const NO_REENTRY = { same_reason: 0, kills: 0 } as const;
 const NO_STALL = { current: null, rework: false } as const;
 const REASON_SHAPE = /^[a-z0-9_]{1,40}$/;
@@ -173,7 +173,7 @@ function guard<T>(act: () => T): T {
   } catch (err) {
     if (err instanceof WError) throw new RunAbort("run_error", null, err.code);
     if (err instanceof OutcomeError) throw new RunAbort("run_error", null, "outcome_invalid");
-    // The own-claim appends of Task 2 refuse with their own error; the code is all that leaves, never the message.
+    // The own-claim appends refuse with their own error; the code is all that leaves, never the message.
     if (err instanceof WorkBudgetError)
       throw new RunAbort("run_error", null, err.code === "claim_lost" ? "claim_lost" : "malformed");
     throw err;
@@ -217,7 +217,7 @@ type Reading =
 /**
  * A station result as a closed status. `rework` is the one status that is not a stop, and only S6 may ask for it
  * (spec 5.0); from any other station, an unknown reason code, a digest that is not 64 hex, and a non-result are all
- * `error`. Nothing the station wrote is copied except a valid digest (M3b2-D19).
+ * `error`. Nothing the station wrote is copied except a valid digest.
  */
 function interpret(id: StationId, raw: unknown): Reading {
   const r = raw as { kind?: unknown; reason_code?: unknown; progress_digest?: unknown } | null;
@@ -238,7 +238,7 @@ function interpret(id: StationId, raw: unknown): Reading {
   return { status: "error" };
 }
 
-/** M3b2-D10: a handoff for every stop that needs a person (blocked, manual) and for a failed item. */
+/** A handoff for every stop that needs a person (blocked, manual) and for a failed item. */
 function needsPerson(c: Classification, d: Disposition): boolean {
   return c.outcome === "blocked" || c.outcome === "manual" || d.action === "fail";
 }
@@ -306,7 +306,7 @@ class Line {
   private readonly times: Partial<Record<NodeId, StageTime>> = {};
   private readonly warnings = new Set<Gate4Warning>();
   private stop: LineStop = { kind: "none" };
-  /** The round's `[node, status, digest]` list; its hash is the stall signature (M3b2-D7). Emptied when a round opens. */
+  /** The round's `[node, status, digest]` list; its hash is the stall signature. Emptied when a round opens. */
   private readonly trail: { node: NodeId; status: StationStatus | GateVerdict; digest: string | null }[] = [];
   /** The signature of the round that just ended in a rework request; the next `work.round` carries it. */
   private lastSignature: string | null = null;
@@ -335,10 +335,10 @@ class Line {
   }
 
   /**
-   * Line entry, before S1 (M3b2-D17): may one more round start? Rounds, spend, ledger anomalies and the re-entry
+   * Line entry, before S1: may one more round start? Rounds, spend, ledger anomalies and the re-entry
    * facts (the same park reason three times, or three killed runs, since the last person's act). A fail is put on
    * the board and ends the line here, before any station runs, so a repeating blocker costs nothing to repeat.
-   * Every count is read from the ledger as it is now, so a restart cannot reset it (M3b2-D3). Returns whether the line goes on.
+   * Every count is read from the ledger as it is now, so a restart cannot reset it. Returns whether the line goes on.
    */
   private guardEntry(): boolean {
     const events = this.env.ledger.readVerified();
@@ -364,7 +364,7 @@ class Line {
     if (node === "S3" && !this.opensRound()) return index;
     const counts = this.visits.enter(node);
     if (node === "GATE-4") return this.afterS6(counts) ? LINE_ORDER.indexOf("S3") : index + 1;
-    // Gates count as visits: the same GATE-4 rule that caps stations caps the S2/GATE-2 loop (M3b2-D6).
+    // Gates count as visits: the same GATE-4 rule that caps stations caps the S2/GATE-2 loop.
     const guarded = evaluateGate4({
       budget: this.budget(),
       visits: { ...counts, entering: node },
@@ -398,9 +398,9 @@ class Line {
   }
 
   /**
-   * S3 entry (skeleton 4.8 step 7): GATE-4 with a next round wanted (rounds, spend, ledger anomalies), then
+   * S3 entry: GATE-4 with a next round wanted (rounds, spend, ledger anomalies), then
    * one step that opens the round. `work.round` is appended before `work.started` and before the work, like
-   * budget.consumed (M3b2-D3). Everything round-scoped goes back to "not run" in the same step (M3b2-D5).
+   * budget.consumed. Everything round-scoped goes back to "not run" in the same step.
    */
   private opensRound(): boolean {
     const answer = evaluateGate4({
@@ -425,7 +425,7 @@ class Line {
   /**
    * The GATE-4 node: the one check that goes on the board whatever it says. A rework request asks for another
    * round, so rounds and spend are checked as for a round that would start, and a round whose signature equals the
-   * one recorded when it opened (the previous round's) is a stall (M3b2-D7). Returns whether the walk goes back to S3.
+   * one recorded when it opened (the previous round's) is a stall. Returns whether the walk goes back to S3.
    */
   private afterS6(counts: { in_round: number; total: number }): boolean {
     const started = this.now();
@@ -516,7 +516,7 @@ class Line {
 
   private async runGate(id: Exclude<GateId, "GATE-4">, index: number): Promise<number> {
     const started = this.now();
-    // GATE-1 ran before start() (M3b2-D12). An item that is already in_progress was past it, and `decide`
+    // GATE-1 ran before start(). An item that is already in_progress was past it, and `decide`
     // refuses it, so a time-based failure now would park an item with no way out but veto or cancel.
     const result: GateResult =
       id === "GATE-1" && this.env.run.resumed
@@ -570,9 +570,9 @@ class Line {
   }
 
   /**
-   * Classify, write the evidence, write the handoff if a person is needed, then finish (skeleton 4.8 step 8).
+   * Classify, write the evidence, write the handoff if a person is needed, then finish.
    * Files come first: a crash before `finish` leaves a file with no finishing event of this run id, which
-   * `trustedRecommendation` reads as absent (M3b2-D8). Any throw from here (a WError, a ledger or evidence error)
+   * `trustedRecommendation` reads as absent. Any throw from here (a WError, a ledger or evidence error)
    * becomes `aborted` `run_error` in runLine, which removes this run's own files.
    */
   finalize(): LineResult {
@@ -659,9 +659,9 @@ class Line {
  * writes (a LedgerCorruptError if the chain breaks between its governance read and its sweep, w-run.ts repairGoal);
  * and TypeError for a GATE-1 key. After beginRun every end is a LineResult: a station or gate exception is a
  * station error or gate_error; a veto, a lost claim, a drifted config, or any WError from the run object
- * removes this run's evidence and handoff and returns `aborted` (M3b2-D11). Any other exception after beginRun
+ * removes this run's evidence and handoff and returns `aborted`. Any other exception after beginRun
  * (a ledger or evidence error, a clock fault) is also `aborted` `run_error` with no code: the run object is
- * never left holding files with no LineResult (skeleton 4.8).
+ * never left holding files with no LineResult.
  */
 export async function runLine(options: LineOptions): Promise<LineResult> {
   const defaults = defaultGates();
@@ -705,7 +705,7 @@ export async function runLine(options: LineOptions): Promise<LineResult> {
     };
     clearEvidence(itemDir); // a killed run leaves none, and a stale file is never current
 
-    // A killed run leaves no result, so the ledger is asked who died (M3b2-D21): a work.claim_reclaimed after the
+    // A killed run leaves no result, so the ledger is asked who died: a work.claim_reclaimed after the
     // item's last state event that no handoffs/*.predecessor.json covers. That also finds a reclaim `repairGoal`
     // did while another item was entered, where `run.reclaimed` is null here. One record covers every owed reclaim
     // (its seq is the newest). It sits after the entry recheck: a run that aborts there leaves the debt owed for the

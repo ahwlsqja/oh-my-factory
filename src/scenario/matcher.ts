@@ -1,7 +1,7 @@
 import type { Expect, JsonScalar, StepObservation } from "./types.js";
 
 /**
- * OMF's own matcher for model-authored `stdout_matches` and `json_path` (spec §5.3, M3-D5). A scenario is
+ * OMF's own matcher for model-authored `stdout_matches` and `json_path` (spec §5.3). A scenario is
  * written by a model, so its pattern is hostile input: it is compiled into a program of single-character
  * items and run as a Thompson set simulation, O(n * m) time and O(m) space, and nothing here builds a host
  * regex engine object from it.

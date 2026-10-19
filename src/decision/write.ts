@@ -71,8 +71,8 @@ function checkContract(contract: InterfaceContract): void {
 
 /**
  * One decision.added (actor omf, class other, id d-intent-q<n>) for each intent open question that has no
- * record yet (A15). The question is cut to the schema's 1000 characters. Not leak-linted here: intent questions
- * are seed-linted when the intent is created (M2b), and a later re-lock is caught by recordProblems at GATE-1
+ * record yet. The question is cut to the schema's 1000 characters. Not leak-linted here: intent questions
+ * are seed-linted when the intent is created, and a later re-lock is caught by recordProblems at GATE-1
  * and withheld from spec.md. Returns unsigned events: the ledger gives them seq, time and hash on append.
  */
 export function seedEvents(state: DecisionState, scope: DecisionScope, intentQuestions: readonly string[]): NewEvent[] {
@@ -109,7 +109,7 @@ function preview(events: readonly LedgerEvent[], added: readonly NewEvent[]): Le
 
 /**
  * The record a closing verb acts on: it must exist and not be final. An open record and a deferred one can be
- * closed (A21: an expired deferral counts as open at GATE-1, so a person must be able to settle it); `resolved` and
+ * closed (an expired deferral counts as open at GATE-1, so a person must be able to settle it); `resolved` and
  * `na` are final. Deferring or n/a on the interface is refused.
  */
 function openRecord(state: DecisionState, decisionId: string, interfaceClosable: boolean): DecisionRecord {
@@ -126,7 +126,7 @@ function openRecord(state: DecisionState, decisionId: string, interfaceClosable:
 
 /**
  * Records a refusal and throws. The rejection names the op, the rule and the field, never the matched text
- * (spec §4.6: the ledger is a log G could one day see). A leaking id is recorded by hash only (A16b).
+ * (spec §4.6: the ledger is a log G could one day see). A leaking id is recorded by hash only.
  */
 function reject(
   ledger: Ledger,
@@ -163,7 +163,7 @@ function reject(
  * The one path every writer takes. Leak lint runs on the input before anything else is appended. Then one locked
  * append: seed the intent questions that have no record, fold the ledger plus those seeds, check the
  * preconditions on that state, and return the seeds and the new event together. If a precondition throws,
- * nothing is written, seeds included. So even a first `resolve` sees d-intent-q<n> (A15), and two writers
+ * nothing is written, seeds included. So even a first `resolve` sees d-intent-q<n>, and two writers
  * cannot both pass the same duplicate check.
  */
 function commit(
@@ -177,7 +177,7 @@ function commit(
 ): LedgerEvent {
   const findings = lintDecisionStrings(lintBody, ctx.leak);
   if (op !== "add") {
-    // A22: GATE-1 judges an id against the readings recorded up to its add. A closing verb re-checks it against the
+    // GATE-1 judges an id against the readings recorded up to its add. A closing verb re-checks it against the
     // current lock's terms and target only, so a reading recorded after the add cannot shut the decision out of
     // resolve, defer and n/a alike (which would leave only cancel or veto).
     findings.push(...lintDecisionStrings({ id: decisionId }, { ...ctx.leak, measuredNumbers: [] }));
@@ -278,7 +278,7 @@ export function resolveDecision(
   });
 }
 
-/** Human only; signed_by is the actor. The interface cannot be deferred, and an expiry at or before now is refused. A deferred decision can be deferred again with a later expiry (A21). */
+/** Human only; signed_by is the actor. The interface cannot be deferred, and an expiry at or before now is refused. A deferred decision can be deferred again with a later expiry. */
 export function deferDecision(
   ledger: Ledger,
   scope: DecisionScope,

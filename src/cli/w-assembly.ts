@@ -17,7 +17,7 @@ import { decideReport } from "./decide.js";
 
 /**
  * The runtime of the configured Docker context, or null when `[judge] docker_context` is unset (the client's current
- * context is never used, M3f). A caller that still needs a runtime object passes `createDockerRuntime({ context: null })`,
+ * context is never used). A caller that still needs a runtime object passes `createDockerRuntime({ context: null })`,
  * which refuses every call, and lets the station report the missing context in its own refusal order.
  */
 export function openRuntime(config: OmfConfig, env: NodeJS.ProcessEnv): ContainerRuntime | null {
@@ -45,7 +45,7 @@ const refuse = (missing: OrderMissing, exit: 0 | 2 | 3, message: string): Order 
 });
 
 /**
- * What a W verb checks before it spends anything (spec section 5, M3h-D4/D17). Read-only: one verified ledger read
+ * What a W verb checks before it spends anything (spec section 5). Read-only: one verified ledger read
  * (a corrupt ledger throws, so the command exits 2 with the ledger hint), the item, and `verifyItemAgainstLedger`.
  * It never takes a lock, never repairs, never writes. State is checked before gates, so an `awaiting_review` item
  * reports "already ran" instead of a gate it no longer needs.

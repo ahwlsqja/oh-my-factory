@@ -21,7 +21,7 @@ export type AuthorOutcome =
 export const DEFAULT_AUTHOR_TIMEOUT_MS = 300_000;
 
 /**
- * The port M3h implements with a container session (spec §5.3). `vendor`, `model` and `isolation` are OMF's own
+ * The port implemented with a container session (spec §5.3). `vendor`, `model` and `isolation` are OMF's own
  * statement about the session, not the author's: they are what `runSealStage` stamps into the ledger and the
  * scenario files. Only a failure code leaves a failed run, never text the author or its stderr printed (spec §4.6).
  */

@@ -10,7 +10,7 @@ import type { DecisionScope } from "./types.js";
 import { INTERFACE_DECISION_ID } from "./types.js";
 
 /**
- * The J2 persist-and-exit record (spec §6.2, M3-D7). GATE-1 found something only a person can settle; OMF
+ * The J2 persist-and-exit record (spec §6.2). GATE-1 found something only a person can settle; OMF
  * writes this file, prints the reasons and exits 3 instead of waiting. `default: null` is the explicit
  * "no silent approval" marker: nothing proceeds on a timeout.
  */
@@ -56,7 +56,7 @@ export function needsHumanFile(itemDir: string): string {
 
 /**
  * record_invalid and ledger_anomaly can be raised because the id or text of a record leaks under a goal
- * re-lock (A17). Their decision_id is therefore not copied into a file a person may paste around; the
+ * re-lock. Their decision_id is therefore not copied into a file a person may paste around; the
  * reason code and problem or anomaly code are enough to act on, and the action is cancel or veto anyway.
  */
 function sanitize(reason: Gate1Reason): Gate1Reason {
@@ -72,8 +72,8 @@ function resolveLine(workId: string, decisionId: string): string {
  * Command lines per distinct reason code, in CODE_ORDER and then reason order, duplicates dropped. Reasons that
  * no decision verb can clear get the cancel-or-veto line: record_invalid, ledger_anomaly (every anomaly is
  * permanent) and resolution_not_human (only a hand-built state has it, and a resolved record is final), because
- * v0.1 has no general reopen verb (A13). An expired or unsigned deferral is a deferred record, which a person can
- * resolve, defer anew or mark n/a (A21), so it keeps the resolve line.
+ * v0.1 has no general reopen verb. An expired or unsigned deferral is a deferred record, which a person can
+ * resolve, defer anew or mark n/a, so it keeps the resolve line.
  */
 function optionsFor(workId: string, reasons: readonly Gate1Reason[]): string[] {
   const lines: string[] = [];
@@ -92,7 +92,7 @@ function optionsFor(workId: string, reasons: readonly Gate1Reason[]): string[] {
           push(resolveLine(workId, INTERFACE_DECISION_ID));
           break;
         case "intent_question_missing":
-          // Any decide write seeds the missing intent-question records (A15); show is the read-only way to see them.
+          // Any decide write seeds the missing intent-question records; show is the read-only way to see them.
           push(`omf decide show ${workId}`);
           push(resolveLine(workId, reason.decision_id));
           break;

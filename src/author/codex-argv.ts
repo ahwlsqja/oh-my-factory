@@ -30,7 +30,7 @@ export const ANSWER_SCHEMA: Readonly<Record<string, unknown>> = Object.freeze({
 export const ANSWER_SCHEMA_TEXT = `${JSON.stringify(ANSWER_SCHEMA)}\n`;
 
 /**
- * Appended to the prompt AFTER it is hashed into `seal.requested.input_sha256`, so the M3c prompt and its digest stand.
+ * Appended to the prompt AFTER it is hashed into `seal.requested.input_sha256`, so the seal prompt and its digest stand.
  * It names the JSON field and says it takes the place of the prompt's "Print nothing else" sentence, so the model is not
  * given two contradicting output rules. `author.session_completed.input_sha256` hashes prompt plus suffix.
  */

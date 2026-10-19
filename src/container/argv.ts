@@ -25,7 +25,7 @@ import {
 } from "./spec.js";
 
 /**
- * The only place a `docker` command line for a container is assembled (spec §7, M3f-D2). Every builder returns the argv
+ * The only place a `docker` command line for a container is assembled (spec §7). Every builder returns the argv
  * AFTER the program name and starts with `--context <ctx>` when a context is given. Names, labels, contexts and tags are
  * validated against closed patterns first, so a bad input throws `ContainerSpecError` before any argv exists. Candidate
  * and scenario data enters only as `docker exec` elements after the container name, never in a flag position.
@@ -159,7 +159,7 @@ export interface BuildArgvSpec {
   contextDir: string;
   tag: string;
   labels: OwnedLabels;
-  /** Full hash of the harness build context; lets a cached image be reused only when the hash matches (Task 5). */
+  /** Full hash of the harness build context; lets a cached image be reused only when the hash matches. */
   contextHash?: string;
 }
 
@@ -222,7 +222,7 @@ export function imageInspectArgv(ref: string, context: string | null): string[] 
   return [...contextArgs(context), "image", "inspect", ref];
 }
 
-/** Only a digest reference can be pulled: the daemon fetches an immutable name (M3f-D24). */
+/** Only a digest reference can be pulled: the daemon fetches an immutable name. */
 export function pullArgv(ref: PinnedImage, context: string | null): string[] {
   if (!isDigestPinned(ref)) throw new ContainerSpecError("invalid_image");
   return [...contextArgs(context), "pull", "--quiet", ref];

@@ -5,7 +5,7 @@ import { registerSealCommand } from "./seal.js";
 
 /**
  * The W verbs behind one call, so `main.ts` changes by one import and one line and the parallel `omf ui` work does not
- * conflict with it (M3h-D18). `omf seal`, `omf run` and `omf report` register here.
+ * conflict with it. `omf seal`, `omf run` and `omf report` register here.
  */
 export function registerWCommands(program: Command): void {
   registerSealCommand(program);

@@ -1,20 +1,20 @@
 import { sha256Hex } from "../core/canonical-json.js";
 
 /**
- * Shared constants and types of the scenario layer (M3c). Everything later tasks and milestones import
+ * Shared constants and types of the scenario layer. Everything later tasks and milestones import
  * lives here, so matcher.ts, runner.ts, vault/ and seal/ never import each other for a type.
  */
 
 export const SCENARIO_KINDS = ["behavior", "nfr", "contradiction_canary"] as const;
 export type ScenarioKind = (typeof SCENARIO_KINDS)[number];
-/** nfr is refused at intake (M3-D17): a latency scenario would be fake coverage of a quantitative decision. */
+/** nfr is refused at intake: a latency scenario would be fake coverage of a quantitative decision. */
 export type StoredKind = Exclude<ScenarioKind, "nfr">;
 export const SCENARIO_SPLITS = ["train", "test"] as const;
 export type ScenarioSplit = (typeof SCENARIO_SPLITS)[number];
 export const SCENARIO_STATUSES = ["active", "retired", "contaminated"] as const;
 export type ScenarioStatus = (typeof SCENARIO_STATUSES)[number];
 
-/** Releases of one split digest after which GATE-2 refuses the set. M3d counts, M3c only compares. */
+/** Releases of one split digest after which GATE-2 refuses the set. The feedback layer counts, the vault only compares. */
 export const EXPOSURE_LIMIT = 20;
 export const MAX_SCENARIOS_PER_SET = 100;
 export const MAX_STEPS = 12;
@@ -22,7 +22,7 @@ export const MAX_SCENARIO_BYTES = 64 * 1024;
 export const MAX_AUTHOR_OUTPUT_BYTES = 1024 * 1024;
 export const SCENARIO_ID_PATTERN = /^s-[0-9a-f]{32}$/;
 export const CANARY_PATTERN = /^omf-canary-[0-9a-f]{32}$/;
-/** Unanchored on purpose: the poka-yoke and the M3e scans look for a canary inside file text. */
+/** Unanchored on purpose: the poka-yoke and the audit scans look for a canary inside file text. */
 export const CANARY_SEARCH = /omf-canary-[0-9a-f]{32}/;
 export const SCENARIO_REF_PATTERN = /^[0-9a-f]{16}$/;
 

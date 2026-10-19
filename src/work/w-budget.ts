@@ -10,10 +10,10 @@ import { classifyWEvent } from "./w-events.js";
 import type { PROGRESS_STATIONS } from "./w-verbs.js";
 
 /**
- * The per-item budget of a W run, kept in the ledger (M3b2-D1, spec §5.0 GATE-4). A limit is copied from
+ * The per-item budget of a W run, kept in the ledger (spec §5.0 GATE-4). A limit is copied from
  * config `[w]` at the item's first run, raised only by a person (J8), and consumed by `work.round` and
  * `work.spend` events that OMF appends under the run's claim. Because the counts are folded from the
- * ledger, a restart or a kill cannot reset them (the M2b `budget.consumed` pattern).
+ * ledger, a restart or a kill cannot reset them (the `budget.consumed` pattern).
  */
 
 /** The four event types of this file; schemas/work-budget-event.schema.json holds their payloads. */
@@ -29,7 +29,7 @@ export interface WorkLimits {
 }
 
 /**
- * Dollars to whole micro-dollars (M3b2-D2). Floats drift when summed, so the ledger stores integers and the
+ * Dollars to whole micro-dollars. Floats drift when summed, so the ledger stores integers and the
  * config's dollars are converted once, here. Refuses anything that is not a positive finite amount whose
  * result is a safe integer of at least 1.
  */
@@ -72,12 +72,12 @@ export interface WorkBudgetState {
   previous_signature: string | null;
   /** A null micro_usd counts as unknown and adds nothing. */
   spend: { micro_usd: number; unknown_count: number };
-  /** Any anomaly fails GATE-4 closed (Task 3). The offending event counts for nothing. */
+  /** Any anomaly fails GATE-4 closed. The offending event counts for nothing. */
   anomalies: BudgetAnomaly[];
 }
 
 /**
- * Folds the verified events of one work item into its budget (M3b2-D1 to D3). Pure. Events of other items
+ * Folds the verified events of one work item into its budget. Pure. Events of other items
  * and every non-budget type are skipped. An invalid event whose `work_id` is missing or malformed names no
  * item, so no item's fold sees it; one that names this item is an `invalid_event` anomaly. Sums saturate at
  * the largest safe integer, so an absurd amount still reads as "over the limit" instead of wrapping.
@@ -151,7 +151,7 @@ export type WorkBudgetErrorCode =
   | "malformed"
   | "claim_lost";
 
-/** Messages are built from codes and validated ids only: nothing a model, a file or the audit wrote (M3b1-D3). */
+/** Messages are built from codes and validated ids only: nothing a model, a file or the audit wrote. */
 export class WorkBudgetError extends Error {
   constructor(
     readonly code: WorkBudgetErrorCode,
@@ -170,7 +170,7 @@ export interface OwnedAppend {
   scope: { goal_id: string; work_id: string; run_id: string };
 }
 
-/** Same stations as the W progress marker; `StationId` in line-types.ts (Task 3) is the same type. */
+/** Same stations as the W progress marker; `StationId` in line-types.ts is the same type. */
 export type BudgetStation = (typeof PROGRESS_STATIONS)[number];
 
 /** Validates at the writer, like `wEvent`: a malformed id or amount fails here and never reaches the ledger. */
@@ -197,7 +197,7 @@ function assertOwned(own: OwnedAppend): void {
 class AlreadyRecorded extends Error {}
 
 /**
- * Copies the `[w]` limits into the ledger at the item's first run (M3b2-D1). Idempotent: returns null when
+ * Copies the `[w]` limits into the ledger at the item's first run. Idempotent: returns null when
  * limits are already recorded. The claim is proved first, so a run that lost its claim writes nothing.
  */
 export function recordLimits(own: OwnedAppend, limits: WorkLimits): LedgerEvent | null {
@@ -218,7 +218,7 @@ export function recordLimits(own: OwnedAppend, limits: WorkLimits): LedgerEvent 
 }
 
 /**
- * Consumes one round when S3 opens (M3b2-D3): the number is `rounds_started + 1` from the ledger the lock
+ * Consumes one round when S3 opens: the number is `rounds_started + 1` from the ledger the lock
  * holds, so two writers cannot take the same number. `prevSignature` is the signature of the round before.
  */
 export function recordRound(own: OwnedAppend, prevSignature: string | null): LedgerEvent {
@@ -229,7 +229,7 @@ export function recordRound(own: OwnedAppend, prevSignature: string | null): Led
   });
 }
 
-/** One station call's model spend in micro-USD; null = the vendor did not say (M3b2-D2). */
+/** One station call's model spend in micro-USD; null = the vendor did not say. */
 export function recordSpend(own: OwnedAppend, station: BudgetStation, micro: number | null): LedgerEvent {
   return own.ledger.appendWith(() => {
     assertOwned(own);
@@ -244,7 +244,7 @@ export const REENTRY_KILLS_MAX = 3;
 const NOT_COUNTED: ReadonlySet<string> = new Set(["reentry_loop", "budget_exhausted"]);
 
 /**
- * Re-entry facts since the last human act on the goal (M3b2-D17): an event whose actor is `human:*` and whose
+ * Re-entry facts since the last human act on the goal: an event whose actor is `human:*` and whose
  * payload names this goal. `same_reason` is the largest number of `work.parked` events of this item with one
  * reason code; `kills` is the number of `work.claim_reclaimed` events of this item. Only schema-valid events
  * written by `omf` count (`classifyWEvent`), so a forged park or reclaim cannot push an item into a loop stop.
@@ -311,7 +311,7 @@ export function openItemBudget(
 }
 
 /**
- * J8: a person raises one limit of an open item (M3b2-D1). The actor must be `human:*`; the item is
+ * J8: a person raises one limit of an open item. The actor must be `human:*`; the item is
  * re-checked under the ledger lock, so a run that finishes or a veto that lands in between cannot be missed.
  * It needs no claim: a person's raise must work while a run holds the item, and the run folds the ledger at its
  * next S3 entry. It moves no state; a person then runs the line again.

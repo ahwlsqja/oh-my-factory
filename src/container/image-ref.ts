@@ -3,7 +3,7 @@ declare const pinnedImageBrand: unique symbol;
 /**
  * `name@sha256:<64 lowercase hex>`: no whitespace, no control character, not starting with "-" or ".", at most 255
  * characters. Only `pinnedImage` mints one, so a function that takes a `PinnedImage` cannot be handed a tag by
- * mistake (M3-D13). The digest is what makes the image immutable; a tag can be re-pointed after a person approved it.
+ * mistake. The digest is what makes the image immutable; a tag can be re-pointed after a person approved it.
  */
 export type PinnedImage = string & { readonly [pinnedImageBrand]: true };
 

@@ -20,7 +20,7 @@ export interface ReconcilerConfig {
 }
 
 /**
- * Constants, not config, in M2b: a change to any of them would leave no ledger trace until a J8 path
+ * Constants, not config, in v0.1: a change to any of them would leave no ledger trace until a J8 path
  * records it, so the tables stay closed (see NOT_CONFIGURABLE).
  */
 export const STOP_IF_UNREVIEWED_EVIDENCE = 3;
@@ -28,13 +28,13 @@ export const REFRESH = { max_age: "14d", max_commits: 50, max_target_move: 1.0 }
 export const EXTRA_HIGH_RISK_GLOBS: readonly string[] = [];
 
 /**
- * Per-work-item limit a W line starts from (M3-D18). Task 2 copies it into a `work.limits_set` ledger event at an
+ * Per-work-item limit a W line starts from. It is copied into a `work.limits_set` ledger event at an
  * item's first run; after that the ledger is the authority and only a recorded human act raises it, so editing
  * this table never loosens an item that already has limits.
  */
 export interface WConfig {
   max_rounds: number;
-  /** Dollars here for a person to read; the ledger holds integer micro-USD (M3b2-D2). */
+  /** Dollars here for a person to read; the ledger holds integer micro-USD. */
   max_model_usd: number;
 }
 
@@ -140,7 +140,7 @@ export class ConfigError extends Error {}
 
 const ROLE_NAMES: readonly RoleName[] = ["author", "implementer", "judge", "reconciler"];
 
-/** Tables that exist as constants in M2b. Naming one in config.toml is refused rather than ignored. */
+/** Tables that exist as constants in v0.1. Naming one in config.toml is refused rather than ignored. */
 const NOT_CONFIGURABLE: readonly string[] = ["stop_if", "refresh", "risk"];
 
 /** Applied per missing SECTION (and per missing key inside a present one); never when the file itself is missing. */
@@ -161,7 +161,7 @@ export const CONFIG_DEFAULTS: OmfConfig = {
     timeout_ms: 120_000,
     max_budget_usd: null,
   },
-  // Small on purpose (M3b2-D13): the default is that a person raises the limit, not that a loop runs long.
+  // Small on purpose: the default is that a person raises the limit, not that a loop runs long.
   w: { max_rounds: 3, max_model_usd: 5 },
   judge: {
     k: 3,

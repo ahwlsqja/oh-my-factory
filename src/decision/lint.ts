@@ -28,7 +28,7 @@ export interface LintProblem {
  * The parts of a record a person (or an agent) wrote, in three groups by the event that wrote them, each with its
  * own object for the leak lint. Nulls are left out and so are the bookkeeping fields (status, seqs, added_by):
  * `lintDecisionStrings` skips the OMF-set keys itself. The id is included on purpose: an id is text that reaches
- * `spec.md` and the ledger (A16b).
+ * `spec.md` and the ledger.
  */
 function leakBodies(record: DecisionRecord): { body: Record<string, unknown>; seq: number }[] {
   const added: Record<string, unknown> = { id: record.id, question: record.question };
@@ -47,7 +47,7 @@ function leakBodies(record: DecisionRecord): { body: Record<string, unknown>; se
 }
 
 /**
- * Whether one record is valid on its own, with no I/O (A17). A closed record that is not valid does not count as
+ * Whether one record is valid on its own, with no I/O. A closed record that is not valid does not count as
  * closed at GATE-1, and `spec.md` withholds it. The order of the problems is fixed, so callers can compare lists.
  *
  * - `interface_wrong_class`: class `interface` is only legal on the id `d-interface`, and that id only on that class.
@@ -55,7 +55,7 @@ function leakBodies(record: DecisionRecord): { body: Record<string, unknown>; se
  * - `interface_body_missing`: a resolved interface decision needs its contract.
  * - `gates_inconsistent`: every gate named in `gates.required` needs a command.
  * - `leak`: any leak finding over every string and number the record carries, under the current lock's terms and
- *   target. Each field is judged against the readings recorded up to the event that wrote it (A22): id, question and
+ *   target. Each field is judged against the readings recorded up to the event that wrote it: id, question and
  *   qas at `added_seq`; the response measure at `measure_seq`; resolution, deferral, n/a and interface at `closed_seq`.
  */
 export function recordProblems(record: DecisionRecord, ctx: LeakContext): LintProblem[] {
@@ -85,7 +85,7 @@ export function recordProblems(record: DecisionRecord, ctx: LeakContext): LintPr
     }
   }
 
-  // Readings keep arriving: judge each field against the ones that existed when it was written (A22).
+  // Readings keep arriving: judge each field against the ones that existed when it was written.
   for (const { body, seq } of leakBodies(record)) {
     for (const finding of lintDecisionStrings(body, leakContextAt(ctx, seq))) {
       problems.push({ code: "leak", decision_id: id, field: finding.field, rule: finding.rule });
@@ -95,8 +95,8 @@ export function recordProblems(record: DecisionRecord, ctx: LeakContext): LintPr
 }
 
 /**
- * Where scenario links come from. The real vault supplies it in M3c; M3a only needs the seam, so the link rule can be
- * tested now and switched on later without touching the callers (M3-D17).
+ * Where scenario links come from. The real vault supplies it; the decision layer only needs the seam, so the link rule can be
+ * tested now and switched on later without touching the callers.
  */
 export interface DecisionLinks {
   linkedDecisionIds(): ReadonlySet<string>;
@@ -106,9 +106,9 @@ export interface DecisionLinks {
  * Which resolved decisions a scenario still has to cover (spec §5.2, GATE-2).
  * - `unlinked`: resolved, not quantitative, and no scenario names it. GATE-2 sends the item back to S2 for these.
  * - `not_run`: resolved and quantitative. A CLI scenario cannot prove a latency or a throughput figure in v0.1, so these
- *   are reported as `measured: not_run` and never counted as success (M3-D17).
+ *   are reported as `measured: not_run` and never counted as success.
  * Open, deferred and not-applicable decisions are in neither list: they have no committed answer to cover. Both lists
- * follow `added_seq` order, so the output is stable. Pure; GATE-1 never calls it (A8).
+ * follow `added_seq` order, so the output is stable. Pure; GATE-1 never calls it.
  */
 export function scenarioLinkCoverage(
   state: DecisionState,
@@ -128,10 +128,10 @@ export function scenarioLinkCoverage(
  * Deterministic lint of one work item's decision state (what `omf decide lint` prints). In order:
  *  1. every ledger anomaly, as code `anomaly` with the anomaly code as `detail`;
  *  2. `recordProblems` for every record, in `added_seq` order;
- *  3. `intent_question_missing` for each id in `intentQuestionIds` that has no record (F8, A15: an unseeded question
+ *  3. `intent_question_missing` for each id in `intentQuestionIds` that has no record (an unseeded question
  *     must not be invisible to lint any more than it is to GATE-1);
  *  4. only when `links` is given: `unlinked` for each resolved non-quantitative decision no scenario names.
- * Without `links` the link rule is skipped, because before M3c there are no scenarios to link to.
+ * Without `links` the link rule is skipped, because before the vault exists there are no scenarios to link to.
  */
 export function lintDecisions(
   state: DecisionState,

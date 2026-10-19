@@ -14,7 +14,7 @@ import type { OutcomeInput, WOutcome } from "./outcome.js";
 import type { ReasonCode, Recommendation } from "./w-events.js";
 
 /**
- * The outcome classifier and the inputs it reads (M3b2-D5, D9, D15, D19; spec §4.4 step 5, §5.0). Pure: no ledger, no
+ * The outcome classifier and the inputs it reads (spec §4.4 step 5, §5.0). Pure: no ledger, no
  * file, no clock. The sequencer fills `EvidenceInputs` through `StationContext.inputs`; this module decides what they mean.
  */
 
@@ -44,12 +44,12 @@ export interface SealedInputs {
 export interface EvidenceInputs {
   audit: AuditInputs;
   sealed: SealedInputs;
-  /** Run-wide: measured once by M3e to M3h, not per round. */
+  /** Run-wide: measured once per run by the audit and containers, not per round. */
   isolation_level: Level | "unmeasured";
   high_risk_paths_touched: string[] | NotRun;
-  /** M3-D10 (a): "not_evaluated" means the check ran but could not decide. */
+  /** "not_evaluated" means the check ran but could not decide. */
   noise_check: "ok" | "within_variance" | "not_evaluated" | NotRun;
-  /** The OMF_GATES line, produced by M3e. Required: not run is `evidence_incomplete`. */
+  /** The OMF_GATES line, produced by the audit. Required: not run is `evidence_incomplete`. */
   gate_line: string | NotRun;
   /** The structured verdict of the same gate run. Required: not run is `evidence_incomplete`. */
   gate_verdict: GateVerdictInput;
@@ -73,7 +73,7 @@ export function emptyEvidenceInputs(): EvidenceInputs {
 
 /**
  * Puts every round-scoped field (`ROUND_SCOPED_INPUTS`) back to its default, in place: stations hold this same object.
- * Called in the step that opens a round, so a round-1 clean audit or sealed pass can never satisfy round 2 (M3b2-D5).
+ * Called in the step that opens a round, so a round-1 clean audit or sealed pass can never satisfy round 2.
  * `isolation_level` is run-wide and stays.
  */
 export function resetRoundScopedInputs(inputs: EvidenceInputs): void {
@@ -127,10 +127,10 @@ export interface ClassifierInput {
   stations: Record<StationId, StationStatus>;
   gates: GateAggregate;
   inputs: EvidenceInputs;
-  /** Ids of quantitative decisions; their `measured` is always "not run" in M3b2 (M3-D17). */
+  /** Ids of quantitative decisions; their `measured` is always "not run" until the sequencer measures them. */
   decisions_unmeasured: readonly string[];
   gate4_warnings: readonly Gate4Warning[];
-  /** From `injectedGateIds`: gates that did not come from `defaultGates()` (M3b2-D20). */
+  /** From `injectedGateIds`: gates that did not come from `defaultGates()`. */
   injected_gates: readonly GateId[];
   declared_level: Level;
 }
@@ -210,15 +210,15 @@ function sealedFailed(sealed: SealedInputs): boolean {
   return failed(sealed.train) || failed(sealed.test);
 }
 
-/** M3-D10 (a): any flaky scenario. Checked before sealedFailed: M3d counts a flaky scenario as not passed (M3d-D4), so pass < total whenever flaky > 0, and the person must see the flakiness. */
+/** Any flaky scenario. Checked before sealedFailed: the test run counts a flaky scenario as not passed, so pass < total whenever flaky > 0, and the person must see the flakiness. */
 function anyFlaky(sealed: SealedInputs): boolean {
   return sealed.train !== NOT_RUN && sealed.train.flaky > 0;
 }
 
 /**
- * Maps what the line produced to the closed outcome (M3b2 skeleton section 4.5). Pure and total: the first matching row wins,
+ * Maps what the line produced to the closed outcome . Pure and total: the first matching row wins,
  * in this order: 1 station stop, 2 gate not run, 3 GATE-1, 4 GATE-2 stop, 5 GATE-3, 6 GATE-4, 7 completeness, 8 quality, 9 success.
- * Every row before the last can only lower the result; a `flawed` result needs an implementation behind it (round >= 1, D18).
+ * Every row before the last can only lower the result; a `flawed` result needs an implementation behind it (round >= 1).
  */
 export function classifyOutcome(input: ClassifierInput): Classification {
   const areas = unverifiedAreas(input);
@@ -291,8 +291,8 @@ export function classifyOutcome(input: ClassifierInput): Classification {
 }
 
 /**
- * The `OutcomeInput` M3b1's `dispositionOf` takes. A success is `human_needed` unless it is `merge_recommended`
- * (M3-D17: an unmeasured quantitative decision, unknown spend or an injected gate never gets a plain merge recommendation).
+ * The `OutcomeInput` that `dispositionOf` takes. A success is `human_needed` unless it is `merge_recommended`
+ * (an unmeasured quantitative decision, unknown spend or an injected gate never gets a plain merge recommendation).
  */
 export function toOutcomeInput(c: Classification): OutcomeInput {
   if (c.outcome === "success") {

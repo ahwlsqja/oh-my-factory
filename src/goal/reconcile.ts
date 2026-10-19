@@ -34,7 +34,7 @@ const LAYOUT_MAX = 100;
 const WITHHELD_TITLE = "(title withheld)";
 
 /**
- * The only thing the reconciler ever sees (spec §4.6, D6, D22). It holds the objective, the approach text,
+ * The only thing the reconciler ever sees (spec §4.6). It holds the objective, the approach text,
  * a direction and a size bucket, and names of work and files, and nothing that says where the metric is.
  */
 export interface ReconcilerInput {
@@ -108,8 +108,7 @@ function layoutOf(tracked: readonly string[], watchedGlobs: readonly string[], t
 }
 
 /**
- * Builds the reconciler input (spec §4.4 step 4). The objective and the approach text go through seed lint
- * (D22); if either fails, nothing is built and the tick escalates J1 `approach_unusable` before any budget
+ * Builds the reconciler input (spec §4.4 step 4). The objective and the approach text go through seed lint; if either fails, nothing is built and the tick escalates J1 `approach_unusable` before any budget
  * is spent. `cap` comes from the locked semantic.
  */
 export function buildReconcilerInput(args: {
@@ -233,7 +232,7 @@ const WORK_ID = /^w-[0-9a-f]{12}$/;
 const FORBIDDEN = new Set(FORBIDDEN_KEYS.map((key) => key.toLowerCase()));
 
 /**
- * Defense in depth behind the schema's path pattern (D19): a path that leaves the repository or points
+ * Defense in depth behind the schema's path pattern: a path that leaves the repository or points
  * into `.git` is out of scope. Returns a fixed code, or null when every path is inside.
  */
 export function scopeViolation(paths: readonly string[]): "outside_repo" | "git_dir" | null {
@@ -291,7 +290,7 @@ function emptyResult(outcome: ReconcileStageResult["outcome"]): ReconcileStageRe
 }
 
 /**
- * The reconcile stage (spec §4.4 step 4, D18, D25, D30). In order: build the input (`approach_unusable`
+ * The reconcile stage (spec §4.4 step 4). In order: build the input (`approach_unusable`
  * spends nothing), check `rounds` and a declared `disclosure` budget, write the input, consume both
  * immediately before the call, call the model, validate the envelope, then filter each candidate:
  * schema, scope, seed lint, fingerprint, WIP cap, and finally the mechanical risk class. A surviving
@@ -341,7 +340,7 @@ export async function reconcileGoal(ctx: ReconcileContext): Promise<ReconcileSta
 
   // The checks above read a snapshot; a feedback release may take the last disclosure unit before this write.
   // So both pools are folded again under the ledger lock and written together or not at all: no round is spent
-  // without the model call it pays for. This is the only place a round is spent (D18).
+  // without the model call it pays for. This is the only place a round is spent.
   let lost: "rounds_exhausted" | "disclosure_exhausted" | null = null;
   try {
     ledger.appendWithMany((current) => {
@@ -423,13 +422,13 @@ export async function reconcileGoal(ctx: ReconcileContext): Promise<ReconcileSta
   });
 
   const dispatchStart = now().getTime();
-  // Every item of the goal in any state, including ones that fail ledger verification: none may be proposed again (D1).
+  // Every item of the goal in any state, including ones that fail ledger verification: none may be proposed again.
   const existing = new Set(known.items.map((item) => item.front.work_id));
   for (const item of known.malformed) {
     const id = item.work_id ?? basename(item.dir);
     if (WORK_ID.test(id)) existing.add(id);
   }
-  // A work.created whose files are missing is completed when its candidate is proposed again (D30).
+  // A work.created whose files are missing is completed when its candidate is proposed again.
   const recorded = new Set(
     events
       .filter((e) => e.type === "work.created" && e.payload.goal_id === goalId)
@@ -449,7 +448,7 @@ export async function reconcileGoal(ctx: ReconcileContext): Promise<ReconcileSta
   };
 
   for (const [index, raw] of envelope.candidates.entries()) {
-    // The candidate shape lives in `$defs/candidate`; the root schema types the items only as objects (Task 5).
+    // The candidate shape lives in `$defs/candidate`; the root schema types the items only as objects.
     const shape = validateDef(RECONCILE_OUTPUT_SCHEMA_FILE, "candidate", raw);
     if (!shape.ok) {
       reject(index, "schema", schemaReason(shape.errors), null);

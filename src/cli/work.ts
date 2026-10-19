@@ -39,7 +39,7 @@ export interface BudgetArgs {
 }
 
 /**
- * `wall_time` is a J8 cap too (D26) but it is not a counted budget, so it stays out of `BudgetKind` and
+ * `wall_time` is a J8 cap too but it is not a counted budget, so it stays out of `BudgetKind` and
  * is parsed here. It can only be raised: its base comes from goal.md at J1.
  */
 export type ParsedBudgetArgs =
@@ -132,7 +132,7 @@ const WORK_ID_ARG = /^w-[0-9a-f]{12}$/;
 const USD_ARG = /^(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$/;
 
 /**
- * Splits `omf budget raise` into its two forms without touching the ledger (M3b2 section 7). `--rounds` or
+ * Splits `omf budget raise` into its two forms without touching the ledger. `--rounds` or
  * `--usd` or a `w-` id selects the work item form; anything else is the goal form, unchanged. Amounts that
  * are not positive (a zero, a sign, an exponent, a result that is not a safe integer of micro-dollars) are
  * `WorkBudgetError("invalid_amount")`; main.ts exits 2 for every error, like the goal form.
@@ -220,7 +220,7 @@ export async function workLimitRaiseFlow(
   return 0;
 }
 
-/** The wall time clock as `auditGoal` enforces it: the limit is the approved time plus the raises (D26). */
+/** The wall time clock as `auditGoal` enforces it: the limit is the approved time plus the raises. */
 export interface WallTimeReport {
   base_ms: number;
   raised_ms: number;
@@ -427,8 +427,8 @@ function assertApprovable(location: ProjectLocation, workId: string, actor: stri
 
 /**
  * Approves an `awaiting_approval` item. The ledger event comes first, then item.md (the ledger is
- * authoritative, D27): a crash in between leaves a recorded approval and an item still awaiting one,
- * which `omf work approve` can finish. No J number: the spec has no item-approval judgment (D5).
+ * authoritative): a crash in between leaves a recorded approval and an item still awaiting one,
+ * which `omf work approve` can finish. No J number: the spec has no item-approval judgment.
  */
 export function runWorkApprove(
   location: ProjectLocation,
@@ -446,7 +446,7 @@ export function runWorkApprove(
 }
 
 /**
- * Vetoes an item from any open state, also while a run holds its claim (D28): a veto only restricts, so
+ * Vetoes an item from any open state, also while a run holds its claim: a veto only restricts, so
  * it needs no terminal. The run sees the new state when it re-reads the item at its next station.
  */
 export function runVeto(
@@ -474,8 +474,7 @@ export function runVeto(
 
 /** Work item and veto commands (spec §4.4 step 5, §9). Errors propagate to main.ts, which exits 2. */
 /**
- * What `work list` and `work show` print for an item whose file is exactly one W edge behind the ledger
- * (M3b1-D4, D5). The reason is a person's question ("did someone edit this by hand?"): the ledger is the
+ * What `work list` and `work show` print for an item whose file is exactly one W edge behind the ledger. The reason is a person's question ("did someone edit this by hand?"): the ledger is the
  * authority, so a crash leftover is healed by the next W entry on the goal, never by editing item.md.
  * Display only: `--json` keeps the machine reason `w_repairable`.
  */

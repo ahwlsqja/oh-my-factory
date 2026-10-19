@@ -45,7 +45,7 @@ export type SealPassResult =
   // Only for a standing seal whose author stage is measured L2.
   | { status: "already_sealed"; seal_id: string; author_measured: true }
   | { status: "sealed"; seal_id: string; round: number; author_measured: true; gate2: "pass" }
-  // M3c convention: "stored", never "sealed", when the author is unmeasured.
+  // Convention: "stored", never "sealed", when the author is unmeasured.
   | { status: "stored"; seal_id: string; round: number; author_measured: false; gate2: "pass" }
   // An author-quality failure, or GATE-2 sending the item back to S2: the person reruns.
   | { status: "retry"; code: SealFailureCode | "gate2_back_to_s2" }
@@ -165,7 +165,7 @@ export function recordAuthorMeasurement(input: {
 }
 
 /**
- * One `omf seal` pass (spec §5.3, M3-D16). In order:
+ * One `omf seal` pass (spec §5.3). In order:
  * 1. the line guard (sealed material in the repository, a symlink in the state tree) is a J7 stop;
  * 2. a standing seal whose author stage is measured L2 answers `already_sealed` here: no key, no daemon, no model call.
  *    A standing seal with an unmeasured author falls through and is sealed again;
@@ -278,7 +278,7 @@ export async function sealItem(deps: SealItemDeps): Promise<SealPassResult> {
 }
 
 /**
- * S2 of `omf run` (M3h-D4). It verifies; it never seals. A standing seal whose author preceded the start answers ok with the
+ * S2 of `omf run`. It verifies; it never seals. A standing seal whose author preceded the start answers ok with the
  * set digest as its progress digest. Otherwise the line stops at the cause: for a `ready` item whose GATE-1 is not passing
  * that is `j2_open`; in every other case a person has to run `omf seal` (`scenarios_need_review`, J3). A guard refusal is
  * `gate_blocked` (J7). No session, key or runtime is passed in, so there is nothing to start.

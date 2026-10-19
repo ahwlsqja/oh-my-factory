@@ -1,7 +1,7 @@
 import type { LedgerEvent } from "../core/ledger.js";
 
 /**
- * The four termination states belong to the goal RUN, not to every tick (D3). `blocked_on_user` and `failed`
+ * The four termination states belong to the goal RUN, not to every tick. `blocked_on_user` and `failed`
  * wait for a person (J6 continue); `finish` and `cancelled` are final.
  */
 export type Termination = "finish" | "blocked_on_user" | "failed" | "cancelled";
@@ -81,13 +81,13 @@ function terminationOf(event: LedgerEvent): { state: Termination; reason_code: s
   return { state: state as Termination, reason_code };
 }
 
-/** `finish` and `cancelled` end a goal run for good (D3). */
+/** `finish` and `cancelled` end a goal run for good. */
 export function isFinal(status: RunState["status"]): boolean {
   return status === "finish" || status === "cancelled";
 }
 
 /**
- * The goal's run state, applying the §5.1 transition table to the verified ledger (spec §4.4, D3):
+ * The goal's run state, applying the §5.1 transition table to the verified ledger (spec §4.4):
  * - goal.escalated blocks the goal; a goal.escalated with no following goal.terminated still projects as
  *   blocked_on_user, because escalate appends two non-atomic events and a crash between them must not leave
  *   the goal running;

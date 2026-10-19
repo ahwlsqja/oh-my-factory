@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Folds docs/requirements.json, the tests it names and docs/evidence/gated-runs.json into one state per
 // requirement and keeps the documents that report those states honest (spec section 11: "enforced by
-// tests/enforcement"; M3h).
+// tests/enforcement").
 //
 //   node scripts/conformance-matrix.mjs --write   regenerate docs/conformance-matrix.md and the generated block
 //                                                 in tests/enforcement/README.md

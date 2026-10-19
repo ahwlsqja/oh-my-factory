@@ -48,7 +48,7 @@ function removeHandlers(): void {
 
 /**
  * One process-wide SIGINT/SIGTERM handler pair, installed on the first registration and removed on the last unregister.
- * `process-group.ts` (running commands), `proveTest` (tree copies) and M3f (judge containers) register here; none
+ * `process-group.ts` (running commands), `proveTest` (tree copies) and the judge containers register here; none
  * installs its own handler. The callback must be synchronous and idempotent. Returns the unregister function.
  * `first` callbacks run before every other one on a signal, whatever the registration order: a process-group killer
  * uses it so a command is dead before a directory it may still write into is deleted.

@@ -27,7 +27,7 @@ export interface SealInputs {
   readonly contract: InterfaceContract;
   /** Resolved and not quantitative: the only ids a scenario may name. */
   readonly linkable_decision_ids: readonly string[];
-  /** Resolved and quantitative: naming one invalidates the scenario (M3-D17). */
+  /** Resolved and quantitative: naming one invalidates the scenario. */
   readonly quantitative_decision_ids: readonly string[];
   readonly feedback?: SealFeedback;
 }
@@ -66,10 +66,10 @@ export const FRONT_MATTER = /^---\n[\s\S]*?\n---\n/;
  * Builds the inputs from the item and the folded state (spec §5.3). In this order:
  * - `interface_missing`: `d-interface` is absent, open, deferred or n/a, or resolved without a body;
  * - `interface_not_supported`: the contract's kind is `http`. Every authored scenario would be refused at intake, so
- *   nothing is spent on the author (M3-D5);
+ *   nothing is spent on the author;
  * - `intent_leak`: the intent fails the seed lint or the decision leak rules under the current lock. `intent.md` has no
  *   hash in `work.created` and is not re-linted after creation, so after a goal re-lock or a hand edit it can hold the
- *   locked target or a metric name. M3a withholds such text from `spec.md`; this does the same for the seal prompt;
+ *   locked target or a metric name. The decision layer withholds such text from `spec.md`; this does the same for the seal prompt;
  * - `too_large`.
  * GATE-1 has already passed when the stage calls this, so no resolved record is withheld from the spec.
  */

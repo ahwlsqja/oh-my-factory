@@ -47,8 +47,7 @@ export function noiseCheck(input: NoiseCheckInput): NoiseCheck {
 export type NoiseReasonCode = "flaky_scenario" | "noise_unverified";
 
 /**
- * The reason code that names why the check forces not_recommended. Advisory and recorded only: the M3b2
- * classifier is the only producer of outcome reason codes (cross-plan X-15). A flaky scenario maps to `flaky_scenario`
+ * The reason code that names why the check forces not_recommended. Advisory and recorded only: the outcome classifier\n * classifier is the only producer of outcome reason codes (cross-plan X-15). A flaky scenario maps to `flaky_scenario`
  * (J4); k < 2 maps to `noise_unverified`, which is reserved and has no producer in v0.1. This module only returns the
  * string and imports nothing from src/work. One downgrade never has two codes. Null when nothing is forced.
  */

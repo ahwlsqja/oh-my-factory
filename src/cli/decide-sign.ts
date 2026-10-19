@@ -158,7 +158,7 @@ const scopeOf = (item: WorkItem): DecisionScope => ({ goal_id: item.front.goal_i
 
 /**
  * The decision a person is about to sign, or a refusal before anyone is asked: unknown, or final (resolved or
- * n/a; v0.1 has no general reopen, M3a A13). An open decision and a deferred one can be signed (A21). The write
+ * n/a; v0.1 has no general reopen). An open decision and a deferred one can be signed. The write
  * re-checks both atomically under the ledger lock.
  */
 export function openDecision(location: ProjectLocation, item: WorkItem, decisionId: string): DecisionRecord {
@@ -204,7 +204,7 @@ function signAs(
   else runDecideNa(location, workId, decisionId, action.input, actor, now);
 }
 
-/** The whole interactive path of one verb, in the order of M3a A20. */
+/** The whole interactive path of one verb, in the order the verb runs. */
 async function signFromTerminal(verb: SignVerb, workId: string, decisionId: string, file: string): Promise<void> {
   const status = requireProject(process.cwd());
   const item = requireDecidableItem(status, workId);

@@ -8,7 +8,7 @@ import { EXIT, type ExitCode } from "./exit.js";
 import { checkOrder, judgeLine } from "./w-assembly.js";
 
 /**
- * `omf report <work_id>` (M3h-D17). Read-only: the verified ledger vouches for the evidence (the report branch of `checkOrder`), and the text is
+ * `omf report <work_id>`. Read-only: the verified ledger vouches for the evidence (the report branch of `checkOrder`), and the text is
  * `renderEvidenceMd` of the validated evidence.json. The bytes of evidence.md are never printed; when they differ from that
  * rendering the file is untrusted and a note says so. Implementer text appears only in the rendering's fenced section.
  * The not-enforced line is part of the rendering whenever the run-level isolation is unmeasured, so it is not added again.

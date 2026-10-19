@@ -3,7 +3,7 @@ import { normalizePath } from "./fingerprint.js";
 import type { RiskAssessment, RiskRule } from "./types.js";
 
 /**
- * Paths a work item must not touch without a person's approval (spec §4.4, D4). Each entry names one rule;
+ * Paths a work item must not touch without a person's approval (spec §4.4). Each entry names one rule;
  * the rule label is all that reaches the ledger. Matching is case-insensitive and includes dot paths, so
  * `.GitHub/Workflows` on a case-insensitive filesystem is still CI.
  */
@@ -79,7 +79,7 @@ function isClassifiable(raw: string, normalized: string): boolean {
 }
 
 /**
- * The mechanical risk class of a candidate (spec §4.4, D4). A declared path is high when any rule glob matches
+ * The mechanical risk class of a candidate (spec §4.4). A declared path is high when any rule glob matches
  * it, matches it as a directory (`<path>/_` probes `dir/**` globs), or matches a tracked file below it. A new
  * untracked file under a high-risk glob is high by pattern alone. No declaration, or one that cannot be judged,
  * is high: the model chooses paths, code chooses the class.

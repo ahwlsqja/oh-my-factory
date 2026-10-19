@@ -205,7 +205,7 @@ function printStatus(report: GoalStatusReport): void {
   printList("next steps", report.next_steps);
 }
 
-/** What `omf goal tick` may print or emit as JSON: the TickResult without the model's titles (D29). */
+/** What `omf goal tick` may print or emit as JSON: the TickResult without the model's titles. */
 type PublicTick = Omit<TickResult, "created"> & { created: { work_id: string; state: WorkState; risk: RiskClass }[] };
 
 /**
@@ -221,7 +221,7 @@ function publicTick(result: TickResult): PublicTick {
 /**
  * Exit code of `omf goal tick` (spec §8). 0: the goal ticked on or finished. 1: a person has to act, which
  * includes a goal parked for a person, a tick the audit or a failed model call stopped, and any open item
- * awaiting approval (D18), so a cron user hears about it. Errors that stop the command exit 2 in main.ts.
+ * awaiting approval, so a cron user hears about it. Errors that stop the command exit 2 in main.ts.
  */
 export function tickExitCode(result: TickResult): number {
   if (result.status === "finish") return 0;
@@ -366,7 +366,7 @@ export function registerGoalCommands(program: Command): void {
     .action(async (goalId: string) => {
       const status = requireProject(process.cwd());
       // The tick lock comes first: a running tick is reported before anything else, and no tick can start
-      // between what the person reads below and the resume that follows (D23).
+      // between what the person reads below and the resume that follows.
       await withTickLock(status, goalId, async () => {
         requireTerminal("goal resume");
         const actor = humanActor(status.repo);

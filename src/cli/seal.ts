@@ -33,7 +33,7 @@ export interface SealReport {
 }
 
 /**
- * The exit code, text and JSON of one seal pass (M3h-D5): 0 sealed or already sealed, 1 a problem in the result (the
+ * The exit code, text and JSON of one seal pass: 0 sealed or already sealed, 1 a problem in the result (the
  * author failed, GATE-2 sent the item back, or the author stage is unmeasured), 3 a person must act, 2 the command
  * could not run. Only ids, statuses and closed codes appear; the author's text never reaches this function.
  */

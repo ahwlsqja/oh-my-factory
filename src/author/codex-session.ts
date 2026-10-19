@@ -294,7 +294,7 @@ export function createContainerAuthor(deps: ContainerAuthorDeps): ContainerAutho
         finalize("completed");
         return { ok: true, output: answer.yaml, durationMs: elapsed() };
       } finally {
-        // Idempotent. A failed removal leaves an orphan with the omf.owner label for the author-role sweep (Task 5).
+        // Idempotent. A failed removal leaves an orphan with the omf.owner label for the author-role sweep.
         await runtime.remove(handle).catch(() => undefined);
       }
     },

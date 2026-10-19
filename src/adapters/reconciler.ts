@@ -134,7 +134,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /**
  * Pulls the model's JSON out of stdout. `claude --output-format json` prints one envelope object; the
  * answer is in `result` as bare or fenced JSON (`structured_output` is read if present). A
- * `command` prints the JSON itself. The value is returned as unvalidated data: Task 9 validates it
+ * `command` prints the JSON itself. The value is returned as unvalidated data: the caller validates it
  * against `reconcile-output.schema.json` (spec §4.4 step 4: the model's output is parsed, never trusted).
  */
 export function extractModelJson(kind: ReconcilerKind, stdout: string): unknown {

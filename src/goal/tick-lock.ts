@@ -6,7 +6,7 @@ import { GoalFileError, assertGoalId, goalDir, goalFile } from "./goal-file.js";
 
 export const TICK_RUNNING_MESSAGE = "a tick is running; retry";
 
-/** Another tick (or a resume or cancel) holds the goal's tick lock. Callers exit 2 (spec §8, D23). */
+/** Another tick (or a resume or cancel) holds the goal's tick lock. Callers exit 2 (spec §8). */
 export class TickRunningError extends Error {
   constructor() {
     super(TICK_RUNNING_MESSAGE);
@@ -27,7 +27,7 @@ export function assertGoalExists(projectDir: string, goalId: string): void {
 }
 
 /**
- * One tick per goal at a time (D23). `omf goal resume` and `omf goal cancel` take the same lock, so an
+ * One tick per goal at a time. `omf goal resume` and `omf goal cancel` take the same lock, so an
  * in-flight tick cannot create work items after `goal.terminated(cancelled)`. The lock records pid and
  * process start time and a crashed holder is reclaimed (core/lock.ts), so no cleanup command is needed.
  */

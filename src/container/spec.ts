@@ -146,7 +146,7 @@ export interface TmpfsSpec {
 /**
  * Everything `docker create` may be told. There is deliberately no field for a mount, a volume, a privilege, a
  * capability, a device, a PID or IPC share, a network, a published port or an environment value: the argv builder
- * cannot emit what this type cannot express (M3f-D2).
+ * cannot emit what this type cannot express.
  */
 export interface ContainerSpec {
   name: string;

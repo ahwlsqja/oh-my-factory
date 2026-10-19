@@ -36,7 +36,7 @@ export interface BeginRunOptions {
 
 export type RecheckFailure = "vetoed" | "cancelled" | "state_changed" | "malformed" | "claim_lost" | "governance";
 
-/** Closed codes only: nothing a model wrote and nothing from the audit reaches a caller through these (M3b1-D3). */
+/** Closed codes only: nothing a model wrote and nothing from the audit reaches a caller through these. */
 export type Recheck = { ok: true; item: WorkItem } | { ok: false; reason: RecheckFailure; code: GovernanceCode | null };
 
 export type FinishResult =
@@ -55,7 +55,7 @@ export interface WRun {
   readonly reclaimed: { pid: number | null } | null;
   /** Ids of the goal's repairable items that this entry healed. */
   readonly repaired: readonly string[];
-  /** S3 entry: moves a ready item to in_progress. Idempotent. `beginRun` never starts an item (M3b1-D11). */
+  /** S3 entry: moves a ready item to in_progress. Idempotent. `beginRun` never starts an item. */
   start(): void;
   /**
    * Call before every station. In order: the claim file still names this run, the ledger does not hold a
@@ -83,7 +83,7 @@ function sameOwner(found: LockOwner | null, mine: LockOwner): boolean {
 }
 
 /**
- * Releases only a claim that still names this run (M3b1-D13). `releaseLock` already refuses another pid,
+ * Releases only a claim that still names this run. `releaseLock` already refuses another pid,
  * but a claim file replaced by a live process with our pid reused is not ours either; forcing its removal
  * would break mutual exclusion, so a foreign claim is left alone.
  */
@@ -126,7 +126,7 @@ function timestampOrEmpty(value: string): string {
 }
 
 /**
- * Leaves the trace of a killed run (M3b1-D8): a dead process cannot append, so the next run does. Written
+ * Leaves the trace of a killed run: a dead process cannot append, so the next run does. Written
  * right after the claim is taken, so a refusal further on (wrong_state, needs_human) still leaves it.
  */
 function recordReclaim(
@@ -151,7 +151,7 @@ function requireReason(input: OutcomeInput): ReasonCode {
 }
 
 /**
- * Heals every repairable item of the goal, each under its own claim (M3b1-D5). An item under a live claim
+ * Heals every repairable item of the goal, each under its own claim. An item under a live claim
  * is somebody's run and is skipped. Every W entry calls this first, so a crash between a ledger append and
  * its file write is repaired by the next run of any item, without anyone naming the stuck one.
  */
@@ -180,7 +180,7 @@ export function repairGoal(ctx: WContext, goalId: string): string[] {
 }
 
 /**
- * Enters one work item: governance, sweep, claim, then the entry checks. Order matters (M3b1 design 3.8):
+ * Enters one work item: governance, sweep, claim, then the entry checks. Order matters (governance, sweep, claim, entry checks):
  * rule 5 first, so a stopped goal never touches a claim; the sweep before the claim, so this item's own
  * repair runs under a claim of its own; every failure after the claim releases it.
  */
@@ -188,7 +188,7 @@ export function beginRun(options: BeginRunOptions): WRun {
   const now = options.now ?? ((): Date => new Date());
   const mint = options.newRunId ?? newRunId;
   const { location, workId } = options;
-  // Spec §11 rule 4: M3b1's run entry refuses while sealed material sits in the repository or an OMF worktree,
+  // Spec §11 rule 4: the run entry refuses while sealed material sits in the repository or an OMF worktree,
   // before it reads, claims or appends anything.
   assertLineSafe(location);
   const ctx: WContext = {
@@ -228,7 +228,7 @@ export function beginRun(options: BeginRunOptions): WRun {
     if (item.front.state !== "ready" && item.front.state !== "in_progress") {
       throw new WError("wrong_state", `work item ${workId} is ${item.front.state}`);
     }
-    // spec §5.6: a manual park is a trust boundary a person must cross; the event that clears it is a later milestone (D7)
+    // spec §5.6: a manual park is a trust boundary a person must cross; the event that clears it is a later milestone
     const last = lastStateEvent(events, workId);
     if (last !== null && last.event.type === "work.parked" && last.event.payload.outcome === "manual") {
       throw new WError("needs_human", `work item ${workId} is parked for a person`);

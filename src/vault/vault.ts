@@ -88,7 +88,7 @@ export function setSha256(scenarios: readonly StoredScenario[]): string {
 }
 
 /**
- * The per-split digest M3d keys its release ladder on: the stored scenarios of one split whose effective status is
+ * The per-split digest the feedback layer keys its release ladder on: the stored scenarios of one split whose effective status is
  * active. Retiring or contaminating a scenario (a ledger event) or editing one changes it; another split's change does not.
  */
 export function splitDigest(
@@ -224,7 +224,7 @@ export function readScenarioSet(vault: Vault, ref: SetRef): ScenarioSetRead {
 }
 
 /**
- * Canaries for the poka-yoke and the M3e scans: every scenario of every set that reads cleanly and whose digest equals the one
+ * Canaries for the poka-yoke and the audit scans: every scenario of every set that reads cleanly and whose digest equals the one
  * its `seal.completed` recorded, retired and contaminated ones included (a retired scenario's canary must still be found). A set
  * that fails either check contributes nothing and its seal id is listed in `unverified`, so a hand-edited file cannot steer a scan.
  */

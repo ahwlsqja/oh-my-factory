@@ -12,7 +12,7 @@ export function totalVisitCap(maxRounds: number): number {
 }
 
 /**
- * In-memory visit counts for one run (M3b2-D6). Round 0 holds S1, S2 and their gates; `startRound` opens round 1, 2, ...
+ * In-memory visit counts for one run. Round 0 holds S1, S2 and their gates; `startRound` opens round 1, 2, ...
  * and resets the per-node counts but keeps the total. What bounds work across runs is the ledger (rounds, spend, the
  * re-entry facts), not this class.
  */
@@ -39,7 +39,7 @@ export class VisitCounter {
 }
 
 /**
- * The stall signature (M3b2-D7): sha256 over the canonical form of the round's `[{node, status, digest}]`. A station
+ * The stall signature: sha256 over the canonical form of the round's `[{node, status, digest}]`. A station
  * contributes a `digest` (for example a diff hash); one that supplies none makes an unchanged round look identical,
  * which is the safe direction. Separate from the goal-level `progressSignature`.
  */
@@ -91,7 +91,7 @@ const SEVERITY_OF: Record<Gate4Reason, Exclude<Gate4Severity, "none">> = {
 const SEVERITY_RANK = { integrity: 3, hard: 2, soft: 1 } as const;
 
 /**
- * GATE-4, pure (spec §5.0, M3-D18). Reads the folded budget state and counters; never the clock, never the disk.
+ * GATE-4, pure (spec §5.0). Reads the folded budget state and counters; never the clock, never the disk.
  *
  * - rounds_exhausted: a next round is wanted and `rounds_started >= effective.max_rounds`.
  * - spend_exhausted: spend over the limit, or at the limit while a next round is wanted.

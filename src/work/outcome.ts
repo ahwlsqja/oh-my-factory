@@ -1,9 +1,9 @@
 import { type ReasonCode, type Recommendation, W_REASON_CODES } from "./w-events.js";
 
 /**
- * Outcome-to-state table (M3-D19, spec §4.4 step 5). It maps what a run ended with to what happens to the item
- * and whether the result counts toward STOP_IF. It does not classify (that is M3b2) and it changes no
- * transition: `src/work/transitions.ts` stays as it is. No row reaches `done`; only a person completes an item (M4).
+ * Outcome-to-state table (spec §4.4 step 5). It maps what a run ended with to what happens to the item
+ * and whether the result counts toward STOP_IF. It does not classify (that is the classifier) and it changes no
+ * transition: `src/work/transitions.ts` stays as it is. No row reaches `done`; only a person completes an item.
  */
 
 export type WOutcome = "success" | "flawed" | "blocked" | "manual";
@@ -15,7 +15,7 @@ export interface OutcomeInput {
   exhausted: boolean;
   /** null for success (its event carries none); a closed code for flawed, blocked and manual. */
   reason_code: ReasonCode | null;
-  /** M3-D17: an unmeasured quantitative decision forces `human_needed`. Only success may set it. */
+  /** An unmeasured quantitative decision forces `human_needed`. Only success may set it. */
   human_needed?: boolean;
 }
 
@@ -31,7 +31,7 @@ export interface OutcomeRow {
   disposition: Disposition;
 }
 
-/** The six rows of M3-D19. `manual` with exhaustion and `success` with exhaustion do not exist. */
+/** The six rows of the outcome table. `manual` with exhaustion and `success` with exhaustion do not exist. */
 export const OUTCOME_ROWS: readonly OutcomeRow[] = [
   {
     outcome: "success",

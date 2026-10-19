@@ -138,7 +138,7 @@ export function scenarioAggregate(scenarios: readonly EffectiveScenario[]): Scen
 }
 
 export type Gate2Result =
-  | { status: "pass"; not_run: string[]; aggregate: ScenarioAggregate } // not_run: resolved quantitative decision ids (M3-D17); never success
+  | { status: "pass"; not_run: string[]; aggregate: ScenarioAggregate } // not_run: resolved quantitative decision ids; never success
   | {
       status: "fail";
       route: Gate2Route;
@@ -147,7 +147,7 @@ export type Gate2Result =
       aggregate: ScenarioAggregate | null;
     };
 
-/** M3d supplies this (releases per split digest from its feedback.* events). M3c never counts exposure itself. */
+/** The feedback layer supplies this (releases per split digest from its feedback.* events). GATE-2 never counts exposure itself. */
 export type ExposureCount = (key: { split: ScenarioSplit; digest: string }) => number;
 
 export interface ProbeRun {
@@ -291,7 +291,7 @@ export function evaluateGate2(input: Gate2Input): Gate2Result {
     if (pairs > 0) reasons.push({ code: "contradiction", count: pairs });
   }
 
-  // Needs no set: the count is keyed by the split digest M3d computes. A count that is not a number cannot prove headroom.
+  // Needs no set: the count is keyed by the split digest the feedback layer computes. A count that is not a number cannot prove headroom.
   for (const split of SCENARIO_SPLITS) {
     const count = input.exposure[split];
     if (!Number.isFinite(count) || count >= EXPOSURE_LIMIT) {
@@ -306,7 +306,7 @@ export function evaluateGate2(input: Gate2Input): Gate2Result {
     if (found.gamed > 0) reasons.push({ code: "judge_broken_or_gamed", count: found.gamed });
   }
 
-  // Quantitative decisions are exempt from linking (M3-D17); a canary names no coverage (vaultDecisionLinks ignores canaries).
+  // Quantitative decisions are exempt from linking; a canary names no coverage (vaultDecisionLinks ignores canaries).
   const coverage = scenarioLinkCoverage(input.state, vaultDecisionLinks(scenarios).linkedDecisionIds());
   if (usable && coverage.unlinked.length > 0) {
     reasons.push({ code: "unlinked_decisions", count: coverage.unlinked.length, decision_ids: coverage.unlinked });

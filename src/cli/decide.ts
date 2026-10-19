@@ -61,10 +61,10 @@ function loadConsistentItem(location: ProjectLocation, workId: string): WorkItem
 
 /**
  * The guard of every write: the item is ledger-consistent, in `ready` and nothing more, and no run holds
- * its claim. A run starts an item only at S3, after GATE-1 passed (M3b1-D11), so an `in_progress` item has
+ * its claim. A run starts an item only at S3, after GATE-1 passed, so an `in_progress` item has
  * a sealed `spec.md`: changing a decision now would drift from the spec its run holds. A J2 question
- * raised after the start has no write path until a later milestone relaxes this guard (M3b1 deferred).
- * Decisions must not change while a run holds the claim either (M3a design A12). Plain errors: exit 2.
+ * raised after the start has no write path until a later milestone relaxes this guard (deferred).
+ * Decisions must not change while a run holds the claim either. Plain errors: exit 2.
  */
 export function requireDecidableItem(location: ProjectLocation, workId: string): WorkItem {
   // Spec §11 rule 4: a write while sealed material sits in the repository or an OMF worktree is refused before it
@@ -122,7 +122,7 @@ export function decideReport(
 
 /**
  * Rewrites `spec.md` from the ledger and refreshes `needs-human.json` when one exists. The ledger is
- * re-read inside the item lock, so two concurrent writers cannot leave the older projection last (A10).
+ * re-read inside the item lock, so two concurrent writers cannot leave the older projection last.
  */
 function refreshProjection(location: ProjectLocation, item: WorkItem, now: Date): void {
   withItemLock(item.dir, () => {
@@ -134,7 +134,7 @@ function refreshProjection(location: ProjectLocation, item: WorkItem, now: Date)
 }
 
 /**
- * The common spine of the four verbs. The ledger event comes first, then the projection (A10): a crash in
+ * The common spine of the four verbs. The ledger event comes first, then the projection: a crash in
  * between leaves a stale `spec.md` that `lint` reports and the next write fixes. A writer that throws
  * (a refusal, a leak) leaves `spec.md` alone, because nothing in the folded state changed.
  */
@@ -265,7 +265,7 @@ interface ShownReport {
 
 /**
  * What a person sees: ids, codes and statuses, never decision text. The id of a record that leaks under the
- * current goal lock is replaced by null everywhere (A16b), exactly as `spec.md` withholds that record.
+ * current goal lock is replaced by null everywhere, exactly as `spec.md` withholds that record.
  */
 function shownReport(report: DecideReport, item: WorkItem): ShownReport {
   const hidden = new Set<string>();
@@ -337,7 +337,7 @@ function printReport(shown: ShownReport, json: boolean): void {
 }
 
 /**
- * `omf decide add|lint|show` (spec §9). `resolve` and `defer` are registered in Task 10, behind a terminal
+ * `omf decide add|lint|show` (spec §9). `resolve` and `defer` are registered separately, behind a terminal
  * and a retype. Errors other than `DecisionError` propagate to main.ts, which exits 2.
  */
 export function registerDecideCommands(program: Command): void {
@@ -356,7 +356,7 @@ export function registerDecideCommands(program: Command): void {
     .action((workId: string, options: { file: string }) => {
       const location = requireProject(process.cwd());
       refusing(() => {
-        requireDecidableItem(location, workId); // the item first, then the file (A20)
+        requireDecidableItem(location, workId); // the item first, then the file
         const input = readInput<AddInput>(options.file, "add_input");
         const { event } = runDecideAdd(location, workId, input, "omf");
         console.log(`added ${input.id} to ${workId} (ledger seq ${event.seq})`);

@@ -29,7 +29,7 @@ export interface ReleaseInput {
   goalId: string;
   workId: string;
   runId: string;
-  /** sha256 hex of the train split of the current set (supplied by the vault, M3c). */
+  /** sha256 hex of the train split of the current set (supplied by the vault). */
   trainDigest: string;
   /** Re-parsed with parseScenarioResults before use: a scenario object with an id or text in it is refused. */
   results: readonly ScenarioResult[];
@@ -39,7 +39,7 @@ export interface ReleaseInput {
 
 declare const implementerFeedbackBrand: unique symbol;
 /**
- * The ONLY value the delivery path (M3h) may accept. It carries the text and nothing else, so whether a score is new or a
+ * The ONLY value the delivery path may accept. It carries the text and nothing else, so whether a score is new or a
  * repeat cannot be forwarded by accident; `host_only` below is for the host and the evidence.
  */
 export interface ImplementerFeedback {

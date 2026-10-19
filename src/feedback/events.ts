@@ -240,7 +240,7 @@ export function exposureUnitsOf(events: readonly LedgerEvent[], goalId: string, 
 export type ExposureCountFn = (key: { split: string; digest: string }) => number;
 
 /**
- * The `ExposureCount` M3d supplies to M3c GATE-2: the (goal, work item) count of `exposureUnitsOf`, returned for ANY split
+ * The `ExposureCount` the feedback layer supplies to GATE-2: the (goal, work item) count of `exposureUnitsOf`, returned for ANY split
  * and digest key (the count is not keyed by digest). A snapshot of the events passed in; the caller builds a new
  * function after the ledger changes.
  */

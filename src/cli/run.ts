@@ -61,7 +61,7 @@ function summaryOf(result: LineResult, itemDir: string, exit: ExitCode): Record<
 }
 
 /**
- * `omf run <work_id>` (M3h): the order check, then one `runLine` over `assembleLine`. Returns the exit code. The order check
+ * `omf run <work_id>`: the order check, then one `runLine` over `assembleLine`. Returns the exit code. The order check
  * and its warning come before the runtime is opened, so a refusal and a warning cost nothing; an item that already ran is
  * reported and left alone.
  */
@@ -69,7 +69,7 @@ export async function runVerb(workId: string, json: boolean): Promise<ExitCode> 
   const location = requireProject(process.cwd());
   const order = checkOrder(location, workId, "run", new Date());
   if (!order.ok) {
-    // Exit 0 is the one refusal that is not a failure: the item already ran and awaits review (Task 6's Order).
+    // Exit 0 is the one refusal that is not a failure: the item already ran and awaits review.
     if (order.exit === 0) console.log(order.message);
     else console.error(order.message);
     return order.exit;

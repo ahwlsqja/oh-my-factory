@@ -202,7 +202,7 @@ class ContainerWorkCopy implements WorkCopy {
 }
 
 /**
- * The container version of the M3e work copy. The copy stages the quarantine commit on the host with `exportTree`,
+ * The container version of the host work copy. The copy stages the quarantine commit on the host with `exportTree`,
  * turns the staging directory into a tar Buffer and extracts it inside a `workcopy` container with `docker exec -i ... tar -x`.
  * No path is mounted, and this file starts no process: every command is a `ContainerRuntime.exec` request.
  */

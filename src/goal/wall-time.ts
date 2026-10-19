@@ -22,9 +22,8 @@ function invalidRaise(event: LedgerEvent, why: string): Error {
 }
 
 /**
- * The wall time limit in milliseconds: the approved wall time plus every raise since the latest approval
- * (D26). The approved value comes from the ledger (`goal.approved.wall_time`); the goal lock is only the
- * fallback for an approval from before M2b, so deleting the lock file cannot lengthen or shorten it.
+ * The wall time limit in milliseconds: the approved wall time plus every raise since the latest approval. The approved value comes from the ledger (`goal.approved.wall_time`); the goal lock is only the
+ * fallback for an approval from before bands and wall time were recorded, so deleting the lock file cannot lengthen or shorten it.
  * A raise before a re-approval does not carry over: a re-approval is a new J1 decision about the whole
  * goal, and the person raises again if the extension is still wanted. The clock still starts at the first
  * approval (see `GoalApproval.first_approved_at`).

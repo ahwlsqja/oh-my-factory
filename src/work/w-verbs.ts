@@ -22,7 +22,7 @@ export interface WContext {
 /**
  * Closed failure codes. `outcome_invalid` covers any caller input outside the closed lists: an outcome
  * that is not a legal combination, a reason code that is not in W_REASON_CODES, a progress marker that is
- * not a station and step. `claim_held`, `governance` and `needs_human` are raised by `beginRun` (Task 7).
+ * not a station and step. `claim_held`, `governance` and `needs_human` are raised by `beginRun`.
  */
 export type WErrorCode =
   | "malformed"
@@ -33,7 +33,7 @@ export type WErrorCode =
   | "outcome_invalid"
   | "needs_human";
 
-/** The message is built from codes and validated ids only: no caller string, file text or audit text (M3b1-D3). */
+/** The message is built from codes and validated ids only: no caller string, file text or audit text. */
 export class WError extends Error {
   constructor(
     readonly code: WErrorCode,
@@ -45,7 +45,7 @@ export class WError extends Error {
 }
 
 export const PROGRESS_STATIONS = ["S1", "S2", "S3", "S4", "S5", "S6", "S7"] as const;
-/** Closed; M3b2 extends it by editing this list. The store validates the rendered marker again. */
+/** Closed; the sequencer extends it by editing this list. The store validates the rendered marker again. */
 export const PROGRESS_STEPS = ["entered", "working", "checking", "handed_off"] as const;
 
 const WORK_ID_PATTERN = /^w-[0-9a-f]{12}$/;
@@ -137,7 +137,7 @@ interface Decision {
 class NothingToRepair extends Error {}
 
 /**
- * The shared shape of every event verb (M3b1-D2). Under the ledger lock it re-reads the item, proves the
+ * The shared shape of every event verb. Under the ledger lock it re-reads the item, proves the
  * claim, runs the verifier on the events it holds and lets `decide` choose the event or refuse. Only after
  * the event is on disk does it call the store. A store failure after the append (a veto's file write won
  * the race) leaves a W event the verifier still accepts: the veto closes the item.
@@ -176,9 +176,9 @@ export function startItem(ctx: WContext, claim: LockOwner, workId: string, runId
 
 /**
  * in_progress -> awaiting_review. The recommendation comes from `dispositionOf`, never from the caller:
- * a flawed outcome cannot be recommended for merge, and `humanNeeded` is valid only with success (M3-D17).
+ * a flawed outcome cannot be recommended for merge, and `humanNeeded` is valid only with success.
  * The event carries no reason code (section 4), but the table wants a closed code for every non-success
- * outcome; the real one is chosen by the M3b2 classifier, so a fixed code is passed and never stored.
+ * outcome; the real one is chosen by the outcome classifier, so a fixed code is passed and never stored.
  */
 export function submitForReview(
   ctx: WContext,
@@ -234,7 +234,7 @@ export function failItem(
   });
 }
 
-/** Event only: the item stays ready (never started) or in_progress, and item.md is not touched (M3b1-D7). */
+/** Event only: the item stays ready (never started) or in_progress, and item.md is not touched. */
 export function parkItem(
   ctx: WContext,
   claim: LockOwner,
@@ -261,7 +261,7 @@ export function parkItem(
 /**
  * Makes item.md catch up with a ledger that is exactly one W edge ahead (a crash between the append and the
  * file write). Returns null when there is nothing to repair. Any other disagreement is refused: a file that
- * is ahead of the ledger, or further behind, is never healed (M3b1-D4).
+ * is ahead of the ledger, or further behind, is never healed.
  */
 export function repairItem(ctx: WContext, claim: LockOwner, workId: string, runId: string): WorkItem | null {
   assertIds(workId, runId);
@@ -285,7 +285,7 @@ export function repairItem(ctx: WContext, claim: LockOwner, workId: string, runI
 }
 
 /**
- * Writes the progress marker (`S3 working`) with no ledger event (M3b1-D10). OMF renders the text from two
+ * Writes the progress marker (`S3 working`) with no ledger event. OMF renders the text from two
  * closed lists, so nothing a model or a metric produced can reach item.md; the store checks the grammar again.
  */
 export function setItemProgress(

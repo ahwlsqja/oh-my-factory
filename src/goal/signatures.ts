@@ -2,12 +2,12 @@ import { canonicalize, sha256Hex } from "../core/canonical-json.js";
 import type { LedgerEvent } from "../core/ledger.js";
 import type { WorkState } from "../work/types.js";
 
-/** The G stations a tick runs (spec §4.4). Each station outcome yields one signature (D2). */
+/** The G stations a tick runs (spec §4.4). Each station outcome yields one signature. */
 export type Station = "audit" | "measure" | "reconcile" | "dispatch" | "refresh";
 
 /**
  * How a station ended. `waiting` is normal operation (nothing to do yet) and is never counted,
- * so a watch goal that idles for weeks cannot trip the breaker (D2, D17).
+ * so a watch goal that idles for weeks cannot trip the breaker.
  */
 export type OutcomeClass = "ok" | "stopped" | "failed" | "empty" | "waiting";
 
@@ -124,7 +124,7 @@ export function signatureCounts(events: readonly LedgerEvent[], goalId: string):
 
 /**
  * The progress signature of the latest tick whose model answered. A failed model call is retryable (it set
- * no baseline); an unchanged state after a model RESPONSE is not (D2, spec §4.4).
+ * no baseline); an unchanged state after a model RESPONSE is not (spec §4.4).
  */
 export function previousProgressSig(events: readonly LedgerEvent[], goalId: string): string | null {
   const reconciled = ticksInWindow(events, goalId).filter((tick) => tick.reconciled);

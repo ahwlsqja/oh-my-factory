@@ -21,7 +21,7 @@ const alwaysOk = (id: "S1" | "S7"): Station => ({ id, run: () => ({ kind: "ok" }
 
 /**
  * The seven stations of `omf run` (spec §5.0). S2 is the standing-seal station wrapped with the test-split entry check:
- * `omf seal` owns the author, so this line never builds an author session and never needs the author key (M3h-D4).
+ * `omf seal` owns the author, so this line never builds an author session and never needs the author key.
  * S3 is the implementer container, S4 to S6 the judge. One feedback slot connects S6 to the next round's S3, and the
  * implementer's candidate source feeds the judge. The key is read from `env` by the implementer station and nowhere else.
  */
@@ -51,7 +51,7 @@ export function assembleLine(input: {
 }
 
 /**
- * The exit code of `omf run` for a line result (M3h-D5): 0 success, 1 flawed (a problem found in the result), 3 blocked or
+ * The exit code of `omf run` for a line result: 0 success, 1 flawed (a problem found in the result), 3 blocked or
  * manual on a person (handoff route J2, J3, J4, J6 or J8), 2 for the environment (J7), for an aborted line and for a
  * blocked result with no handoff, which cannot happen and fails closed.
  */
@@ -64,7 +64,7 @@ export function exitForLine(result: LineResult): ExitCode {
 }
 
 /**
- * The line `omf run` and `omf report` print about the judge (M3h-D9). `resolveRoles` reads and validates the `roles.judge`
+ * The line `omf run` and `omf report` print about the judge. `resolveRoles` reads and validates the `roles.judge`
  * entry; the judge is deterministic until a model judge exists, and nothing here starts one.
  */
 export function judgeLine(location: ProjectLocation): string {
