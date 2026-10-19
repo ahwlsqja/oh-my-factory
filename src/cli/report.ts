@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Command } from "commander";
+import { Ledger } from "../core/ledger.js";
 import { requireProject } from "../core/project.js";
-import { EVIDENCE_MD, readEvidence, renderEvidenceMd } from "../work/evidence.js";
+import { EVIDENCE_MD, claimsMoreIsolation, readEvidence, renderEvidenceMd } from "../work/evidence.js";
 import { EXIT, type ExitCode } from "./exit.js";
 import { checkOrder, judgeLine } from "./w-assembly.js";
 
@@ -22,6 +23,11 @@ export function reportVerb(workId: string, json: boolean): ExitCode {
   const read = readEvidence(order.item.dir);
   if (!read.ok) {
     console.error(`no trusted evidence (S7 has not run): run omf run ${workId}`);
+    return EXIT.cannotRun;
+  }
+  // The ledger vouches for the isolation level too: a file that claims more than the measurements support is untrusted.
+  if (claimsMoreIsolation(read.doc, new Ledger(location.dir).readVerified())) {
+    console.error(`no trusted evidence (the isolation level does not match the ledger): run omf run ${workId}`);
     return EXIT.cannotRun;
   }
   const rendered = renderEvidenceMd(read.doc);

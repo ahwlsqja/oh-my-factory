@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { LedgerEvent } from "../core/ledger.js";
+import { loadRunIsolation } from "../isolation/record.js";
 import type { ProjectLocation } from "../core/paths.js";
 import { writePrivateFileAtomic } from "../core/private-fs.js";
 import { safeText } from "../core/safe-text.js";
@@ -472,6 +473,14 @@ export function readEvidence(
     return { ok: false, reason: "invalid" };
   }
   return evidenceProblem(parsed) === null ? { ok: true, doc: parsed as EvidenceDoc } : { ok: false, reason: "invalid" };
+}
+
+const LEVEL_RANK: Record<Level | "unmeasured", number> = { unmeasured: 0, L1: 1, L2: 2, L3: 3 };
+
+/** True when the document names a higher isolation level than the verified ledger's measurements support. */
+export function claimsMoreIsolation(doc: EvidenceDoc, events: readonly LedgerEvent[]): boolean {
+  const ledger = loadRunIsolation("", { goal_id: doc.goal_id, work_id: doc.work_id, run_id: doc.run_id }, events).level;
+  return LEVEL_RANK[doc.isolation_level] > LEVEL_RANK[ledger];
 }
 
 const quiet = (recommendation: Recommendation): recommendation is "not_recommended" | "human_needed" =>
