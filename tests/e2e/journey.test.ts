@@ -93,7 +93,7 @@ describe("first-run journey", () => {
 
       const status = run("goal status", ["goal", "status", GOAL_ID], 0);
       expect(status.stdout).toContain(GOAL_ID);
-      expect(status.stdout).toMatch(/running/);
+      expect(status.stdout).toContain("approved, no tick has run yet");
 
       const total = Date.now() - started;
       const lines = [

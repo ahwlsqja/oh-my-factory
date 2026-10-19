@@ -58,6 +58,8 @@ export function setupGoal(options: { guardrails?: string[] } = {}): GoalFixture 
     goalTemplate("g-fast")
       .replace(/m-replace-me/g, "m-p95")
       .replace("value: 0", "value: 250")
+      // Older tests count elapsed time against 72h; the shipped default is longer (see the observation tests in audit.test.ts).
+      .replace("wall_time: 14d", "wall_time: 72h")
       .replace("guardrails: []", `guardrails: [${guardrails.join(", ")}]`),
   );
   const ledger = new Ledger(location.dir);
