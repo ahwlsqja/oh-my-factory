@@ -6,15 +6,20 @@ import { isTestPath } from "./risk.js";
  * paths where the change makes the tests weaker: the file is deleted, it loses more assertion lines than it gains, it gains
  * more skip/only/todo/x-prefixed markers than it loses, a numeric threshold goes down, or a runner or coverage config under
  * a test path (including `.coveragerc`, `codecov.yml` and `package.json`) is added or edited in any way other than raising
- * threshold numbers with the rest of every changed line unchanged, a `conftest.py` at any depth is added, edited or
+ * threshold numbers with the rest of every changed line unchanged (inside one contiguous change block), a `conftest.py` at any depth is added, edited or
  * deleted, or a binary section (nothing to read) sits on a test path or a coverage/runner config.
  *
  * Two rules decide the details. First, every added and removed line is split on CR, U+2028 and U+2029 into separate
  * logical lines, for every file kind, before any analysis; so code after a line terminator is read as code, whatever
- * comment syntax precedes it. Second, in declarative runner or coverage configs (INI: `.coveragerc*`, `.ini`, `.cfg`; TOML:
- * `.toml`; YAML: `.yml`, `.yaml`) only an exact raise is not weakening: every changed line must be a removed/added pair of
- * `KEY = NUMBER` or `KEY: NUMBER` (optional `%`, no comment, no other text) with the same recognized threshold key and a
- * number that did not go down. Any other added, removed or changed line there is weakening, even a harmless one. JS/TS and
+ * comment syntax precedes it. Second, in declarative runner or coverage configs (INI: `.coveragerc` or `coveragerc` and their
+ * `.*` variants, any `.ini` or `.cfg`; TOML: `.toml`; YAML: `.yml`, `.yaml`; extensionless `.nycrc`, `.c8rc`, `.mocharc`,
+ * `codecov`; the pytest 9 names `.pytest.ini`, `pytest.toml`, `.pytest.toml` are runner configs) a change is not weakening
+ * only when, inside each contiguous change block (a run of removed lines directly followed by a run of added lines of the
+ * same length, no context line between), every added line equals its removed line except for the threshold digits (same
+ * leading whitespace, key with the same case, separator, spacing and percent sign), the key is a recognized threshold key
+ * and the number does not fall. A block that only removes or only adds lines is weakening; so is a new or deleted config
+ * even with zero lines, and any change to a key where a higher number means a looser gate (the codecov `threshold`). Any
+ * other added, removed or changed line there is weakening, even a harmless one. JS/TS and
  * JSON configs keep the masked-remainder rule: threshold values are masked and the rest of each line must be equal text.
  * On an added line of other files, markers are searched in the code part, plus any code after a closed block comment; a
  * pure comment line is not a marker. Touching a test file, or adding one, is not weakening by itself.
@@ -33,7 +38,7 @@ export function findTestWeakening(
   for (const section of splitSections(diff)) {
     const parsed = parseSection(section);
     if (parsed === null) return null;
-    const { path, deleted, binary, removed, added } = parsed;
+    const { path, deleted, created, binary, removed, added, blocks } = parsed;
     seen.add(normalizePath(path));
     const isTest = isTestPath(path, explicitTestPaths);
     const isHook = isConftest(path);
@@ -44,12 +49,15 @@ export function findTestWeakening(
     if (binary && (isTest || isCoverageConfig(path) || isHook)) found.add(path);
     else if (isHook) found.add(path);
     else if (declarative) {
-      // Strict allow-list: only an exact `key = number` raise passes. A mode-only change has no lines; it is weakening on a test path.
+      // Strict allow-list: only an exact `key = number` raise passes. A new or deleted config is weakening even with zero
+      // lines. A same-path mode-only change has no lines; it is weakening on a test path.
       const changed = removed.length > 0 || added.length > 0;
-      if (changed ? !onlyExactRaises(removed, added) : isTest) found.add(path);
+      if (deleted || created) found.add(path);
+      else if (changed ? !onlyExactRaises(blocks) : isTest) found.add(path);
     } else if (isTest && (deleted || assertionsLost(removed, added) || markersGained(removed, added))) found.add(path);
     else if (isTest && isCoverageConfig(path) && !onlyRaisesThresholds(removed, added)) found.add(path);
-    else if (thresholdLowered(removed, added)) found.add(path);
+    else if (thresholdLowered(removed, added) || (isCoverageConfig(path) && looserKeyTouched(removed, added)))
+      found.add(path);
   }
   if (auditedPaths !== undefined) {
     const audited = new Set(auditedPaths.map((path) => normalizePath(path)));
@@ -62,7 +70,7 @@ export function findTestWeakening(
 }
 
 const RUNNER_CONFIG =
-  /^(vitest|vite|jest|karma|playwright)\.config\.[^/]+$|^vitest\.workspace\.[^/]+$|^\.mocharc(\.[^/]+)?$|^\.?(nycrc|c8rc)(\.[^/]+)?$|^(pytest\.ini|tox\.ini|setup\.cfg|pyproject\.toml)$/i;
+  /^(vitest|vite|jest|karma|playwright)\.config\.[^/]+$|^vitest\.workspace\.[^/]+$|^\.mocharc(\.[^/]+)?$|^\.?(nycrc|c8rc)(\.[^/]+)?$|^\.?pytest\.(ini|toml)$|^(tox\.ini|setup\.cfg|pyproject\.toml)$/i;
 const COVERAGE_CONFIG = /^\.?(coveragerc|codecov)(\.[^/]+)?$|^(codecov\.ya?ml|package\.json)$/i;
 
 const basename = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
@@ -87,7 +95,10 @@ function isCoverageConfig(path: string): boolean {
  * must also be a recognized runner or coverage config. JSON and JS/TS configs are not declarative here.
  */
 function isDeclarativeConfig(path: string): boolean {
-  return isCoverageConfig(path) && /^\.?coveragerc(\.[^/]+)?$|\.(ini|cfg|toml|ya?ml)$/i.test(basename(path));
+  return (
+    isCoverageConfig(path) &&
+    /^\.?coveragerc(\.[^/]+)?$|^\.?(nycrc|c8rc|mocharc|codecov)$|\.(ini|cfg|toml|ya?ml)$/i.test(basename(path))
+  );
 }
 
 function splitSections(diff: string): string[][] {
@@ -102,8 +113,17 @@ function splitSections(diff: string): string[][] {
 interface Section {
   path: string;
   deleted: boolean;
+  /** The section creates the file (`new file mode`). */
+  created: boolean;
   /** The section is a binary patch (`GIT binary patch` or `Binary files ... differ`): it carries no lines to read. */
   binary: boolean;
+  removed: string[];
+  added: string[];
+  /** Contiguous change blocks in order: a run of removed lines directly followed by a run of added lines, no context between. */
+  blocks: ChangeBlock[];
+}
+
+interface ChangeBlock {
   removed: string[];
   added: string[];
 }
@@ -142,13 +162,17 @@ const stripTab = (name: string): string => (name.endsWith("\t") ? name.slice(0, 
 function parseSection(lines: string[]): Section | null {
   let path: string | null = null;
   let deleted = false;
+  let created = false;
   let binary = false;
   const removed: string[] = [];
   const added: string[] = [];
+  const blocks: ChangeBlock[] = [];
+  let current: ChangeBlock | null = null;
   let inHunk = false;
   for (const line of lines.slice(1)) {
     if (!inHunk) {
       if (line.startsWith("deleted file mode")) deleted = true;
+      else if (line.startsWith("new file mode")) created = true;
       else if (line.startsWith("GIT binary patch") || line.startsWith("Binary files ")) binary = true;
       else if (line.startsWith("--- ") && line !== "--- /dev/null") {
         const name = unquote(stripTab(line.slice(4)));
@@ -158,11 +182,29 @@ function parseSection(lines: string[]): Section | null {
         if (name.startsWith("b/")) path = name.slice(2);
       }
       if (line.startsWith("@@")) inHunk = true;
-    } else if (line.startsWith("-")) removed.push(...logicalLines(line.slice(1)));
-    else if (line.startsWith("+")) added.push(...logicalLines(line.slice(1)));
+    } else if (line.startsWith("-")) {
+      if (current === null || current.added.length > 0) {
+        current = { removed: [], added: [] };
+        blocks.push(current);
+      }
+      const parts = logicalLines(line.slice(1));
+      removed.push(...parts);
+      current.removed.push(...parts);
+    } else if (line.startsWith("+")) {
+      if (current === null) {
+        current = { removed: [], added: [] };
+        blocks.push(current);
+      }
+      const parts = logicalLines(line.slice(1));
+      added.push(...parts);
+      current.added.push(...parts);
+    } else if (!line.startsWith("\\")) {
+      // A context line or a new hunk header ends the block; the "\ No newline" marker does not.
+      current = null;
+    }
   }
   if (path === null) return lines.length > 1 && inHunk ? null : binaryOrModeOnly(lines, binary);
-  return { path, deleted, binary, removed, added };
+  return { path, deleted, created, binary, removed, added, blocks };
 }
 
 /** A section with no `---`/`+++` lines is a mode change (nothing to weaken) or a binary file (flagged by the caller on a test path or config). */
@@ -172,7 +214,8 @@ function binaryOrModeOnly(lines: string[], binary: boolean): Section | null {
   const to = unquote(header?.[2] ?? "");
   if (header === null || !from.startsWith("a/") || !to.startsWith("b/") || from.slice(2) !== to.slice(2)) return null;
   const deleted = lines.some((line) => line.startsWith("deleted file mode"));
-  return { path: to.slice(2), deleted, binary, removed: [], added: [] };
+  const created = lines.some((line) => line.startsWith("new file mode"));
+  return { path: to.slice(2), deleted, created, binary, removed: [], added: [], blocks: [] };
 }
 
 const ASSERTION =
@@ -332,6 +375,7 @@ function onlyRaisesThresholds(removed: readonly string[], added: readonly string
     const before = maskThresholds(line);
     const after = maskThresholds(added[index] ?? "");
     if (before === null || after === null || before.keys.length === 0) return false;
+    if (before.keys.some((key) => LOOSER_KEYS.test(key))) return false;
     return (
       before.text === after.text &&
       before.keys.join("\n") === after.keys.join("\n") &&
@@ -356,22 +400,44 @@ function thresholdLowered(removed: readonly string[], added: readonly string[]):
   });
 }
 
-const EXACT_PAIR = /^\s*([A-Za-z_][\w-]*)\s*[=:]\s*(\d+(?:\.\d+)?)%?\s*$/;
+/**
+ * Keys where a higher number means a looser gate (a tolerance, such as the codecov `threshold`). Any change to one of them in a
+ * coverage or runner config is weakening, never a raise.
+ */
+const LOOSER_KEYS = /^(threshold|tolerance|allowed[_-]?(drop|decrease)|max[_-]?(drop|decrease)|drop|\w*tolerance\w*)$/i;
+
+/** True when a removed or added line of a coverage or runner config carries a looser-is-higher key. */
+function looserKeyTouched(removed: readonly string[], added: readonly string[]): boolean {
+  return [...removed, ...added].some((line) => pairsOf(line).some(([key]) => LOOSER_KEYS.test(key)));
+}
+
+const EXACT_PAIR = /^([ \t]*([A-Za-z_][\w-]*)[ \t]*[=:][ \t]*)(\d+(?:\.\d+)?)(%?[ \t]*)$/;
+
+/** The line with its threshold number replaced by a placeholder, with the key and the number; null when it is not `KEY = NUMBER`. */
+function exactPair(line: string): { template: string; key: string; value: number } | null {
+  const match = EXACT_PAIR.exec(line);
+  if (match === null) return null;
+  return { template: `${match[1]}\u0001${match[4]}`, key: match[2] ?? "", value: Number(match[3]) };
+}
 
 /**
- * The strict allow-list for declarative configs (INI, TOML, YAML). A change is not weakening only when every changed line is
- * part of a removed/added pair (same position) where both lines are exactly `KEY = NUMBER` or `KEY: NUMBER`, with an
- * optional `%`, nothing else (no comment, no other text), the same recognized threshold KEY, and a new number that is
- * greater than or equal to the old one. Any other added, removed or changed line is weakening.
+ * The strict allow-list for declarative configs (INI, TOML, YAML). A change is not weakening only when every contiguous change
+ * block is a run of removed lines directly followed by a run of added lines of the same length (no context between), and
+ * each removed/added pair is byte-identical once its threshold number is replaced by a placeholder (same leading whitespace,
+ * same key with the same case, same separator and spacing, same percent sign or none), the key is a recognized threshold key
+ * where a higher number is stricter, and the new number is greater than or equal to the old one. A block that only removes or
+ * only adds lines is weakening, as is any other changed line.
  */
-function onlyExactRaises(removed: readonly string[], added: readonly string[]): boolean {
-  if (removed.length === 0 || removed.length !== added.length) return false;
-  return removed.every((line, index) => {
-    const before = EXACT_PAIR.exec(line);
-    const after = EXACT_PAIR.exec(added[index] ?? "");
-    if (before === null || after === null) return false;
-    const key = (before[1] ?? "").toLowerCase();
-    if (key !== (after[1] ?? "").toLowerCase() || !THRESHOLD_KEYS.test(key)) return false;
-    return Number(after[2]) >= Number(before[2]);
+function onlyExactRaises(blocks: readonly ChangeBlock[]): boolean {
+  if (blocks.length === 0) return false;
+  return blocks.every(({ removed, added }) => {
+    if (removed.length === 0 || removed.length !== added.length) return false;
+    return removed.every((line, index) => {
+      const before = exactPair(line);
+      const after = exactPair(added[index] ?? "");
+      if (before === null || after === null || before.template !== after.template) return false;
+      if (!THRESHOLD_KEYS.test(before.key) || LOOSER_KEYS.test(before.key)) return false;
+      return after.value >= before.value;
+    });
   });
 }
