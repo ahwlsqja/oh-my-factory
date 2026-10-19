@@ -41,6 +41,18 @@ describe("seam: the whole line with an injected author measurement", () => {
     const released = eventsOfType(run, "feedback.released");
     expect(released).toHaveLength(1);
     expect(released[0]?.payload.disclosure_units).toBe(1);
+    // Exactly these fields, so a new one (a score, a digest, a note) fails here rather than slipping past the five patterns below.
+    expect(Object.keys(released[0]?.payload ?? {}).sort()).toEqual([
+      "categories",
+      "disclosure_units",
+      "goal_id",
+      "round",
+      "run_id",
+      "train_digest",
+      "work_id",
+    ]);
+    for (const category of (released[0]?.payload.categories ?? []) as object[])
+      expect(Object.keys(category).sort()).toEqual(["category", "kind", "n", "pass", "score_pct"]);
     for (const pattern of SCENARIO_ONLY)
       expect(JSON.stringify(released[0]?.payload), `release ${pattern}`).not.toMatch(pattern);
     const types = run.events.map((event) => event.type);
@@ -60,11 +72,9 @@ describe("seam: the whole line with an injected author measurement", () => {
     // tests/calc.test.mjs, and adding a test is not test weakening, so no high-risk path is reported.
     expect([...areas].sort()).toEqual(["decision_unmeasured", "noise_check_not_evaluated"]);
     expect(run.result.evidence.sealed).toEqual({ train: { pass: 5, total: 5, flaky: 0 }, test: { pass: 1, total: 1 } });
-    expect(
-      run.result.evidence.gates.history
-        .filter((entry) => entry.gate === "GATE-3")
-        .every((entry) => entry.verdict === "pass"),
-    ).toBe(true);
+    const gate3 = run.result.evidence.gates.history.filter((entry) => entry.gate === "GATE-3");
+    expect(gate3.length, "GATE-3 was evaluated, so the pass check below is not vacuous").toBeGreaterThan(0);
+    expect(gate3.every((entry) => entry.verdict === "pass")).toBe(true);
 
     // The label is L2 only because the test appended the author and implementer measurements.
     expect(evidenceMd(run)).toContain("- isolation level: L2");
