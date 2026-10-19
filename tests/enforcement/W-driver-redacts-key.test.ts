@@ -110,7 +110,11 @@ describe("W-driver-redacts-key", () => {
   it("a failing test process that prints the key leaves it nowhere the driver writes, and [redacted] stands in its place", () => {
     const r = rig("child");
     expect(
-      script.main(["--model", "--record"], { PATH: process.env.PATH, OMF_IMPLEMENTER_API_KEY: SENTINEL }, r.deps),
+      script.main(
+        ["--model", "--only", "G-implementer-real-run", "--record"],
+        { PATH: process.env.PATH, OMF_IMPLEMENTER_API_KEY: SENTINEL },
+        r.deps,
+      ),
     ).toBe(EXIT.failed);
     const seen = [
       r.out.join(""),
@@ -133,7 +137,11 @@ describe("W-driver-redacts-key", () => {
 
   it("only the test process is handed the key; every other child gets none; without --model the key is dropped", () => {
     const withModel = rig("child");
-    script.main(["--model"], { PATH: process.env.PATH, OMF_IMPLEMENTER_API_KEY: SENTINEL }, withModel.deps);
+    script.main(
+      ["--model", "--only", "G-implementer-real-run"],
+      { PATH: process.env.PATH, OMF_IMPLEMENTER_API_KEY: SENTINEL },
+      withModel.deps,
+    );
     const vitest = withModel.vitestCall();
     expect(vitest?.options.redact).toEqual([SENTINEL]);
     expect(vitest?.options.env?.OMF_IMPLEMENTER_API_KEY).toBe(SENTINEL);
@@ -212,9 +220,13 @@ describe("W-driver-redacts-key", () => {
 
   it("--record stores the model report of the real run, and nothing that came from the key", () => {
     const r = rig("pass");
-    expect(script.main(["--model", "--record"], { PATH: "/bin", OMF_IMPLEMENTER_API_KEY: SENTINEL }, r.deps)).toBe(
-      EXIT.ok,
-    );
+    expect(
+      script.main(
+        ["--model", "--only", "G-implementer-real-run", "--record"],
+        { PATH: "/bin", OMF_IMPLEMENTER_API_KEY: SENTINEL },
+        r.deps,
+      ),
+    ).toBe(EXIT.ok);
     const runs = JSON.parse(readFileSync(r.evidenceFile, "utf8")).runs;
     expect(runs).toHaveLength(1);
     expect(runs[0]).toMatchObject({ test: "G-implementer-real-run", model: MODEL_REPORT });
