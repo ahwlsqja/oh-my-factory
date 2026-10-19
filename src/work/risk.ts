@@ -140,12 +140,17 @@ export function classifyLiteralPaths(input: {
    * test path stays high under the rule `test`.
    */
   weakeningPaths?: readonly string[] | null | undefined;
+  /** Literal test paths or directories the project configured outside the default test globs; they stay `test` when the check could not run. */
+  explicitTestPaths?: readonly string[] | undefined;
 }): RiskAssessment {
   const checked = input.weakeningPaths !== undefined && input.weakeningPaths !== null;
   const rules: Array<{ rule: RiskRule; matches: (path: string) => boolean }> = [
     ...DEFAULT_HIGH_RISK.filter(({ rule }) => !(checked && rule === "test")).map(({ rule, globs }) => ({
       rule,
-      matches: picomatch([...globs], MATCH_OPTIONS),
+      matches:
+        rule === "test"
+          ? (path: string) => isTestPath(path, input.explicitTestPaths ?? [])
+          : picomatch([...globs], MATCH_OPTIONS),
     })),
   ];
   if (checked) {

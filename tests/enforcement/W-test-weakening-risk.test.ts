@@ -29,4 +29,19 @@ describe("W-test-weakening-risk", () => {
       paths: ["tests/a.test.ts"],
     });
   });
+
+  it.each([undefined, null])(
+    "a configured test path outside the default globs stays high by the rule test when the check is missing (%s)",
+    (weakeningPaths) => {
+      expect(
+        classifyLiteralPaths({ ...base, paths: ["e2e/flow.ts"], weakeningPaths, explicitTestPaths: ["e2e"] }),
+      ).toEqual({ class: "high", rules: ["test"], paths: ["e2e/flow.ts"] });
+    },
+  );
+
+  it("a path outside the test globs and the configured test paths stays normal", () => {
+    expect(
+      classifyLiteralPaths({ ...base, paths: ["lib/flow.ts"], weakeningPaths: null, explicitTestPaths: ["e2e"] }).class,
+    ).toBe("normal");
+  });
 });

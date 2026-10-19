@@ -40,7 +40,7 @@ export function findTestWeakening(
 }
 
 const RUNNER_CONFIG =
-  /^(vitest|vite|jest|karma|playwright)\.config\.[^/]+$|^vitest\.workspace\.[^/]+$|^\.mocharc(\.[^/]+)?$|^\.?(nycrc|c8rc)(\.[^/]+)?$|^(pytest\.ini|tox\.ini|setup\.cfg|pyproject\.toml)$/i;
+  /^(vitest|vite|jest|karma|playwright)\.config\.[^/]+$|^vitest\.workspace\.[^/]+$|^\.mocharc(\.[^/]+)?$|^\.?(nycrc|c8rc)(\.[^/]+)?$|^(pytest\.ini|tox\.ini|setup\.cfg|pyproject\.toml|conftest\.py)$/i;
 const COVERAGE_CONFIG = /^\.?(coveragerc|codecov)(\.[^/]+)?$|^(codecov\.ya?ml|package\.json)$/i;
 
 const basename = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
@@ -145,34 +145,37 @@ function assertionsLost(removed: readonly string[], added: readonly string[]): b
 }
 
 const MARKER =
-  /\b(it|test|describe|suite|context|bench)(\.\w+)*\.(skip|only|todo|fixme|fails|skipIf|runIf)\b|\{[^}]*\b(skip|todo|only)\s*:\s*true|\b(ctx|context|t)\.(skip|todo)\(|\b(xit|xtest|xdescribe|fit|ftest|fdescribe)\s*\(|@pytest\.mark\.(skip|xfail)|\bpytest\.(skip|xfail)\(|@unittest\.skip|\bt\.Skip(Now)?\(|@Disabled\b|@Ignore\b|#\[ignore\]/;
+  /\b(it|test|describe|suite|context|bench)(\.\w+)*\.(skip|only|todo|fixme|fails|skipIf|runIf)\b|\{[^}]*\b(skip|todo|only)\s*:\s*true|\b(ctx|context|t)\.(skip|todo)\(|(?<![\w.$])(xit|xtest|xdescribe|fit|ftest|fdescribe)\s*\(|\bpytest\.mark\.(skip|xfail)|\bpytest\.(skip|xfail)\(|@unittest\.skip|\bt\.Skip(f|Now)?\(|\bself\.skipTest\(|\.failing\b|expectedFailure|^\s*pytestmark\s*=|\bthis\.skip\s*\(|\bfunc\s+TestMain\s*\(|@Disabled\b|@Ignore\b|#\[ignore\b/;
 
 function markersGained(removed: readonly string[], added: readonly string[]): boolean {
   return count(added, MARKER) > count(removed, MARKER);
 }
 
-const THRESHOLD = /([A-Za-z_][\w-]*)["']?\s*[:=]\s*(\d+(?:\.\d+)?)\b/;
+const PAIR = /([A-Za-z_][\w-]*)["']?\s*[:=]\s*(\d+(?:\.\d+)?)\b/g;
 const THRESHOLD_KEYS =
   /^(threshold|thresholds|lines|branches|functions|statements|min|minimum|min_coverage|coverage|fail[_-]under|cov-fail-under|target|percent|\w*threshold\w*)$/i;
 
-function thresholds(lines: readonly string[]): Array<[string, number]> {
-  const out: Array<[string, number]> = [];
-  for (const line of lines) {
-    const match = THRESHOLD.exec(line);
-    const key = match?.[1];
-    const value = match?.[2];
-    if (key !== undefined && value !== undefined && THRESHOLD_KEYS.test(key))
-      out.push([key.toLowerCase(), Number(value)]);
-  }
-  return out;
+/** Every `key: number` or `key = number` pair of a line, in order (a one-line `{ lines: 80, branches: 90 }` has two). */
+function pairsOf(line: string): Array<[string, number]> {
+  return [...line.matchAll(PAIR)].map((match) => [(match[1] ?? "").toLowerCase(), Number(match[2])]);
 }
 
-/** True when the change to a config is a number going up, nothing else: every changed line is a threshold line, paired by key. */
+function thresholds(lines: readonly string[]): Array<[string, number]> {
+  return lines.flatMap((line) => pairsOf(line).filter(([key]) => THRESHOLD_KEYS.test(key)));
+}
+
+/**
+ * True when the change to a config is numbers going up, nothing else: the same number of changed lines, every line holding a
+ * threshold key, and every `key: number` pair of the removed lines found again, in order, with a value that did not go down.
+ * Anything it cannot pair is undecidable and counts as weakening.
+ */
 function onlyRaisesThresholds(removed: readonly string[], added: readonly string[]): boolean {
   if (removed.length === 0 || removed.length !== added.length) return false;
-  const before = thresholds(removed);
-  const after = thresholds(added);
-  if (before.length !== removed.length || after.length !== added.length) return false;
+  const holdsThreshold = (line: string): boolean => pairsOf(line).some(([key]) => THRESHOLD_KEYS.test(key));
+  if (!removed.every(holdsThreshold) || !added.every(holdsThreshold)) return false;
+  const before = removed.flatMap(pairsOf);
+  const after = added.flatMap(pairsOf);
+  if (before.length !== after.length) return false;
   return before.every(([key, value], index) => after[index]?.[0] === key && (after[index]?.[1] ?? -1) >= value);
 }
 

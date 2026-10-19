@@ -193,4 +193,10 @@ describe("assessDiffRisk with the test-weakening check", () => {
     const outcome = assessDiffRisk(facts(".github/workflows/ci.yml", "tests/a.test.ts"), declaredNormal, none, []);
     expect(outcome.effective.rules).toEqual(["ci"]);
   });
+
+  it("keeps a configured test path high when the weakening check returned null", () => {
+    const outcome = assessDiffRisk(facts("e2e/flow.ts"), declaredNormal, { ...none, explicitTestPaths: ["e2e"] }, null);
+    expect(outcome.effective.class).toBe("high");
+    expect(outcome.effective.rules).toEqual(["test"]);
+  });
 });

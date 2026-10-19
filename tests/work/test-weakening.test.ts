@@ -75,15 +75,91 @@ describe("findTestWeakening", () => {
     "it.skip('a', () => {});",
     "describe.only('a', () => {});",
     "test.todo('a');",
+    "it.fixme('a', () => {});",
+    "it.fails('a', () => {});",
+    "it.failing('a', () => {});",
+    "it.skipIf(isCI)('a', () => {});",
+    "it.runIf(false)('a', () => {});",
+    "test('a', { skip: true }, () => {});",
+    "ctx.skip();",
+    "this.skip();",
     "xit('a', () => {});",
+    "xtest('a', () => {});",
     "xdescribe('a', () => {});",
     "fit('a', () => {});",
+    "ftest('a', () => {});",
+    "fdescribe('a', () => {});",
     "@pytest.mark.skip",
+    "@pytest.mark.xfail",
+    "mark = pytest.mark.skip",
+    "pytest.skip('later')",
+    "pytest.xfail('later')",
+    "pytestmark = pytest.mark.usefixtures('x')",
+    "@unittest.skip('later')",
+    "@unittest.expectedFailure",
+    "self.skipTest('later')",
     't.Skip("later")',
+    't.Skipf("later %d", 1)',
+    "t.SkipNow()",
+    "func TestMain(m *testing.M) {",
     "@Disabled",
+    "@Ignore",
+    "#[ignore]",
+    '#[ignore = "slow"]',
   ])("flags an added marker: %s", (line) => {
     const diff = modify("tests/a.test.ts", [` ctx`, `+${line}`]);
     expect(findTestWeakening(diff, [])).toEqual(["tests/a.test.ts"]);
+  });
+
+  it("does not read a method call such as model.fit(X) as a focused test", () => {
+    expect(findTestWeakening(modify("tests/a.test.ts", ["+  model.fit(X);"]), [])).toEqual([]);
+    expect(findTestWeakening(modify("tests/a.test.ts", ["+  await $.fit(X);"]), [])).toEqual([]);
+  });
+
+  it("flags a Go TestMain added in a new test file", () => {
+    const diff = [
+      "diff --git a/pkg/zz_test.go b/pkg/zz_test.go",
+      "new file mode 100644",
+      "index 0000000..2222222",
+      "--- /dev/null",
+      "+++ b/pkg/zz_test.go",
+      "@@ -0,0 +3 @@",
+      "+func TestMain(m *testing.M) {",
+      "+\tos.Exit(0)",
+      "+}",
+      "",
+    ].join("\n");
+    expect(findTestWeakening(diff, [])).toEqual(["pkg/zz_test.go"]);
+  });
+
+  it("flags a new tests/conftest.py that ignores collected tests", () => {
+    const diff = [
+      "diff --git a/tests/conftest.py b/tests/conftest.py",
+      "new file mode 100644",
+      "index 0000000..2222222",
+      "--- /dev/null",
+      "+++ b/tests/conftest.py",
+      "@@ -0,0 +1 @@",
+      '+collect_ignore_glob = ["test_*.py"]',
+      "",
+    ].join("\n");
+    expect(findTestWeakening(diff, [])).toEqual(["tests/conftest.py"]);
+  });
+
+  it("flags a one-line threshold object where one key goes up and another goes down", () => {
+    const diff = modify("tests/vitest.config.ts", [
+      "-    thresholds: { lines: 80, branches: 90 },",
+      "+    thresholds: { lines: 90, branches: 0 },",
+    ]);
+    expect(findTestWeakening(diff, [])).toEqual(["tests/vitest.config.ts"]);
+  });
+
+  it("does not flag a one-line threshold object where every key goes up", () => {
+    const diff = modify("tests/vitest.config.ts", [
+      "-    thresholds: { lines: 80, branches: 90 },",
+      "+    thresholds: { lines: 90, branches: 95 },",
+    ]);
+    expect(findTestWeakening(diff, [])).toEqual([]);
   });
 
   it("flags a lowered threshold in a test and in a coverage config", () => {

@@ -72,7 +72,7 @@ export interface RiskOutcome {
 export function assessDiffRisk(
   facts: DiffFacts,
   declared: RiskAssessment,
-  globs: { watchedGlobs: readonly string[]; extraGlobs: readonly string[] },
+  globs: { watchedGlobs: readonly string[]; extraGlobs: readonly string[]; explicitTestPaths?: readonly string[] },
   weakeningPaths?: readonly string[] | null,
 ): RiskOutcome {
   if (facts.empty) return { recomputed: null, effective: declared, raised: false };
@@ -80,6 +80,7 @@ export function assessDiffRisk(
     paths: facts.paths,
     watchedGlobs: globs.watchedGlobs,
     extraGlobs: globs.extraGlobs,
+    explicitTestPaths: globs.explicitTestPaths,
     weakeningPaths,
   });
   const effective = raiseRisk(declared, recomputed);

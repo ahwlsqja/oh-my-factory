@@ -90,7 +90,7 @@ export async function runAudit(input: AuditInput): Promise<WorkAudit> {
   const risk = assessDiffRisk(
     facts,
     input.declaredRisk,
-    { watchedGlobs: input.watchedGlobs, extraGlobs: input.extraGlobs },
+    { watchedGlobs: input.watchedGlobs, extraGlobs: input.extraGlobs, explicitTestPaths: input.explicitTestPaths },
     await testWeakening(input, facts.paths),
   );
   return {
