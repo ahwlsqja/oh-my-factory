@@ -82,7 +82,7 @@ export const JUDGE_DOCKER_CALL_S = 60;
  */
 /** Per step: the `exec` of the step and the harness `observe`, both exec calls. */
 export const JUDGE_STEP_EXEC_CALLS = 2;
-/** Per step: the `isRunning` inspect the relay makes after a non-zero exit (counted for every step). */
+/** Per step: the `containerState` inspect (`stopCause`) the relay makes after a non-zero exit, an exec client error or a null status (counted for every step). */
 export const JUDGE_STEP_DOCKER_CALLS = 1;
 /** Per SUT after its start: the remove of `stop` (a cut or killed step) and the remove of `close`. */
 export const JUDGE_SUT_END_DOCKER_CALLS = 2;

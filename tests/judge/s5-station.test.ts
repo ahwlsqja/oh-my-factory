@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { auditPath, loadAudit } from "../../src/audit/work-audit.js";
 import type { ContainerRuntime } from "../../src/container/runtime.js";
 import { WorkCopyError } from "../../src/container/work-copy.js";
+import { GateInfrastructureError } from "../../src/gate/run-gates.js";
 import { judgeStations } from "../../src/judge/stations.js";
 import { WorkCopiesError } from "../../src/judge/work-copies.js";
 import { RUN_ID, type S5Fixture, classifyS5, s5Fixture } from "../helpers/s5-fixture.js";
@@ -120,6 +121,18 @@ describe("S5 audit station", () => {
       name: "a container is not golden",
       arrange: (fx) => Object.assign(fx.deps, { copies: fails(new WorkCopyError("not_golden")) }),
       reason: "gate_blocked",
+    },
+    {
+      name: "a gate's container is lost",
+      arrange: (fx) =>
+        Object.assign(fx.deps, {
+          steps: {
+            runGates: async () => {
+              throw new GateInfrastructureError("full", "workcopy_container_gone");
+            },
+          },
+        }),
+      reason: "infra_failure",
     },
     {
       name: "no base image is configured",

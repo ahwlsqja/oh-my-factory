@@ -7,12 +7,19 @@ import { applyPatchToDir, exportTree, isDirClean } from "../git/ops.js";
 import type { StageGolden } from "../isolation/evaluate.js";
 import { containerSpecFor, goldenFor } from "./golden.js";
 import { createMeasured, type MeasureDeps, type MeasuredContainer, NotGoldenError } from "./measure.js";
-import { containerState } from "./running.js";
+import { markHostEnded } from "./lifecycle.js";
+import { stopCause } from "./running.js";
 import type { ContainerHandle, ContainerRuntime, ImageInfo } from "./runtime.js";
 import { type ContainerSpec, type OwnedLabels, WORKCOPY_GATE_EXEC_S, WORKCOPY_GATE_EXECS } from "./spec.js";
 import { tarOfDir } from "./tar-dir.js";
 
-export type WorkCopyErrorCode = "build_failed" | "extract_failed" | "not_golden" | "timeout" | "container_gone";
+export type WorkCopyErrorCode =
+  | "build_failed"
+  | "extract_failed"
+  | "not_golden"
+  | "timeout"
+  | "container_gone"
+  | "exit_unknown";
 
 /** The message is the code; no path and no command output ever appears in it. */
 export class WorkCopyError extends Error {
@@ -47,6 +54,9 @@ export interface ContainerWorkCopyDeps {
 export const EXTRACT_TIMEOUT_MS = 120_000;
 export const BUILD_TIMEOUT_MS = 600_000;
 const OUTPUT_LIMIT_BYTES = 1024 * 1024;
+
+/** What a command that stopped its own container is reported as when the exec client gave no status: a kill, as `docker exec` would say. */
+const CONTAINER_STOPPED_STATUS = 137;
 
 let copySerial = 0;
 let containerSerial = 0;
@@ -148,14 +158,19 @@ class ContainerWorkCopy implements WorkCopy {
   private async removeContainer(): Promise<void> {
     const handle = this.container;
     this.container = null;
-    if (handle !== null) await this.ctx.runtime.remove(handle);
+    if (handle === null) return;
+    markHostEnded(handle);
+    await this.ctx.runtime.remove(handle);
   }
 
   /**
    * Every command runs at most `WORKCOPY_GATE_EXEC_S` seconds, whatever timeout the caller injects, because the lifetime is sized from it.
    * A container that has served `WORKCOPY_GATE_EXECS` commands is replaced like a stale one, so no container is asked for more than its
-   * lifetime was sized for. A failure to recreate comes back as an error result, because `proveTest` does not catch a throw from `run` and `runGates` reads an
-   * error result as `skip`. A timeout or the output limit kills only the docker client, not the process in the container, so the
+   * lifetime was sized for. A failure to recreate comes back as an error result, because `proveTest` does not catch a throw from `run`;
+   * `runGates` turns the error results that mean a lost container (`container_gone`, `exit_unknown`) into an infrastructure stop. After a
+   * non-zero exit, an exec client error or no status, `stopCause` says why a container is not running: the host's (removed, stopped,
+   * lifetime elapsed, or unknown) is `container_gone`, no status is `exit_unknown`, and a container that stopped early on its own is the
+   * command's failure and comes back as a failed exit. A timeout or the output limit kills only the docker client, not the process in the container, so the
    * container is removed by name and the next command starts in a fresh one: nothing keeps running behind it.
    */
   async run(argv: readonly string[], options: RunOptions): Promise<CommandResult> {
@@ -176,16 +191,28 @@ class ContainerWorkCopy implements WorkCopy {
       if (result.kind === "timeout" || result.kind === "output_limit") {
         this.stale = true;
         await this.removeContainer();
-      } else if (
-        ((result.kind === "exited" && result.status !== 0) || result.kind === "error") &&
-        (await containerState(this.ctx.runtime, this.container)) !== "running"
-      ) {
-        // The container is gone or its state is unknown (a failed inspect), after a non-zero exit of any status or an exec client
-        // error. A command cannot end its own container (PID 1 is the idle sleep, which takes no signal), so this is the host's
-        // doing, never a gate or test result: it comes back as an error result, like a failed recreate.
+      } else if (result.kind === "exited" && result.status === null) {
+        // No status: the docker client was killed, so nothing says how the command ended or whether it still runs.
         this.stale = true;
         await this.removeContainer();
-        return errorResult(new WorkCopyError("container_gone"));
+        return errorResult(new WorkCopyError("exit_unknown"));
+      } else if ((result.kind === "exited" && result.status !== 0) || result.kind === "error") {
+        const { cause } = await stopCause(this.ctx.runtime, this.container);
+        if (cause === "host" || cause === "unknown") {
+          // The host removed or stopped the container, its lifetime ran out, or the daemon would not say: not the command's
+          // doing, so it comes back as an error result (like a failed recreate), never as a gate or test result.
+          this.stale = true;
+          await this.removeContainer();
+          return errorResult(new WorkCopyError("container_gone"));
+        }
+        if (cause === "candidate") {
+          // The container stopped early on its own (the command ended its PID 1 or pushed it into an OOM kill): the command's
+          // failure. It reads as a failed exit, never as a skip, and the next command starts in a fresh container.
+          this.stale = true;
+          await this.removeContainer();
+          if (result.kind === "error")
+            return { kind: "exited", status: CONTAINER_STOPPED_STATUS, signal: null, stdout: "", stderr: "" };
+        }
       }
       return result;
     } catch (error) {

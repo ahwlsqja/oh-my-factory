@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { hostClock, markHostEnded, resetLifecycle } from "../../src/container/lifecycle.js";
 import { createArgv } from "../../src/container/argv.js";
 import { NotGoldenError } from "../../src/container/measure.js";
 import { JUDGE_MAX_SCENARIOS, JUDGE_MAX_STEPS, roleTmpfs } from "../../src/container/spec.js";
@@ -45,19 +46,51 @@ describe("fault outcomes", () => {
 describe("a SUT container that stops mid-round", () => {
   const roundError = { name: "JudgeRoundError", code: "round_error" };
   const one = [scenarioOf(1, [stepOf(["a"], 0)])];
+  afterEach(resetLifecycle);
 
-  it.each([1, 125, 137])("ends the round as round_error, not as a failed step (status %i)", async (status) => {
+  it.each([1, 125, 137])("fails the step when the container stopped early on its own (status %i)", async (status) => {
     const double = new RuntimeDouble(({ state }) => {
       state.dead = true;
+      return exited("", status);
+    });
+    const verdict = await runRound(double, one, { k: 2 });
+    expect(verdict.tallies.map((tally) => [tally.verdict, tally.outcomes])).toEqual([["fail", ["fail", "fail"]]]);
+    expect(verdict.counts).toMatchObject({ fail: 1, error: 0 });
+  });
+
+  it("fails the step when the exec client failed and the container stopped early on its own", async () => {
+    const double = new RuntimeDouble(({ state }) => {
+      state.dead = true;
+      return { kind: "error", code: "EIO", message: "client failed" };
+    });
+    const verdict = await runRound(double, one, { k: 2 });
+    expect(verdict.tallies.map((tally) => tally.verdict)).toEqual(["fail"]);
+  });
+
+  it("fails the step when the memory limit ended the container (State.OOMKilled true)", async () => {
+    const double = new RuntimeDouble(({ state, container }) => {
+      state.dead = true;
+      double.stopState.set(container, { OOMKilled: true, ExitCode: 137 });
+      return exited("", 137);
+    });
+    const verdict = await runRound(double, one, { k: 1 });
+    expect(verdict.tallies.map((tally) => tally.verdict)).toEqual(["fail"]);
+  });
+
+  it.each([1, 125, 137])("ends the round as round_error when the lifetime had elapsed (status %i)", async (status) => {
+    const double = new RuntimeDouble(({ state }) => {
+      state.dead = true;
+      hostClock.now = () => 1e12;
       return exited("", status);
     });
     await expect(runRound(double, one, { k: 2 })).rejects.toMatchObject(roundError);
   });
 
-  it("ends the round as round_error when the exec client failed and the container is gone", async () => {
-    const double = new RuntimeDouble(({ state }) => {
+  it("ends the round as round_error when the host removed the container", async () => {
+    const double = new RuntimeDouble(({ state, container }) => {
       state.dead = true;
-      return { kind: "error", code: "EIO", message: "client failed" };
+      markHostEnded(container);
+      return exited("", 137);
     });
     await expect(runRound(double, one, { k: 2 })).rejects.toMatchObject(roundError);
   });
@@ -65,6 +98,17 @@ describe("a SUT container that stops mid-round", () => {
   it("ends the round as round_error when the inspect after a non-zero exit fails", async () => {
     const double = new RuntimeDouble(() => exited("", 1));
     double.failInspect = true;
+    await expect(runRound(double, one, { k: 2 })).rejects.toMatchObject(roundError);
+  });
+
+  it("ends the round as round_error for an exit with no status, whatever the container state", async () => {
+    const double = new RuntimeDouble(() => ({
+      kind: "exited",
+      status: null,
+      signal: "SIGKILL",
+      stdout: "",
+      stderr: "",
+    }));
     await expect(runRound(double, one, { k: 2 })).rejects.toMatchObject(roundError);
   });
 

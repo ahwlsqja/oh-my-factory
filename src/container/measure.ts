@@ -10,6 +10,7 @@ import type {
   StageMeasurement,
   ViolationCode,
 } from "../isolation/types.js";
+import { recordStarted } from "./lifecycle.js";
 import { markMeasured } from "./measured-handles.js";
 import type { ContainerHandle, ContainerRuntime } from "./runtime.js";
 import { type ContainerSpec, ROLE_STAGE } from "./spec.js";
@@ -181,6 +182,8 @@ export async function createMeasured(
     } catch {
       throw new MeasureError("create_failed");
     }
+    // The sleep began no earlier than now: the reference for telling a lifetime that ran out from a container that stopped early.
+    recordStarted(handle, spec.lifetime_s);
     const answer = await runtime.exec(handle, {
       argv: CONTAINER_PROBE_ARGV,
       timeoutMs: PROBE_TIMEOUT_MS,

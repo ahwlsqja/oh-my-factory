@@ -3,6 +3,7 @@ import type { ProcessResult } from "../adapters/process-group.js";
 import type { PinnedImage } from "../container/image-ref.js";
 import type { ContainerHandle, ContainerRuntime, ExecSpec, ImageInfo, OwnedResource } from "../container/runtime.js";
 import { readRunIds, removeStagingDirs } from "../container/item-sweep.js";
+import { markHostEnded } from "../container/lifecycle.js";
 import { assertName, type ContainerRole, type ContainerSpec, type ImageId } from "../container/spec.js";
 import { registerCleanup } from "../core/cleanup-registry.js";
 import { isLockHeld, sealLockFile } from "../core/lock.js";
@@ -31,6 +32,7 @@ class Tracker implements TrackedRuntime {
 
   close(): void {
     const names = [...this.names];
+    for (const name of names) markHostEnded(name);
     if (names.length > 0) this.inner.removeAllSync(names);
     for (const name of names) this.forget(name);
   }
@@ -95,6 +97,7 @@ class Tracker implements TrackedRuntime {
 
   /** Forgotten only after the daemon confirmed: a failed removal stays tracked for `close()` and for a signal. */
   async remove(handle: ContainerHandle): Promise<void> {
+    markHostEnded(handle);
     await this.inner.remove(handle);
     this.forget(handle.name);
   }
@@ -108,6 +111,7 @@ class Tracker implements TrackedRuntime {
   }
 
   removeAllSync(names: readonly string[]): void {
+    for (const name of names) markHostEnded(name);
     this.inner.removeAllSync(names);
     for (const name of names) this.forget(name);
   }

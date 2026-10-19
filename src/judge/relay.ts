@@ -1,4 +1,5 @@
-import { containerState } from "../container/running.js";
+import { markHostEnded } from "../container/lifecycle.js";
+import { stopCause } from "../container/running.js";
 import type { ContainerHandle, ContainerRuntime } from "../container/runtime.js";
 import { observationOf } from "../scenario/observe.js";
 import type { ScenarioRunner, ScenarioSession } from "../scenario/runner.js";
@@ -23,14 +24,15 @@ export interface RelayInput {
  *
  * Who caused a stop decides how it is reported. A timeout, an output limit and invalid UTF-8 are the candidate's doing, so they
  * come back as `signaled` (which every expectation fails with `not_exited`) and the candidate cannot end the item `blocked` by
- * causing them. A container that is not running after a non-zero exit or an exec client error is never the candidate's doing:
- * a candidate cannot end its own container from inside, because PID 1 is the idle sleep, which installs no signal handlers, and
- * the kernel drops signals sent to a namespace init from inside that namespace when it has no handler (SIGKILL and SIGSTOP
- * included), and the candidate has no docker socket. So whatever the status (1, 125 and up, 137) and for an exec client error,
- * a container that is gone, or whose state the daemon would not tell (a failed inspect), is an infrastructure `error`, which
- * ends the round as `round_error`. A non-zero exit from a container that is still running is the candidate's result. A timeout
- * kills the docker client, not the process inside the container, so the container is removed at once and nothing keeps running
- * behind the next step.
+ * causing them. A candidate can also end its own container (it can install the `sleep` that is PID 1, or push PID 1 into an OOM
+ * kill; see `stopCause`), so a container that is not running after a non-zero exit or an exec client error is attributed by
+ * `stopCause`: one the host removed or stopped, or whose lifetime ran out, or whose state the daemon would not tell, is an
+ * infrastructure `error` and ends the round as `round_error`; one that stopped early on its own is the candidate's, reported as
+ * `signaled` `container_exited`. A non-zero exit from a container that is still running is the candidate's result. An exit with
+ * no status (the docker client was killed) is an `error` whatever the container state, because nothing says how the program ended.
+ * A timeout kills the docker client, not the process inside the container, so the container is removed at once and nothing keeps
+ * running behind the next step. A candidate-installed `sleep` can keep a SUT container alive past its lifetime; the sweep of the
+ * next run removes it.
  */
 export function createContainerScenarioRunner(input: RelayInput): ScenarioRunner {
   if (input.run.length === 0) throw new Error("relay run argv is empty");
@@ -47,6 +49,7 @@ export function createContainerScenarioRunner(input: RelayInput): ScenarioRunner
       let gone = false;
       const stop = async (outcome: StepObservation): Promise<StepObservation> => {
         gone = true;
+        markHostEnded(lease.handle);
         await runtime.remove(lease.handle);
         return outcome;
       };
@@ -63,10 +66,13 @@ export function createContainerScenarioRunner(input: RelayInput): ScenarioRunner
           });
           if (result.kind === "timeout" || result.kind === "output_limit")
             return stop({ outcome: "signaled", signal: result.kind });
+          if (result.kind === "exited" && result.status === null) return stop({ outcome: "error" });
           const status = result.kind === "exited" ? (result.status ?? 0) : 0;
           if (result.kind === "error" || status !== 0) {
-            // Only a container that is still running leaves a non-zero exit to the candidate. Gone or unknown is the host's.
-            if ((await containerState(runtime, lease.handle)) !== "running") return stop({ outcome: "error" });
+            const { cause } = await stopCause(runtime, lease.handle);
+            // Only a container that still runs leaves a non-zero exit to the candidate; one it ended itself is its failure.
+            if (cause === "candidate") return stop({ outcome: "signaled", signal: "container_exited" });
+            if (cause === "host" || cause === "unknown") return stop({ outcome: "error" });
             if (result.kind === "error") return { outcome: "error" };
           }
           const observation = observationOf(result);

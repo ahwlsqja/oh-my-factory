@@ -1,10 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { hostClock, resetLifecycle } from "../../src/container/lifecycle.js";
 import type { JudgeConfigDecl } from "../../src/decision/types.js";
 import { proveTest } from "../../src/gate/prove-test.js";
 import { runGates } from "../../src/gate/run-gates.js";
 import { EXIT_0, MemoryRuntime, exit } from "../helpers/memory-runtime.js";
 import { TEST_COMMAND, calcFixture } from "../helpers/prove-fixture.js";
 import { workCopies } from "../helpers/work-copy-fixture.js";
+
+afterEach(resetLifecycle);
 
 const bytes = (stdin: string | Buffer | undefined): Buffer => (Buffer.isBuffer(stdin) ? stdin : Buffer.alloc(0));
 const isTar = (argv: readonly string[]): boolean => argv[0] === "tar";
@@ -57,28 +60,14 @@ describe("W-gates-run-in-container", () => {
     expect(memory.live.size).toBe(0);
   });
 
-  it("a work copy that stops mid-gate is an infrastructure error, not a gate fail and not a test status", async () => {
-    const fx = calcFixture();
-    const memory = new MemoryRuntime();
-    memory.onExec = (name, spec) => {
-      if (isTar(spec.argv)) return EXIT_0;
-      memory.stopped.add(name);
-      return exit(1);
-    };
-    const { factory } = workCopies(memory);
-    const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
-    const gates: JudgeConfigDecl["gates"] = {
-      fast: ["npm", "run", "lint"],
-      full: null,
-      deep: null,
-      required: ["fast"],
-    };
-    const gated = await runGates(gates, copy);
-    expect(gated.values.fast).toBe("skip");
-    expect(gated.details[0]).toMatchObject({ gate: "fast", value: "skip", exit: null, outcome: "error" });
-    await copy.dispose();
-
-    const proven = await proveTest({
+  const GATES: JudgeConfigDecl["gates"] = {
+    fast: ["npm", "run", "lint"],
+    full: ["npm", "test"],
+    deep: null,
+    required: ["fast"],
+  };
+  const proveOn = (factory: ReturnType<typeof workCopies>["factory"], fx: ReturnType<typeof calcFixture>) =>
+    proveTest({
       quarantine: fx.quarantine,
       base: fx.base,
       head: fx.head,
@@ -86,6 +75,65 @@ describe("W-gates-run-in-container", () => {
       explicitTestPaths: [],
       copies: factory,
     });
+
+  it("a work copy that stops early on its own is a gate fail and a failing test status, never a skip", async () => {
+    const fx = calcFixture();
+    const memory = new MemoryRuntime();
+    hostClock.now = () => 0;
+    memory.onExec = (name, spec) => {
+      if (isTar(spec.argv)) return EXIT_0;
+      memory.stopped.add(name);
+      hostClock.now = () => 60_000;
+      return spec.argv[0] === "npm" ? exit(137) : { kind: "error", code: "EIO", message: "client failed" };
+    };
+    const { factory } = workCopies(memory);
+    const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
+    const gated = await runGates(GATES, copy);
+    // the non-required gate is a fail too, never a skip that would leave the line GREEN
+    expect(gated.values).toMatchObject({ fast: "fail", full: "fail", deep: "skip" });
+    expect(gated.verdict.status).toBe("RED");
+    await copy.dispose();
+
+    const proven = await proveOn(factory, fx);
+    expect(proven).toMatchObject({ status: "MISCONFIGURED", reason: "baseline-test-failed" });
+    expect(proven.test_exit).toBe(137);
+  });
+
+  it.each([
+    ["a required gate", ["fast"] as const],
+    ["a gate that is not required", ["full"] as const],
+  ])("a work copy the host lost mid-gate stops the line as an infrastructure error (%s)", async (_name, declared) => {
+    const fx = calcFixture();
+    const memory = new MemoryRuntime();
+    hostClock.now = () => 0;
+    memory.onExec = (name, spec) => {
+      if (isTar(spec.argv)) return EXIT_0;
+      if (spec.argv.join(" ") !== (declared[0] === "fast" ? "npm run lint" : "npm test")) return EXIT_0;
+      memory.stopped.add(name);
+      hostClock.now = () => 1e12; // the lifetime ran out
+      return exit(1);
+    };
+    const { factory } = workCopies(memory);
+    const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
+    await expect(runGates(GATES, copy)).rejects.toMatchObject({
+      name: "GateInfrastructureError",
+      code: "workcopy_container_gone",
+    });
+    await copy.dispose();
+  });
+
+  it("a test command whose work copy the host lost could not run: MISCONFIGURED with no test status", async () => {
+    const fx = calcFixture();
+    const memory = new MemoryRuntime();
+    hostClock.now = () => 0;
+    memory.onExec = (name, spec) => {
+      if (isTar(spec.argv)) return EXIT_0;
+      memory.stopped.add(name);
+      hostClock.now = () => 1e12;
+      return exit(1);
+    };
+    const { factory } = workCopies(memory);
+    const proven = await proveOn(factory, fx);
     expect(proven).toMatchObject({ status: "MISCONFIGURED", reason: "test-command-unrunnable" });
     expect(proven.test_exit).toBeNull();
   });

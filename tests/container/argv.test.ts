@@ -244,8 +244,8 @@ describe("listing and image removal", () => {
 });
 
 describe("PID 1 of every container is the idle sleep", () => {
-  // The gone-container rule rests on it: a candidate cannot end its own container from inside, because PID 1 installs no
-  // signal handlers and the kernel drops signals sent to a namespace init from inside the namespace.
+  // The sleep is PID 1 and a candidate can still end it (it can install the `sleep` the PATH finds, or push PID 1 into an OOM
+  // kill), which is why a stopped container is attributed by `stopCause` and not assumed to be the host's.
   it.each(["sut", "harness", "workcopy", "implementer", "author"] as const)("%s: sleep, no init wrapper", (role) => {
     const argv = createArgv(specFor(role), null);
     expect(argv).not.toContain("--init");

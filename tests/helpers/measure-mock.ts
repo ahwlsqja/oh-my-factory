@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { recordStarted } from "../../src/container/lifecycle.js";
 import type { MeasureDeps, MeasuredContainer } from "../../src/container/measure.js";
 import type { ContainerRole, ContainerSpec } from "../../src/container/spec.js";
 import { ROLE_STAGE } from "../../src/container/spec.js";
@@ -34,6 +35,7 @@ export async function measureMockModule() {
       if (failure !== null) throw failure;
       const handle = await deps.runtime.create(spec);
       await deps.runtime.start(handle);
+      recordStarted(handle, spec.lifetime_s);
       return { handle, measurement: hostStage(ROLE_STAGE[spec.labels.role], deps.now()) };
     },
   };

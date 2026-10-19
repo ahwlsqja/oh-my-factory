@@ -9,6 +9,23 @@ import {
 } from "./gate-line.js";
 import type { CommandResult, CommandTarget, RunOptions } from "./ports.js";
 
+/** The error codes of a work copy that lost its container: the host's doing, never evidence about a gate. */
+const LOST_CONTAINER_CODES: ReadonlySet<string> = new Set(["workcopy_container_gone", "workcopy_exit_unknown"]);
+
+/**
+ * A declared gate (required or not) ran in a container that was lost. That is an infrastructure error that blocks the line: it
+ * must not become `skip`, which a gate that is not required would turn into GREEN. The message is the code only.
+ */
+export class GateInfrastructureError extends Error {
+  constructor(
+    readonly gate: GateName,
+    readonly code: string,
+  ) {
+    super(code);
+    this.name = "GateInfrastructureError";
+  }
+}
+
 /** The last non-empty stdout line, when a gate wants to say how many rules it ran. */
 export const GATE_RULES_MARKER = /^OMF_GATE_RULES: (\d+)$/;
 
@@ -39,7 +56,7 @@ function rulesOf(stdout: string): number | null {
 
 /**
  * exit 0 is `pass` (`empty` when the marker says 0 rules); a non-zero exit, a signal, a timeout or the output limit is `fail`;
- * a runner error is `skip` (the gate never ran: environment). Only the exit status and the marker integer are read;
+ * a runner error is `skip` (the gate never ran: environment), except a lost container, which `runGates` stops on. Only the exit status and the marker integer are read;
  * stdout and stderr are hostile and nothing else is kept.
  */
 export function gateValueOf(result: CommandResult): { value: GateLineValue; rules: number | null } {
@@ -78,6 +95,9 @@ export async function runGates(
       result = await target.run(argv, runOptions);
     } catch {
       result = { kind: "error", code: null, message: "runner threw" };
+    }
+    if (result.kind === "error" && result.code !== null && LOST_CONTAINER_CODES.has(result.code)) {
+      throw new GateInfrastructureError(gate, result.code);
     }
     const { value, rules } = gateValueOf(result);
     values[gate] = value;

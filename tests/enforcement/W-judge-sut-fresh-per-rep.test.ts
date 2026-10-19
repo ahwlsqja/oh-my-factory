@@ -7,7 +7,7 @@ vi.mock("../../src/container/measure.js", async () => (await import("../helpers/
 beforeEach(resetMeasureHook);
 
 // M3f-D7: one fresh, measured SUT container per (scenario, rep). The candidate below leaves a file under /tmp and a
-// background process. None of it may be visible to another scenario or another rep.
+// background process, and kills its own PID 1. None of it may be visible to another scenario or another rep.
 const candidate: Candidate = ({ argv, state }) => {
   switch (argv[1]) {
     case "write":
@@ -17,7 +17,8 @@ const candidate: Candidate = ({ argv, state }) => {
     case "read":
       return exited(`${state.files.size} ${state.background.size}`);
     default:
-      return exited("");
+      state.dead = true;
+      return { kind: "error", code: "EIO", message: "container gone" };
   }
 };
 
@@ -29,12 +30,13 @@ describe("W-judge-sut-fresh-per-rep", () => {
       [
         scenarioOf(1, [stepOf(["write"], 0), stepOf(["read"], 0, "1 1")]), // steps of one scenario share the container
         scenarioOf(2, [stepOf(["read"], 0, "0 0")]),
-        scenarioOf(3, [stepOf(["read"], 0, "0 0")]),
+        scenarioOf(3, [stepOf(["die"], 0)]), // kills its own container
+        scenarioOf(4, [stepOf(["read"], 0, "0 0")]),
       ],
       { k: 2 },
     );
-    expect(verdict.tallies.map((tally) => tally.verdict)).toEqual(["pass", "pass", "pass"]);
-    expect(verdict.counts).toEqual({ total: 3, pass: 3, fail: 0, flaky: 0, error: 0 });
+    expect(verdict.tallies.map((tally) => tally.verdict)).toEqual(["pass", "pass", "fail", "pass"]);
+    expect(verdict.counts).toEqual({ total: 4, pass: 3, fail: 1, flaky: 0, error: 0 });
   });
 
   it("creates and measures a new container per run and removes the previous one before the next exists", async () => {

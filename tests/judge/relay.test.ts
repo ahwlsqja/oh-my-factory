@@ -1,4 +1,12 @@
-import { describe, expect, it } from "vitest";
+import type { ProcessResult } from "../../src/adapters/process-group.js";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  hostClock,
+  LIFETIME_SLACK_MS,
+  markHostEnded,
+  recordStarted,
+  resetLifecycle,
+} from "../../src/container/lifecycle.js";
 import { createContainerScenarioRunner } from "../../src/judge/relay.js";
 import type { ScenarioSession, StepInput, StepLimits } from "../../src/scenario/runner.js";
 import { type Candidate, exited, RuntimeDouble } from "../helpers/sut-double.js";
@@ -7,9 +15,17 @@ const LIMITS: StepLimits = { timeoutMs: 1000, maxOutputBytes: 4096 };
 const RUN = ["/work/cli"];
 const step = (argv: string[], stdin = ""): StepInput => ({ argv, stdin });
 
-function relay(candidate: Candidate) {
+const LIFETIME_S = 1703;
+afterEach(resetLifecycle);
+
+/** `startedAt` records the container start on the host clock (the real `createMeasured` does it just after `docker start`). */
+function relay(candidate: Candidate, options: { startedAt?: number } = {}) {
   const double = new RuntimeDouble(candidate);
   const handle = double.open("omf-sut-test-1");
+  if (options.startedAt !== undefined) {
+    hostClock.now = () => options.startedAt as number;
+    recordStarted(handle, LIFETIME_S);
+  }
   const released: string[] = [];
   const runner = createContainerScenarioRunner({
     runtime: double,
@@ -76,11 +92,12 @@ describe("container scenario runner", () => {
     expect(double.calls).not.toContain("remove:omf-sut-test-1");
   });
 
-  it("an exec client error is a runtime fault whether or not the container is alive", async () => {
+  it("an exec client error from a container that is alive is a runtime fault", async () => {
     const alive = relay(() => ({ kind: "error", code: "EIO", message: "client failed" }));
     expect(await (await alive.open()).runStep(step(["x"]), LIMITS)).toEqual({ outcome: "error" });
+  });
 
-    // A candidate cannot end its own container (PID 1 is the idle sleep, which takes no signal), so a gone one is the host's.
+  it("an exec client error from a container that is gone, with no start recorded, is a runtime fault", async () => {
     const gone = relay(({ state }) => {
       state.dead = true;
       return { kind: "error", code: "EIO", message: "client failed" };
@@ -90,7 +107,7 @@ describe("container scenario runner", () => {
   });
 
   it.each([1, 125, 137])(
-    "a non-zero exit (status %i) from a container that is gone is a runtime fault, never the candidate's exit",
+    "a non-zero exit (status %i) from a container that is gone, with no start recorded, is a runtime fault",
     async (status) => {
       const cut = relay(({ state }) => {
         state.dead = true;
@@ -105,9 +122,109 @@ describe("container scenario runner", () => {
   );
 
   it.each([1, 137])("a failed inspect after a non-zero exit (status %i) is a runtime fault", async (status) => {
-    const blind = relay(() => exited("", status));
+    const blind = relay(() => exited("", status), { startedAt: 0 });
     blind.double.failInspect = true;
     expect(await (await blind.open()).runStep(step(["x"]), LIMITS)).toEqual({ outcome: "error" });
+  });
+
+  describe("a container that stopped early on its own is the candidate's doing", () => {
+    const ending =
+      (answer: (status: number) => ProcessResult, status: number): Candidate =>
+      ({ state }) => {
+        state.dead = true;
+        return answer(status);
+      };
+    const execError = () => ({ kind: "error", code: "EIO", message: "client failed" }) as const;
+
+    it.each([1, 125, 137])(
+      "a non-zero exit (status %i) is signaled container_exited, and the container is removed",
+      async (status) => {
+        const cut = relay(ending(exited.bind(null, ""), status), { startedAt: 0 });
+        hostClock.now = () => 60_000; // one minute into a lifetime of 1703 seconds
+        const session = await cut.open();
+        expect(await session.runStep(step(["x"]), LIMITS)).toEqual({ outcome: "signaled", signal: "container_exited" });
+        expect(cut.double.calls).toContain("remove:omf-sut-test-1");
+        expect(await session.runStep(step(["y"]), LIMITS)).toEqual({ outcome: "signaled", signal: "container_exited" });
+        expect(cut.double.sutExecs).toHaveLength(1);
+      },
+    );
+
+    it("an exec client error is signaled container_exited", async () => {
+      const cut = relay(ending(execError, 0), { startedAt: 0 });
+      hostClock.now = () => 1000;
+      expect(await (await cut.open()).runStep(step(["x"]), LIMITS)).toEqual({
+        outcome: "signaled",
+        signal: "container_exited",
+      });
+    });
+
+    it("an early stop the memory limit caused (State.OOMKilled true) is signaled container_exited", async () => {
+      const cut = relay(ending(exited.bind(null, ""), 137), { startedAt: 0 });
+      cut.double.stopState.set("omf-sut-test-1", { OOMKilled: true, ExitCode: 137 });
+      hostClock.now = () => 1000;
+      expect(await (await cut.open()).runStep(step(["x"]), LIMITS)).toEqual({
+        outcome: "signaled",
+        signal: "container_exited",
+      });
+    });
+  });
+
+  describe("a container the host ended is infrastructure, whatever the exit status", () => {
+    it.each([1, 137])("a stop at the elapsed lifetime (status %i) is a runtime fault", async (status) => {
+      const cut = relay(
+        ({ state }) => {
+          state.dead = true;
+          hostClock.now = () => LIFETIME_S * 1000 - LIFETIME_SLACK_MS;
+          return exited("", status);
+        },
+        { startedAt: 0 },
+      );
+      expect(await (await cut.open()).runStep(step(["x"]), LIMITS)).toEqual({ outcome: "error" });
+    });
+
+    it("a stop one millisecond before the elapsed lifetime is still the candidate's", async () => {
+      const cut = relay(
+        ({ state }) => {
+          state.dead = true;
+          hostClock.now = () => LIFETIME_S * 1000 - LIFETIME_SLACK_MS - 1;
+          return exited("", 137);
+        },
+        { startedAt: 0 },
+      );
+      expect(await (await cut.open()).runStep(step(["x"]), LIMITS)).toEqual({
+        outcome: "signaled",
+        signal: "container_exited",
+      });
+    });
+
+    it("a container the host removed during the step is a runtime fault", async () => {
+      const cut = relay(
+        ({ state, container }) => {
+          markHostEnded(container); // a cleanup, a sweep or a release removed it
+          state.dead = true;
+          return exited("", 137);
+        },
+        { startedAt: 0 },
+      );
+      expect(await (await cut.open()).runStep(step(["x"]), LIMITS)).toEqual({ outcome: "error" });
+    });
+  });
+
+  it.each([
+    ["running", false],
+    ["gone", true],
+  ])("an exit with no status is a runtime fault whatever the container state (%s)", async (_state, dead) => {
+    const killedClient = relay(
+      ({ state }) => {
+        state.dead = dead;
+        return { kind: "exited", status: null, signal: "SIGKILL", stdout: "", stderr: "" };
+      },
+      { startedAt: 0 },
+    );
+    hostClock.now = () => 1000;
+    const session = await killedClient.open();
+    expect(await session.runStep(step(["x"]), LIMITS)).toEqual({ outcome: "error" });
+    expect(await session.runStep(step(["y"]), LIMITS)).toEqual({ outcome: "signaled", signal: "container_exited" });
   });
 
   it("a non-zero exit from a container that is still running stays the candidate's exit", async () => {

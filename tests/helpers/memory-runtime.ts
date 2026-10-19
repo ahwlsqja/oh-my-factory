@@ -82,9 +82,13 @@ export class MemoryRuntime implements ContainerRuntime {
   /** Containers a test stopped by hand (a lifetime that ran out): still known to the daemon, no longer running. */
   readonly stopped = new Set<string>();
 
+  /** What the daemon reports about a stopped container besides `Running` (`OOMKilled`, `ExitCode`, `FinishedAt`), by name. */
+  readonly stopState = new Map<string, Record<string, unknown>>();
+
   async inspect(handle: ContainerHandle): Promise<unknown> {
     if (this.failInspect) throw new Error("inspect failed");
-    return { State: { Running: this.live.has(handle.name) && !this.stopped.has(handle.name) } };
+    const running = this.live.has(handle.name) && !this.stopped.has(handle.name);
+    return { State: { Running: running, ...(running ? {} : this.stopState.get(handle.name)) } };
   }
 
   async start(handle: ContainerHandle): Promise<void> {
