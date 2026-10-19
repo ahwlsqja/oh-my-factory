@@ -56,9 +56,9 @@ describe("seam: the whole line with an injected author measurement", () => {
     expect(run.result.evidence.recommendation).not.toBe("merge_recommended");
     const areas = run.result.evidence.unverified_areas.map((area) => area.code);
     expect(areas).toContain("noise_check_not_evaluated");
-    // Exactly these areas, named: the fixture goal carries a quantitative decision, and the candidate adds
-    // tests/calc.test.mjs, a high-risk path.
-    expect([...areas].sort()).toEqual(["decision_unmeasured", "high_risk_paths_touched", "noise_check_not_evaluated"]);
+    // Exactly these areas, named: the fixture goal carries a quantitative decision. The candidate only adds
+    // tests/calc.test.mjs, and adding a test is not test weakening, so no high-risk path is reported.
+    expect([...areas].sort()).toEqual(["decision_unmeasured", "noise_check_not_evaluated"]);
     expect(run.result.evidence.sealed).toEqual({ train: { pass: 5, total: 5, flaky: 0 }, test: { pass: 1, total: 1 } });
     expect(
       run.result.evidence.gates.history
