@@ -52,6 +52,26 @@ describe("createCommandAuthor", () => {
     expect(existsSync(where.cwd), "the scratch directory is removed").toBe(false);
   });
 
+  it.each(["OMF_AUTHOR_API_KEY", "OMF_IMPLEMENTER_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_BASE_URL", "CODEX_API_KEY"])(
+    "refuses to pass %s through and never starts the command",
+    async (name) => {
+      const record = makeTempDir("omf-rec-");
+      const author = authorFor(
+        record,
+        "from_feedback",
+        { envPassthrough: ["KEEP_ME", name] },
+        {
+          PATH: process.env.PATH,
+          KEEP_ME: "1",
+          [name]: "sk-must-not-pass",
+        },
+      );
+      const outcome = await author.run({ prompt: "p\n", inputs: SESSION_INPUTS, timeoutMs: 20_000 });
+      expect(outcome).toMatchObject({ ok: false, code: "misconfigured" });
+      expect(existsSync(join(record, "env.json"))).toBe(false);
+    },
+  );
+
   it("maps every way a run can end to one failure code", async () => {
     const cases: Array<[string, string]> = [
       ["exit3", "nonzero_exit"],
