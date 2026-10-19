@@ -44,18 +44,16 @@ function isSymlink(path: string): boolean {
  * OMF state directory (`projectDir`, `<home>/projects/<id>`). The state directory itself is resolved first, so a symlinked home
  * (a dotfile manager, `/var -> /private/var`) is no link in the tree; a symlink anywhere below it (`goals`, a goal directory,
  * `work`, the work id directory, `runs`) makes the real path differ, and the staging under it may be a directory outside the
- * state tree. Without `projectDir`, or when `runsDir` is not below it, the written path itself is the expectation. Any failure
- * to resolve says no.
+ * state tree. When `runsDir` is not below `projectDir`, the written path itself is the expectation. Any failure to resolve says
+ * no. The answer is a snapshot of the moment it is asked; `removeStagingDirs` asks again before each removal.
  */
-export function runsOnStatePath(runsDir: string, projectDir?: string): boolean {
+export function runsOnStatePath(runsDir: string, projectDir: string): boolean {
   try {
     const written = resolve(runsDir);
     let expected = written;
-    if (projectDir !== undefined) {
-      const below = relative(resolve(projectDir), written);
-      if (below !== "" && below !== ".." && !below.startsWith(`..${sep}`)) {
-        expected = join(realpathSync.native(resolve(projectDir)), below);
-      }
+    const below = relative(resolve(projectDir), written);
+    if (below !== "" && below !== ".." && !below.startsWith(`..${sep}`)) {
+      expected = join(realpathSync.native(resolve(projectDir)), below);
     }
     return realpathSync.native(runsDir) === expected;
   } catch {
@@ -69,8 +67,12 @@ export function runsOnStatePath(runsDir: string, projectDir?: string): boolean {
  * entry: one that cannot be removed is left for the next sweep. The run logs under `runs/<id>/implementer/` are not touched.
  * Nothing is removed unless `runsDir` is on the real state path (`runsOnStatePath`): a symlink above `runs` could point the
  * staging at a directory outside the state tree, which every caller (the item sweep and the run-start sweep) is then spared.
+ * The check is made again immediately before each removal (an unlink or an `rmSync`), not once for the sweep, so a link that
+ * appears while the sweep runs stops the removals that follow it. The window between that check and the removal is not closed:
+ * a concurrent local writer of the state tree (a process that can create symlinks under it at the same moment) is outside the
+ * model, as it is outside the rest of the state tree's trust.
  */
-export function removeStagingDirs(runsDir: string, runIds: Iterable<string>, projectDir?: string): number {
+export function removeStagingDirs(runsDir: string, runIds: Iterable<string>, projectDir: string): number {
   if (!isPlainDir(runsDir) || !runsOnStatePath(runsDir, projectDir)) return 0;
   let removed = 0;
   for (const runId of runIds) {
@@ -84,9 +86,11 @@ export function removeStagingDirs(runsDir: string, runIds: Iterable<string>, pro
       const path = join(runDir, name);
       try {
         const stat = lstatSync(path);
+        if (!stat.isSymbolicLink() && !stat.isDirectory()) continue;
+        // Immediately before the removal: the state path may have changed since the sweep began.
+        if (!runsOnStatePath(runsDir, projectDir)) return removed;
         if (stat.isSymbolicLink()) unlinkSync(path);
-        else if (stat.isDirectory()) rmSync(path, { recursive: true, force: true });
-        else continue;
+        else rmSync(path, { recursive: true, force: true });
         removed += 1;
       } catch {
         // absent or not removable now: the next sweep tries again
@@ -102,7 +106,7 @@ interface ItemSweepInput {
   /** The item's id: a run id is only unique to the second, so a container counts only when its `omf.work` label is this item. */
   workId: string;
   /** The project's state directory (`location.dir`): the root the staging path must really lie under (`runsOnStatePath`). */
-  projectDir?: string;
+  projectDir: string;
   /** The pass of the calling `omf seal`, whose marker may already exist; never selected. */
   currentPassId?: string;
 }

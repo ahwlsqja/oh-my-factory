@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createDockerRuntime } from "../../src/container/docker-cli.js";
 import { removeStagingDirs, sweepItemOrphans } from "../../src/container/item-sweep.js";
 import { claimItem, releaseItem } from "../../src/work/claim.js";
-import { existsSync, mkdirSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { sweepImplementerContainers, sweepOrphans } from "../../src/judge/state.js";
 import { imageIdFor } from "../helpers/image-id.js";
@@ -27,7 +27,7 @@ describe("the item sweep selects by item, not by run id alone", () => {
       { kind: "container", name: `omf-author-${SHARED_RUN}-2-1`, run_id: SHARED_RUN, work_id: Y },
       { kind: "container", name: `omf-implementer-${SHARED_RUN}-2-2`, run_id: SHARED_RUN, work_id: Y },
     ];
-    expect(await sweepItemOrphans({ runtime: memory, itemDir: itemY, workId: Y })).toBe(2);
+    expect(await sweepItemOrphans({ runtime: memory, itemDir: itemY, projectDir: itemY, workId: Y })).toBe(2);
     expect(memory.owned.map((resource) => resource.name).sort()).toEqual(
       [`omf-author-${SHARED_RUN}-1-1`, `omf-implementer-${SHARED_RUN}-1-2`].sort(),
     );
@@ -51,7 +51,7 @@ describe("the item sweep reaches the judge roles", () => {
     put(item, `runs/${EARLIER}/marker`, "x");
     const memory = new MemoryRuntime();
     memory.owned = judgeOf(EARLIER, X);
-    expect(await sweepItemOrphans({ runtime: memory, itemDir: item, workId: X })).toBe(3);
+    expect(await sweepItemOrphans({ runtime: memory, itemDir: item, projectDir: item, workId: X })).toBe(3);
     expect(memory.owned).toEqual([]);
     expect(memory.calls.filter((call) => call.startsWith("remove "))).toHaveLength(3);
   });
@@ -66,7 +66,7 @@ describe("the item sweep reaches the judge roles", () => {
     ];
     claimItem(item);
     try {
-      expect(await sweepItemOrphans({ runtime: memory, itemDir: item, workId: X })).toBe(1);
+      expect(await sweepItemOrphans({ runtime: memory, itemDir: item, projectDir: item, workId: X })).toBe(1);
     } finally {
       releaseItem(item);
     }
@@ -88,7 +88,9 @@ describe("the item sweep reaches the judge roles", () => {
       { kind: "container", name: `omf-sut-${EARLIER}-oops`, run_id: EARLIER, work_id: X },
     ];
     const before = memory.owned.map((resource) => resource.name).sort();
-    expect(await sweepItemOrphans({ runtime: memory, itemDir: item, workId: X, currentPassId: CURRENT })).toBe(0);
+    expect(
+      await sweepItemOrphans({ runtime: memory, itemDir: item, projectDir: item, workId: X, currentPassId: CURRENT }),
+    ).toBe(0);
     expect(memory.owned.map((resource) => resource.name).sort()).toEqual(before);
   });
 
@@ -97,7 +99,9 @@ describe("the item sweep reaches the judge roles", () => {
     put(item, `runs/${EARLIER}/marker`, "x");
     const memory = new MemoryRuntime();
     memory.owned = judgeOf(EARLIER, X);
-    expect(await sweepItemOrphans({ runtime: memory, itemDir: item, workId: X, roles: ["author"] })).toBe(0);
+    expect(
+      await sweepItemOrphans({ runtime: memory, itemDir: item, projectDir: item, workId: X, roles: ["author"] }),
+    ).toBe(0);
     expect(memory.owned).toHaveLength(3);
   });
 });
@@ -115,7 +119,7 @@ describe("the item sweep removes the host staging of a run that is not live", ()
   it("removes runs/<id>/judge and runs/<id>/implementer-stage of an earlier run while the claim is free, and keeps the logs", async () => {
     const item = realTempDir("omf-sweep-stage-");
     stage(item, EARLIER);
-    await sweepItemOrphans({ runtime: new MemoryRuntime(), itemDir: item, workId: X });
+    await sweepItemOrphans({ runtime: new MemoryRuntime(), itemDir: item, projectDir: item, workId: X });
     expect(existsSync(join(item, "runs", EARLIER, "judge"))).toBe(false);
     expect(existsSync(join(item, "runs", EARLIER, "implementer-stage"))).toBe(false);
     expect(existsSync(join(item, "runs", EARLIER, "implementer", "round-1", "implementer.log"))).toBe(true);
@@ -128,13 +132,25 @@ describe("the item sweep removes the host staging of a run that is not live", ()
     stage(item, CURRENT);
     claimItem(item);
     try {
-      await sweepItemOrphans({ runtime: new MemoryRuntime(), itemDir: item, workId: X, currentPassId: CURRENT });
+      await sweepItemOrphans({
+        runtime: new MemoryRuntime(),
+        itemDir: item,
+        projectDir: item,
+        workId: X,
+        currentPassId: CURRENT,
+      });
     } finally {
       releaseItem(item);
     }
     expect(existsSync(join(item, "runs", EARLIER, "judge"))).toBe(true);
     expect(existsSync(join(item, "runs", EARLIER, "implementer-stage"))).toBe(true);
-    await sweepItemOrphans({ runtime: new MemoryRuntime(), itemDir: item, workId: X, currentPassId: CURRENT });
+    await sweepItemOrphans({
+      runtime: new MemoryRuntime(),
+      itemDir: item,
+      projectDir: item,
+      workId: X,
+      currentPassId: CURRENT,
+    });
     expect(existsSync(join(item, "runs", EARLIER, "judge"))).toBe(false);
     expect(existsSync(join(item, "runs", CURRENT, "judge"))).toBe(true);
     expect(existsSync(join(item, "runs", CURRENT, "implementer-stage"))).toBe(true);
@@ -147,7 +163,7 @@ describe("the item sweep removes the host staging of a run that is not live", ()
     memory.listOwned = async () => {
       throw new Error("daemon down");
     };
-    expect(await sweepItemOrphans({ runtime: memory, itemDir: item, workId: X })).toBe(0);
+    expect(await sweepItemOrphans({ runtime: memory, itemDir: item, projectDir: item, workId: X })).toBe(0);
     expect(existsSync(join(item, "runs", EARLIER, "judge"))).toBe(false);
   });
 
@@ -160,7 +176,7 @@ describe("the item sweep removes the host staging of a run that is not live", ()
     mkdirSync(join(item, "runs", EARLIER), { recursive: true });
     symlinkSync(join(outside, "keep"), join(item, "runs", EARLIER, "judge"));
     symlinkSync(outside, join(item, "runs", "r-20261002T090000Z-cccc"));
-    await sweepItemOrphans({ runtime: new MemoryRuntime(), itemDir: item, workId: X });
+    await sweepItemOrphans({ runtime: new MemoryRuntime(), itemDir: item, projectDir: item, workId: X });
     expect(existsSync(join(item, "runs", EARLIER, "judge"))).toBe(false);
     expect(existsSync(join(outside, "keep", "file"))).toBe(true);
     expect(existsSync(join(outside, "judge", "file"))).toBe(true);
@@ -180,6 +196,7 @@ describe("the run-start sweep does not follow a symlink either", () => {
     const result = await sweepOrphans({
       runtime: new MemoryRuntime(),
       itemDir: item,
+      projectDir: item,
       workId: X,
       currentRunId: CURRENT,
     });
@@ -216,12 +233,12 @@ describe("host staging is removed only on the real state path", () => {
   it.each(["goal", "work"] as const)(
     "a symlinked %s directory: the item sweep removes no staging outside the state tree, but still removes the container",
     async (kind) => {
-      const { itemDir, workDir } = linked(kind);
+      const { itemDir, workDir, state } = linked(kind);
       const memory = new MemoryRuntime();
       memory.owned = [
         { kind: "container", name: `omf-implementer-${OUTSIDE_RUN}-1-1`, run_id: OUTSIDE_RUN, work_id: X },
       ];
-      expect(await sweepItemOrphans({ runtime: memory, itemDir, workId: X })).toBe(1);
+      expect(await sweepItemOrphans({ runtime: memory, itemDir, projectDir: state, workId: X })).toBe(1);
       expect(memory.owned).toEqual([]);
       expect(survives(workDir)).toBe(true);
     },
@@ -230,17 +247,45 @@ describe("host staging is removed only on the real state path", () => {
   it.each(["goal", "work"] as const)(
     "a symlinked %s directory: the run-start sweep removes no staging outside the state tree",
     async (kind) => {
-      const { itemDir, workDir } = linked(kind);
-      const result = await sweepOrphans({ runtime: new MemoryRuntime(), itemDir, workId: X, currentRunId: CURRENT });
+      const { itemDir, workDir, state } = linked(kind);
+      const result = await sweepOrphans({
+        runtime: new MemoryRuntime(),
+        itemDir,
+        projectDir: state,
+        workId: X,
+        currentRunId: CURRENT,
+      });
       expect(result.staging).toBe(0);
       expect(survives(workDir)).toBe(true);
     },
   );
 
   it.each(["goal", "work"] as const)("a symlinked %s directory: removeStagingDirs removes nothing", (kind) => {
-    const { itemDir, workDir } = linked(kind);
-    expect(removeStagingDirs(join(itemDir, "runs"), [OUTSIDE_RUN])).toBe(0);
+    const { itemDir, workDir, state } = linked(kind);
+    expect(removeStagingDirs(join(itemDir, "runs"), [OUTSIDE_RUN], state)).toBe(0);
     expect(survives(workDir)).toBe(true);
+  });
+
+  it("checks the state path again before each removal: a link that appears while the sweep runs stops the removals after it", () => {
+    const LATE_RUN = "r-20261001T090000Z-eeee";
+    const state = realTempDir("omf-sweep-race-state-");
+    const outside = realTempDir("omf-sweep-race-outside-");
+    const itemDir = join(state, "goals", "g1", "work", "w1");
+    put(itemDir, `runs/${OUTSIDE_RUN}/judge/ctx`, "x");
+    put(itemDir, `runs/${LATE_RUN}/judge/ctx`, "x");
+    const elsewhere = join(outside, "w1");
+    put(elsewhere, `runs/${LATE_RUN}/judge/ctx`, "x");
+    const work = join(state, "goals", "g1", "work");
+    function* runs(): Generator<string> {
+      yield OUTSIDE_RUN;
+      // the first run's staging is gone; before the next run is looked at the work directory is swapped for a link
+      renameSync(work, join(state, "goals", "g1", "work-moved"));
+      symlinkSync(outside, work);
+      yield LATE_RUN;
+    }
+    expect(removeStagingDirs(join(itemDir, "runs"), runs(), state)).toBe(1);
+    expect(existsSync(join(elsewhere, "runs", LATE_RUN, "judge", "ctx"))).toBe(true);
+    expect(existsSync(join(state, "goals", "g1", "work-moved", "w1", "runs", OUTSIDE_RUN, "judge"))).toBe(false);
   });
 
   it("a symlinked state directory is not a symlink in the tree: the staging under it is removed", async () => {
@@ -283,7 +328,7 @@ describe("the item sweep removes round images by item and run id", () => {
     put(itemY, `runs/${EARLIER}/marker`, "x");
     const memory = new MemoryRuntime();
     memory.owned = [image(EARLIER, 1, X), image(EARLIER, 2, Y), image(EARLIER, 3, "")];
-    await sweepItemOrphans({ runtime: memory, itemDir: itemY, workId: Y });
+    await sweepItemOrphans({ runtime: memory, itemDir: itemY, projectDir: itemY, workId: Y });
     expect(memory.owned.map((resource) => resource.name).sort()).toEqual(
       [`omf-sut:${EARLIER}-1`, `omf-sut:${EARLIER}-3`].sort(),
     );
@@ -305,12 +350,12 @@ describe("the item sweep removes round images by item and run id", () => {
     ];
     claimItem(item);
     try {
-      await sweepItemOrphans({ runtime: memory, itemDir: item, workId: X, currentPassId: CURRENT });
+      await sweepItemOrphans({ runtime: memory, itemDir: item, projectDir: item, workId: X, currentPassId: CURRENT });
     } finally {
       releaseItem(item);
     }
     expect(memory.owned).toHaveLength(4);
-    await sweepItemOrphans({ runtime: memory, itemDir: item, workId: X, currentPassId: CURRENT });
+    await sweepItemOrphans({ runtime: memory, itemDir: item, projectDir: item, workId: X, currentPassId: CURRENT });
     expect(memory.owned.map((resource) => resource.name).sort()).toEqual(
       [`omf-sut:${CURRENT}-1`, "omf-sut:r-20260101T000000Z-ffff-1", "omf-harness:0123456789ab"].sort(),
     );
@@ -355,7 +400,7 @@ describe("a round image is removed by the id read when it was listed", () => {
     const { fake, runtime, mine, other } = setup();
     const item = realTempDir("omf-sweep-retag-");
     put(item, `runs/${RUN}/marker`, "x");
-    expect(await sweepItemOrphans({ runtime, itemDir: item, workId: WORK })).toBe(1);
+    expect(await sweepItemOrphans({ runtime, itemDir: item, projectDir: item, workId: WORK })).toBe(1);
     expect(fake.state.images[mine]).toBeUndefined();
     expect(fake.state.images[other]).toBeDefined();
   });
@@ -364,7 +409,13 @@ describe("a round image is removed by the id read when it was listed", () => {
     const { fake, runtime, mine, other } = setup();
     const item = realTempDir("omf-sweep-retag-");
     put(item, `runs/${RUN}/marker`, "x");
-    await sweepOrphans({ runtime, itemDir: item, currentRunId: "r-20261019T100000Z-bbbb", workId: WORK });
+    await sweepOrphans({
+      runtime,
+      itemDir: item,
+      projectDir: item,
+      currentRunId: "r-20261019T100000Z-bbbb",
+      workId: WORK,
+    });
     expect(fake.state.images[mine]).toBeUndefined();
     expect(fake.state.images[other]).toBeDefined();
   });
@@ -392,13 +443,13 @@ describe("a runs directory that is a symlink is never entered", () => {
 
   it("removeStagingDirs removes nothing under a linked runs directory", () => {
     const { item, kept } = linkedRuns();
-    expect(removeStagingDirs(join(item, "runs"), [EARLIER])).toBe(0);
+    expect(removeStagingDirs(join(item, "runs"), [EARLIER], item)).toBe(0);
     expect(kept()).toBe(true);
   });
 
   it("the item sweep does nothing: no directory, no container, no image", async () => {
     const { item, memory, kept } = linkedRuns();
-    expect(await sweepItemOrphans({ runtime: memory, itemDir: item, workId: X })).toBe(0);
+    expect(await sweepItemOrphans({ runtime: memory, itemDir: item, projectDir: item, workId: X })).toBe(0);
     expect(kept()).toBe(true);
     expect(memory.owned).toHaveLength(4);
     expect(memory.calls).toEqual([]);
@@ -406,7 +457,13 @@ describe("a runs directory that is a symlink is never entered", () => {
 
   it("the run-start sweep does nothing: no directory, no container, no image", async () => {
     const { item, memory, kept } = linkedRuns();
-    const result = await sweepOrphans({ runtime: memory, itemDir: item, workId: X, currentRunId: CURRENT });
+    const result = await sweepOrphans({
+      runtime: memory,
+      itemDir: item,
+      projectDir: item,
+      workId: X,
+      currentRunId: CURRENT,
+    });
     expect(result).toEqual({ containers: 0, images: 0, staging: 0, skipped: [] });
     expect(kept()).toBe(true);
     expect(memory.owned).toHaveLength(4);
@@ -438,12 +495,12 @@ describe("an unset docker_context still lets the sweep remove host staging", () 
     // negative guard first: the same sweep with the claim held removes nothing, so the removal below is the sweep's doing
     claimItem(item);
     try {
-      await sweepItemOrphans({ runtime: noContext(), itemDir: item, workId: X });
+      await sweepItemOrphans({ runtime: noContext(), itemDir: item, projectDir: item, workId: X });
     } finally {
       releaseItem(item);
     }
     expect(existsSync(join(item, "runs", EARLIER, "judge", "file"))).toBe(true);
-    await sweepItemOrphans({ runtime: noContext(), itemDir: item, workId: X });
+    await sweepItemOrphans({ runtime: noContext(), itemDir: item, projectDir: item, workId: X });
     expect(existsSync(join(item, "runs", EARLIER, "judge"))).toBe(false);
     expect(existsSync(join(item, "runs", EARLIER, "implementer-stage"))).toBe(false);
     expect(existsSync(join(item, "runs", EARLIER, "implementer", "round-1", "log"))).toBe(true);
@@ -453,7 +510,13 @@ describe("an unset docker_context still lets the sweep remove host staging", () 
     const item = stage();
     claimItem(item);
     try {
-      await sweepItemOrphans({ runtime: noContext(), itemDir: item, workId: X, roles: ["implementer"] });
+      await sweepItemOrphans({
+        runtime: noContext(),
+        itemDir: item,
+        projectDir: item,
+        workId: X,
+        roles: ["implementer"],
+      });
     } finally {
       releaseItem(item);
     }

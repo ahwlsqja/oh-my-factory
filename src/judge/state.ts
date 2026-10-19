@@ -176,7 +176,7 @@ export interface SweepInput {
   /** The item's id: only containers whose `omf.work` label is this item are selected, since two items can share a run id. */
   workId: string;
   /** The project's state directory (`location.dir`): the root the staging path must really lie under (`runsOnStatePath`). */
-  projectDir?: string;
+  projectDir: string;
 }
 
 export interface SweepResult {

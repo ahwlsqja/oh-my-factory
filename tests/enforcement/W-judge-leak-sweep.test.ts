@@ -37,7 +37,13 @@ describe("W-judge-leak-sweep", () => {
       { kind: "image", name: `omf-sut:${CURRENT}-1`, run_id: CURRENT, work_id: WORK },
       { kind: "container", name: `omf-sut-${OTHER_ITEM}-1-1`, run_id: OTHER_ITEM, work_id: OTHER_WORK }, // another work item's run: not under this item's runs/
     ];
-    const swept = await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK });
+    const swept = await sweepOrphans({
+      runtime: memory,
+      itemDir,
+      projectDir: itemDir,
+      currentRunId: CURRENT,
+      workId: WORK,
+    });
     expect(swept).toEqual({ containers: 2, images: 1, staging: 1, skipped: [] });
     expect(memory.owned.map((resource) => resource.name).sort()).toEqual(
       [
@@ -50,7 +56,9 @@ describe("W-judge-leak-sweep", () => {
     expect(existsSync(join(itemDir, "runs", EARLIER, "judge"))).toBe(false);
     expect(existsSync(join(itemDir, "runs", EARLIER, "audit-1.json"))).toBe(true);
     expect(existsSync(join(itemDir, "runs", CURRENT, "judge", "1-train", "keep"))).toBe(true);
-    expect(await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK })).toEqual({
+    expect(
+      await sweepOrphans({ runtime: memory, itemDir, projectDir: itemDir, currentRunId: CURRENT, workId: WORK }),
+    ).toEqual({
       containers: 0,
       images: 0,
       staging: 0,
@@ -68,14 +76,18 @@ describe("W-judge-leak-sweep", () => {
     ];
     acquireLock(sealLockFile(itemDir));
     try {
-      expect(await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK })).toMatchObject({
+      expect(
+        await sweepOrphans({ runtime: memory, itemDir, projectDir: itemDir, currentRunId: CURRENT, workId: WORK }),
+      ).toMatchObject({
         containers: 1,
       });
       expect(memory.owned.map((resource) => resource.name)).toEqual([`omf-author-${EARLIER}-1-1`]);
     } finally {
       releaseLock(sealLockFile(itemDir));
     }
-    expect(await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK })).toMatchObject({
+    expect(
+      await sweepOrphans({ runtime: memory, itemDir, projectDir: itemDir, currentRunId: CURRENT, workId: WORK }),
+    ).toMatchObject({
       containers: 1,
     });
     expect(memory.owned).toEqual([]);
@@ -90,7 +102,9 @@ describe("W-judge-leak-sweep", () => {
       { kind: "container", name: `omf-author-${EARLIER}-1-1`, run_id: EARLIER, work_id: WORK },
       { kind: "container", name: `omf-author-${OTHER_ITEM}-1-1`, run_id: OTHER_ITEM, work_id: OTHER_WORK },
     ];
-    expect(await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK })).toMatchObject({
+    expect(
+      await sweepOrphans({ runtime: memory, itemDir, projectDir: itemDir, currentRunId: CURRENT, workId: WORK }),
+    ).toMatchObject({
       containers: 1,
     });
     expect(memory.owned.map((resource) => resource.run_id)).toEqual([OTHER_ITEM]);
@@ -139,7 +153,9 @@ describe("W-judge-leak-sweep", () => {
       { kind: "container", name: `omf-implementer-${EARLIER}-1-1`, run_id: EARLIER, work_id: WORK },
       { kind: "container", name: `omf-implementer-${CURRENT}-1-1`, run_id: CURRENT, work_id: WORK },
     ];
-    expect(await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK })).toEqual({
+    expect(
+      await sweepOrphans({ runtime: memory, itemDir, projectDir: itemDir, currentRunId: CURRENT, workId: WORK }),
+    ).toEqual({
       containers: 1,
       images: 0,
       staging: 0,
@@ -154,7 +170,9 @@ describe("W-judge-leak-sweep", () => {
     put(itemDir, `runs/${EARLIER}/judge/scratch`, "x");
     put(itemDir, `runs/${CURRENT}/implementer-stage/round-1/bundle`, "x");
     const memory = new MemoryRuntime();
-    expect(await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK })).toEqual({
+    expect(
+      await sweepOrphans({ runtime: memory, itemDir, projectDir: itemDir, currentRunId: CURRENT, workId: WORK }),
+    ).toEqual({
       containers: 0,
       images: 0,
       staging: 2,
@@ -184,7 +202,13 @@ describe("W-judge-leak-sweep", () => {
         await memory.remove(handle);
       },
     };
-    const swept = await sweepOrphans({ runtime: strict, itemDir, currentRunId: CURRENT, workId: WORK });
+    const swept = await sweepOrphans({
+      runtime: strict,
+      itemDir,
+      projectDir: itemDir,
+      currentRunId: CURRENT,
+      workId: WORK,
+    });
     expect(swept).toEqual({ containers: 1, images: 1, staging: 0, skipped: [odd] });
     expect(memory.owned.map((resource) => resource.name)).toEqual([odd]);
   });
@@ -198,7 +222,13 @@ describe("W-judge-leak-sweep", () => {
       { kind: "container", name: `omf-implementer-${EARLIER}-1-2`, run_id: EARLIER, work_id: OTHER_WORK },
       { kind: "container", name: `omf-author-${EARLIER}-1-3`, run_id: EARLIER, work_id: OTHER_WORK },
     ];
-    const swept = await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK });
+    const swept = await sweepOrphans({
+      runtime: memory,
+      itemDir,
+      projectDir: itemDir,
+      currentRunId: CURRENT,
+      workId: WORK,
+    });
     expect(swept.containers).toBe(1);
     expect(memory.owned.map((resource) => resource.name).sort()).toEqual(
       [`omf-implementer-${EARLIER}-1-2`, `omf-author-${EARLIER}-1-3`].sort(),
@@ -233,6 +263,7 @@ describe("W-judge-leak-sweep", () => {
     const swept = await sweepOrphans({
       runtime: memory,
       itemDir,
+      projectDir: itemDir,
       currentRunId: "r-20261015T000000Z-ffff",
       workId: WORK,
     });
@@ -249,7 +280,13 @@ describe("W-judge-leak-sweep", () => {
       { kind: "image", name: `omf-sut:${EARLIER}-2`, run_id: EARLIER, work_id: OTHER_WORK },
       { kind: "image", name: `omf-sut:${EARLIER}-3`, run_id: EARLIER, work_id: "" }, // no label read: never selected
     ];
-    const swept = await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK });
+    const swept = await sweepOrphans({
+      runtime: memory,
+      itemDir,
+      projectDir: itemDir,
+      currentRunId: CURRENT,
+      workId: WORK,
+    });
     expect(swept).toMatchObject({ images: 1 });
     expect(memory.owned.map((resource) => resource.name).sort()).toEqual(
       [`omf-sut:${EARLIER}-2`, `omf-sut:${EARLIER}-3`].sort(),

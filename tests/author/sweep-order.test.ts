@@ -64,7 +64,9 @@ describe("the item sweep reads runs/ before it probes the lock", () => {
       mkdirSync(join(itemDir, "runs", STARTING), { recursive: true });
     };
     try {
-      expect(await sweepItemOrphans({ runtime: memory, itemDir, workId: WORK, roles: ["author"] })).toBe(1);
+      expect(
+        await sweepItemOrphans({ runtime: memory, itemDir, projectDir: itemDir, workId: WORK, roles: ["author"] }),
+      ).toBe(1);
     } finally {
       releaseLock(lock);
     }
@@ -84,7 +86,9 @@ describe("the item sweep reads runs/ before it probes the lock", () => {
       mkdirSync(join(itemDir, "runs", STARTING), { recursive: true });
     };
     try {
-      expect(await sweepItemOrphans({ runtime: memory, itemDir, workId: WORK, roles: ["implementer"] })).toBe(1);
+      expect(
+        await sweepItemOrphans({ runtime: memory, itemDir, projectDir: itemDir, workId: WORK, roles: ["implementer"] }),
+      ).toBe(1);
     } finally {
       releaseItem(itemDir);
     }
