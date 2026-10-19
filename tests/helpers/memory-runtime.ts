@@ -45,6 +45,8 @@ export class MemoryRuntime implements ContainerRuntime {
   /** What `listOwned` reports; removals delete from it. */
   owned: OwnedResource[] = [];
   failCreate = false;
+  /** The daemon refuses to remove a container: it stays known and running (an orphan for the sweep). */
+  failRemove = false;
   failImageRemoval = false;
   /** The daemon cannot answer an inspect: the state of a container is then unknown. */
   failInspect = false;
@@ -102,6 +104,7 @@ export class MemoryRuntime implements ContainerRuntime {
 
   async remove(handle: ContainerHandle): Promise<void> {
     this.calls.push(`remove ${handle.name}`);
+    if (this.failRemove) throw new Error("remove failed");
     this.forget([handle.name]);
   }
 

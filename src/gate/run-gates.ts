@@ -9,11 +9,19 @@ import {
 } from "./gate-line.js";
 import type { CommandResult, CommandTarget, RunOptions } from "./ports.js";
 
-/** The error codes of a work copy that lost its container: the host's doing, never evidence about a gate. */
-const LOST_CONTAINER_CODES: ReadonlySet<string> = new Set(["workcopy_container_gone", "workcopy_exit_unknown"]);
+/**
+ * The error codes of a work copy that lost its container or could not run at all: the host's doing, never evidence about a gate.
+ * `runtime_error` is what the work copy reports for a failure the candidate cannot cause (a docker client spawn failure, a
+ * recreate that failed on the daemon, a disposed copy), so it stops the line like a lost container.
+ */
+const LOST_CONTAINER_CODES: ReadonlySet<string> = new Set([
+  "workcopy_container_gone",
+  "workcopy_exit_unknown",
+  "runtime_error",
+]);
 
 /**
- * A declared gate (required or not) ran in a container that was lost. That is an infrastructure error that blocks the line: it
+ * A declared gate (required or not) ran in a container that was lost, or the work copy could not run it for a reason of the host. That is an infrastructure error that blocks the line: it
  * must not become `skip`, which a gate that is not required would turn into GREEN. The message is the code only.
  */
 export class GateInfrastructureError extends Error {

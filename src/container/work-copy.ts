@@ -131,7 +131,8 @@ class ContainerWorkCopy implements WorkCopy {
       if (ctx.build.length > 0) await this.step(ctx.build, BUILD_TIMEOUT_MS, "build_failed", undefined, "/work");
       this.stale = false;
     } catch (error) {
-      await this.removeContainer();
+      // The failure that is thrown is the one that decided the result; a failed removal must not replace it.
+      await this.removeQuietly();
       throw error;
     }
   }
@@ -164,10 +165,23 @@ class ContainerWorkCopy implements WorkCopy {
   }
 
   /**
+   * Removes the container where a result is already decided. A failed removal leaves an orphan that stops itself and that
+   * `lastName` still lets `abortSync` and the sweep reach; it must never change the result, so the error is dropped here.
+   */
+  private async removeQuietly(): Promise<void> {
+    try {
+      await this.removeContainer();
+    } catch {
+      // the decided result stands
+    }
+  }
+
+  /**
    * Every command runs at most `WORKCOPY_GATE_EXEC_S` seconds, whatever timeout the caller injects, because the lifetime is sized from it.
    * A container that has served `WORKCOPY_GATE_EXECS` commands is replaced like a stale one, so no container is asked for more than its
    * lifetime was sized for. A failure to recreate comes back as an error result, because `proveTest` does not catch a throw from `run`;
-   * `runGates` turns the error results that mean a lost container (`container_gone`, `exit_unknown`) into an infrastructure stop. After a
+   * `runGates` turns the error results that mean a lost container (`container_gone`, `exit_unknown`) or `runtime_error` into an infrastructure stop. A result
+   * that is already decided is never changed by a failed removal of the container. After a
    * non-zero exit, an exec client error or no status, `stopCause` says why a container is not running: the host's (removed, stopped,
    * lifetime elapsed, or unknown) is `container_gone`, no status is `exit_unknown`, and a container that stopped early on its own is the
    * command's failure and comes back as a failed exit. A timeout or the output limit kills only the docker client, not the process in the container, so the
@@ -190,11 +204,11 @@ class ContainerWorkCopy implements WorkCopy {
       });
       if (result.kind === "timeout" || result.kind === "output_limit") {
         this.stale = true;
-        await this.removeContainer();
+        await this.removeQuietly();
       } else if (result.kind === "exited" && result.status === null) {
         // No status: the docker client was killed, so nothing says how the command ended or whether it still runs.
         this.stale = true;
-        await this.removeContainer();
+        await this.removeQuietly();
         return errorResult(new WorkCopyError("exit_unknown"));
       } else if ((result.kind === "exited" && result.status !== 0) || result.kind === "error") {
         const { cause } = await stopCause(this.ctx.runtime, this.container);
@@ -202,16 +216,20 @@ class ContainerWorkCopy implements WorkCopy {
           // The host removed or stopped the container, its lifetime ran out, or the daemon would not say: not the command's
           // doing, so it comes back as an error result (like a failed recreate), never as a gate or test result.
           this.stale = true;
-          await this.removeContainer();
+          await this.removeQuietly();
           return errorResult(new WorkCopyError("container_gone"));
         }
         if (cause === "candidate") {
           // The container stopped early on its own (the command ended its PID 1 or pushed it into an OOM kill): the command's
           // failure. It reads as a failed exit, never as a skip, and the next command starts in a fresh container.
           this.stale = true;
-          await this.removeContainer();
+          await this.removeQuietly();
           if (result.kind === "error")
             return { kind: "exited", status: CONTAINER_STOPPED_STATUS, signal: null, stdout: "", stderr: "" };
+        } else if (result.kind === "error") {
+          // The container still runs, so only the docker client failed (it could not be started): the host's doing, and a
+          // gate result must never be made of it. It reaches `runGates` as `runtime_error`, not as the client's own code.
+          return errorResult(null);
         }
       }
       return result;
