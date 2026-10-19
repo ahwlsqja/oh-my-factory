@@ -142,3 +142,12 @@ describe("omf seal is idempotent on a measured seal", () => {
     expect(bin.state().calls).toEqual([]);
   });
 });
+
+describe("reportSeal egress line", () => {
+  it.each([
+    ["sealed", { status: "sealed", seal_id: SEAL, round: 1, author_measured: true, gate2: "pass" }],
+    ["stored", { status: "stored", seal_id: SEAL, round: 1, author_measured: false, gate2: "pass" }],
+  ] as [string, SealPassResult][])("says author network egress is not restricted when %s", (_name, result) => {
+    expect(reportSeal(WORK, result).text).toContain("author network egress is not restricted");
+  });
+});

@@ -32,6 +32,9 @@ export interface SealReport {
   json: Record<string, unknown>;
 }
 
+/** Said wherever the author container ran: its network is Docker's default bridge, with no egress allowlist. */
+const EGRESS_LINE = "author network egress is not restricted; see docs/author.md";
+
 /**
  * The exit code, text and JSON of one seal pass: 0 sealed or already sealed, 1 a problem in the result (the
  * author failed, GATE-2 sent the item back, or the author stage is unmeasured), 3 a person must act, 2 the command
@@ -54,7 +57,7 @@ export function reportSeal(workId: string, result: SealPassResult): SealReport {
       return make(
         0,
         "out",
-        `sealed ${result.seal_id} (round ${result.round}); the author ran in a measured container and GATE-2 passed`,
+        `sealed ${result.seal_id} (round ${result.round}); the author ran in a measured container and GATE-2 passed\n${EGRESS_LINE}`,
         {
           seal_id: result.seal_id,
           round: result.round,
@@ -65,7 +68,7 @@ export function reportSeal(workId: string, result: SealPassResult): SealReport {
       return make(
         1,
         "err",
-        `stored ${result.seal_id} (round ${result.round}); GATE-2 passed but the author stage is unmeasured, so omf run will stop at GATE-3; run omf seal ${workId} again`,
+        `stored ${result.seal_id} (round ${result.round}); GATE-2 passed but the author stage is unmeasured, so omf run will stop at GATE-3; run omf seal ${workId} again\n${EGRESS_LINE}`,
         { seal_id: result.seal_id, round: result.round, author_measured: false },
       );
     case "retry": {

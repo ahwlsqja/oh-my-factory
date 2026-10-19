@@ -592,7 +592,9 @@ describe("runDoctor: author readiness advisory", () => {
     expect(ready.author).toMatchObject({ image_configured: true, key_present: true });
     expect(JSON.stringify(ready)).not.toContain(SENTINEL);
     expect(readFileSync(join(projectDir(repo, e), "preflight.json"), "utf8")).not.toContain(SENTINEL);
-    expect([ready.ok, ready.problems, ready.warnings]).toEqual([baseline.ok, baseline.problems, baseline.warnings]);
+    // The author image adds one notice (egress); ok and problems stay as they were.
+    expect([ready.ok, ready.problems]).toEqual([baseline.ok, baseline.problems]);
+    expect(ready.warnings).toEqual([...baseline.warnings, "author network egress is not restricted"]);
     for (const phrase of ["not enforced", "spend limit", "dedicated docker context", "open network"]) {
       expect(ready.author.note).toContain(phrase);
     }
