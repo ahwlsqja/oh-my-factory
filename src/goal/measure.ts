@@ -24,7 +24,8 @@ import {
 } from "./bands.js";
 import { type TargetResult, evaluateTarget } from "./evaluate.js";
 import { type GoalSemantic, type GoalTarget, goalDir } from "./goal-file.js";
-import { workingTreeFingerprint } from "./git.js";
+import { observeWorkingTree } from "./git.js";
+import { type MeasurementProvenance, provenanceOf } from "./provenance.js";
 
 export type MetricRole = "target" | "leading" | "lagging" | "guardrail";
 export type GuardrailStatus = "pass" | "breach" | "unevaluated";
@@ -49,6 +50,8 @@ export interface GapReport {
   measured_at: string;
   runner: RunnerKind;
   isolation: Isolation;
+  /** Host-only context for a human: revision, dirty state, directory contract and limits. Not a model input. */
+  provenance: MeasurementProvenance;
   /** The locked target, not the one currently in goal.md. */
   target: GoalTarget & { measured: number | null; result: TargetResult | null };
   metrics: MetricMeasurement[];
@@ -197,7 +200,8 @@ export async function measureGoal(
   // Measurements taken while a regime change is pending carry the mark, so nothing downstream reads them as approved.
   const pending = audit.regime_changes.length > 0;
   const history = ledger.readVerified();
-  const inputSha = workingTreeFingerprint(location.repo);
+  const observed = observeWorkingTree(location.repo);
+  const inputSha = observed.fingerprint;
   const measuredAt = now();
   const metrics: MetricMeasurement[] = [];
   for (const lock of metricLocks) {
@@ -281,6 +285,7 @@ export async function measureGoal(
     measured_at: measuredAt.toISOString(),
     runner: options.runner,
     isolation: isolationOf(options.runner),
+    provenance: provenanceOf(observed, measuredAt, options.runner),
     target: { ...target, measured, result: measured === null ? null : evaluateTarget(target, measured) },
     metrics,
     guardrails: goalLock.semantic.guardrails.map((id) => ({

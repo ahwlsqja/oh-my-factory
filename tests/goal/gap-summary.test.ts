@@ -3,6 +3,7 @@ import { evaluateTarget } from "../../src/goal/evaluate.js";
 import type { BandAction, BandResult } from "../../src/goal/bands.js";
 import type { Operator } from "../../src/goal/goal-file.js";
 import type { GapReport, MetricMeasurement } from "../../src/goal/measure.js";
+import { PROVENANCE_LIMITS } from "../../src/goal/provenance.js";
 import { summarizeGap } from "../../src/goal/gap-summary.js";
 
 function reportOf(
@@ -24,6 +25,15 @@ function reportOf(
     measured_at: "2026-10-12T09:00:00.000Z",
     runner: "host",
     isolation: "none",
+    provenance: {
+      revision: "a".repeat(40),
+      tree: "clean",
+      changed_paths: 0,
+      fingerprint: "b".repeat(64),
+      captured_at: "2026-10-12T09:00:00.000Z",
+      working_directory: "repository root (host, no isolation)",
+      limits: PROVENANCE_LIMITS,
+    },
     target: {
       metric_id: "m-p95",
       operator,

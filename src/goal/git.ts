@@ -83,10 +83,35 @@ export function diffStat(repo: string, commit: string, paths: readonly string[])
   return git(repo, ["diff", "--stat", "--no-renames", commit, "--", ...paths]).trimEnd();
 }
 
+/** One reading of the tree a measurement is about to run against. */
+export interface TreeObservation {
+  head: string;
+  /** Paths `git status` lists, untracked files that are not ignored included; a rename counts once. */
+  changedPaths: number;
+  fingerprint: string;
+}
+
+/** `git status --porcelain=v1 -z` writes a rename or copy as `XY new\0old`, so the second path is not an entry. */
+function statusEntryCount(status: string): number {
+  const fields = status.split("\0").filter((field) => field.length > 0);
+  let count = 0;
+  for (let i = 0; i < fields.length; i++) {
+    count++;
+    const code = fields[i]?.slice(0, 2) ?? "";
+    if (code.includes("R") || code.includes("C")) i++;
+  }
+  return count;
+}
+
 /** Identifies what a measurement ran against: the commit plus any uncommitted state. */
-export function workingTreeFingerprint(repo: string): string {
+export function observeWorkingTree(repo: string): TreeObservation {
   const status = git(repo, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]);
-  return sha256Hex(canonicalize({ head: headCommit(repo), status }));
+  const head = headCommit(repo);
+  return { head, changedPaths: statusEntryCount(status), fingerprint: sha256Hex(canonicalize({ head, status })) };
+}
+
+export function workingTreeFingerprint(repo: string): string {
+  return observeWorkingTree(repo).fingerprint;
 }
 
 /** The paths that match any glob. Dot files match, so `.github/**` covers workflows. */

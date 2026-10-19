@@ -1,8 +1,11 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Ledger } from "../../src/core/ledger.js";
 import { projectDir } from "../../src/core/paths.js";
+import { approveGoal } from "../../src/goal/approve.js";
+import { goalTemplate } from "../../src/goal/goal-file.js";
 import { lockGoal } from "../../src/goal/goal-lock.js";
 import { lockFile, proposalFile, readProposal } from "../../src/goal/metrics.js";
 import { omf } from "../helpers/cli.js";
@@ -123,6 +126,35 @@ describe("omf metric propose", () => {
 });
 
 describe("omf goal audit", () => {
+  it("keeps template placeholders and short-wall-time advice together without blocking approval", () => {
+    const fx = setupGoal();
+    const template = goalTemplate("g-fast").replace(/m-replace-me/g, "m-p95");
+    writeFileSync(fx.goalFile, template);
+    const auditJson = () => JSON.parse(omf(["goal", "audit", "g-fast", "--json"], fx.repo, fx.home).stdout);
+    const fresh = auditJson();
+    expect(template).toContain("wall_time: 14d");
+    expect(fresh).toMatchObject({ state: "draft", problems: [], warnings: [] });
+    expect(fresh.placeholders.length).toBeGreaterThan(0);
+
+    writeFileSync(fx.goalFile, template.replace("wall_time: 14d", "wall_time: 72h"));
+    const short = auditJson();
+    expect(short).toMatchObject({ state: "draft", problems: [], placeholders: fresh.placeholders });
+    expect(short.warnings).toHaveLength(1);
+    const text = omf(["goal", "audit", "g-fast"], fx.repo, fx.home);
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain("still template text in goal.md (replace before you approve):");
+    expect(text.stdout).toContain("warnings:");
+    expect(text.stdout).toContain("wall time 72h is not longer than the minimum observation 7d");
+
+    expect(approveGoal(fx.location, "g-fast", "human:dev").created).toBe(true);
+    expect(auditJson()).toMatchObject({
+      state: "approved",
+      problems: [],
+      placeholders: fresh.placeholders,
+      warnings: short.warnings,
+    });
+  });
+
   it("reports a draft that is ready for J1", () => {
     const fx = setupGoal();
     const result = omf(["goal", "audit", "g-fast"], fx.repo, fx.home);
@@ -164,7 +196,9 @@ describe("omf goal audit", () => {
     expect(audit.code).toBe(1);
     expect(audit.stdout).toContain("goal g-fast: tampered (regime 1)");
     expect(audit.stdout).toContain("- metric lock tampered: m-p95");
-    expect(audit.stdout).toContain("run omf goal approve g-fast to repair it");
+    expect(audit.stdout).toContain(
+      "approving again repairs a changed goal.md or watched path, other problems are listed below",
+    );
     const json = omf(["goal", "audit", "g-fast", "--json"], fx.repo, fx.home);
     expect((JSON.parse(json.stdout) as { state: string }).state).toBe("tampered");
 
@@ -201,6 +235,24 @@ describe("omf goal measure", () => {
     expect(result.stdout).toContain("target m-p95: 312 ms; target <= 250 ms; gap 62 (decrease, medium)");
     expect(result.stdout).toContain("guardrail m-errors: unevaluated");
     expect(result.stderr).toContain("warning: measured on the host without isolation (--runner host)");
+  });
+
+  it("prints the revision, dirty state, directory contract and capture time, and no absolute temp path", () => {
+    const fx = setupGoal();
+    lockGoal(fx.location, "g-fast", "human:dev");
+    writeFileSync(join(fx.repo, "scratch.txt"), "x\n");
+    const result = omf(["goal", "measure", "g-fast", "--runner", "host"], fx.repo, fx.home);
+    expect(result.code).toBe(0);
+    const head = gitIn(fx.repo, "rev-parse", "HEAD").trim();
+    expect(result.stdout).toContain(`measured at revision ${head.slice(0, 12)} (dirty, 1 changed path), observed `);
+    expect(result.stdout).toMatch(/observed \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/);
+    expect(result.stdout).toContain("working directory: repository root (host, no isolation)");
+    // The `report:` line names the host-state file by design and predates provenance; every other line must be path-free.
+    const rest = result.stdout
+      .split("\n")
+      .filter((line) => !line.startsWith("report: "))
+      .join("\n");
+    for (const path of [fx.repo, fx.home, tmpdir()]) expect(rest).not.toContain(path);
   });
 
   it("uses Docker by default and fails metrics that have no image", () => {
