@@ -30,7 +30,14 @@ export const UNMEASURED_CODES = [
 export type UnmeasuredCode = (typeof UNMEASURED_CODES)[number];
 export type MeasureOutcome = { ok: true; value: number } | { ok: false; code: UnmeasuredCode; reason: string };
 
-/** The exit status a shell gives a command it found but may not execute. */
+/**
+ * The exit status a shell gives a command it found but may not execute.
+ *
+ * How the same failure is labelled depends on who runs the program: a shell that cannot find a command exits 127,
+ * which is labelled nonzero_exit, while a direct spawn of a missing program fails with ENOENT and is labelled
+ * could_not_run. A script that exits 126 on purpose is labelled permission_denied. All of these are unmeasured and
+ * none counts as met; only the label differs.
+ */
 const EXIT_NOT_EXECUTABLE = 126;
 
 export const MEASURE_TIMEOUT_MS = 120_000;

@@ -211,6 +211,15 @@ describe("omf goal measure", () => {
     expect(result.stdout).toContain("unmeasured (no_image): metric m-p95 has no image");
   });
 
+  it("prints the target as unmeasured, not as a number, when the target metric has no result", () => {
+    const fx = setupGoal();
+    lockGoal(fx.location, "g-fast", "human:dev");
+    const result = omf(["goal", "measure", "g-fast"], fx.repo, fx.home);
+    expect(result.stdout).toContain("target m-p95: unmeasured; target <= 250 ms");
+    expect(result.stdout).not.toMatch(/target m-p95: \d/);
+    expect(result.stdout).not.toContain("; met");
+  });
+
   it("exits 2 for an unapproved goal", () => {
     const fx = setupGoal();
     const result = omf(["goal", "measure", "g-fast", "--runner", "host"], fx.repo, fx.home);
