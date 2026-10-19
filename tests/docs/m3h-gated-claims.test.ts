@@ -1,5 +1,9 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { makeTempDir } from "../helpers/tmp.js";
 
 // The three gated author suites are written and not recorded (M3h). This keeps the wording honest: docs/author.md carries
 // "[not enforced: <id>]" for a suite exactly until docs/evidence/gated-runs.json holds a passing record for it, the suites are
@@ -16,6 +20,45 @@ const SUITES = [
   { id: "S5.3.author-answer-no-leak", suite: "G-author-canary", file: "tests/gated/author-canary.test.ts" },
   { id: "S5.0.skeleton-real-line", suite: "G-skeleton-real", file: "tests/gated/skeleton-real.test.ts" },
 ] as const;
+
+const ROOT_DIR = fileURLToPath(ROOT);
+const NESTED_CONFIG = fileURLToPath(new URL("../helpers/vitest.nested.config.ts", import.meta.url));
+
+/** Runs the named gated suite files in a child vitest under `env` and reports how many of their tests ran, passed and were skipped. */
+function runGated(
+  files: string[],
+  env: Record<string, string>,
+): { total: number; passed: number; failed: number; skipped: number } {
+  const clean = Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !name.startsWith("OMF_") && !name.endsWith("_API_KEY")),
+  );
+  const out = join(makeTempDir("omf-gated-json-"), "report.json");
+  spawnSync(
+    process.execPath,
+    [
+      join(ROOT_DIR, "node_modules", "vitest", "vitest.mjs"),
+      "run",
+      "--config",
+      NESTED_CONFIG,
+      "--reporter=json",
+      `--outputFile=${out}`,
+      ...files,
+    ],
+    { cwd: ROOT_DIR, encoding: "utf8", env: { ...clean, ...env }, maxBuffer: 16 * 1024 * 1024 },
+  );
+  const report = JSON.parse(readFileSync(out, "utf8")) as {
+    numTotalTests: number;
+    numPassedTests: number;
+    numFailedTests: number;
+    numPendingTests: number;
+  };
+  return {
+    total: report.numTotalTests,
+    passed: report.numPassedTests,
+    failed: report.numFailedTests,
+    skipped: report.numPendingTests,
+  };
+}
 
 interface Requirement {
   id: string;
@@ -37,13 +80,33 @@ describe.each(SUITES)("$suite", ({ id, suite, file }) => {
     const source = read(file);
     // The matrix reads only a line that is exactly `// covers: <id>`; a mention inside prose does not count.
     expect(source.split("\n").map((line) => line.trim())).toContain(`// covers: ${id}`);
-    expect(source).toMatch(new RegExp(`describeGated(?:Model)?\\("${suite}"`));
-    expect(source).not.toMatch(/\bdescribe\(/);
+    // Anchored at the start of a line: a decoy in a string or a comment cannot satisfy it, and nothing else may open a suite.
+    expect(source).toMatch(new RegExp(`^describeGated(?:Model)?\\("${suite}"`, "m"));
+    expect(source).not.toMatch(/\bdescribe(?:\.\w+)*\(|\bdescribe\.\w+|^(?:it|test)(?:\.\w+)*\(/m);
   });
 
   it("is called not enforced in docs/author.md exactly until a passing record exists", () => {
     expect(read("docs/author.md").includes(`[not enforced: ${id}]`)).toBe(!recorded().includes(suite));
   });
+});
+
+describe("the gated suites are skipped without the switch", () => {
+  const FILES = SUITES.map((s) => s.file);
+
+  it("with no switch every test of the three author suites is skipped, none passes or fails", () => {
+    const run = runGated(FILES, {});
+    expect(run.total).toBeGreaterThan(0);
+    expect(run).toEqual({ total: run.total, passed: 0, failed: 0, skipped: run.total });
+  }, 120_000);
+
+  it("under OMF_GATED=docker the two model suites are still skipped, so a docker run never spends money", () => {
+    const run = runGated(
+      SUITES.filter((s) => s.suite !== "G-author-boundary-real").map((s) => s.file),
+      { OMF_GATED: "docker" },
+    );
+    expect(run.total).toBeGreaterThan(0);
+    expect(run).toEqual({ total: run.total, passed: 0, failed: 0, skipped: run.total });
+  }, 120_000);
 });
 
 describe("docs/author.md gated runs", () => {
