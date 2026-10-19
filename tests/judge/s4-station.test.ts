@@ -6,7 +6,7 @@ import { createFeedbackSlot } from "../../src/judge/round-state.js";
 import { judgeStations } from "../../src/judge/stations.js";
 import { splitDigest } from "../../src/vault/vault.js";
 import type { Station, StationResult } from "../../src/work/sequencer.js";
-import { FAILS, type Outcome, type OutcomePlan, PASSES, s4Rig } from "../helpers/judge-rig.js";
+import { FAILS, type Outcome, type OutcomePlan, PASSES, THIS_ITEM, s4Rig } from "../helpers/judge-rig.js";
 import { RUN } from "../helpers/judge-seed.js";
 import { recordW } from "../helpers/work.js";
 
@@ -76,11 +76,11 @@ describe("S4", () => {
     const r = s4Rig({
       owned: {
         [earlier]: [
-          { kind: "container", name: `omf-sut-${earlier}-1-3`, run_id: earlier },
-          { kind: "image", name: `omf-sut:${earlier}-1`, run_id: earlier },
-          { kind: "image", name: "omf-harness:0123456789ab", run_id: earlier },
+          { kind: "container", name: `omf-sut-${earlier}-1-3`, run_id: earlier, work_id: THIS_ITEM },
+          { kind: "image", name: `omf-sut:${earlier}-1`, run_id: earlier, work_id: "" },
+          { kind: "image", name: "omf-harness:0123456789ab", run_id: earlier, work_id: "" },
         ],
-        [other]: [{ kind: "container", name: `omf-sut-${other}-1-1`, run_id: other }],
+        [other]: [{ kind: "container", name: `omf-sut-${other}-1-1`, run_id: other, work_id: "w-ba9876543210" }],
       },
     });
     recordW(r.s.f.fx.ledger, "work.started", r.s.f.item, { run_id: earlier });

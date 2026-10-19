@@ -17,7 +17,7 @@ import type { ApprovalExpectation } from "../goal/goal-lock.js";
 import { type GapReport, measureGoal } from "../goal/measure.js";
 import { provenanceLines } from "../goal/provenance.js";
 import { metricSha256, proposeMetric, readProposal } from "../goal/metrics.js";
-import { createMarkdownStore } from "../adapters/state-markdown.js";
+import { type StateStore, createMarkdownStore } from "../adapters/state-markdown.js";
 import { type BudgetState, budgetStateFromEvents } from "../core/budget.js";
 import { cancelGoal, cancelProblem, resumeGoal, resumeProblem, stoppedNextSteps } from "../goal/lifecycle.js";
 import { type Escalation, type RunState, runStateFromEvents } from "../goal/run-state.js";
@@ -299,6 +299,30 @@ function printTick(goalId: string, result: TickResult): void {
 }
 
 /** Goal and metric commands (spec §9). Errors propagate to main.ts, which exits 2. */
+/**
+ * The cancel of `omf goal cancel` and what follows it, under the tick lock the caller holds: the goal and its open items are
+ * cancelled, the result line is printed, and only then are the cancelled items' containers of a killed run swept (best effort,
+ * `sweepItemBestEffort`). The print comes first, so a daemon that answers slowly or never cannot keep the person from reading
+ * that the goal is cancelled.
+ */
+export async function cancelGoalAndSweep(input: {
+  location: ProjectLocation;
+  ledger: Ledger;
+  store: StateStore;
+  goalId: string;
+  actor: string;
+  env: NodeJS.ProcessEnv;
+  print: (line: string) => void;
+  now?: Date;
+}): Promise<{ cancelled: string[] }> {
+  const result = cancelGoal(input.ledger, input.store, input.goalId, input.actor, input.now ?? new Date());
+  const count = result.cancelled.length;
+  input.print(`cancelled ${input.goalId}; ${count} work ${count === 1 ? "item" : "items"} cancelled`);
+  // The cancelled items will never reach another station: a container of a killed run is removed now.
+  for (const workId of result.cancelled) await sweepItemBestEffort(input.location, workId, input.env);
+  return result;
+}
+
 export function registerGoalCommands(program: Command): void {
   const goal = program.command("goal").description("define, approve and measure goals");
 
@@ -461,12 +485,15 @@ export function registerGoalCommands(program: Command): void {
           process.exitCode = 1;
           return;
         }
-        const result = cancelGoal(ledger, store, goalId, actor, new Date());
-        // The cancelled items will never reach another station: a container of a killed run is removed now.
-        for (const workId of result.cancelled) await sweepItemBestEffort(status, workId, process.env);
-        console.log(
-          `cancelled ${goalId}; ${result.cancelled.length} work ${result.cancelled.length === 1 ? "item" : "items"} cancelled`,
-        );
+        await cancelGoalAndSweep({
+          location: status,
+          ledger,
+          store,
+          goalId,
+          actor,
+          env: process.env,
+          print: (line) => console.log(line),
+        });
       });
     });
 

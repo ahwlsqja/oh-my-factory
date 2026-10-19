@@ -6,7 +6,7 @@ import { createDockerRuntime, dockerEnv, resolveDockerConfig } from "../../src/c
 import { pinnedImage } from "../../src/container/image-ref.js";
 import { RuntimeError } from "../../src/container/runtime.js";
 import { type ImageId, containerName } from "../../src/container/spec.js";
-import { FIXTURE_RUN_ID, SUT_BASE, labelsFor, specFor } from "../helpers/container-fixture.js";
+import { FIXTURE_RUN_ID, FIXTURE_WORK_ID, SUT_BASE, labelsFor, specFor } from "../helpers/container-fixture.js";
 import { FakeDocker, fakeDockerBin, verbOf } from "../helpers/fake-docker.js";
 import { addImage, addRegistryImage } from "../helpers/fake-docker-core.mjs";
 import { fakeRuntime } from "../helpers/fake-runtime.js";
@@ -199,6 +199,7 @@ describe("listOwned and removeImage through the real adapter", () => {
       kind: "container",
       name: handle.name,
       run_id: FIXTURE_RUN_ID,
+      work_id: FIXTURE_WORK_ID,
     });
     expect(await runtime.listOwned({ run_id: "some-other-run" })).toEqual([]);
     await runtime.remove(handle);
@@ -211,8 +212,8 @@ describe("listOwned and removeImage through the real adapter", () => {
     addImage(fake.state, "omf-harness:0123456789ab", { labels: { "omf.owner": "omf" } });
     const runtime = fakeRuntime(fake);
     expect(await runtime.listOwned({ run_id: null })).toEqual([
-      { kind: "image", name: "omf-sut:run-9-2", run_id: "run-9" },
-      { kind: "image", name: "omf-harness:0123456789ab", run_id: "" },
+      { kind: "image", name: "omf-sut:run-9-2", run_id: "run-9", work_id: "" },
+      { kind: "image", name: "omf-harness:0123456789ab", run_id: "", work_id: "" },
     ]);
     await runtime.removeImage("omf-sut:run-9-2" as ImageId);
     expect((await runtime.listOwned({ run_id: "run-9" })).length).toBe(0);

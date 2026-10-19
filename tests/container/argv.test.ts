@@ -197,7 +197,7 @@ describe("listing and image removal", () => {
       "--filter",
       "label=omf.owner=omf",
       "--format",
-      '{{.Names}}\t{{.Label "omf.run"}}',
+      '{{.Names}}\t{{.Label "omf.run"}}\t{{.Label "omf.work"}}',
     ]);
     expect(listOwnedArgv("container", "run-1", null)).toEqual([
       "ps",
@@ -207,7 +207,7 @@ describe("listing and image removal", () => {
       "--filter",
       "label=omf.run=run-1",
       "--format",
-      '{{.Names}}\t{{.Label "omf.run"}}',
+      '{{.Names}}\t{{.Label "omf.run"}}\t{{.Label "omf.work"}}',
     ]);
     expect(listOwnedArgv("image", null, "ctx")).toEqual([
       "--context",

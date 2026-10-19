@@ -38,7 +38,7 @@ function containerSweeps(runtime: ContainerRuntime): {
       async run(ctx) {
         seen = { itemDir: ctx.item.dir, runId: ctx.runId };
         try {
-          await sweepOrphans({ runtime, itemDir: ctx.item.dir, currentRunId: ctx.runId });
+          await sweepOrphans({ runtime, itemDir: ctx.item.dir, currentRunId: ctx.runId, workId: ctx.workId });
         } catch {
           // the next run sweeps again
         }

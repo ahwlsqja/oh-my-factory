@@ -319,14 +319,14 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
       const name = await requireLocal();
       const resources: OwnedResource[] = [];
       for (const line of (await succeed(listOwnedArgv("container", filter.run_id, name), META_MS)).split("\n")) {
-        const [containerName, runId = ""] = line.trim().split("\t");
-        if (containerName) resources.push({ kind: "container", name: containerName, run_id: runId });
+        const [containerName, runId = "", workId = ""] = line.trim().split("\t");
+        if (containerName) resources.push({ kind: "container", name: containerName, run_id: runId, work_id: workId });
       }
       for (const line of (await succeed(listOwnedArgv("image", null, name), META_MS)).split("\n")) {
         const tag = line.trim();
         if (!tag || tag.startsWith("<none>")) continue;
         const run = /^omf-sut:(.+)-\d+$/.exec(tag)?.[1] ?? "";
-        if (filter.run_id === null || run === filter.run_id) resources.push({ kind: "image", name: tag, run_id: run });
+        if (filter.run_id === null || run === filter.run_id) resources.push({ kind: "image", name: tag, run_id: run, work_id: "" });
       }
       return resources;
     },

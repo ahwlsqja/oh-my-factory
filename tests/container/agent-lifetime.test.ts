@@ -77,11 +77,10 @@ describe("agent container lifetime", () => {
     expect(argv).not.toContain("2147483647");
   });
 
-  // Paired with the author lifetime in the same test, so the test is red on the code before the lifetime existed.
+  // A negative guard: green before the lifetime existed, kept so the judge containers keep their idle sleep.
   it.each(["sut", "harness", "workcopy"] as const)(
-    "leaves the %s idle sleep as it was while the author's is bounded",
+    "negative guard: the %s idle sleep stays 2147483647",
     (role) => {
-      expect(tail(createArgv(specFor("author"), "ctx")).at(-1)).toBe("765");
       expect(tail(createArgv(specFor(role), "ctx")).at(-1)).toBe("2147483647");
     },
   );

@@ -28,6 +28,8 @@ export interface OwnedResource {
   kind: "container" | "image";
   name: string;
   run_id: string;
+  /** The container's `omf.work` label: the work item it belongs to. Empty for an image, which carries none. */
+  work_id: string;
 }
 
 /**

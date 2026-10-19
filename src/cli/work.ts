@@ -574,12 +574,13 @@ export function registerWorkCommands(program: Command): void {
       const status = requireProject(process.cwd());
       const actor = humanActor(status.repo);
       const result = runVeto(status, workId, actor, options.reason);
-      // The vetoed item will never reach another station, so a container of a killed run would stay for ever without this.
-      await sweepItemBestEffort(status, workId, process.env);
       console.log(`vetoed ${workId} (was ${result.previous})`);
       if (result.claim.held) {
         const pid = result.claim.owner === null ? "unknown" : String(result.claim.owner.pid);
         console.log(`note: a run holds the claim (pid ${pid}); it stops when it re-reads the item at its next station`);
       }
+      // After the print, so a daemon that never answers cannot hide the recorded veto. The vetoed item will never reach
+      // another station, so a container of a killed run would stay for ever without this.
+      await sweepItemBestEffort(status, workId, process.env);
     });
 }

@@ -89,9 +89,12 @@ export async function runVerb(workId: string, json: boolean): Promise<ExitCode> 
   try {
     result = await runLine({ location, workId, stations: line.stations, onLineEnd: line.onLineEnd });
   } catch (err) {
+    // Whatever the line threw before a run existed (a refusal of beginRun, a guard refusal of assertLineSafe): no station ran,
+    // so no station sweep did, and a container of a killed run is removed here, before the error reaches the person. The claim
+    // is not held by this process any more; a live run elsewhere keeps its own containers (sweepItemOrphans).
+    await sweepItemBestEffort(location, workId, process.env, runtime);
     // beginRun's refusals (claim_held, wrong_state, needs_human, governance, malformed) carry a code and a message built from ids.
     if (err instanceof WError) {
-      await sweepItemBestEffort(location, workId, process.env, runtime);
       console.error(`run refused: ${err.message}`);
       return err.code === "needs_human" ? EXIT.waiting : EXIT.cannotRun;
     }
@@ -99,6 +102,8 @@ export async function runVerb(workId: string, json: boolean): Promise<ExitCode> 
   } finally {
     await line.onLineEnd();
   }
+  // A line that ended aborted before S1 ran (the entry recheck, a lost claim) never reached a station's own sweep either.
+  if (result.kind === "aborted" && result.at === "S1") await sweepItemBestEffort(location, workId, process.env, runtime);
   const code = exitForLine(result);
   if (json) {
     console.log(JSON.stringify(summaryOf(result, order.item.dir, code), null, 2));

@@ -214,7 +214,8 @@ export function listOwnedArgv(kind: "container" | "image", runId: string | null,
     return [...contextArgs(context), "image", "ls", ...owner, "--format", "{{.Repository}}:{{.Tag}}"];
   }
   const run = runId === null ? [] : ["--filter", `label=omf.run=${runId}`];
-  return [...contextArgs(context), "ps", "--all", ...owner, ...run, "--format", '{{.Names}}\t{{.Label "omf.run"}}'];
+  const format = '{{.Names}}\t{{.Label "omf.run"}}\t{{.Label "omf.work"}}';
+  return [...contextArgs(context), "ps", "--all", ...owner, ...run, "--format", format];
 }
 
 /** Removes one OMF round image or harness image by tag, or any local image by id. Never a base image by tag. */

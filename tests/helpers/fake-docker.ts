@@ -48,6 +48,8 @@ export class FakeDocker {
   readonly state: FakeState;
   /** Answers a call instead of the daemon (a timeout, a missing binary); null lets the daemon answer. */
   intercept: ((argv: readonly string[]) => ProcessResult | null) | null = null;
+  /** Awaited before a call is answered: a test that holds a call open (a killed process never gets its answer) returns a pending promise. */
+  gate: ((argv: readonly string[]) => Promise<void> | null) | null = null;
   private readonly hooks: FakeHooks;
 
   constructor(options: FakeDockerOptions = {}) {
@@ -59,6 +61,7 @@ export class FakeDocker {
   }
 
   readonly run: FakeRunner = async (argv, options) => {
+    await this.gate?.(argv);
     const answer = this.intercept?.(argv) ?? null;
     if (answer !== null) {
       this.state.calls.push({ argv: [...argv], context: null, stdin_b64: null });

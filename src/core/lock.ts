@@ -12,7 +12,7 @@ export interface LockOwner {
  * A lock file with no readable owner is presumed mid-write for this long. A guard file is held for
  * microseconds. Both stay well inside withLockSync's default 2s wait, so a crash heals within one wait.
  */
-const UNREADABLE_GRACE_MS = 1000;
+export const UNREADABLE_GRACE_MS = 1000;
 const RECLAIM_GUARD_STALE_MS = 1000;
 
 export class LockHeldError extends Error {

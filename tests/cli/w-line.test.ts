@@ -97,9 +97,9 @@ describe("assembleLine container sweeps", () => {
   it("removes what a killed earlier run and a killed seal pass left, at the start, even when the line stops before S3 creates anything", async () => {
     const { jl, location, workId } = await sealed();
     jl.fake.state.containers = {};
-    const implementer = plantOwnedContainer(jl.fake.state, "implementer", EARLIER);
-    const author = plantOwnedContainer(jl.fake.state, "author", EARLIER);
-    const sut = plantOwnedContainer(jl.fake.state, "sut", EARLIER);
+    const implementer = plantOwnedContainer(jl.fake.state, "implementer", EARLIER, workId);
+    const author = plantOwnedContainer(jl.fake.state, "author", EARLIER, workId);
+    const sut = plantOwnedContainer(jl.fake.state, "sut", EARLIER, workId);
     expect(names(jl)).toEqual([author, implementer, sut].sort());
     const line = assembleLine({ location, runtime: jl.runtime, env: {} });
     // The project has no [implementer] image: the real S3 stops the line before it touches a container.
@@ -111,8 +111,8 @@ describe("assembleLine container sweeps", () => {
   it("leaves an author container alone while an omf seal holds seal.lock", async () => {
     const { jl, location, workId } = await sealed();
     jl.fake.state.containers = {};
-    const author = plantOwnedContainer(jl.fake.state, "author", EARLIER);
-    const implementer = plantOwnedContainer(jl.fake.state, "implementer", EARLIER);
+    const author = plantOwnedContainer(jl.fake.state, "author", EARLIER, workId);
+    const implementer = plantOwnedContainer(jl.fake.state, "implementer", EARLIER, workId);
     const lock = sealLockFile(jl.l.f.item.dir);
     acquireLock(lock);
     try {
@@ -135,7 +135,7 @@ describe("assembleLine container sweeps", () => {
       S3: {
         id: "S3" as const,
         run: () => {
-          plantOwnedContainer(jl.fake.state, "implementer", THIS_RUN);
+          plantOwnedContainer(jl.fake.state, "implementer", THIS_RUN, workId);
           return { kind: "blocked" as const, reason_code: "infra_failure" as const };
         },
       },

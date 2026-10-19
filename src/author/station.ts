@@ -110,6 +110,7 @@ export async function sweepAuthorOrphans(input: {
   runtime: Pick<ContainerRuntime, "listOwned" | "remove">;
   itemDir: string;
   currentPassId: string;
+  workId: string;
 }): Promise<number> {
   const runsDir = join(input.itemDir, "runs");
   const earlier = new Set(existsSync(runsDir) ? readdirSync(runsDir) : []);
@@ -117,6 +118,7 @@ export async function sweepAuthorOrphans(input: {
   let removed = 0;
   for (const resource of await input.runtime.listOwned({ run_id: null })) {
     if (resource.kind !== "container" || !resource.name.startsWith("omf-author-")) continue;
+    if (resource.work_id !== input.workId) continue;
     if (!earlier.has(resource.run_id)) continue;
     try {
       assertName(resource.name);
@@ -221,7 +223,7 @@ export async function sealItem(deps: SealItemDeps): Promise<SealPassResult> {
   const scope: DecisionScope = { goal_id: item.front.goal_id, work_id: item.front.work_id };
   const passId = newRunId(now());
   // Before any other check, so a pass killed after its container exists is cleaned up by the next seal whatever it answers.
-  await sweepItemOrphans({ runtime, itemDir: item.dir, currentPassId: passId });
+  await sweepItemOrphans({ runtime, itemDir: item.dir, currentPassId: passId, workId });
   const stateEnv = locationEnv(location);
   try {
     assertLineSafe(location, stateEnv);
@@ -246,7 +248,7 @@ export async function sealItem(deps: SealItemDeps): Promise<SealPassResult> {
   // sweep, count the cap against the ledger as it is now, then take the call. A pass that never gets here spends nothing.
   const beforeAuthorRun = async (info: { round: number }): Promise<BeforeAuthorRun> => {
     try {
-      await sweepAuthorOrphans({ runtime, itemDir: item.dir, currentPassId: passId });
+      await sweepAuthorOrphans({ runtime, itemDir: item.dir, currentPassId: passId, workId });
       const current = ledger.readVerified();
       callsBefore = authorCallsUsed(current, scope);
       round = info.round;

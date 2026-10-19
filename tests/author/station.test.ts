@@ -247,7 +247,7 @@ describe("sealItem", () => {
       ),
     ).rejects.toThrow(/host killed/);
     const killed = String(ledgerEvents(l.f.fx, "author.session_started")[0]?.payload.pass_id);
-    runtime.owned = [{ kind: "container", name: `omf-author-${killed}-1-1`, run_id: killed }];
+    runtime.owned = [{ kind: "container", name: `omf-author-${killed}-1-1`, run_id: killed, work_id: l.f.workId }];
     expect(await sealItem(deps())).toEqual({ status: "refused", code: "author_call_cap" });
     expect(runtime.owned).toEqual([]);
   });
@@ -255,14 +255,15 @@ describe("sealItem", () => {
   describe("author orphans of a killed pass", () => {
     // A pass killed after its container exists leaves a container with the omf.owner label and the pass's name, and the pass marker.
     const KILLED = "r-20261001T080000Z-dddd";
-    const orphan = (): { kind: "container"; name: string; run_id: string } => ({
+    const orphan = (l: LineFixture): { kind: "container"; name: string; run_id: string; work_id: string } => ({
       kind: "container",
       name: `omf-author-${KILLED}-1-1`,
       run_id: KILLED,
+      work_id: l.f.workId,
     });
     const plant = (l: LineFixture, runtime: MemoryRuntime): void => {
       mkdirSync(join(l.f.item.dir, "runs", KILLED), { recursive: true });
-      runtime.owned = [orphan()];
+      runtime.owned = [orphan(l)];
     };
 
     it("is removed by the next seal that runs the author", async () => {
@@ -310,7 +311,7 @@ describe("sealItem", () => {
       acquireLock(lock);
       try {
         expect(await sealItem(deps())).toEqual({ status: "blocked", route: "J7", code: "seal_in_progress" });
-        expect(runtime.owned).toEqual([orphan()]);
+        expect(runtime.owned).toEqual([orphan(l)]);
       } finally {
         releaseLock(lock);
       }
@@ -321,7 +322,7 @@ describe("sealItem", () => {
     it("leaves another item's author container alone", async () => {
       const { l, runtime, deps } = rig();
       plant(l, runtime);
-      runtime.owned.push({ kind: "container", name: `omf-author-${OTHER_ITEM}-1-1`, run_id: OTHER_ITEM });
+      runtime.owned.push({ kind: "container", name: `omf-author-${OTHER_ITEM}-1-1`, run_id: OTHER_ITEM, work_id: "w-other0000000" });
       await sealItem(deps());
       expect(runtime.owned.map((resource) => resource.run_id)).toEqual([OTHER_ITEM]);
     });
@@ -469,10 +470,10 @@ describe("sealItem", () => {
     const r = rig();
     mkdirSync(join(r.l.f.item.dir, "runs", EARLIER), { recursive: true });
     r.runtime.owned = [
-      { kind: "container", name: `omf-author-${EARLIER}-1-1`, run_id: EARLIER },
-      { kind: "container", name: `omf-implementer-${EARLIER}-1-2`, run_id: EARLIER },
-      { kind: "container", name: `omf-sut-${EARLIER}-1-3`, run_id: EARLIER },
-      { kind: "container", name: `omf-author-${OTHER_ITEM}-1-1`, run_id: OTHER_ITEM },
+      { kind: "container", name: `omf-author-${EARLIER}-1-1`, run_id: EARLIER, work_id: r.l.f.workId },
+      { kind: "container", name: `omf-implementer-${EARLIER}-1-2`, run_id: EARLIER, work_id: r.l.f.workId },
+      { kind: "container", name: `omf-sut-${EARLIER}-1-3`, run_id: EARLIER, work_id: r.l.f.workId },
+      { kind: "container", name: `omf-author-${OTHER_ITEM}-1-1`, run_id: OTHER_ITEM, work_id: "w-other0000000" },
     ];
     expect((await sealItem(r.deps())).status).toBe("sealed");
     expect(r.runtime.owned.map((resource) => resource.name).sort()).toEqual(
@@ -484,8 +485,8 @@ describe("sealItem", () => {
     const r = rig();
     mkdirSync(join(r.l.f.item.dir, "runs", EARLIER), { recursive: true });
     r.runtime.owned = [
-      { kind: "container", name: `omf-author-${EARLIER}-1-1`, run_id: EARLIER },
-      { kind: "container", name: `omf-implementer-${EARLIER}-1-2`, run_id: EARLIER },
+      { kind: "container", name: `omf-author-${EARLIER}-1-1`, run_id: EARLIER, work_id: r.l.f.workId },
+      { kind: "container", name: `omf-implementer-${EARLIER}-1-2`, run_id: EARLIER, work_id: r.l.f.workId },
     ];
     claimItem(r.l.f.item.dir);
     try {
@@ -499,7 +500,7 @@ describe("sealItem", () => {
   it("stops at J7 and sweeps nothing while another seal pass holds seal.lock", async () => {
     const r = rig();
     mkdirSync(join(r.l.f.item.dir, "runs", EARLIER), { recursive: true });
-    r.runtime.owned = [{ kind: "container", name: `omf-author-${EARLIER}-1-1`, run_id: EARLIER }];
+    r.runtime.owned = [{ kind: "container", name: `omf-author-${EARLIER}-1-1`, run_id: EARLIER, work_id: r.l.f.workId }];
     const lock = sealLockFile(r.l.f.item.dir);
     acquireLock(lock);
     try {

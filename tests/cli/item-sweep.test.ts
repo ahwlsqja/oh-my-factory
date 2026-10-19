@@ -1,16 +1,22 @@
-import { mkdirSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createMarkdownStore } from "../../src/adapters/state-markdown.js";
+import { cancelGoalAndSweep } from "../../src/cli/goal.js";
 import { runVeto } from "../../src/cli/work.js";
+import { findWorkItem } from "../../src/adapters/state-markdown.js";
+import { Ledger } from "../../src/core/ledger.js";
+import { claimFile } from "../../src/work/claim.js";
 import { acquireLock, releaseLock, sealLockFile } from "../../src/core/lock.js";
 import { cancelGoal } from "../../src/goal/lifecycle.js";
 import { claimItem, releaseItem } from "../../src/work/claim.js";
-import { omf } from "../helpers/cli.js";
+import { CLI, harnessEnv, omf } from "../helpers/cli.js";
+import { appendEscalation } from "../helpers/loop-events.js";
 import { type FakeDockerBin, fakeDockerBin, plantOwnedContainer, verbOf } from "../helpers/fake-docker.js";
 import { type LineFixture, setupLine } from "../helpers/line-fixture.js";
-import { AUTHOR_KEY, configureSeal } from "../helpers/seal-cli.js";
-import { gitIn } from "../helpers/tmp.js";
+import { AUTHOR_KEY, configureSeal, plantStandingSeal } from "../helpers/seal-cli.js";
+import { gitIn, makeTempDir } from "../helpers/tmp.js";
 
 const KILLED = "r-20261001T080000Z-dddd";
 const LISTING = ["context inspect", "ps", "image ls"];
@@ -50,7 +56,7 @@ const veto = (l: LineFixture): void => {
 };
 
 describe("an implementer container of a killed run on an item that is vetoed", () => {
-  it("is removed by the next omf seal; the sweep lists once and removes exactly it", () => {
+  it("the next omf seal removes it: only the listing and the planted removal are allowed", () => {
     const l = setupLine();
     configureSeal(l);
     const bin = fakeDockerBin();
@@ -63,7 +69,7 @@ describe("an implementer container of a killed run on an item that is vetoed", (
     expect(names(bin)).toEqual([]);
   });
 
-  it("is removed by the next omf run, which is refused before its first station", () => {
+  it("the next omf run, refused before its first station, removes it: only the listing and the planted removal are allowed", () => {
     const l = setupLine();
     configureSeal(l);
     const bin = fakeDockerBin();
@@ -75,7 +81,7 @@ describe("an implementer container of a killed run on an item that is vetoed", (
     expect(names(bin)).toEqual([]);
   });
 
-  it("is removed by omf veto itself", () => {
+  it("omf veto itself removes it: only the listing and the planted removal are allowed", () => {
     const l = setupLine();
     configureSeal(l);
     const bin = fakeDockerBin();
@@ -87,7 +93,7 @@ describe("an implementer container of a killed run on an item that is vetoed", (
     expect(names(bin)).toEqual([]);
   });
 
-  it("is removed after the goal was cancelled, by the next omf seal and the next omf run", () => {
+  it("after the goal was cancelled the next omf seal and omf run remove it: only the listing and the planted removal are allowed", () => {
     const l = setupLine();
     configureSeal(l);
     const bin = fakeDockerBin();
@@ -108,7 +114,7 @@ describe("an implementer container of a killed run on an item that is vetoed", (
     expect(names(bin)).toEqual([]);
   });
 
-  it("is kept while a live process holds the claim, and an author orphan with a free seal.lock goes in the same sweep", () => {
+  it("stays while a live process holds the claim and the author orphan goes in the same sweep: only the listing and the planted removals are allowed", () => {
     const l = setupLine();
     configureSeal(l);
     const bin = fakeDockerBin();
@@ -136,7 +142,7 @@ describe("an implementer container of a killed run on an item that is vetoed", (
 });
 
 describe("omf run refused before S1 sweeps the item's orphans", () => {
-  it("removes an author orphan when GATE-1 is failing and seal.lock is free; the implementer orphan goes with it", () => {
+  it("omf run refused at GATE-1 removes the author orphan with a free seal.lock and the implementer orphan: only the listing and the planted removals are allowed", () => {
     const l = setupLine({ decisions: false });
     configureSeal(l);
     const bin = fakeDockerBin();
@@ -152,7 +158,7 @@ describe("omf run refused before S1 sweeps the item's orphans", () => {
     expect(names(bin)).toEqual([]);
   });
 
-  it("keeps the author orphan while seal.lock is held and removes the implementer orphan", () => {
+  it("omf run refused at GATE-1 keeps the author orphan while seal.lock is held and removes the implementer orphan: only the listing and the planted removal are allowed", () => {
     const l = setupLine({ decisions: false });
     configureSeal(l);
     const bin = fakeDockerBin();
@@ -168,6 +174,170 @@ describe("omf run refused before S1 sweeps the item's orphans", () => {
       expect(names(bin)).toEqual([author]);
     } finally {
       releaseLock(sealLockFile(l.f.item.dir));
+    }
+  });
+});
+
+describe("omf run sweeps on every error outcome", () => {
+  it("a sealed-material guard refusal removes the author and implementer orphans before it is printed", async () => {
+    const l = setupLine();
+    configureSeal(l);
+    await plantStandingSeal(l, { measured: true });
+    const bin = fakeDockerBin();
+    plantKilled(l, bin, "author");
+    bin.update((state) => {
+      plantOwnedContainer(state, "implementer", KILLED, l.f.workId);
+    });
+    expect(names(bin)).toHaveLength(2);
+    mkdirSync(join(l.f.fx.repo, "goals"), { recursive: true });
+    writeFileSync(join(l.f.fx.repo, "goals", "m-latency.lock.json"), "{}\n");
+    const { out, verbs } = command(bin, () => cli(l, bin, ["run", l.f.workId]));
+    expect(out.code).not.toBe(0);
+    expect(out.stderr).toMatch(/sealed material/);
+    expect(verbs).toEqual([...LISTING, "rm", "rm"]);
+    expect(names(bin)).toEqual([]);
+  });
+
+  it("a finished goal refuses the run with goal_stopped and still removes both orphans", async () => {
+    const l = setupLine();
+    configureSeal(l);
+    await plantStandingSeal(l, { measured: true });
+    appendEscalation(l.f.fx.ledger, l.f.fx.goalId, "J6", "no_progress");
+    const bin = fakeDockerBin();
+    plantKilled(l, bin, "author");
+    bin.update((state) => {
+      plantOwnedContainer(state, "implementer", KILLED, l.f.workId);
+    });
+    const { out, verbs } = command(bin, () => cli(l, bin, ["run", l.f.workId]));
+    expect(out.code).toBe(2);
+    expect(out.stderr).toContain("goal_stopped");
+    expect(verbs).toEqual([...LISTING, "rm", "rm"]);
+    expect(names(bin)).toEqual([]);
+  });
+});
+
+describe("a claim.lock nobody can read", () => {
+  const unreadableClaim = (l: LineFixture, mtimeMs: number): void => {
+    const file = claimFile(l.f.item.dir);
+    writeFileSync(file, "");
+    utimesSync(file, mtimeMs / 1000, mtimeMs / 1000);
+  };
+
+  it("older than the grace no longer shields an implementer orphan from the next omf seal after a veto", () => {
+    const l = setupLine();
+    configureSeal(l);
+    const bin = fakeDockerBin();
+    plantKilled(l, bin, "implementer");
+    veto(l);
+    unreadableClaim(l, Date.now() - 3_600_000);
+    const { out, verbs } = command(bin, () => cli(l, bin, ["seal", l.f.workId], { OMF_AUTHOR_API_KEY: AUTHOR_KEY }));
+    expect(out.code).toBe(2);
+    expect(verbs).toEqual([...LISTING, "rm"]);
+    expect(names(bin)).toEqual([]);
+  });
+
+  it("younger than the grace still shields it: only the listing is allowed", () => {
+    const l = setupLine();
+    configureSeal(l);
+    const bin = fakeDockerBin();
+    const implementer = plantKilled(l, bin, "implementer");
+    veto(l);
+    unreadableClaim(l, Date.now() + 3_600_000);
+    const { out, verbs } = command(bin, () => cli(l, bin, ["seal", l.f.workId], { OMF_AUTHOR_API_KEY: AUTHOR_KEY }));
+    expect(out.code).toBe(2);
+    expect(verbs).toEqual(LISTING);
+    expect(names(bin)).toEqual([implementer]);
+  });
+});
+
+describe("omf goal cancel and omf veto print first and sweep afterwards", () => {
+  it("cancelGoalAndSweep prints its result before the first docker call and then removes the orphans of the cancelled items", async () => {
+    const l = setupLine();
+    configureSeal(l);
+    const bin = fakeDockerBin();
+    plantKilled(l, bin, "author");
+    bin.update((state) => {
+      plantOwnedContainer(state, "implementer", KILLED, l.f.workId);
+    });
+    const before = bin.state().calls.length;
+    const callsWhenPrinted: number[] = [];
+    const printed: string[] = [];
+    const result = await cancelGoalAndSweep({
+      location: l.f.fx.location,
+      ledger: new Ledger(l.f.fx.location.dir),
+      store: createMarkdownStore(l.f.fx.location.dir),
+      goalId: l.f.fx.goalId,
+      actor: "human:dev",
+      env: { PATH: bin.path, HOME: l.f.fx.home },
+      print: (line) => {
+        printed.push(line);
+        callsWhenPrinted.push(bin.state().calls.length - before);
+      },
+    });
+    expect(result.cancelled).toEqual([l.f.workId]);
+    expect(printed).toHaveLength(1);
+    expect(printed[0]).toContain(`cancelled ${l.f.fx.goalId}`);
+    expect(callsWhenPrinted).toEqual([0]);
+    expect(
+      bin
+        .state()
+        .calls.slice(before)
+        .map((call) => verbOf(call.argv)),
+    ).toEqual([...LISTING, "rm", "rm"]);
+    expect(names(bin)).toEqual([]);
+  });
+
+  it("omf veto records and prints the veto even when the docker daemon never answers the listing", async () => {
+    const l = setupLine();
+    configureSeal(l);
+    gitIn(l.f.fx.repo, "config", "user.email", "dev@example.com");
+    const bin = fakeDockerBin();
+    const hangDir = makeTempDir("omf-hang-docker-");
+    const pidFile = join(hangDir, "ps.pid");
+    const wrapper = join(hangDir, "docker");
+    writeFileSync(
+      wrapper,
+      [
+        "#!/bin/sh",
+        'for arg in "$@"; do',
+        `  if [ "$arg" = ps ]; then echo $$ > '${pidFile}'; exec sleep 600; fi`,
+        "done",
+        `exec '${join(bin.dir, "docker")}' "$@"`,
+        "",
+      ].join("\n"),
+    );
+    chmodSync(wrapper, 0o755);
+    const child = spawn(process.execPath, [CLI, "veto", l.f.workId], {
+      cwd: l.f.fx.repo,
+      env: harnessEnv(l.f.fx.home, { PATH: `${hangDir}:${bin.path}` }),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const killOnce = (pid: number): void => {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        // already gone
+      }
+    };
+    try {
+      const printed = await new Promise<string>((resolve, reject) => {
+        let seen = "";
+        const timer = setTimeout(() => reject(new Error(`no veto line before the timeout: ${seen}`)), 20_000);
+        child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+          seen += chunk;
+          if (seen.includes(`vetoed ${l.f.workId}`)) {
+            clearTimeout(timer);
+            resolve(seen);
+          }
+        });
+        child.on("exit", () => reject(new Error(`omf veto ended before it printed: ${seen}`)));
+      });
+      expect(printed).toContain(`vetoed ${l.f.workId} (was ready)`);
+      expect(findWorkItem(l.f.fx.location.dir, l.f.workId)?.front.state).toBe("vetoed");
+      expect(child.exitCode).toBeNull();
+    } finally {
+      if (child.pid !== undefined) killOnce(child.pid);
+      if (existsSync(pidFile)) killOnce(Number(readFileSync(pidFile, "utf8").trim()));
     }
   });
 });

@@ -1,13 +1,15 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { ContainerRuntime } from "./runtime.js";
 import { assertName } from "./spec.js";
-import { isLockHeld, sealLockFile } from "../core/lock.js";
-import { claimStatus } from "../work/claim.js";
+import { UNREADABLE_GRACE_MS, isLockHeld, sealLockFile } from "../core/lock.js";
+import { claimFile, claimStatus } from "../work/claim.js";
 
 interface ItemSweepInput {
   runtime: Pick<ContainerRuntime, "listOwned" | "remove">;
   itemDir: string;
+  /** The item's id: a run id is only unique to the second, so a container counts only when its `omf.work` label is this item. */
+  workId: string;
   /** The pass of the calling `omf seal`, whose marker may already exist; never selected. */
   currentPassId?: string;
 }
@@ -36,7 +38,7 @@ export async function sweepItemOrphans(
     if (!free.author && !free.implementer) return 0;
     let removed = 0;
     for (const resource of await input.runtime.listOwned({ run_id: null })) {
-      if (resource.kind !== "container" || !earlier.has(resource.run_id)) continue;
+      if (resource.kind !== "container" || resource.work_id !== input.workId || !earlier.has(resource.run_id)) continue;
       const role = resource.name.startsWith("omf-author-")
         ? "author"
         : resource.name.startsWith("omf-implementer-")
@@ -57,16 +59,23 @@ export async function sweepItemOrphans(
   }
 }
 
-/** A claim that cannot be read counts as held: the sweep keeps what it cannot prove orphaned. */
+/**
+ * Whether the sweep must treat the claim as held. A claim whose owner is readable is held while that process lives. A claim with
+ * no readable owner counts as held only for the grace `isLockHeld` gives a lock file mid-write; an older one is not held for
+ * the sweep. `claimStatus` itself is unchanged: such a claim still keeps the item unrunnable until it is removed by hand.
+ * Any other failure to read it counts as held: the sweep keeps what it cannot prove orphaned.
+ */
 function claimHeld(itemDir: string): boolean {
   try {
-    return claimStatus(itemDir).held;
+    const status = claimStatus(itemDir);
+    if (!status.held) return false;
+    if (status.owner !== null) return true;
+    try {
+      return Date.now() - statSync(claimFile(itemDir)).mtimeMs <= UNREADABLE_GRACE_MS;
+    } catch {
+      return false;
+    }
   } catch {
     return true;
   }
-}
-
-/** `sweepItemOrphans` for the author role only. */
-export function sweepItemAuthorOrphans(input: ItemSweepInput): Promise<number> {
-  return sweepItemOrphans({ ...input, roles: ["author"] });
 }
