@@ -7,6 +7,7 @@ import {
   createGoal,
   goalTemplate,
   parseGoal,
+  placeholdersIn,
   readGoal,
   referencedMetrics,
   semanticHash,
@@ -19,6 +20,64 @@ describe("goal.md", () => {
     expect(doc.front.goal_id).toBe("g-fast-search");
     expect(doc.front.target).toEqual({ metric_id: "m-replace-me", operator: "<=", value: 0, unit: "ms" });
     expect(doc.body).toContain("## Approach");
+  });
+
+  it("guides the author through Why, Constraints and Done when under Approach, and explains the fields", () => {
+    const text = goalTemplate("g-fast-search");
+    const body = parseGoal(text).body;
+    expect(body).toMatch(/^## Approach\n/);
+    for (const heading of ["### Why", "### Constraints", "### Done when"]) expect(body).toContain(heading);
+    for (const word of ["mode", "kind", "state_source", "metrics_judged", "unit", "leading"]) {
+      expect(text).toMatch(new RegExp(`^\\s*#.*${word}`, "m"));
+    }
+    expect(text).toMatch(/^\s*#.*Placeholder/m);
+  });
+
+  it("labels each field as an OMF default the author may keep or a decision the author must make", () => {
+    const lines = goalTemplate("g-a").split("\n");
+    // The contiguous # note lines directly above the first line that starts with `key`.
+    const notesAbove = (key: string): string => {
+      const at = lines.findIndex((line) => line.trimStart().startsWith(`${key}:`));
+      expect(at, `${key} is in the template`).toBeGreaterThan(0);
+      const notes: string[] = [];
+      for (let i = at - 1; i >= 0 && (lines[i] ?? "").trimStart().startsWith("#"); i--) notes.unshift(lines[i] ?? "");
+      return notes.join("\n");
+    };
+    for (const key of ["value", "min_observation", "decision_rule"]) {
+      expect(notesAbove(key), key).toMatch(/Your decision/);
+      expect(notesAbove(key), key).not.toMatch(/OMF defaults you may keep/);
+    }
+    // The budget values share one note on the block, and operator sits with value's note.
+    expect(notesAbove("budget")).toMatch(/OMF defaults you may keep: the three budget values/);
+    expect(notesAbove("value")).toMatch(/operator/);
+    // Comments carry no value: stripping every YAML comment line leaves the J1 semantic hash unchanged.
+    const template = goalTemplate("g-a");
+    const end = template.indexOf("\n---", 4);
+    const stripped = `${template
+      .slice(0, end)
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("#"))
+      .join("\n")}${template.slice(end)}`;
+    expect(stripped).not.toBe(template);
+    expect(semanticHash(parseGoal(template).front)).toBe(semanticHash(parseGoal(stripped).front));
+  });
+
+  it("lists every placeholder a fresh goal still has, and none once they are replaced", () => {
+    const fresh = placeholdersIn(parseGoal(goalTemplate("g-a")));
+    expect(fresh).toHaveLength(6);
+    expect(fresh[0]).toMatch(/^metric id m-replace-me is a placeholder/);
+    const edited = goalTemplate("g-a")
+      .replace(/m-replace-me/g, "m-warnings")
+      .replace("Say what this goal is in a few words", "Fewer lint warnings")
+      .replace("The outcome you want, in plain words", "Keep the code base tidy")
+      .replace("Why moving the leading metrics should move the lagging ones", "Warnings hide real problems")
+      .replace(/Replace this line/g, "Write");
+    const unitLeft = placeholdersIn(parseGoal(edited));
+    expect(unitLeft).toHaveLength(1);
+    expect(unitLeft[0]).toMatch(/^target unit ms and value 0 are template defaults/);
+    const decided = edited.replace("value: 0", "value: 3").replace("unit: ms", "unit: warnings");
+    expect(placeholdersIn(parseGoal(decided))).toEqual([]);
+    expect(placeholdersIn(parseGoal(edited.replace("value: 0", "value: 200")))).toEqual([]);
   });
 
   it("rejects a file without front matter, invalid YAML, or a schema violation", () => {

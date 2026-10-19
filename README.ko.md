@@ -130,11 +130,11 @@ OMF 는 루프 두 개를 돌립니다.
 | `omf ledger verify [--json]` | 원장의 해시 체인을 확인합니다. 원장이 손상됐으면 stderr 둘째 줄에 경로, 줄 번호, 다음 행동이 나오고 `--json` 은 같은 내용을 필드로 냅니다. `--json` 의 오류는 모두 `{ "ok": false, "error": { "code": "...", "message": "..." } }` 형태입니다(code: `not_initialized`, `ledger_corrupt`, `not_a_git_repository`, `git_not_found`, `unsupported_repository`, `symlink_refused`, `cannot_run`). 키는 snake_case 입니다. `omf init` 전에는 종료 코드 2 입니다. |
 | `omf goal new <id>` | 템플릿으로 호스트 상태에 `goal.md` 를 만듭니다. |
 | `omf metric propose <id> --unit <u> -- <command>` | 지표를 제안합니다. 값을 출력하는 명령, 단위, 바뀌면 체제 변경(regime change)이 되는 경로를 적습니다. |
-| `omf goal audit <id>` | 목표, 잠금, 원장을 점검하고 체제 변경을 알려 줍니다. 아무것도 쓰지 않습니다. |
+| `omf goal audit <id>` | 목표, 잠금, 원장을 점검하고 체제 변경을 알려 주며, 아직 바꾸지 않은 템플릿 문구도 나열합니다(`--json` 의 `placeholders`). 아무것도 쓰지 않습니다. |
 | `omf goal approve <id>` | J1: 잠글 내용(지표와 그 관리 한계)을 보여 주고, 터미널에서 목표 id 를 직접 입력하면 승인합니다. |
 | `omf goal measure <id>` | 잠긴 지표를 실행하고(Docker, 또는 `--runner host` 로 호스트에서), 목표값까지의 차이와 관리 한계(control band)를 계산해 격차 보고서를 호스트 상태에 씁니다. |
 | `omf goal tick <id>` | 목표 루프를 한 바퀴 돕니다(명세 §4.4). 점검, 측정, 모델에게 작업 요청, 후보를 코드로 걸러 내기, 작업 항목 내보내기, 낡음과 루프 보호 장치 확인. 조정 모델이 필요합니다("목표 루프 돌리기" 참고). |
-| `omf goal status <id>` | 실행 상태(`running`, `blocked_on_user`, `failed`, `finish`, `cancelled`), 열린 에스컬레이션과 풀 수 있는 명령, 남은 라운드, 열린 작업 항목을 보여 줍니다. |
+| `omf goal status <id>` | 실행 상태(`running`, `blocked_on_user`, `failed`, `finish`, `cancelled`. 아직 초안이거나 재승인이 필요한 목표는 `running` 대신 그렇게 표시하고, 승인됐지만 아직 틱이 없는 목표도 그렇게 표시합니다), 열린 에스컬레이션과 풀 수 있는 명령, 남은 라운드, 열린 작업 항목을 보여 줍니다. |
 | `omf goal resume <id>` | J6 계속: 멈추게 한 원인을 고친 뒤, 터미널에서 확인을 입력하면 틱이 다시 돕니다. |
 | `omf goal cancel <id>` | J6 중지: 터미널에서 확인을 입력하면 목표와 열린 작업 항목을 모두 취소합니다. |
 | `omf budget show <id> [--json]` | 라운드, 공개, 벽시계 시간 예산의 선언값, 상향값, 사용량, 남은 양을 출력합니다. |
@@ -196,13 +196,22 @@ warning: claude not found on PATH (needed for: the implementer, the sealing auth
 
 ## 목표를 정하고 재기
 
+사람의 결정을 기록하는 명령(`omf metric propose`, `omf goal approve`, `omf goal resume`, `omf goal cancel`,
+`omf work approve`, `omf work veto`, `omf budget declare`, `omf budget raise`, `omf decide resolve`, `omf decide defer`)은 당신을 `human:<email>` 로
+기록합니다. 이메일은 저장소 안에서 `git config user.email` 이 돌려주는 값입니다. 먼저 설정해 두세요. 없으면
+명령이 멈추고 그렇게 안내합니다. 이 식별자는 명령 출력(확인 입력 줄 포함)에 나오고, 프로젝트의 `ledger.jsonl`
+과 `~/.omf`(또는 `OMF_HOME`) 아래 제안·잠금 파일, 작업 항목의 `item.md`(`approval` 필드)에 저장됩니다. 모두 당신의 기기 안입니다. OMF 는 이를 어디로도
+보내지 않습니다. 텔레메트리도 없고 공개되는 것도 없습니다. 출력, ledger 일부, 보고서를 이슈나 채팅에 붙이기
+전에는 주소를 가린 뒤 올리세요. 예를 들면 `human:you@example.com` 으로 바꿉니다. 비밀은 아니지만 개인정보입니다.
+그 밖에 빼야 할 것은 [`SECURITY.md`](SECURITY.md)(영어)를 보세요.
+
 ```console
 $ omf init
 initialized ~/.omf/projects/3186047891f1f0a0
 
 $ omf goal new g-demo
 created ~/.omf/projects/3186047891f1f0a0/goals/g-demo/goal.md
-edit it, propose its metrics with omf metric propose, then run omf goal audit g-demo
+edit it (the comments in the file explain each field), propose its metrics with omf metric propose, then run omf goal audit g-demo
 
 $ # goal.md 를 고칩니다: 목표 m-demo <= 5 ms, lagging: [m-demo]
 $ omf metric propose m-demo --unit ms -- sh -c 'echo 7'
@@ -217,7 +226,7 @@ goal g-demo: Say what this goal is in a few words
 objective: The outcome you want, in plain words
 target: m-demo <= 5 ms
 leading: none; lagging: m-demo; guardrails: none
-budget: 10 rounds, 72h wall time, at most 2 open work items
+budget: 10 rounds, 14d wall time, at most 2 open work items
 decision rule: target met for 2 consecutive measurements and no guardrail breach (minimum observation 7d)
 metric m-demo: ["sh","-c","echo 7"] -> ms; watches none
 bands m-demo: none (not monitored)
@@ -246,9 +255,22 @@ warning: measured on the host without isolation (--runner host)
 아니며, 이미 수정된 파일을 다시 수정해도 구별하지 못합니다. 그러므로 체크아웃을 편집하는 동안 측정한 값은 표시된
 리비전과 다를 수 있습니다.
 
+생성된 `goal.md` 는 front matter 안의 `#` 메모로 각 필드를 설명합니다. `## Approach` 아래에는 채울 소제목 셋
+(`### Why`, `### Constraints`, `### Done when`)이 있습니다. 이 섹션과 `objective` 만 모델에 보이므로("목표 루프 돌리기" 참고), 숫자나 지표 id 없이
+말로 쓰세요. `omf goal audit` 은 아직 바꾸지 않은 템플릿 문구(예: 자리표시자 지표 id `m-replace-me`)도 나열합니다.
+이 목록은 안내일 뿐 감사 결과를 바꾸지 않습니다.
+같은 목록이 `omf goal audit --json` 의 `placeholders` 필드입니다.
+템플릿의 `#` 메모는 OMF 기본값이라 그대로 둬도 되는 값(예산)과 직접 정해야 하는 값(목표값과 연산자, `min_observation`, `decision_rule`)도 구분해 둡니다.
+
 재승인 화면은 먼저 왜 필요한지 보여 줍니다. 잠금 문제, 체제 변경, 바뀐 감시 경로의 diff 입니다. 읽는 동안
 목표나 지표가 바뀌면 아무것도 승인되지 않습니다. 재승인은 예산을 바꾸지 않습니다. `goal.md` 의 라운드 수나
 벽시계 시간이 이미 적용된 값과 다르면 `omf goal approve` 가 거부하고, 늘리는 것은 별도 결정(J8)입니다.
+
+벽시계 시간은 첫 승인부터 흐르는 달력 시간이고, 성공 판정에는 최소 관찰 기간에 걸친 측정이 필요합니다. 그래서
+생성되는 `goal.md` 는 최소 관찰 7d 에 벽시계 시간 14d 를 짝지어 둡니다. 벽시계 시간을 최소 관찰 기간보다 길지
+않게 정하면 `omf goal audit` 과 승인 화면이 "예산이 끝나기 전에는 성공에 닿을 수 없다"고 경고합니다. 거부가
+아니라 경고입니다. 그대로 승인할 수 있고, 예산이 다 되면 `omf budget raise <id> wall_time <기간>` 으로 늘린 뒤
+`omf goal resume <id>` 로 이어 갑니다. 예산을 대신 늘리거나 경과 시간을 되돌리는 일은 없습니다.
 
 "지표 코드는 조용히 바뀌지 않습니다" 의 한계:
 
@@ -261,6 +283,121 @@ warning: measured on the host without isolation (--runner host)
 - `bands/<metric>.yaml` 은 목표와 함께 잠깁니다. 해시가 J1 승인에 들어가므로, 고치거나 새로 만들거나 지우면
   체제 변경입니다. 관리 한계가 잠기기 전에 승인한 목표는 다시 승인할 때까지 한계가 잠기지 않고, 승인 화면이
   그렇게 알려 줍니다.
+
+## Docker 없이 측정하기
+
+지표는 숫자를 출력하는 명령이면 무엇이든 됩니다. 정의, 승인, 측정에 Docker 가 필요 없습니다. 목표는 평소처럼
+터미널에서 승인하고, 측정할 때 `--runner host` 를 붙이면 됩니다. 이 예시는 임시 저장소와 측정 대상 도구로 Biome
+(이 프로젝트가 쓰는 린터)를 씁니다. 동작을 확인한 뒤 도구와 숫자를 본인 것으로 바꾸세요.
+
+**호스트 실행이란.** 명령은 지금 상태 그대로의 작업 트리(커밋하지 않은 수정 포함)에서 저장소 루트를 작업
+디렉터리로 실행되고, 환경 변수는 `PATH`, 쓰고 버리는 `HOME`, C 로케일뿐입니다. 격리가 없습니다(no isolation).
+사용자 권한으로 읽고 쓸 수 있는 것은 모두 할 수 있고 저장소를 바꾸는 것도 막지 못합니다. `omf goal measure
+--runner host` 는 실행할 때마다 stderr 에 이 사실을 알립니다. 직접 쓰거나 검토한 명령에만 쓰세요. 실행 중에 다른
+프로세스가 파일을 고치면 값도 따라 움직입니다.
+
+**계약.** 지표 명령은 stdout 의 마지막 비어 있지 않은 줄(last non-empty line)에 값을 숫자로만 출력해야 합니다
+(`3`, `0.25`, `-1`, `1e3`). 그 앞에 출력한 것은 무시하므로 사람이 읽는 요약을 먼저 찍어도 됩니다. 명령이 아무것도
+출력하지 않거나, 마지막 줄이 숫자가 아니거나, 0 이 아닌 코드로 끝나거나(exits non-zero), 2분을 넘기거나, 1 MiB 를
+넘게 출력하면 측정은 이유와 함께 실패하고 값은 기록되지 않습니다. 이때 `omf goal measure` 는 1 로 끝납니다. 도구를
+읽지 못한 스크립트는 짐작한 값을 찍지 말고 0 이 아닌 코드로 끝나야 합니다. 아래 스크립트는 Biome 에 대해서도 이 규칙을 따릅니다. Biome 가 0 이 아닌 코드로
+끝나면(예: 파일에 lint 오류가 있을 때) Biome 가 요약을 출력하더라도 스크립트는 1 로 끝나고 값을 보고하지 않습니다.
+오류를 먼저 고치세요. 오류가 있는 채로 센 warnings 값은 아무도 요청하지 않은 숫자입니다.
+
+**먼저 무엇을 잴지 정하세요.** Biome 는 warnings 와 infos 를 따로 셉니다. 보통의 `biome lint` 출력도 각각 한 줄씩
+(`Found N warnings.`, `Found N infos.`)으로 끝납니다. 서로 다른 양이므로 목표는 하나를 골라야 합니다. 아래
+스크립트는 warnings 를 세고 infos 는 무시합니다. infos 를 쫓으려면 `summary.infos` 를 읽고 지표 id 와 단위도 맞게
+바꾸세요. JSON 요약을 읽으면 사람용 텍스트를 파싱할 필요도 없습니다.
+
+새 디렉터리에 만드는 예시 파일입니다. 각 블록을 그대로 복사하면 됩니다.
+
+```json biome.json
+{
+  "linter": {
+    "rules": {
+      "style": { "useConst": "info" },
+      "suspicious": { "noVar": "warn" }
+    }
+  }
+}
+```
+
+```js src/app.js
+var a = 1;
+var c = 3;
+var d = 4;
+let b = 2;
+console.log(a, b, c, d);
+```
+
+```js scripts/count-biome-warnings.mjs
+import { spawnSync } from "node:child_process";
+
+const run = spawnSync(
+  "npx",
+  ["--no-install", "biome", "lint", "--max-diagnostics=none", "--reporter=json", "."],
+  { encoding: "utf8" },
+);
+if (run.error) {
+  console.error(`could not run biome: ${run.error.message}`);
+  process.exit(1);
+}
+if (run.status !== 0) {
+  console.error(`biome exited with ${run.status}; fix its errors first, no value is reported`);
+  process.exit(1);
+}
+let summary;
+try {
+  summary = JSON.parse(run.stdout).summary;
+} catch {
+  console.error("biome did not print a JSON summary");
+  process.exit(1);
+}
+if (!Number.isInteger(summary?.warnings) || !Number.isInteger(summary?.infos)) {
+  console.error("the biome summary has no warning and info counts");
+  process.exit(1);
+}
+console.log(`warnings: ${summary.warnings} (measured), infos: ${summary.infos} (ignored)`);
+console.log(summary.warnings);
+```
+
+준비(`git init`, `npm install --save-dev --save-exact @biomejs/biome@2.5.15` 로 Biome 추가, 위 파일 세 개 만들기)를 마치고, OMF 에
+맡기기 전에 스크립트부터 확인하세요. `npx biome lint .` 은 warnings 3, infos 1 을 보고해야 하고 스크립트는 `3` 으로
+끝나야 합니다. 파일은 커밋도 해 두세요. 감시하는 경로에 커밋하지 않은 변경이 있으면 J1 승인이 지표 잠금을
+거부합니다.
+
+```console
+$ node scripts/count-biome-warnings.mjs
+warnings: 3 (measured), infos: 1 (ignored)
+3
+```
+
+이제 목표를 정의합니다. `omf goal new g-biome-zero` 가 `goal.md` 를 만들면 target 을 `metric_id: m-biome-warnings`,
+`operator: "<="`, `value: 0`, `unit: warnings` 로, `lagging: [m-biome-warnings]` 로 고칩니다. 지표 id, 단위, target
+단위는 아래 모든 명령에서 같은 문자열이어야 합니다.
+
+```console
+$ omf init
+$ omf goal new g-biome-zero
+$ omf metric propose m-biome-warnings --unit warnings --watch scripts/count-biome-warnings.mjs --watch biome.json -- node scripts/count-biome-warnings.mjs
+$ omf goal audit g-biome-zero
+$ git add biome.json scripts src
+$ git -c user.email=dev@example.com -c user.name=Dev commit -m "Add the Biome fixture"
+$ omf goal approve g-biome-zero
+$ omf goal measure g-biome-zero --runner host
+```
+
+`omf goal approve` 는 터미널이 필요하고 목표 id 를 직접 입력해야 합니다. 여기서 대신 승인해 주는 것은 없습니다.
+측정 결과는 `target m-biome-warnings: 3 warnings; target <= 0 warnings; gap 3 (decrease, large)` 처럼 읽혀야 하며, 스크립트가 찍은 숫자와
+같습니다.
+
+**무엇을 감시할지 정하세요.** `--watch` 는 반복할 수 있고, 바뀌면 체제 변경이어야 하는 파일을 지정합니다. 여기서는
+값 계산 방식을 정하는 스크립트와 무엇이 warning 인지 정하는 `biome.json` 입니다. 감시는 파일 전체 단위이고 일부만
+지정할 수 없습니다. Biome 업그레이드를 잡으려고 `package.json` 도 감시하면 `version` 필드까지 감시됩니다. 버전만
+올리는 릴리스도 감시 파일을 바꾸므로 다음 측정 전에 재승인(J1)이 필요해지는데, 이는 검사가 제대로 동작하는
+것이지 버그가 아닙니다. 감시는 지표를 정의하는 파일로 한정하고, 재승인을 피하려고 감시를 빼지 마세요. 감시하지 않는
+변경이 아무도 승인하지 않은 채 숫자를 바꿀 수 있습니다. 도구 업그레이드도 반영하고 싶다면 락파일을 감시하거나
+스크립트가 도구 버전을 읽어 출력하게 하고, 바뀔 때 재승인하세요.
 
 ## 목표 루프 돌리기
 
@@ -353,7 +490,7 @@ OMF 는 모든 것을 저장소 밖에, 프로젝트마다 폴더 하나로 둡�
     bands/<metric>.yaml   관리 한계 (목표와 함께 잠김)
     reports/              격차 보고서(<stamp>-gap.json)와 틱 보고서(<stamp>-tick.md)
     reconcile/            틱마다 모델에 준 입력과 받은 원본 출력
-    work/<work-id>/       item.md (상태와 진행)와 intent.md
+    work/<work-id>/       item.md (상태, 진행, 승인자가 담긴 승인)와 intent.md
     tick.lock             틱이 도는 동안 쥐는 잠금
   vault/
     metrics/proposed/     지표 제안, <metric>.json
@@ -364,6 +501,8 @@ OMF 는 모든 것을 저장소 밖에, 프로젝트마다 폴더 하나로 둡�
 
 다른 위치를 쓰려면 `OMF_HOME` 을 지정하세요. OMF 는 상태를 저장소 안이나 `~/.claude`, `~/.codex`
 안에 두는 것을 거부합니다. 폴더 권한은 `0700`, 파일 권한은 `0600` 입니다.
+
+ledger, 지표 제안, J1 잠금 파일에도 제안하거나 승인한 사람의 `human:<email>` 이 들어 있습니다("목표를 정하고 재기" 참고). 공유하기 전에 가리세요.
 
 보고서와 `reconcile/` 파일에는 실제 측정값이 들어 있습니다. 호스트 상태 안에만 있고, 모델은 읽지 못합니다.
 

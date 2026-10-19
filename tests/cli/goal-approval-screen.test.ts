@@ -20,6 +20,16 @@ describe("approvalScreen", () => {
     expect(text).not.toContain("why approval is needed again");
   });
 
+  it("warns on the approval screen when the wall time cannot cover the minimum observation", () => {
+    const fx = setupGoal();
+    writeFileSync(fx.goalFile, readFileSync(fx.goalFile, "utf8").replace("wall_time: 72h", "wall_time: 14d"));
+    const clean = approvalScreen(fx.location, "g-fast").lines.join("\n");
+    expect(clean).not.toContain("warning:");
+    writeFileSync(fx.goalFile, readFileSync(fx.goalFile, "utf8").replace("wall_time: 14d", "wall_time: 72h"));
+    const text = approvalScreen(fx.location, "g-fast").lines.join("\n");
+    expect(text).toContain("warning: wall time 72h is not longer than the minimum observation 7d");
+  });
+
   it("shows the changed watched path and its diff when a metric's code changed", () => {
     const fx = setupGoal();
     approveGoal(fx.location, "g-fast", "human:dev");
