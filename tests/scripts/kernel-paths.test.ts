@@ -109,6 +109,11 @@ describe("matchKernelPaths", () => {
     ["ab", "a[b]", false],
     ["a{b}", "a{b}", true],
     ["a\\b", "a\\b", true],
+    ["src/judge/a\nb.ts", "src/judge/**", true],
+    ["src/judge/a\nb/c.ts", "src/judge/**", true],
+    ["x/y\nz/enforcement/a.ts", "**/enforcement/*.ts", true],
+    ["src/core/a\nb.ts", "src/core/*.ts", true],
+    ["src/core/a\nb/c.ts", "src/core/*.ts", false],
   ])("%s against %s is %s", (file, pattern, expected) => {
     expect(hits(file, pattern)).toBe(expected);
   });
@@ -157,6 +162,22 @@ describe("scripts/kernel-paths.mjs CLI", () => {
     expect(out.stdout).toContain("- `src/decision/a.ts` (src/decision/**)");
     expect(out.stdout).toContain("- `.github/workflows/ci.yml` (.github/**)");
     expect(out.stdout).not.toContain("docs/x.md");
+    expect(out.stdout).toContain(NOTICE);
+  });
+
+  it("classifies a changed file whose name contains a newline, read byte-exact from git diff -z", () => {
+    const repo = makeGitRepo();
+    write(repo, "README.md", "# r\n");
+    commitAll(repo, "root");
+    const base = head(repo);
+    write(repo, "src/judge/a\nb.ts", "export const a = 1;\n");
+    commitAll(repo, "newline name");
+    const list = join(makeTempDir("omf-kp-"), "list.txt");
+    writeFileSync(list, "src/judge/**\n");
+    const out = report(["--repo", repo, "--base", base, "--head", head(repo), "--list", list]);
+    expect(out.status).toBe(0);
+    expect(out.stdout).toContain("Files on kernel paths: 1 of 1 changed.");
+    expect(out.stdout).toContain("(src/judge/**)");
     expect(out.stdout).toContain(NOTICE);
   });
 
