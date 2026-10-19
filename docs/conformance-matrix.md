@@ -7,7 +7,7 @@ Generated from `docs/requirements.json` by `node scripts/conformance-matrix.mjs 
 - **deferred**: the design states it and v0.1 does not implement it. It has no test, and the documents say `not implemented`.
 - **missing**: no test counts, or a mapped file is absent. CI fails.
 
-Totals: 38 covered, 6 unproven, 7 deferred, 0 missing.
+Totals: 38 covered, 7 unproven, 7 deferred, 0 missing.
 
 | Id | State | Last recorded | Tests | Claim |
 |---|---|---|---|---|
@@ -16,7 +16,8 @@ Totals: 38 covered, 6 unproven, 7 deferred, 0 missing.
 | `F3.code-controls-loop` | covered | - | 2 offline | Budgets and visit caps live in the host ledger and in code, not in a session, and nothing extends them on its own. |
 | `F4.goal-closes-by-signature` | deferred (M4) | - | none | Agents produce at most a candidate; a goal closes only by a person's signature (J5). |
 | `F5.bands-detect-regression` | covered | - | 1 offline | Control bands detect a drift after launch and record a breach event. |
-| `F6.vault-host-only` | covered | 2026-10-18 | 3 offline, 2 gated, 1 wiring only | No agent session or container can read the vault; only the harness container reads it, during S4. |
+| `F6.vault-host-only` | covered | 2026-10-18 | 3 offline, 2 gated, 1 wiring only | No implementer session or container can read the vault; only the harness container reads it, during S4. |
+| `F6.author-vault-host-only` | unproven | - | 1 offline, 1 gated | No author container can read the vault: it has no bind mount and receives only the item's intent, spec and interface contract. Unproven until a real author run is recorded. |
 | `F7.unevaluated-undetermined` | covered | - | 1 offline | A guardrail that was not evaluated is undetermined, never passing. |
 | `F8.open-decision-blocks` | covered | - | 1 offline | Work does not run while a required decision is open. |
 | `F9.unverified-areas-first` | covered | - | 2 offline | The evidence report lists the unverified areas, and nothing that nobody produced reads as passed. |
@@ -48,7 +49,7 @@ Totals: 38 covered, 6 unproven, 7 deferred, 0 missing.
 | `S5.3.role-bound-secrets` | covered | - | 1 offline | A vendor key reaches a container only as a name-only environment flag on an exec, and only the role it belongs to may carry it: the implementer the Anthropic key, the author the Codex key. Every other pairing is refused before a process starts or the value is read. |
 | `S5.3.author-one-shot-ephemeral` | covered | - | 2 offline | The Codex author runs as one ephemeral exec whose prompt arrives on a pipe; nothing about the invocation is interactive. |
 | `S5.3.author-measured-before-key` | unproven | - | 1 offline, 1 gated | The author key reaches a container only after that container measured golden; a container that does not measure golden never receives it. |
-| `S4.6.author-answer-closed` | covered | - | 1 offline | Only one string field of a closed answer envelope leaves the author container; a malformed answer or one holding the key is dropped, and a failed run leaves a closed code. |
+| `S4.6.author-answer-closed` | covered | - | 1 offline | Only one string field of a closed answer envelope leaves the author container; a malformed answer is dropped, and so is one that holds the key in one of the searched spellings (a key in a spelling the scan does not search is not caught); a failed run leaves a closed code. |
 | `S5.3.author-measurement-bound` | covered | - | 1 offline | The author container measurement counts only for the seal it was made for; a later or superseded seal is never attested by it. |
 | `S5.3.standing-seal-rule` | covered | - | 1 offline | A seal stands only while its vault set matches its digest, the decisions are unchanged and the latest GATE-2 passed it; its author counts as measured only when an L2 author measurement is bound to exactly that seal. |
 | `S5.3.seal-refuses-out-of-order` | covered | - | 2 offline | omf seal refuses before it spends anything when GATE-1 is not passing, the item is unknown, claimed by a run or started without an author-measured seal, and names the missing gate. |

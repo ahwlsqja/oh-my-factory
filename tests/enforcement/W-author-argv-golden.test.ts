@@ -23,6 +23,7 @@ import {
 } from "../helpers/container-fixture.js";
 
 // covers: S5.3.author-container-argv
+// covers: F6.author-vault-host-only
 // W-author-argv-golden (create half): the author container comes from the same reviewed argv function as every other role,
 // pinned byte for byte. It differs from a judge role in the network, the fixed environment and its tmpfs set, and from the
 // implementer in the environment and the absence of any executable mount (spec §7). The key is not in it: it appears only as

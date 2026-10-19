@@ -28,6 +28,7 @@ import { assertFalse, assertTrue } from "./implementer-support.js";
 import { gatedRuntime, ownedLeftovers } from "./lifecycle-support.js";
 
 // covers: S5.3.author-answer-no-leak
+// covers: F6.author-vault-host-only
 // G-author-canary. The real Codex author runs through the real seal pass in the real
 // container while the goal's canary values sit in host state and in the repository, and a random marker sits in the user's
 // worktree and another in the vault. The answer must hold none of them and not the key, the daemon's document of the container

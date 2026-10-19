@@ -137,7 +137,7 @@ Records live in `docs/evidence/gated-runs.json` and are written only by `--recor
 suite has a record, the docs say the behaviour it covers is not enforced. Gated suites are never part of CI. A gated suite that calls the implementer directly (`G-implementer-real-run`, `G-e6-l2-leak-redteam`) passes its own
 session timeout in the request instead of the `[implementer] timeout_ms` default (30 minutes): 20 minutes for the
 session, 25 for the vitest test. Suites driven through the CLI or the author (`G-skeleton-real`, `G-author-canary`) take
-their session limit from config (`implementer.timeout_ms`, and `author.timeout_ms` capped at 10 minutes), and their vitest
+their session limit from config (`implementer.timeout_ms`, and `author.timeout_ms`, 10 minutes by default with no cap at 10 minutes), and their vitest
 timeout (90 and 30 minutes) is set above it.
 
 One older test predates this: the Docker case in `tests/adapters/measure-cmd.test.ts` runs only when

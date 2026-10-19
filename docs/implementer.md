@@ -16,7 +16,7 @@ Offline tests cover the code paths against a fake Docker and a real git; they ca
 
 ## The image
 
-You build the image; OMF never pulls or builds it. It needs `sh`, `tar`, `git`, `base64`, `tr`, `sleep` and `claude`, and a passwd entry for uid 65532 with home `/agent` (the container runs as 65532, and both `git commit` and the Claude client need a name and a home):
+You build the image. OMF never builds the image and never pulls by tag. A digest reference (`name@sha256:...`) that is not present locally is pulled by that digest, and a local image id (`sha256:...`) is never pulled. It needs `sh`, `tar`, `git`, `base64`, `tr`, `sleep` and `claude`, and a passwd entry for uid 65532 with home `/agent` (the container runs as 65532, and both `git commit` and the Claude client need a name and a home):
 
 ```dockerfile
 ARG BASE
@@ -88,4 +88,7 @@ OMF_IMPLEMENTER_API_KEY="$(security find-generic-password -a "$USER" -s omf-gate
 - Three behaviours rest on the pinned claude version and the docker client and are shown only by the gated runs: `docker exec --env NAME` inheriting the value from the client environment, `--setting-sources user` leaving out the repository's settings, and deny rules for test files under permission bypass.
 - `max_log_bytes` defaults to 64 MiB; the real run records the observed log size in `docs/evidence/gated-runs.json` before that default is fixed.
 - The tmpfs mounts are charged to the container's memory; the defaults are a starting point to measure.
+- If the host dies, the implementer container stops itself: its entrypoint is `sleep` for `ceil(implementer.timeout_ms / 1000)` seconds plus the caps of the other commands one container serves (the isolation probe, the settings write, the workspace preparation, the process kill, the capture and the finalize, 1005 seconds in all) plus a 60 second margin, 2865 seconds with the default `timeout_ms`. The image needs `sleep` and nothing else for this; OMF does not assume `timeout`. A stopped container is removed only by a sweep.
+- Signals: SIGINT, SIGTERM, SIGHUP (a closed terminal) and SIGQUIT make OMF remove the containers it created before it exits with that signal. SIGKILL and a power cut run nothing, so the lifetime above is the only bound then.
+- What sweeps an implementer container: `omf run` removes the implementer, judge and author containers of the item's earlier runs at the start of the line (an author container only while no `omf seal` holds the item's `seal.lock`), again at the next judging station and the next implementer station, and removes any implementer container of the item still there when the line ends, whether it finished, was vetoed, stopped at a goal or wall-time limit, or aborted. The sweeps are best effort: when the daemon does not answer, the next command repeats them.
 - A rerun starts again from the base commit with the released feedback in the prompt; continuing from the previous head does not exist yet.

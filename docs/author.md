@@ -16,13 +16,13 @@ Offline tests cover the code paths against a fake Docker and call no model and n
 
 In: a tmpfs `/in` with three files, `intent.md`, `spec.md` and `contract.json` (the interface contract), a tmpfs `/out` for one answer file, and `/tmp` and `/agent` (an OMF-owned `CODEX_HOME`). The files are written by `tar -x` on stdin. The container has no bind mount, so no host path can reach it, and it holds no repository, worktree, vault, host state, plan or report.
 
-Out: `/out/answer.json`, one JSON object `{ "scenarios_yaml": "<the YAML stream>" }`, read back with `cat`, capped in size and parsed by OMF. The string then goes through the same intake as any author's answer. Nothing else leaves the container and its output is never returned. A credential value found in the answer drops the answer (`credential_in_output`).
+Out: `/out/answer.json`, one JSON object `{ "scenarios_yaml": "<the YAML stream>" }`, read back with `cat`, capped in size and parsed by OMF. The string then goes through the same intake as any author's answer. Nothing else leaves the container and its output is never returned. A credential value found in the answer, in one of the spellings the scan searches, drops the answer (`credential_in_output`). A key in a spelling the scan does not search is stored with the scenarios in the vault and is seen by the harness container (network none), which is why the key must be dedicated and spend-limited.
 
 Codex runs as one-shot `codex exec --ephemeral`. OMF refuses an argument list that is not a one-shot ephemeral exec, so there is no interactive path.
 
 ## The image
 
-You build the image; OMF never pulls or builds it. It needs `sh`, `tar`, `cat`, `sleep` and `codex`, and a passwd entry for uid 65532 with home `/agent`. It must hold no `claude` binary, no credential file under `~/.claude`, `~/.codex` or `~/.aws`, and no baked credential name; an image that does is measured with a violation and the author does not start (`not_golden`).
+You build the image. OMF never builds the image and never pulls by tag. A digest reference (`name@sha256:...`) that is not present locally is pulled by that digest, and a local image id (`sha256:...`) is never pulled. It needs `sh`, `tar`, `cat`, `sleep` and `codex`, and a passwd entry for uid 65532 with home `/agent`. It must hold no `claude` binary, no credential file under `~/.claude`, `~/.codex` or `~/.aws`, and no baked credential name; an image that does is measured with a violation and the author does not start (`not_golden`).
 
 ```dockerfile
 ARG BASE
@@ -81,8 +81,10 @@ Each `author.session_started` event records the pass, the round and `calls_befor
 
 - The container runs on Docker's default bridge network: open egress to the model API and to everything else, since an egress allowlist does not exist yet. The default bridge also reaches other containers on that bridge and services on the host gateway of the docker context in use. Use a dedicated docker context or colima profile.
 - A seal whose author stage is unmeasured is stored and reported as `stored`, and the run's isolation level reads `unmeasured`. For a work item that already started, `omf seal` cannot replace it yet and exits 2 saying so.
-- `omf seal` on a seal that is current for the decisions and whose author stage is measured exits 0 as `already_sealed` and needs no key, no daemon and no model.
-- A killed `omf seal` can leave an author container running (a dead host cannot stop it) until the next `omf seal` on the same work item sweeps it. The next `omf seal` on the same work item removes the author containers that its earlier seal passes left behind, and never the container of the current pass. That sweep runs right before the call cap is checked, so a killed pass's orphan is removed even when that next seal is refused at the cap; a seal refused earlier (GATE-1 not passing, for example) does not reach it.
+- `omf seal` on a seal that is current for the decisions and whose author stage is measured exits 0 as `already_sealed` and needs no key and no model. It does list the item's leftover containers to remove them, and answers the same when the daemon does not respond.
+- If the host dies, the author container stops itself: its entrypoint is `sleep` for `ceil(author.timeout_ms / 1000)` seconds plus the caps of the other commands the container serves (the isolation probe, two uploads and the answer read, 105 seconds in all) plus a 60 second margin, 765 seconds with the default `timeout_ms`. The image needs `sleep` and nothing else for this; OMF does not assume `timeout`. A stopped container is only removed by a sweep, so it stays listed (and holds no process) until one runs.
+- Signals: SIGINT, SIGTERM, SIGHUP (a closed terminal) and SIGQUIT make OMF remove the containers it created before it exits with that signal. SIGKILL and a power cut run nothing, so the lifetime above is the only bound then.
+- What sweeps an author container: every `omf seal` on the item, at the start and whatever it answers (a new seal, `already_sealed`, a refusal, a started item, GATE-1 not passing), removes the author containers its earlier passes left, never the current pass's and never one whose pass holds the item's `seal.lock`; `omf run` removes them at the start of the line under the same rule. The sweep is best effort: when the daemon does not answer, it is repeated by the next command. `omf report` only reads and sweeps nothing.
 
 ## Gated runs
 
@@ -91,7 +93,7 @@ Three suites in `tests/gated` check the author container against a real Docker d
 | Suite | Needs | What it checks | Status |
 |---|---|---|---|
 | `G-author-boundary-real` | Docker, the author image | A real author container measures L2 with the real probe, mounts only the four tmpfs paths, has no `claude` binary and no `.codex` directory, shows the secret to one exec only and never to `docker inspect`, and has a writable answer path | not enforced [not enforced: S5.3.author-boundary-real] |
-| `G-author-canary` | Docker, the author image, `OMF_AUTHOR_API_KEY` | The real Codex author answers through `omf seal`; the answer holds no goal canary, no marker planted in the worktree or the vault and not the key; the daemon's document of the container names no host path; no file OMF writes holds the key | not enforced [not enforced: S5.3.author-answer-no-leak] |
+| `G-author-canary` | Docker, the author image, `OMF_AUTHOR_API_KEY` | The real Codex author answers through `omf seal`; the answer holds no goal canary, no marker planted in the worktree or the vault and not the key; the daemon's document of the container names no host path; no file OMF writes holds the key | not enforced [not enforced: S5.3.author-answer-no-leak] [not enforced: F6.author-vault-host-only] |
 | `G-skeleton-real` | Docker, the three images, both keys | `omf seal`, `omf run` and `omf report` on a staged item with a real author and a real implementer: one rework round, outcome `success`, recommendation `human_needed`, run isolation level `L2`, and `noise_check_not_evaluated` as the only unverified area | not enforced [not enforced: S5.0.skeleton-real-line] |
 
 Under the noise-check decision of the container judge a run never reaches `merge_recommended`, so the strongest result a recorded run can show is `success` with `human_needed`.

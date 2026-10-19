@@ -54,7 +54,7 @@
     {
       "id": "F6.vault-host-only",
       "source": "spec §2 F6",
-      "claim": "No agent session or container can read the vault; only the harness container reads it, during S4.",
+      "claim": "No implementer session or container can read the vault; only the harness container reads it, during S4.",
       "real_world": true,
       "surfaces": ["docs/isolation-and-gates.md"],
       "tests": [
@@ -78,6 +78,23 @@
         {
           "path": "tests/gated/implementer-boundary-real.test.ts",
           "gated": "G-implementer-boundary-real"
+        }
+      ]
+    },
+    {
+      "id": "F6.author-vault-host-only",
+      "source": "spec §2 F6",
+      "claim": "No author container can read the vault: it has no bind mount and receives only the item's intent, spec and interface contract. Unproven until a real author run is recorded.",
+      "real_world": true,
+      "surfaces": ["docs/author.md"],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-author-argv-golden.test.ts"
+        },
+        {
+          "path": "tests/gated/author-canary.test.ts",
+          "gated": "G-author-canary",
+          "proves": "behavior"
         }
       ]
     },
@@ -476,7 +493,7 @@
     {
       "id": "S4.6.author-answer-closed",
       "source": "spec §4.6, §5.3",
-      "claim": "Only one string field of a closed answer envelope leaves the author container; a malformed answer or one holding the key is dropped, and a failed run leaves a closed code.",
+      "claim": "Only one string field of a closed answer envelope leaves the author container; a malformed answer is dropped, and so is one that holds the key in one of the searched spellings (a key in a spelling the scan does not search is not caught); a failed run leaves a closed code.",
       "real_world": false,
       "surfaces": [],
       "tests": [
