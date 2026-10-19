@@ -64,9 +64,7 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
       req.headers.host !== origin.slice("http://".length) ||
       headerCount(req, "origin") > 1 ||
       (req.headers.origin !== undefined && req.headers.origin !== origin) ||
-      headerCount(req, "sec-fetch-site") > 1 ||
-      (req.headers["sec-fetch-site"] !== undefined &&
-        !["none", "same-origin"].includes(String(req.headers["sec-fetch-site"])))
+      headerCount(req, "sec-fetch-site") > 1
     ) {
       respond(req, res, 403, "Forbidden\n");
       return;
@@ -81,6 +79,25 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
     const requestedCapability = /^\/([a-f0-9]{48})\//.exec(req.url ?? "")?.[1];
     if (requestedCapability === undefined || !timingSafeEqual(Buffer.from(requestedCapability, "hex"), capability)) {
       respond(req, res, 404, "Not found\n");
+      return;
+    }
+
+    // A local redirect file starts a cross-site navigation. Exempt only the authenticated top-level
+    // page; this metadata does not prove file provenance, and never permits cross-site API or asset reads.
+    const pageNavigation =
+      req.method === "GET" &&
+      (req.url === basePath || req.url === `${basePath}index.html`) &&
+      req.headers["sec-fetch-site"] === "cross-site" &&
+      headerCount(req, "sec-fetch-mode") === 1 &&
+      req.headers["sec-fetch-mode"] === "navigate" &&
+      headerCount(req, "sec-fetch-dest") === 1 &&
+      req.headers["sec-fetch-dest"] === "document";
+    if (
+      req.headers["sec-fetch-site"] !== undefined &&
+      !["none", "same-origin"].includes(String(req.headers["sec-fetch-site"])) &&
+      !pageNavigation
+    ) {
+      respond(req, res, 403, "Forbidden\n");
       return;
     }
 
