@@ -611,7 +611,7 @@
         },
         {
           "path": "tests/enforcement/W-no-fake-switch.test.ts",
-          "proves": "behavior"
+          "proves": "wiring_only"
         },
         {
           "path": "tests/acceptance/cli-fake-docker.test.ts",
