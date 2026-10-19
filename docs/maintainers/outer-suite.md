@@ -21,9 +21,11 @@ canary tests) until that protocol is frozen.
 
 - `tests/outer/outer-suite.test.ts` runs this checkout's copy against its own `dist/`, and proves the suite can
   fail by running it against builds with one promise broken on purpose.
-- Planned, not built yet: an advisory CI job will run the stage0 release's copy of the suite against the pull request's
-  build. The stage0 release will be the tag named in `docs/maintainers/stage0.txt` (the file does not exist yet); the job
-  will never use the pull request's own copy, and will not be a required check. No workflow runs the outer suite today.
+- An advisory CI job (`.github/workflows/outer-suite.yml`) runs the stage0 release's copy of the suite, with
+  `--require-tty`, against the pull request's build. The stage0 release is the tag named in
+  `docs/maintainers/stage0.txt`, read from the base commit; the job never uses the pull request's own copy. It is not a
+  required check. The pinned `v0.0.3` predates the suite, so the job reports a skip until the owner pins a release that
+  carries `outer/run.mjs`.
 - Changing a contract on purpose, or the stage0 tag, is a kernel-path pull request. The owner merges it after reading
   the diff. Agents do not merge it.
 
