@@ -1,7 +1,6 @@
-import { join } from "node:path";
 import { sha256Hex } from "../core/canonical-json.js";
 import type { Ledger } from "../core/ledger.js";
-import { LockHeldError, acquireLock, releaseLock } from "../core/lock.js";
+import { LockHeldError, acquireLock, releaseLock, sealLockFile } from "../core/lock.js";
 import type { ProjectLocation } from "../core/paths.js";
 import { assertStateTreeClean } from "../core/safe-fs.js";
 import { type Gate1Reason, evaluateGate1, intentQuestionIds } from "../decision/gate1.js";
@@ -81,13 +80,7 @@ export type SealStageResult =
   | { status: "refused"; reason: "implementation_started" | "seal_in_progress" | AuthorRunRefusal }
   | { status: "failed"; code: SealFailureCode };
 
-/**
- * `<item dir>/seal.lock`. Not `item.lock`: that one is a millisecond mutex with a 2 s wait, and an author runs for
- * minutes, so holding it would make a person's veto fail with a lock timeout.
- */
-export function sealLockFile(itemDir: string): string {
-  return join(itemDir, "seal.lock");
-}
+export { sealLockFile };
 
 /**
  * S2 (spec §5.3). In order:

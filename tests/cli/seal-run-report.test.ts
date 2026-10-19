@@ -1,15 +1,36 @@
 // covers: S5.3.seal-refuses-out-of-order
 // covers: S5.3.seal-idempotent-when-measured
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { SealPassResult } from "../../src/author/station.js";
 import { closedCode, reportSeal } from "../../src/cli/seal.js";
 import { claimItem, releaseItem } from "../../src/work/claim.js";
 import { omf } from "../helpers/cli.js";
-import { type FakeDockerBin, fakeDockerBin } from "../helpers/fake-docker.js";
-import { type LineFixture, setupLine } from "../helpers/line-fixture.js";
+import { type FakeDockerBin, fakeDockerBin, plantOwnedContainer, verbOf } from "../helpers/fake-docker.js";
+import { type LineFixture, appendWorkStarted, setupLine } from "../helpers/line-fixture.js";
 import { AUTHOR_KEY, configureSeal, ledgerBytes, plantStandingSeal } from "../helpers/seal-cli.js";
 
 const SEAL = "seal-0123456789abcdef";
+const KILLED = "r-20261001T080000Z-dddd";
+
+/** The docker verbs of a command that did more than list the OMF-labelled containers and images (what a sweep reads). */
+const spent = (bin: FakeDockerBin): string[] =>
+  bin
+    .state()
+    .calls.map((call) => verbOf(call.argv))
+    .filter((verb) => !["context inspect", "ps", "image ls"].includes(verb));
+
+/** A container of a pass killed after it was created, and the pass marker that pass wrote before it. */
+function plantKilledPass(l: LineFixture, bin: FakeDockerBin): string {
+  mkdirSync(join(l.f.item.dir, "runs", KILLED), { recursive: true });
+  let name = "";
+  bin.update((state) => {
+    name = plantOwnedContainer(state, "author", KILLED, l.f.workId);
+  });
+  return name;
+}
+const planted = (bin: FakeDockerBin): string[] => Object.keys(bin.state().containers);
 const WORK = "w-0123456789ab";
 
 describe("reportSeal", () => {
@@ -67,7 +88,7 @@ describe("omf seal refuses before it spends anything", () => {
     expect(json.code).toBe(3);
     expect(JSON.parse(json.stdout)).toEqual({ status: "refused", work_id: l.f.workId, missing: "GATE-1", exit: 3 });
     expect(ledgerBytes(l)).toBe(before);
-    expect(bin.state().calls).toEqual([]);
+    expect(spent(bin)).toEqual([]);
     expect(text.stdout + text.stderr + json.stdout + json.stderr).not.toContain(AUTHOR_KEY);
   });
 
@@ -100,7 +121,7 @@ describe("omf seal refuses before it spends anything", () => {
     }
     const json = seal(l, bin, ["--json"]);
     expect(JSON.parse(json.stdout)).toMatchObject({ status: "refused", exit: 2 });
-    expect(bin.state().calls).toEqual([]);
+    expect(spent(bin)).toEqual([]);
   });
 
   it("refuses while a live run holds the item's claim", () => {
@@ -139,7 +160,58 @@ describe("omf seal is idempotent on a measured seal", () => {
       exit: 0,
     });
     expect(ledgerBytes(l)).toBe(before);
-    expect(bin.state().calls).toEqual([]);
+    expect(spent(bin)).toEqual([]);
+  });
+});
+
+describe("omf seal sweeps the item's author orphans whatever it answers", () => {
+  it("removes the container of a killed pass when GATE-1 stops the seal (exit 3)", () => {
+    const l = setupLine({ decisions: false });
+    configureSeal(l);
+    const bin = fakeDockerBin();
+    const name = plantKilledPass(l, bin);
+    expect(planted(bin)).toEqual([name]);
+    const out = seal(l, bin, [], { OMF_AUTHOR_API_KEY: AUTHOR_KEY });
+    expect(out.code).toBe(3);
+    expect(out.stderr).toContain("GATE-1 is not passing");
+    expect(planted(bin)).toEqual([]);
+    expect(spent(bin)).toEqual(["rm"]);
+  });
+
+  it("removes it when the item is already sealed (exit 0, no key, nothing built or run)", async () => {
+    const l = setupLine();
+    configureSeal(l);
+    await plantStandingSeal(l, { measured: true });
+    const bin = fakeDockerBin();
+    const name = plantKilledPass(l, bin);
+    expect(planted(bin)).toEqual([name]);
+    const out = seal(l, bin);
+    expect(out.code).toBe(0);
+    expect(out.stdout).toContain("already sealed");
+    expect(planted(bin)).toEqual([]);
+    expect(spent(bin)).toEqual(["rm"]);
+  });
+
+  it("removes it when the seal is refused for a missing key", () => {
+    const l = setupLine();
+    configureSeal(l);
+    const bin = fakeDockerBin();
+    plantKilledPass(l, bin);
+    const out = seal(l, bin, []);
+    expect(out.code).toBe(2);
+    expect(out.stderr).toContain("author_key_missing");
+    expect(planted(bin)).toEqual([]);
+  });
+
+  it("removes it when the item has no standing seal and has started (refused before the line is read)", () => {
+    const l = setupLine();
+    configureSeal(l);
+    appendWorkStarted(l);
+    const bin = fakeDockerBin();
+    plantKilledPass(l, bin);
+    const out = seal(l, bin, [], { OMF_AUTHOR_API_KEY: AUTHOR_KEY });
+    expect(out.code).not.toBe(0);
+    expect(planted(bin)).toEqual([]);
   });
 });
 

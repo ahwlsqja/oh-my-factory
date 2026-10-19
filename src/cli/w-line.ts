@@ -5,6 +5,7 @@ import type { ProjectLocation } from "../core/paths.js";
 import { resolveRoles } from "../core/roles.js";
 import { combineLineEnd, implementerStations } from "../implementer/station.js";
 import { createFeedbackSlot } from "../judge/round-state.js";
+import { sweepImplementerContainers, sweepOrphans } from "../judge/state.js";
 import { judgeStations } from "../judge/stations.js";
 import type { StationId } from "../work/line-types.js";
 import type { LineResult, Station } from "../work/sequencer.js";
@@ -16,8 +17,44 @@ export interface LineAssembly {
   onLineEnd: () => Promise<void>;
 }
 
-/** S1 and S7 have no work of their own in v0.1: the sequencer's bookkeeping around them is the whole station. */
-const alwaysOk = (id: "S1" | "S7"): Station => ({ id, run: () => ({ kind: "ok" }) });
+/** S7 has no work of its own in v0.1: the sequencer's bookkeeping around it is the whole station. */
+const alwaysOk = (id: "S7"): Station => ({ id, run: () => ({ kind: "ok" }) });
+
+/**
+ * What `omf run` cleans up in the daemon, for this item only. At the start of the line (S1, under the item claim) every
+ * container an earlier run or seal pass left behind goes (`sweepOrphans`: the judge roles, the implementer and the author,
+ * the author only while no `omf seal` holds `seal.lock`), whatever station the line then stops at. At the end of the line,
+ * finished, vetoed or stopped, any implementer container of the item still there goes too. Both are best effort: a daemon
+ * that cannot answer never changes what the line returns.
+ */
+function containerSweeps(runtime: ContainerRuntime): {
+  start: Station;
+  end: () => Promise<void>;
+} {
+  let seen: { itemDir: string; runId: string } | null = null;
+  return {
+    start: {
+      id: "S1",
+      async run(ctx) {
+        seen = { itemDir: ctx.item.dir, runId: ctx.runId };
+        try {
+          await sweepOrphans({ runtime, itemDir: ctx.item.dir, currentRunId: ctx.runId });
+        } catch {
+          // the next run sweeps again
+        }
+        return { kind: "ok" };
+      },
+    },
+    async end() {
+      if (seen === null) return;
+      try {
+        await sweepImplementerContainers({ runtime, itemDir: seen.itemDir, currentRunId: seen.runId });
+      } catch {
+        // the next run's start sweeps what is left
+      }
+    },
+  };
+}
 
 /**
  * The seven stations of `omf run` (spec §5.0). S2 is the standing-seal station wrapped with the test-split entry check:
@@ -36,9 +73,10 @@ export function assembleLine(input: {
   const feedback = createFeedbackSlot();
   const implementer = implementerStations({ location, runtime, feedback, env, ...clock });
   const judge = judgeStations({ location, runtime, candidates: implementer.candidates, feedback, ...clock });
+  const sweeps = containerSweeps(runtime);
   return {
     stations: {
-      S1: alwaysOk("S1"),
+      S1: sweeps.start,
       S2: judge.withEntryCheck(standingSealStation(location)),
       S3: implementer.S3,
       S4: judge.S4,
@@ -46,7 +84,7 @@ export function assembleLine(input: {
       S6: judge.S6,
       S7: alwaysOk("S7"),
     },
-    onLineEnd: combineLineEnd(() => judge.dispose(), implementer.dispose),
+    onLineEnd: combineLineEnd(() => judge.dispose(), implementer.dispose, sweeps.end),
   };
 }
 

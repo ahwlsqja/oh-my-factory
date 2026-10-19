@@ -49,13 +49,13 @@ describe("agent container lifetime", () => {
     const author = (timeout_ms: number) =>
       agentLifetimeSeconds("author", { kind: "author", author: { ...FIXTURE_AUTHOR_LIMITS, timeout_ms } });
     expect(author(1500)).toBe(2 + 105 + 60);
-    expect(author(1_200_000) - author(600_000)).toBe(600);
+    expect((author(1_200_000) ?? 0) - (author(600_000) ?? 0)).toBe(600);
     const implementer = (timeout_ms: number) =>
       agentLifetimeSeconds("implementer", {
         kind: "implementer",
         implementer: { ...FIXTURE_IMPLEMENTER_LIMITS, timeout_ms },
       });
-    expect(implementer(3_600_000) - implementer(1_800_000)).toBe(1800);
+    expect((implementer(3_600_000) ?? 0) - (implementer(1_800_000) ?? 0)).toBe(1800);
     expect(implementer(1)).toBeGreaterThan(1005);
   });
 
@@ -116,7 +116,7 @@ describe("agent container lifetime", () => {
       const spec = specFor(role);
       const result = await fake.run(createArgv(spec, "fake"), { timeoutMs: 1000, maxOutputBytes: 1_000_000 });
       expect(result).toMatchObject({ kind: "exited", status: 0 });
-      const made = fake.state.containers[spec.name] as { entrypoint: string; cmd: string[] };
+      const made = fake.state.containers[spec.name] as unknown as { entrypoint: string; cmd: string[] };
       seen[role] = [made.entrypoint, ...made.cmd];
     }
     expect(seen).toEqual({

@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync, rmSync, statSync, writeSync } from "node:fs";
+import { join } from "node:path";
 
 export interface LockOwner {
   pid: number;
@@ -121,6 +122,30 @@ function tryReclaim(path: string): boolean {
   } finally {
     rmSync(guard, { force: true });
   }
+}
+
+/**
+ * Whether a live process holds the lock now, read without taking it: a lock file whose owner is alive, or one with no
+ * readable owner that is young enough to be mid-write. A stale lock (owner gone, pid reused) is not held. Used by a sweep
+ * that must leave alone what a running command still owns.
+ */
+export function isLockHeld(path: string): boolean {
+  if (!existsSync(path)) return false;
+  const owner = readOwner(path);
+  if (owner !== null) return !isStale(owner);
+  try {
+    return Date.now() - statSync(path).mtimeMs <= UNREADABLE_GRACE_MS;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * `<item dir>/seal.lock`. Not `item.lock`: that one is a millisecond mutex with a 2 s wait, and an author runs for
+ * minutes, so holding it would make a person's veto fail with a lock timeout.
+ */
+export function sealLockFile(itemDir: string): string {
+  return join(itemDir, "seal.lock");
 }
 
 export function acquireLock(path: string): LockOwner {

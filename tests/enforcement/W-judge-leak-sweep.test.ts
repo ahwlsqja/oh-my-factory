@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { ContainerHandle } from "../../src/container/runtime.js";
 import { assertName, type ImageId } from "../../src/container/spec.js";
-import { sweepOrphans } from "../../src/judge/state.js";
+import { acquireLock, releaseLock, sealLockFile } from "../../src/core/lock.js";
+import { sweepImplementerContainers, sweepOrphans } from "../../src/judge/state.js";
 import { MemoryRuntime } from "../helpers/memory-runtime.js";
 import { put, realTempDir } from "../helpers/ops-fixture.js";
 import { waitForPids } from "../helpers/process.js";
@@ -53,6 +54,57 @@ describe("W-judge-leak-sweep", () => {
       staging: 0,
       skipped: [],
     });
+  });
+
+  it("also removes an earlier pass's author container, but not while the item's seal.lock is held", async () => {
+    const itemDir = realTempDir("omf-sweep-item-");
+    put(itemDir, `runs/${EARLIER}/marker`, "x"); // the pass marker an author pass creates before its container
+    const memory = new MemoryRuntime();
+    memory.owned = [
+      { kind: "container", name: `omf-author-${EARLIER}-1-1`, run_id: EARLIER },
+      { kind: "container", name: `omf-sut-${EARLIER}-1-1`, run_id: EARLIER },
+    ];
+    acquireLock(sealLockFile(itemDir));
+    try {
+      expect(await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT })).toMatchObject({ containers: 1 });
+      expect(memory.owned.map((resource) => resource.name)).toEqual([`omf-author-${EARLIER}-1-1`]);
+    } finally {
+      releaseLock(sealLockFile(itemDir));
+    }
+    expect(await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT })).toMatchObject({ containers: 1 });
+    expect(memory.owned).toEqual([]);
+  });
+
+  it("leaves an author container of another item's run alone: only runs under this item's runs/ are selected", async () => {
+    const itemDir = realTempDir("omf-sweep-item-");
+    put(itemDir, `runs/${EARLIER}/marker`, "x");
+    const memory = new MemoryRuntime();
+    memory.owned = [{ kind: "container", name: `omf-author-${OTHER_ITEM}-1-1`, run_id: OTHER_ITEM }];
+    expect(await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT })).toMatchObject({ containers: 0 });
+    expect(memory.owned).toHaveLength(1);
+  });
+
+  it("sweepImplementerContainers removes this item's implementer containers, the current run's included, and nothing else", async () => {
+    const itemDir = realTempDir("omf-sweep-item-");
+    put(itemDir, `runs/${EARLIER}/marker`, "x");
+    const memory = new MemoryRuntime();
+    memory.owned = [
+      { kind: "container", name: `omf-implementer-${EARLIER}-1-1`, run_id: EARLIER },
+      { kind: "container", name: `omf-implementer-${CURRENT}-2-3`, run_id: CURRENT },
+      { kind: "container", name: `omf-implementer-${OTHER_ITEM}-1-1`, run_id: OTHER_ITEM },
+      { kind: "container", name: `omf-sut-${CURRENT}-1-1`, run_id: CURRENT },
+      { kind: "container", name: `omf-author-${EARLIER}-1-1`, run_id: EARLIER },
+      { kind: "image", name: `omf-sut:${CURRENT}-1`, run_id: CURRENT },
+    ];
+    expect(await sweepImplementerContainers({ runtime: memory, itemDir, currentRunId: CURRENT })).toBe(2);
+    expect(memory.owned.map((resource) => resource.name).sort()).toEqual(
+      [
+        `omf-author-${EARLIER}-1-1`,
+        `omf-implementer-${OTHER_ITEM}-1-1`,
+        `omf-sut-${CURRENT}-1-1`,
+        `omf-sut:${CURRENT}-1`,
+      ].sort(),
+    );
   });
 
   it("also removes an earlier run's implementer container", async () => {

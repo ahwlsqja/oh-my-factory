@@ -21,7 +21,7 @@ import {
 } from "../helpers/author-session.js";
 import { NOW, addOpen, resolveOpen } from "../helpers/decision-fixture.js";
 import { ledgerEvents } from "../helpers/enforcement-goal.js";
-import { type LineFixture, ROUND1, ROUND2, setupLine, writeYaml } from "../helpers/line-fixture.js";
+import { type LineFixture, ROUND1, ROUND2, appendWorkStarted, setupLine, writeYaml } from "../helpers/line-fixture.js";
 import { MemoryRuntime } from "../helpers/memory-runtime.js";
 
 const EARLIER = "r-20261001T090000Z-aaaa";
@@ -249,6 +249,81 @@ describe("sealItem", () => {
     runtime.owned = [{ kind: "container", name: `omf-author-${killed}-1-1`, run_id: killed }];
     expect(await sealItem(deps())).toEqual({ status: "refused", code: "author_call_cap" });
     expect(runtime.owned).toEqual([]);
+  });
+
+  describe("author orphans of a killed pass", () => {
+    // A pass killed after its container exists leaves a container with the omf.owner label and the pass's name, and the pass marker.
+    const KILLED = "r-20261001T080000Z-dddd";
+    const orphan = (): { kind: "container"; name: string; run_id: string } => ({
+      kind: "container",
+      name: `omf-author-${KILLED}-1-1`,
+      run_id: KILLED,
+    });
+    const plant = (l: LineFixture, runtime: MemoryRuntime): void => {
+      mkdirSync(join(l.f.item.dir, "runs", KILLED), { recursive: true });
+      runtime.owned = [orphan()];
+    };
+
+    it("is removed by the next seal that runs the author", async () => {
+      const { l, runtime, deps } = rig();
+      plant(l, runtime);
+      expect(await sealItem(deps())).toMatchObject({ status: "sealed" });
+      expect(runtime.owned).toEqual([]);
+    });
+
+    it("is removed by a seal that answers already_sealed", async () => {
+      const { l, runtime, deps } = rig();
+      expect(await sealItem(deps())).toMatchObject({ status: "sealed" });
+      plant(l, runtime);
+      expect(await sealItem(deps({ env: {} }))).toMatchObject({ status: "already_sealed" });
+      expect(runtime.owned).toEqual([]);
+    });
+
+    it("is removed by a seal that GATE-1 stops", async () => {
+      const { l, runtime, deps } = rig();
+      addOpen(l.f, "d-extra", "compatibility");
+      plant(l, runtime);
+      expect(await sealItem(deps())).toEqual({ status: "blocked", route: "J2", code: "gate1_not_passing" });
+      expect(runtime.owned).toEqual([]);
+    });
+
+    it("is removed by a seal that is refused on a started item", async () => {
+      const { l, runtime, deps } = rig();
+      appendWorkStarted(l);
+      plant(l, runtime);
+      expect(await sealItem(deps())).toEqual({ status: "blocked", route: "J3", code: "implementation_started" });
+      expect(runtime.owned).toEqual([]);
+    });
+
+    it("is removed by a seal that is refused before the author runs (no key)", async () => {
+      const { l, runtime, deps } = rig();
+      plant(l, runtime);
+      expect(await sealItem(deps({ env: {} }))).toEqual({ status: "refused", code: "author_key_missing" });
+      expect(runtime.owned).toEqual([]);
+    });
+
+    it("is not removed while seal.lock is held, and is removed once it is released", async () => {
+      const { l, runtime, deps } = rig();
+      plant(l, runtime);
+      const lock = sealLockFile(l.f.item.dir);
+      acquireLock(lock);
+      try {
+        expect(await sealItem(deps())).toEqual({ status: "blocked", route: "J7", code: "seal_in_progress" });
+        expect(runtime.owned).toEqual([orphan()]);
+      } finally {
+        releaseLock(lock);
+      }
+      expect(await sealItem(deps())).toMatchObject({ status: "sealed" });
+      expect(runtime.owned).toEqual([]);
+    });
+
+    it("leaves another item's author container alone", async () => {
+      const { l, runtime, deps } = rig();
+      plant(l, runtime);
+      runtime.owned.push({ kind: "container", name: `omf-author-${OTHER_ITEM}-1-1`, run_id: OTHER_ITEM });
+      await sealItem(deps());
+      expect(runtime.owned.map((resource) => resource.run_id)).toEqual([OTHER_ITEM]);
+    });
   });
 
   // Green at 7dc0cf0 and kept as a regression guard: the call is taken under seal.lock, so one pass of two runs.

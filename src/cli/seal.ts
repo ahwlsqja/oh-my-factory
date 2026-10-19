@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import type { AuthorRefusalCode, SealPassResult } from "../author/station.js";
-import { sealItem } from "../author/station.js";
+import { sealItem, sweepItemAuthorOrphans } from "../author/station.js";
+import { findWorkItem } from "../adapters/state-markdown.js";
 import { createDockerRuntime } from "../container/docker-cli.js";
 import { readConfig } from "../core/config.js";
 import type { ProjectLocation } from "../core/paths.js";
@@ -111,6 +112,18 @@ function printRefusal(workId: string, order: Extract<Order, { ok: false }>, json
   return order.exit;
 }
 
+/** Best effort and silent: the answer of a refused seal is the refusal, not what the sweep found. */
+async function sweepRefusedItem(location: ProjectLocation, workId: string, env: NodeJS.ProcessEnv): Promise<void> {
+  try {
+    const item = findWorkItem(location.dir, workId);
+    const runtime = openRuntime(readConfig(location.dir), env);
+    if (item === null || runtime === null) return;
+    await sweepItemAuthorOrphans({ runtime, itemDir: item.dir });
+  } catch {
+    // nothing to report: the next seal sweeps again
+  }
+}
+
 /**
  * `omf seal`: the order check, then `sealItem`, then a closed report. Nothing here decides anything the station owns;
  * a ConfigError or a corrupt ledger throws and main.ts exits 2 with its hint.
@@ -119,7 +132,11 @@ export async function runSeal(input: RunSealInput): Promise<ExitCode> {
   const { location, workId, json, env } = input;
   const now = input.now ?? ((): Date => new Date());
   const order = checkOrder(location, workId, "seal", now());
-  if (!order.ok) return printRefusal(workId, order, json);
+  if (!order.ok) {
+    // A refusal here never reaches `sealItem`, but it must not leave an earlier pass's container running either.
+    await sweepRefusedItem(location, workId, env);
+    return printRefusal(workId, order, json);
+  }
   const config = readConfig(location.dir);
   // A runtime with no context refuses every call, so sealItem reports docker_context_unset in its own refusal order.
   const runtime = openRuntime(config, env) ?? createDockerRuntime({ context: null, env });

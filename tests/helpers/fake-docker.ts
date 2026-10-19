@@ -129,3 +129,17 @@ export function fakeDockerBin(options: { hooks?: string } = {}): FakeDockerBin {
     },
   };
 }
+
+/**
+ * A container a killed pass left behind: `omf.owner` and `omf.run` labels and an OMF name, nothing else. The name carries the
+ * role (`omf-author-<run>-1-1`), the sweeps find it through the labels the daemon lists.
+ */
+export function plantOwnedContainer(state: FakeState, role: string, runId: string, workId = "w-0123456789ab"): string {
+  const name = `omf-${role}-${runId}-1-1`;
+  state.containers[name] = {
+    name,
+    running: true,
+    labels: { "omf.owner": "omf", "omf.work": workId, "omf.run": runId, "omf.round": "1", "omf.role": role },
+  };
+  return name;
+}
