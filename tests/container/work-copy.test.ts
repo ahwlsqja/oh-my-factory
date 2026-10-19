@@ -2,7 +2,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MeasureError, NotGoldenError } from "../../src/container/measure.js";
-import { roleTmpfs } from "../../src/container/spec.js";
+import { roleTmpfs, WORKCOPY_GATE_EXECS } from "../../src/container/spec.js";
 import { ContainerWorkCopyFactory, type Launch, WorkCopyError } from "../../src/container/work-copy.js";
 import { revertPatch } from "../../src/git/ops.js";
 import { EXIT_0, exit, MemoryRuntime } from "../helpers/memory-runtime.js";
@@ -101,6 +101,29 @@ describe("ContainerWorkCopyFactory (spec section 4.8)", () => {
     expect(memory.execs.map((e) => e.argv[0])).toEqual(["tar", "slow", "tar", "echo"]);
     expect(memory.execs.at(-1)?.name).not.toBe(first);
     await copy.dispose();
+  });
+
+  it("replaces the container with a fresh one once its gate exec budget is spent, so its lifetime is never outrun", async () => {
+    const fx = calcFixture();
+    const memory = new MemoryRuntime();
+    const { factory } = workCopies(memory, { build: ["make"] });
+    const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
+    for (let n = 0; n < WORKCOPY_GATE_EXECS; n += 1) await copy.run(["echo", String(n)], OPTIONS);
+    const gates = memory.execs.filter((e) => e.argv[0] === "echo");
+    expect(new Set(gates.map((e) => e.name)).size).toBe(1);
+    expect(memory.specs).toHaveLength(1);
+    await copy.run(["echo", "next"], OPTIONS);
+    expect(memory.specs).toHaveLength(2);
+    expect(memory.live.size).toBe(1);
+    const last = memory.execs.at(-1);
+    expect(last?.argv).toEqual(["echo", "next"]);
+    expect(last?.name).not.toBe(gates[0]?.name);
+    // the fresh container is booted like the first: extract, then build, before the command, and its budget starts again
+    expect(memory.execs.slice(-3).map((e) => e.argv[0])).toEqual(["tar", "make", "echo"]);
+    for (let n = 1; n < WORKCOPY_GATE_EXECS; n += 1) await copy.run(["echo", "again"], OPTIONS);
+    expect(memory.specs).toHaveLength(2);
+    await copy.dispose();
+    expect(memory.live.size).toBe(0);
   });
 
   it("a recreate that fails comes back as an error result, not an exception", async () => {

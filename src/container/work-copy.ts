@@ -8,7 +8,7 @@ import type { StageGolden } from "../isolation/evaluate.js";
 import { containerSpecFor, goldenFor } from "./golden.js";
 import { createMeasured, type MeasureDeps, type MeasuredContainer, NotGoldenError } from "./measure.js";
 import type { ContainerHandle, ContainerRuntime, ImageInfo } from "./runtime.js";
-import type { ContainerSpec, OwnedLabels } from "./spec.js";
+import { type ContainerSpec, type OwnedLabels, WORKCOPY_GATE_EXECS } from "./spec.js";
 import { tarOfDir } from "./tar-dir.js";
 
 export type WorkCopyErrorCode = "build_failed" | "extract_failed" | "not_golden" | "timeout";
@@ -64,6 +64,8 @@ class ContainerWorkCopy implements WorkCopy {
   private container: ContainerHandle | null = null;
   private lastName: string | null = null;
   private stale = true;
+  /** Gate execs served by the current container; its lifetime is sized for `WORKCOPY_GATE_EXECS` of them. */
+  private execs = 0;
   private gone = false;
 
   constructor(
@@ -111,6 +113,7 @@ class ContainerWorkCopy implements WorkCopy {
       throw error instanceof NotGoldenError ? new WorkCopyError("not_golden") : error;
     }
     this.container = measured.handle;
+    this.execs = 0;
     try {
       await this.step(["tar", "-x", "-C", "/work"], EXTRACT_TIMEOUT_MS, "extract_failed", tarOfDir(this.tree));
       if (ctx.build.length > 0) await this.step(ctx.build, BUILD_TIMEOUT_MS, "build_failed", undefined, "/work");
@@ -147,18 +150,20 @@ class ContainerWorkCopy implements WorkCopy {
   }
 
   /**
-   * A failure to recreate comes back as an error result, because `proveTest` does not catch a throw from `run` and `runGates` reads an
+   * A container that has served `WORKCOPY_GATE_EXECS` commands is replaced like a stale one, so no container is asked for more than its
+   * lifetime was sized for. A failure to recreate comes back as an error result, because `proveTest` does not catch a throw from `run` and `runGates` reads an
    * error result as `skip`. A timeout or the output limit kills only the docker client, not the process in the container, so the
    * container is removed by name and the next command starts in a fresh one: nothing keeps running behind it.
    */
   async run(argv: readonly string[], options: RunOptions): Promise<CommandResult> {
     if (this.gone) return { kind: "error", code: "runtime_error", message: "runtime_error" };
     try {
-      if (this.stale) {
+      if (this.stale || this.execs >= WORKCOPY_GATE_EXECS) {
         await this.removeContainer();
         await this.boot();
       }
       if (this.container === null) return errorResult(null);
+      this.execs += 1;
       const result = await this.ctx.runtime.exec(this.container, {
         argv,
         workdir: "/work",
