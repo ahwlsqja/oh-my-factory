@@ -1,5 +1,71 @@
 # Changelog
 
+## [0.0.4](https://github.com/ahwlsqja/oh-my-factory/compare/v0.0.3...v0.0.4) (2026-10-19)
+
+
+### Features
+
+* **goal:** explain goal.md fields and list leftover template text in audit ([f0413e2](https://github.com/ahwlsqja/oh-my-factory/commit/f0413e2e50fb3e68dd457f29f09b0bebb50d53d8))
+* **goal:** record revision, dirty state and directory contract in measurement reports ([c4ead9d](https://github.com/ahwlsqja/oh-my-factory/commit/c4ead9d0ebef40744bddf65490493e5d58d4543f))
+* **goal:** retain measurement context across the first-use integrations ([ef1d04f](https://github.com/ahwlsqja/oh-my-factory/commit/ef1d04f488092d771850ede0ec47daee590b84cb))
+* **measure:** give every unmeasured outcome a distinct closed reason code ([3a6cb64](https://github.com/ahwlsqja/oh-my-factory/commit/3a6cb64ad422ee72b7e80dce89bc236fef9e9e7c))
+* **risk:** raise risk on test weakening instead of on any test change ([d961d8d](https://github.com/ahwlsqja/oh-my-factory/commit/d961d8de75236107db397935dbe2495c49d6815b))
+* **ui:** make local factory progress inspectable without a tracker account ([6dc2aac](https://github.com/ahwlsqja/oh-my-factory/commit/6dc2aac4e52519f4be9e31a2963eccd89bfc7e23))
+* **ui:** make verified factory state inspectable locally ([69381f2](https://github.com/ahwlsqja/oh-my-factory/commit/69381f22827a1cb0881477a779a3b5123ad51b8a))
+
+
+### Bug Fixes
+
+* **doctor:** build the projection fixture canary at run time and fix the canary recovery advice ([fd3b0c6](https://github.com/ahwlsqja/oh-my-factory/commit/fd3b0c6b6ccdfbfcd517a2e24ae00e4011158135))
+* **doctor:** warn that a genuine sealed canary in a committed file burns the sealed set ([9112609](https://github.com/ahwlsqja/oh-my-factory/commit/9112609b7a2ba071a9db8db35594f6a036b7ab6f))
+* **goal:** default wall time covers the minimum observation and audit warns when it cannot ([c811159](https://github.com/ahwlsqja/oh-my-factory/commit/c811159c77f306f7a2e8d2e50f5e6f085158d89e))
+* **goal:** explain audit stops while preserving run-state consumers ([5b0c4be](https://github.com/ahwlsqja/oh-my-factory/commit/5b0c4bef9de79fe120926e9fe1fc4e8fd8f6371b))
+* **goal:** flag the template's default target unit and value in goal audit ([c0ed6ec](https://github.com/ahwlsqja/oh-my-factory/commit/c0ed6ecbc054d29668900a2746d2b64480f2a2a5))
+* **goal:** keep first-use advice together without blocking approval ([d7b6e01](https://github.com/ahwlsqja/oh-my-factory/commit/d7b6e013238332ba1ecd3972884cb2f31ab5af52))
+* **goal:** point every audit stop at goal audit and drop repair-everything wording ([ee4a3cc](https://github.com/ahwlsqja/oh-my-factory/commit/ee4a3cc1f8682e692368970cfe3a110ea1fa2c7d))
+* **goal:** print observation warning durations in d/h units in both states ([395175e](https://github.com/ahwlsqja/oh-my-factory/commit/395175e2bb9093ef8d0999d14d3fabfafa503e1b))
+* **goal:** print the minimum observation in the warning through the duration formatter ([70437e9](https://github.com/ahwlsqja/oh-my-factory/commit/70437e9396664ff1dab17ec591b249359746df28))
+* **goal:** report unmeasured metrics as unmeasured and never as met ([d14e50c](https://github.com/ahwlsqja/oh-my-factory/commit/d14e50c212ea44d3e9f7f6460db679c55873ae51))
+* **goal:** say a draft or reapproval-needed goal is not running in goal status ([fa5f07d](https://github.com/ahwlsqja/oh-my-factory/commit/fa5f07d341b6d249056194a206fa4aafb68bbc41))
+* **goal:** word the tampered status as audit problems and cover final states ([72871f9](https://github.com/ahwlsqja/oh-my-factory/commit/72871f931a6c0b3b3c748227bd90288bb0c14912))
+* **implementer:** restore natural shell keywords in the kill-all script ([8702679](https://github.com/ahwlsqja/oh-my-factory/commit/870267950954d015ee5978c481aa59f53dde7e87))
+* **implementer:** retain cleanup safety alongside the reviewed first-use stack ([b3c0caa](https://github.com/ahwlsqja/oh-my-factory/commit/b3c0caa88f0fef3f6cf4e7ae762d12bb8e5a612b))
+* **implementer:** treat a kill-all with no process left as a clean stop ([2caed5c](https://github.com/ahwlsqja/oh-my-factory/commit/2caed5cccc29cbe984525a268265729379923e65))
+* **measure:** retain private provenance when a target cannot be measured ([3a7fe6e](https://github.com/ahwlsqja/oh-my-factory/commit/3a7fe6e300ae95f50cec8562063184b4b0e400b8))
+* **risk:** close test-weakening gaps for spaced names, declared tests, comments, configs and assertion forms ([8c57f57](https://github.com/ahwlsqja/oh-my-factory/commit/8c57f575db04784683f1761d53079f651ff51d12))
+* **risk:** count test hooks, every threshold key, and configured test paths as weakening ([e393798](https://github.com/ahwlsqja/oh-my-factory/commit/e3937985a0e98d4b76f7611d4f10ef4635afc959))
+* **risk:** prevent quoted comment markers from hiding weaker checks ([b2d904f](https://github.com/ahwlsqja/oh-my-factory/commit/b2d904f21305287e015fd0483a7d92cdd1c423f6))
+* **risk:** read quoted git paths and treat removed coverage thresholds as weakening ([b8cb297](https://github.com/ahwlsqja/oh-my-factory/commit/b8cb297e0f1e7c0f74f6ff4f170a19d8ff8d05ab))
+* **risk:** retain conservative judgment when comment syntax is ambiguous ([b0c7afb](https://github.com/ahwlsqja/oh-my-factory/commit/b0c7afb1f25cb84af5b31df06639c2c7ae542fd8))
+* **risk:** treat binary sections, commented thresholds, exit hooks and same-line config edits as weakening ([7fd0acc](https://github.com/ahwlsqja/oh-my-factory/commit/7fd0accc27120be2fa4329dadb8dd8a15dd6a61d))
+* **ui:** keep browser capability out of opener process arguments ([5ae46e7](https://github.com/ahwlsqja/oh-my-factory/commit/5ae46e7f900e2810d9054b936a02bb106ddf5884))
+* **ui:** keep local observations tied to verified state ([2cff37d](https://github.com/ahwlsqja/oh-my-factory/commit/2cff37d6f86deadac41ab9afc6d1407edd320e67))
+* **ui:** keep session capabilities out of opener arguments ([571ee5a](https://github.com/ahwlsqja/oh-my-factory/commit/571ee5a91b5ce8972971e61557060a89cac5ad56))
+* **vault:** raise the sealed-material scan cap to one million entries ([fd41959](https://github.com/ahwlsqja/oh-my-factory/commit/fd41959292fe1b432f730ed7e28585bece465261))
+* **vault:** retain canary guidance while supporting larger checkouts ([1c44711](https://github.com/ahwlsqja/oh-my-factory/commit/1c44711c41a5cf6568c0c061e0c565ada5404ffe))
+* **vault:** retain fixture guidance on the reviewed cleanup stack ([9cf1036](https://github.com/ahwlsqja/oh-my-factory/commit/9cf10369aa70cfef26954f4dad92da71f655cf47))
+
+
+### Performance
+
+* **ui:** establish evidence before optimizing snapshot reads ([3c0fdf8](https://github.com/ahwlsqja/oh-my-factory/commit/3c0fdf8375207a915ab0c76519c3b5cfdb0a8049))
+* **ui:** establish snapshot read costs before optimization ([1031f93](https://github.com/ahwlsqja/oh-my-factory/commit/1031f934f62508851240b9a702a8249eb4ef09b3))
+
+
+### Documentation
+
+* **goal:** hash-check the template comments and list audit placeholders in the command table ([202e9ab](https://github.com/ahwlsqja/oh-my-factory/commit/202e9ab924df406d485d45dba7215731d4fd969e))
+* **goal:** mark template defaults versus author decisions and document audit placeholders ([fc8d029](https://github.com/ahwlsqja/oh-my-factory/commit/fc8d0294fef24c1075eaa31fdf3e22c482678b78))
+* **policy:** keep all existing verdict boundaries under human ownership ([ff37cfb](https://github.com/ahwlsqja/oh-my-factory/commit/ff37cfbee91e29e8d854b0404cf0c9d91c2143cd))
+* **readme:** add a Docker-free metric walkthrough with a runnable script ([#51](https://github.com/ahwlsqja/oh-my-factory/issues/51)) ([9cf8bc7](https://github.com/ahwlsqja/oh-my-factory/commit/9cf8bc7ccb1544f1f6b6a99f36d8d59588017afe))
+* **readme:** disclose how the recorded human identity appears and is stored ([#57](https://github.com/ahwlsqja/oh-my-factory/issues/57)) ([fae1396](https://github.com/ahwlsqja/oh-my-factory/commit/fae139664a324c731e4da82de5ab00c2b8f0fd2a))
+* **readme:** update status and record the real isolation probe run ([df11171](https://github.com/ahwlsqja/oh-my-factory/commit/df11171669a8783dd14c6eda1880f6dc7f7fa529))
+* **release:** keep maintainer guidance tied to release sources ([#63](https://github.com/ahwlsqja/oh-my-factory/issues/63)) ([32de4dc](https://github.com/ahwlsqja/oh-my-factory/commit/32de4dc98b94dd08a316d8b399b1075a9dcb429d))
+* **vault:** drop the private checkout size and the supported-size claim ([68a4308](https://github.com/ahwlsqja/oh-my-factory/commit/68a430805af78df022a2d9f0a65b6686233a2897))
+* **workflow:** close gaps in kernel ownership and review evidence ([d2bf7f8](https://github.com/ahwlsqja/oh-my-factory/commit/d2bf7f8e44fa80927f01a1d0f12963e7d7a74264))
+* **workflow:** make contributor decisions traceable to evidence ([cc0befd](https://github.com/ahwlsqja/oh-my-factory/commit/cc0befdea97a845fc5953ebb842f952e21a1a432))
+* **workflow:** make goal-driven changes traceable across agent sessions ([5869336](https://github.com/ahwlsqja/oh-my-factory/commit/58693361e45e91958a487a18e90910130f7a3293))
+
 ## [0.0.3](https://github.com/ahwlsqja/oh-my-factory/compare/v0.0.2...v0.0.3) (2026-10-18)
 
 
