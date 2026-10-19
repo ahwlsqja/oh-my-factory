@@ -208,7 +208,7 @@ describe("omf goal measure", () => {
     lockGoal(fx.location, "g-fast", "human:dev");
     const result = omf(["goal", "measure", "g-fast"], fx.repo, fx.home);
     expect(result.code).toBe(1);
-    expect(result.stdout).toContain("failed: metric m-p95 has no image");
+    expect(result.stdout).toContain("unmeasured (no_image): metric m-p95 has no image");
   });
 
   it("exits 2 for an unapproved goal", () => {

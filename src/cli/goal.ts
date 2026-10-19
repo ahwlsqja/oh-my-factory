@@ -139,7 +139,7 @@ function printGap(report: GapReport, file: string): void {
   console.log(`goal ${report.goal_id} (regime ${report.regime}), runner ${report.runner}`);
   const t = report.target;
   const wanted = `target ${t.operator} ${t.value} ${t.unit}`;
-  if (t.result === null) console.log(`target ${t.metric_id}: not measured; ${wanted}`);
+  if (t.result === null) console.log(`target ${t.metric_id}: unmeasured; ${wanted}`);
   else if (t.result.met) console.log(`target ${t.metric_id}: ${t.measured} ${t.unit}; ${wanted}; met`);
   else {
     console.log(
@@ -147,7 +147,7 @@ function printGap(report: GapReport, file: string): void {
     );
   }
   for (const m of report.metrics) {
-    const value = m.value === null ? `failed: ${m.failure}` : `${m.value} ${m.unit}`;
+    const value = m.value === null ? `unmeasured (${m.failure_code}): ${m.failure}` : `${m.value} ${m.unit}`;
     let band = "";
     if (m.band !== null) {
       band =

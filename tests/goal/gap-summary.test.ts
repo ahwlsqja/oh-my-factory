@@ -49,6 +49,7 @@ function breaching(tier: "1sigma" | "2sigma" | "3sigma", action: BandAction | nu
     unit: "%",
     value: 40,
     failure: null,
+    failure_code: null,
     band,
     band_action: action,
   };

@@ -1,5 +1,11 @@
 import { join, relative } from "node:path";
-import { type Isolation, type RunnerKind, isolationOf, runMeasurement } from "../adapters/measure-cmd.js";
+import {
+  type Isolation,
+  type RunnerKind,
+  type UnmeasuredCode,
+  isolationOf,
+  runMeasurement,
+} from "../adapters/measure-cmd.js";
 import type { BudgetState } from "../core/budget.js";
 import { canonicalize } from "../core/canonical-json.js";
 import { Ledger, type LedgerEvent } from "../core/ledger.js";
@@ -29,6 +35,8 @@ export interface MetricMeasurement {
   unit: string;
   value: number | null;
   failure: string | null;
+  /** Why the metric is unmeasured; null when it has a value. An unmeasured metric has no value, never 0. */
+  failure_code: UnmeasuredCode | null;
   band: BandResult | null;
   band_action: BandAction | null;
 }
@@ -199,16 +207,25 @@ export async function measureGoal(
       unit: lock.unit,
       value: null,
       failure: null,
+      failure_code: null,
       band: null,
       band_action: null,
     };
     const outcome = await runMeasurement(lock, location.repo, options.runner, options.env);
     if (!outcome.ok) {
       entry.failure = outcome.reason;
+      entry.failure_code = outcome.code;
       ledger.append({
         actor: "omf",
         type: "metric.measure_failed",
-        payload: { goal_id: goalId, metric_id: lock.metric_id, regime, runner: options.runner, reason: outcome.reason },
+        payload: {
+          goal_id: goalId,
+          metric_id: lock.metric_id,
+          regime,
+          runner: options.runner,
+          reason_code: outcome.code,
+          reason: outcome.reason,
+        },
       });
     } else {
       entry.value = outcome.value;
