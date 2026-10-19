@@ -23,6 +23,8 @@ const REFUSAL_FIX: Readonly<Record<AuthorRefusalCode, string>> = {
   author_vendor_unsupported: "the author must be codex in this version",
   docker_unreachable: "start Docker and check the context named in [judge]",
   endpoint_not_local: "the Docker context must point at this machine",
+  author_call_cap:
+    "this item used its author calls; raise max_calls in the [author] table of config.toml to allow more",
 };
 
 export interface SealReport {

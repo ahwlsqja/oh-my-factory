@@ -111,6 +111,22 @@ describe("sealItem", () => {
     });
   });
 
+  it("refuses with author_call_cap once the item has used its calls, with no new container and no new event", async () => {
+    const { l, deps } = rig({ authorLines: ["max_calls = 1"] });
+    const first = await sealItem(
+      deps({
+        session: (_credential, passId) =>
+          scriptedAuthor(l, writeYaml(l, "x.yaml", ROUND2), passId, { failure: "no_output" }),
+      }),
+    );
+    expect(first).toEqual({ status: "retry", code: "no_output" });
+    const recorded = ledgerEvents(l.f.fx, "author.session_completed");
+    expect(recorded).toHaveLength(1);
+    const second = await sealItem(deps());
+    expect(second).toEqual({ status: "refused", code: "author_call_cap" });
+    expect(ledgerEvents(l.f.fx, "author.session_completed")).toHaveLength(1);
+  });
+
   it("answers retry for an author-quality failure and for a GATE-2 back_to_S2", async () => {
     const { l, deps } = rig();
     const failed = await sealItem(

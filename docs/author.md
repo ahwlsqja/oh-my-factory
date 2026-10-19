@@ -62,7 +62,13 @@ OMF measures the author container with `docker inspect` before the key reaches i
 
 ## What it costs
 
-OMF neither records nor bounds the spend of an author call. The only bound is the spend limit you set on the provider key.
+OMF neither records nor bounds the spend of an author call: money is not metered. It reads no usage or price numbers from Codex, so there is no dollar cap like the implementer's `max_model_usd`. What it caps instead, in the `[author]` table of `config.toml`:
+
+- `timeout_ms`: wall time of one call (default 10 minutes).
+- `max_output_bytes`: bytes Codex may print on stdout plus stderr in one call (default 1 MiB, 65536 to 16777216); past it the call stops as `output_limit`.
+- `max_calls`: author calls one work item may use over its life (default 10, 1 to 100), counted from the ledger. When the count is reached `omf seal` is refused with `author_call_cap` before any container is made; raise the value to allow more.
+
+Each `author.session_completed` event records the caps in force (`limit_timeout_ms`, `limit_output_bytes`, `limit_calls`), the call's `output_bytes` and `calls_before`. The only bound on money remains the spend limit you set on the provider key.
 
 ## Limits
 
@@ -97,7 +103,7 @@ OMF_AUTHOR_API_KEY=<dedicated, spend-limited key> npm run test:gated -- --model 
 OMF_AUTHOR_API_KEY=<dedicated, spend-limited key> OMF_IMPLEMENTER_API_KEY=<dedicated, spend-limited key> npm run test:gated -- --model --only G-skeleton-real
 ```
 
-The driver starts the `omf-m3f` profile, passes each suite only the keys it reads under their own names and runs the output through a redactor. A key is passed on the command line of the one command that needs it and is never written to a file; the suites print nothing, and a failure message is a fixed string. Use dedicated keys with a provider-side spend limit: code in the container can read the key it is given, and author spend is not recorded or bounded by OMF.
+The driver starts the `omf-m3f` profile, passes each suite only the keys it reads under their own names and runs the output through a redactor. A key is passed on the command line of the one command that needs it and is never written to a file; the suites print nothing, and a failure message is a fixed string. Use dedicated keys with a provider-side spend limit: code in the container can read the key it is given, and author spend is not recorded or bounded by OMF in money (see What it costs for the wall-time, output and call caps it does enforce).
 
 To record a passing suite, add `--record` on a clean working tree. Then delete that suite's `[not enforced: ...]` marker in the table above; `tests/docs/m3h-gated-claims.test.ts` fails until you do.
 

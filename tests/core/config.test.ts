@@ -444,6 +444,8 @@ describe("[author]", () => {
     expect(parseConfig("").author).toEqual({
       image: null,
       timeout_ms: 600_000,
+      max_output_bytes: 1_048_576,
+      max_calls: 10,
       memory_mb: 1024,
       cpus: 1,
       pids_limit: 256,
@@ -527,6 +529,8 @@ describe("[author]", () => {
         "cpus",
         "image",
         "in_tmpfs_mb",
+        "max_calls",
+        "max_output_bytes",
         "memory_mb",
         "out_tmpfs_mb",
         "pids_limit",
@@ -552,5 +556,27 @@ describe("[seal] same_vendor", () => {
   it("refuses any other [seal] key and an empty [seal] table as unknown configuration", () => {
     expect(() => parseConfig("[seal]\nrounds = 2\n")).toThrow(/config\.toml is invalid/);
     expect(() => parseConfig("[seal]\n")).toThrow(/config\.toml is invalid/);
+  });
+});
+
+describe("[author] caps", () => {
+  it("defaults to ten calls per work item and a 1 MiB cap on the Codex output", () => {
+    expect(parseConfig("").author).toMatchObject({ max_calls: 10, max_output_bytes: 1_048_576, timeout_ms: 600_000 });
+  });
+
+  it.each([
+    ["max_calls = 0"],
+    ["max_calls = 101"],
+    ["max_calls = 1.5"],
+    ["max_output_bytes = 65535"],
+    ["max_output_bytes = 16777217"],
+  ])("refuses %s", (line) => {
+    expect(() => parseConfig(`[author]\n${line}\n`)).toThrow(/max_/);
+  });
+
+  it("accepts the edges", () => {
+    const author = parseConfig("[author]\nmax_calls = 1\nmax_output_bytes = 65536\n").author;
+    expect(author).toMatchObject({ max_calls: 1, max_output_bytes: 65_536 });
+    expect(parseConfig("[author]\nmax_calls = 100\nmax_output_bytes = 16777216\n").author.max_calls).toBe(100);
   });
 });

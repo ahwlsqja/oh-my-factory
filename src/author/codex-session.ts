@@ -58,6 +58,8 @@ export interface ContainerAuthorDeps {
   /** A label only, >= 1. */
   round: number;
   workId: string;
+  /** Author calls this work item already has in the ledger; recorded in the facts. Default 0. */
+  callsBefore?: number;
   now: () => Date;
 }
 
@@ -187,6 +189,7 @@ export function createContainerAuthor(deps: ContainerAuthorDeps): ContainerAutho
         answerSha: null as string | null,
         answerBytes: 0,
         hits: 0,
+        outputBytes: 0,
       };
       const finalize = (outcome: "completed" | AuthorFailureCode): void => {
         if (seen.imageId === null) return;
@@ -203,6 +206,11 @@ export function createContainerAuthor(deps: ContainerAuthorDeps): ContainerAutho
           answer_sha256: seen.answerSha,
           answer_bytes: seen.answerBytes,
           credential_hits: seen.hits,
+          output_bytes: seen.outputBytes,
+          limit_timeout_ms: Math.min(request.timeoutMs, config.author.timeout_ms),
+          limit_output_bytes: config.author.max_output_bytes,
+          limit_calls: config.author.max_calls,
+          calls_before: deps.callsBefore ?? 0,
           injected_secret_names: ["CODEX_API_KEY"],
         };
       };
@@ -286,8 +294,15 @@ export function createContainerAuthor(deps: ContainerAuthorDeps): ContainerAutho
           return fail("container_failed");
         }
 
-        const ran = await exec({ argv, stdin, timeoutMs, maxOutputBytes: MAX_AUTHOR_OUTPUT_BYTES, secret: credential });
+        const ran = await exec({
+          argv,
+          stdin,
+          timeoutMs,
+          maxOutputBytes: config.author.max_output_bytes,
+          secret: credential,
+        });
         const printed = outputOf(ran);
+        seen.outputBytes = Buffer.byteLength(printed.stdout) + Buffer.byteLength(printed.stderr);
         seen.hits += keyHits(printed.stdout, credential) + keyHits(printed.stderr, credential);
         const ranCode = failureCodeOf(ran);
         if (ranCode !== null) return fail(ranCode);

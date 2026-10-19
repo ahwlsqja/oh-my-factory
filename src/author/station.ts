@@ -28,7 +28,7 @@ import { openVault } from "../vault/vault.js";
 import type { Station } from "../work/sequencer.js";
 import { newRunId } from "../work/w-events.js";
 import { type ContainerAuthorSession, createContainerAuthor } from "./codex-session.js";
-import { authorSessionCompletedEvent } from "./events.js";
+import { AUTHOR_SESSION_EVENT, authorSessionCompletedEvent } from "./events.js";
 import { standingSeal } from "./standing.js";
 
 /** Why a seal pass did not start. Nothing is written and no container is created for any of them. */
@@ -39,7 +39,8 @@ export type AuthorRefusalCode =
   | "same_vendor"
   | "author_vendor_unsupported"
   | "docker_unreachable"
-  | "endpoint_not_local";
+  | "endpoint_not_local"
+  | "author_call_cap";
 
 export type SealPassResult =
   // Only for a standing seal whose author stage is measured L2.
@@ -123,6 +124,19 @@ export async function sweepAuthorOrphans(input: {
   return removed;
 }
 
+/** Author calls this item has in the ledger: one `author.session_completed` per container run, whatever its outcome. */
+function authorCallsUsed(
+  events: readonly { type: string; payload: Record<string, unknown> }[],
+  scope: DecisionScope,
+): number {
+  return events.filter(
+    (event) =>
+      event.type === AUTHOR_SESSION_EVENT &&
+      event.payload.goal_id === scope.goal_id &&
+      event.payload.work_id === scope.work_id,
+  ).length;
+}
+
 /** Thrown inside the ledger lock when the seal a measurement was made for is not the item's latest any more. */
 class StaleSeal extends Error {}
 
@@ -201,6 +215,8 @@ export async function sealItem(deps: SealItemDeps): Promise<SealPassResult> {
 
   const cleared = await authorRefusal({ location, runtime, env: deps.env });
   if (cleared.refused !== null) return { status: "refused", code: cleared.refused };
+  const callsBefore = authorCallsUsed(before, scope);
+  if (callsBefore >= cleared.config.author.max_calls) return { status: "refused", code: "author_call_cap" };
 
   const passId = newRunId(now());
   const lock = sealLockFile(item.dir);
@@ -230,6 +246,7 @@ export async function sealItem(deps: SealItemDeps): Promise<SealPassResult> {
       passId,
       round: foldSeals(before, scope).completed + 1,
       workId,
+      callsBefore,
       now,
     });
   const feedback = sealFeedbackFromEvents(before, scope);

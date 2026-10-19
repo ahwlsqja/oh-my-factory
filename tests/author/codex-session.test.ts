@@ -131,6 +131,34 @@ describe("createContainerAuthor: a good run", () => {
   });
 });
 
+describe("createContainerAuthor: the caps", () => {
+  it("passes the configured output cap to the Codex exec and records the caps in the facts", async () => {
+    const config = authorConfig();
+    const capped = { ...config, author: { ...config.author, max_output_bytes: 65_536, timeout_ms: 90_000 } };
+    const double = authorDouble();
+    const session = createContainerAuthor(authorDeps(double, { config: capped, callsBefore: 2 }));
+    await session.run(authorRequest(300_000));
+    expect(double.runs.find((run) => run.argv.includes("codex"))?.maxOutputBytes).toBe(65_536);
+    expect(session.takeFacts()).toMatchObject({
+      limit_timeout_ms: 90_000,
+      limit_output_bytes: 65_536,
+      limit_calls: config.author.max_calls,
+      calls_before: 2,
+      output_bytes: Buffer.byteLength("PRIVATE-STDOUT") + Buffer.byteLength("PRIVATE-STDERR"),
+    });
+  });
+
+  it("defaults the caps and counts no earlier call", async () => {
+    const session = createContainerAuthor(authorDeps(authorDouble()));
+    await session.run(authorRequest());
+    expect(session.takeFacts()).toMatchObject({
+      limit_timeout_ms: 60_000,
+      limit_output_bytes: 1024 * 1024,
+      calls_before: 0,
+    });
+  });
+});
+
 describe("createContainerAuthor: every way a run ends badly is one closed code", () => {
   const timeout = { kind: "timeout", stdout: "", stderr: "" } as const;
   const cases: Array<[string, AuthorScript, string]> = [

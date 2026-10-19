@@ -49,7 +49,7 @@ export interface AuthorDouble {
   /** The archives extracted into the container, by destination, already unpacked. */
   extracted: Array<{ dest: string; items: TarItem[] }>;
   /** The timeout of every docker call, in order. */
-  runs: Array<{ argv: string[]; timeoutMs: number }>;
+  runs: Array<{ argv: string[]; timeoutMs: number; maxOutputBytes: number }>;
 }
 
 const sameArgv = (a: readonly string[], b: readonly string[]): boolean =>
@@ -85,7 +85,7 @@ export function authorDouble(script: AuthorScript = {}): AuthorDouble {
     fake.intercept = (argv) => (verbOf(argv) === "exec" && argv.includes("codex") ? result : null);
   }
   const run: DockerRunner = (argv, options) => {
-    runs.push({ argv: [...argv], timeoutMs: options.timeoutMs });
+    runs.push({ argv: [...argv], timeoutMs: options.timeoutMs, maxOutputBytes: options.maxOutputBytes });
     return fake.run(argv, options);
   };
   const runtime = createDockerRuntime({

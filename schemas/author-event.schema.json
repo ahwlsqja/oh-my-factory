@@ -23,6 +23,11 @@
         "answer_sha256",
         "answer_bytes",
         "credential_hits",
+        "output_bytes",
+        "limit_timeout_ms",
+        "limit_output_bytes",
+        "limit_calls",
+        "calls_before",
         "injected_secret_names"
       ],
       "properties": {
@@ -58,6 +63,11 @@
         "answer_sha256": { "anyOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
         "answer_bytes": { "$ref": "#/$defs/count" },
         "credential_hits": { "$ref": "#/$defs/count" },
+        "output_bytes": { "$ref": "#/$defs/count" },
+        "limit_timeout_ms": { "$ref": "#/$defs/count" },
+        "limit_output_bytes": { "$ref": "#/$defs/count" },
+        "limit_calls": { "$ref": "#/$defs/count" },
+        "calls_before": { "$ref": "#/$defs/count" },
         "injected_secret_names": {
           "type": "array",
           "minItems": 1,

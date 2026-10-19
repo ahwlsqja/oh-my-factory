@@ -53,6 +53,8 @@ max_model_usd = 5.0
 # [author]
 # image = "name@sha256:..."              # pinned by digest, or a local image id ("sha256:" and 64 hex digits)
 # timeout_ms = 600000                    # one author call, 60000..3600000
+# max_output_bytes = 1048576             # Codex stdout plus stderr per call, 65536..16777216
+# max_calls = 10                         # author calls per work item over its life, 1..100; money is not metered
 # memory_mb = 1024                       # tmp_tmpfs_mb, in_tmpfs_mb, out_tmpfs_mb and agent_tmpfs_mb together must fit inside it
 # The author's key is never configured here either: it is read from OMF_AUTHOR_API_KEY in the environment of the one command that runs it.
 `;

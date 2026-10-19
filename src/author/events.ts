@@ -25,6 +25,14 @@ export interface AuthorSessionFacts {
   /** sha256 of `answer.json`; null when no answer was read or it was dropped. */
   answer_sha256: string | null;
   answer_bytes: number;
+  /** Bytes Codex printed on stdout and stderr in the call; 0 when it never ran. */
+  output_bytes: number;
+  /** The caps in force for this call: wall time and output bytes of the call, and calls per work item. */
+  limit_timeout_ms: number;
+  limit_output_bytes: number;
+  limit_calls: number;
+  /** Author calls this work item had recorded before this one. */
+  calls_before: number;
   /** Occurrences of the key in the exec output and the answer. Counted, never stored. */
   credential_hits: number;
   injected_secret_names: ["CODEX_API_KEY"];

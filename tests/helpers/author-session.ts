@@ -26,11 +26,13 @@ export interface AuthorConfigOptions {
   image?: string | null;
   /** "same_vendor" gives the author the implementer's vendor (claude); "swapped" makes the author claude and the implementer codex. */
   roles?: "default" | "same_vendor" | "swapped";
+  /** Extra lines of the `[author]` table, for example `max_calls = 1`. */
+  authorLines?: string[];
 }
 
 /** Appends the `[judge]` and `[author]` tables the station reads to the config `omf init` wrote. */
 export function writeAuthorConfig(l: LineFixture, options: AuthorConfigOptions = {}): void {
-  const { context = AUTHOR_CONTEXT, image = AUTHOR_IMAGE, roles = "default" } = options;
+  const { context = AUTHOR_CONTEXT, image = AUTHOR_IMAGE, roles = "default", authorLines = [] } = options;
   let base = l.f.fx.baseConfig;
   if (roles !== "default") base = base.replace('author = { vendor = "codex" }', 'author = { vendor = "claude" }');
   if (roles === "swapped")
@@ -42,6 +44,7 @@ export function writeAuthorConfig(l: LineFixture, options: AuthorConfigOptions =
       ...(context === null ? [] : ["[judge]", `docker_context = "${context}"`, ""]),
       "[author]",
       ...(image === null ? [] : [`image = "${image}"`]),
+      ...authorLines,
       "",
     ].join("\n"),
   );
@@ -118,6 +121,11 @@ export function scriptedAuthor(
         answer_sha256: failed ? null : sha256Hex("answer"),
         answer_bytes: failed ? 0 : 6,
         credential_hits: 0,
+        output_bytes: 0,
+        limit_timeout_ms: 600_000,
+        limit_output_bytes: 1_048_576,
+        limit_calls: 10,
+        calls_before: 0,
         injected_secret_names: ["CODEX_API_KEY"],
       };
     },

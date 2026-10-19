@@ -46,3 +46,14 @@ describe("authorSessionCompletedEvent", () => {
     expect(() => authorSessionCompletedEvent(AUTHOR_SCOPE, facts)).toThrow(/invalid author\.session_completed event/);
   });
 });
+
+describe("authorSessionCompletedEvent: the caps", () => {
+  it("carries the limits and counts, and refuses a negative or fractional one", () => {
+    const event = authorSessionCompletedEvent(AUTHOR_SCOPE, AUTHOR_FACTS);
+    expect(event.payload).toMatchObject({ limit_calls: 10, calls_before: 0, output_bytes: 28 });
+    for (const field of ["output_bytes", "limit_timeout_ms", "limit_output_bytes", "limit_calls", "calls_before"]) {
+      expect(() => authorSessionCompletedEvent(AUTHOR_SCOPE, bad({ [field]: -1 }))).toThrow(/schema/);
+      expect(() => authorSessionCompletedEvent(AUTHOR_SCOPE, bad({ [field]: 1.5 }))).toThrow(/schema/);
+    }
+  });
+});

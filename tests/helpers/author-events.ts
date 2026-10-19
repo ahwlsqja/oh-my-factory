@@ -15,5 +15,10 @@ export const AUTHOR_FACTS: AuthorSessionFacts = {
   answer_sha256: "3".repeat(64),
   answer_bytes: 2048,
   credential_hits: 0,
+  output_bytes: 28,
+  limit_timeout_ms: 600_000,
+  limit_output_bytes: 1_048_576,
+  limit_calls: 10,
+  calls_before: 0,
   injected_secret_names: ["CODEX_API_KEY"],
 };

@@ -103,6 +103,14 @@ export interface AuthorConfig {
   image: string | null;
   /** One author call. */
   timeout_ms: number;
+  /** Bytes of Codex stdout plus stderr one call may print; past it the call stops as `output_limit`. */
+  max_output_bytes: number;
+  /**
+   * Author calls (container runs) one work item may use over its whole life, counted from the ledger. The next
+   * `omf seal` is refused with `author_call_cap` once the count is reached. Money is not metered: OMF reads no usage
+   * numbers from Codex, so wall time, output bytes and the call count are the caps.
+   */
+  max_calls: number;
   memory_mb: number;
   cpus: number;
   pids_limit: number;
@@ -197,6 +205,8 @@ export const CONFIG_DEFAULTS: OmfConfig = {
   author: {
     image: null,
     timeout_ms: 600_000,
+    max_output_bytes: 1024 * 1024,
+    max_calls: 10,
     memory_mb: 1024,
     cpus: 1,
     pids_limit: 256,
