@@ -495,8 +495,10 @@ describe("findTestWeakening", () => {
       });
     });
 
-    it("a runner config outside a test path is only checked for thresholds", () => {
-      expect(findTestWeakening(modify("pytest.ini", ["-addopts = -x", "+addopts = -k smoke"]), [])).toEqual([]);
+    it("a harmless addopts edit in a declarative runner config is weakening, even outside a test path", () => {
+      expect(findTestWeakening(modify("pytest.ini", ["-addopts = -x", "+addopts = -k smoke"]), [])).toEqual([
+        "pytest.ini",
+      ]);
     });
   });
 

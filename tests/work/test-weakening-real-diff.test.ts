@@ -184,9 +184,9 @@ describe("findTestWeakening on a real git diff", () => {
     expect(findTestWeakening(diff, [])).toEqual([".coveragerc"]);
   });
 
-  it("does not flag a raised threshold that carries a trailing comment", () => {
+  it("flags a raised threshold that carries a trailing comment (only an exact `key = number` raise passes)", () => {
     const diff = realDiff({ ".coveragerc": "fail_under = 80\n" }, { ".coveragerc": "fail_under = 90 # raised\n" });
-    expect(findTestWeakening(diff, [])).toEqual([]);
+    expect(findTestWeakening(diff, [])).toEqual([".coveragerc"]);
   });
 
   it("flags a new pkg/zz_test.go with an init that exits the process", () => {
