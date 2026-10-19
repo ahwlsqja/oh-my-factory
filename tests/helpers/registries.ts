@@ -29,6 +29,7 @@ export const DEV_ONLY_TOP_LEVEL: readonly string[] = [
   "DESIGN.md",
   "docs",
   "examples",
+  "outer",
   "package-lock.json",
   "README.ko.md",
   "release-please-config.json",
