@@ -1,0 +1,48 @@
+# Verification/trust kernel: repository-relative picomatch globs (dot: true), one per line.
+# Match changed paths, including deletions and both old/new names in renames.
+# Classify against the base revision's manifest; candidate edits cannot remove their own protection.
+# Hashing, actor/state verification, approval locks, measurements and goal success govern trusted outcomes.
+src/core/**
+src/goal/**
+src/work/**
+# Scenario validation/GATE-2 and feedback disclosure are part of the independent verification boundary.
+src/scenario/**
+src/feedback/**
+# Human decision/signature records (including J2), host Git and process/state adapters are trust boundaries.
+src/decision/**
+src/cli/decide-sign.ts
+src/cli/confirm.ts
+src/git/**
+src/adapters/**
+src/gate/**
+src/judge/**
+src/seal/**
+src/vault/**
+src/isolation/**
+src/audit/**
+src/container/**
+src/implementer/**
+harness/**
+fixtures/**
+schemas/**
+tests/enforcement/**
+# Test startup and CLI shields keep the default suite away from real credentials, models and Docker.
+tests/global-setup.ts
+tests/helpers/bin-shims/**
+.github/workflows/**
+.github/CODEOWNERS
+# Whole-file protection is conservative: version/dependency/bot updates and coverage raises still need human merge.
+package.json
+package-lock.json
+vitest.config.*
+scripts/gated-docker.mjs
+docs/evidence/gated-runs.json
+# Whole design paths conservatively cover principles/gates and their Korean mirrors.
+docs/design/**
+docs/ko/design/**
+# Self-protect the manifest and instructions that define the human-merge requirement.
+docs/maintainers/kernel-paths.txt
+tests/docs/kernel-paths.test.ts
+docs/maintainers/development-workflow.md
+AGENTS.md
+CLAUDE.md
