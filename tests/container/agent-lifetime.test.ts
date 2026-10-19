@@ -119,7 +119,7 @@ describe("agent container lifetime", () => {
     expect(seen).toEqual({
       author: ["sleep", "765"],
       implementer: ["sleep", "2865"],
-      sut: ["sleep", "195"],
+      sut: ["sleep", "443"],
     });
   });
 });

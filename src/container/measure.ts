@@ -13,6 +13,10 @@ import type {
 import { markMeasured } from "./measured-handles.js";
 import type { ContainerHandle, ContainerRuntime } from "./runtime.js";
 import { type ContainerSpec, ROLE_STAGE } from "./spec.js";
+import { PROBE_TIMEOUT_MS } from "./probe-timeout.js";
+
+/** The cap of the isolation probe, milliseconds; `judgeLifetimeSeconds` derives `JUDGE_PROBE_S` from it. */
+export { PROBE_TIMEOUT_MS };
 
 /**
  * `inspect_unparseable`: the daemon's document lacked an isolation field (absence is never a pass). `probe_failed` and
@@ -50,7 +54,6 @@ const PROBE_SCRIPT = [
 
 export const CONTAINER_PROBE_ARGV: readonly string[] = Object.freeze(["sh", "-c", PROBE_SCRIPT]);
 
-const PROBE_TIMEOUT_MS = 15_000;
 const PROBE_MAX_BYTES = 16 * 1024;
 const MAX_PROBE_LINES = 64;
 const VENDOR_LINE = /^vendor:([a-z0-9-]{1,32})$/;

@@ -1,5 +1,6 @@
 import type { AuthorConfig, ImplementerConfig, JudgeConfig } from "../core/config.js";
 import { type PinnedImage, isDigestPinned } from "./image-ref.js";
+import { PROBE_TIMEOUT_MS } from "./probe-timeout.js";
 
 /** The containers OMF starts: three judge roles, the implementer and the sealing author. */
 export const CONTAINER_ROLES = ["sut", "harness", "workcopy", "implementer", "author"] as const;
@@ -48,7 +49,7 @@ export const AUTHOR_STEPS_S = 15 + 30 + 30 + 30;
 export const IMPLEMENTER_STEPS_S = 15 + 30 + (30 + 4 * 120) + 30 + 300 + 120;
 
 /** The isolation probe `createMeasured` runs in every container, seconds (its cap, `PROBE_TIMEOUT_MS`). */
-export const JUDGE_PROBE_S = 15;
+export const JUDGE_PROBE_S = PROBE_TIMEOUT_MS / 1000;
 /**
  * The scenario bounds the judge lifetimes are sized from: at most this many steps in a scenario and scenarios in a set.
  * Copies of `MAX_STEPS` and `MAX_SCENARIOS_PER_SET` in src/scenario/types.ts so the container layer imports nothing from
@@ -63,25 +64,45 @@ export const WORKCOPY_GATE_EXECS = 32;
 export const WORKCOPY_GATE_EXEC_S = 600;
 
 /**
+ * The cap of one docker call that creates, inspects, starts or removes a container, seconds. A copy of `META_MS` in
+ * docker-cli.ts, which imports this module; tests/container/judge-lifetime.test.ts pins the two together.
+ */
+export const JUDGE_DOCKER_CALL_S = 60;
+/** The docker calls the host makes for each SUT container besides its execs: create, inspect, start, the `isRunning` inspect and remove. */
+export const JUDGE_SUT_DOCKER_CALLS = 5;
+/**
+ * A judge bound is the computed worst case times this factor, plus the margin. The worst case adds up caps that the host
+ * reaches one after the other; the factor covers the daemon's own latency between them.
+ */
+export const JUDGE_SAFETY_FACTOR = 1.5;
+
+const boundOf = (worstS: number): number =>
+  Math.min(MAX_LIFETIME_S, Math.ceil(JUDGE_SAFETY_FACTOR * worstS) + AGENT_LIFETIME_MARGIN_S);
+
+/**
  * How long a judge container sleeps before it stops itself, so a run killed by SIGKILL cannot leave one behind for ever
- * (the next item sweep removes it earlier). Sized from the exec caps the role serves and the margin of the agent roles:
- * - sut serves one scenario: the probe and at most `JUDGE_MAX_STEPS` steps at `judge.step_timeout_ms`;
- * - harness serves the whole round: the probe, `load`, `verdict`, and a `begin` plus up to `JUDGE_MAX_STEPS` `observe` calls
- *   for each of `judge.k` reps of up to `JUDGE_MAX_SCENARIOS` scenarios, each at `judge.step_timeout_ms`;
- * - workcopy serves a tree: the probe, the boot caps and `WORKCOPY_GATE_EXECS` execs at `WORKCOPY_GATE_EXEC_S`.
+ * (the next item sweep removes it earlier). The bound is wall-clock time from the container start, so it is sized from
+ * everything the host does while the container is alive, each call at its cap, times `JUDGE_SAFETY_FACTOR`, plus the margin:
+ * - sut serves one scenario: the probe and at most `JUDGE_MAX_STEPS` steps, each followed by an `observe` call, each at
+ *   `judge.step_timeout_ms`;
+ * - harness stays alive for the whole round: the probe, `load`, `verdict`, and for each of `judge.k` reps of up to
+ *   `JUDGE_MAX_SCENARIOS` scenarios a `begin`, the SUT's docker calls and probe, and up to `JUDGE_MAX_STEPS` pairs of step
+ *   and `observe`, each at `judge.step_timeout_ms`;
+ * - workcopy serves a tree and is replaced after `WORKCOPY_GATE_EXECS` execs: the probe, the boot caps and that many gate
+ *   execs at `WORKCOPY_GATE_EXEC_S`.
  * Never more than `MAX_LIFETIME_S`. An agent role has no judge lifetime (null).
  */
 export function judgeLifetimeSeconds(role: ContainerRole, limits: RoleLimits): number | null {
   if (role === "author" || role === "implementer") return null;
   if (limits.kind !== "judge") throw new ContainerSpecError("invalid_limits");
   const stepS = Math.ceil(limits.judge.step_timeout_ms / 1000);
-  const execsS =
-    role === "sut"
-      ? JUDGE_MAX_STEPS * stepS
-      : role === "harness"
-        ? (2 + limits.judge.k * JUDGE_MAX_SCENARIOS * (1 + JUDGE_MAX_STEPS)) * stepS
-        : WORKCOPY_BOOT_S + WORKCOPY_GATE_EXECS * WORKCOPY_GATE_EXEC_S;
-  return Math.min(MAX_LIFETIME_S, JUDGE_PROBE_S + execsS + AGENT_LIFETIME_MARGIN_S);
+  const scenarioS = JUDGE_MAX_STEPS * (stepS + stepS);
+  if (role === "sut") return boundOf(JUDGE_PROBE_S + scenarioS);
+  if (role === "workcopy") {
+    return boundOf(JUDGE_PROBE_S + WORKCOPY_BOOT_S + WORKCOPY_GATE_EXECS * WORKCOPY_GATE_EXEC_S);
+  }
+  const each = stepS + JUDGE_PROBE_S + JUDGE_SUT_DOCKER_CALLS * JUDGE_DOCKER_CALL_S + scenarioS;
+  return boundOf(2 * stepS + JUDGE_PROBE_S + limits.judge.k * JUDGE_MAX_SCENARIOS * each);
 }
 
 /** The lifetime of any role: `agentLifetimeSeconds` for the agents, `judgeLifetimeSeconds` for the judge roles. */

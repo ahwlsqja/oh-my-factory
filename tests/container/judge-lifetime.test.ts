@@ -5,8 +5,11 @@ import {
   AGENT_LIFETIME_MARGIN_S,
   ContainerSpecError,
   JUDGE_MAX_SCENARIOS,
+  JUDGE_DOCKER_CALL_S,
   JUDGE_MAX_STEPS,
   JUDGE_PROBE_S,
+  JUDGE_SAFETY_FACTOR,
+  JUDGE_SUT_DOCKER_CALLS,
   WORKCOPY_BOOT_S,
   WORKCOPY_GATE_EXECS,
   WORKCOPY_GATE_EXEC_S,
@@ -18,6 +21,8 @@ import { CONFIG_DEFAULTS, type JudgeConfig } from "../../src/core/config.js";
 import { MAX_SCENARIOS_PER_SET, MAX_STEPS } from "../../src/scenario/types.js";
 import { FIXTURE_RUN_ID, FIXTURE_WORK_ID, SUT_BASE, limitsFor, specFor } from "../helpers/container-fixture.js";
 import { FakeDocker } from "../helpers/fake-docker.js";
+import { META_MS } from "../../src/container/docker-cli.js";
+import { PROBE_TIMEOUT_MS } from "../../src/container/measure.js";
 import { addImage } from "../helpers/fake-docker-core.mjs";
 import { HARNESS_BASE } from "../helpers/container-fixture.js";
 
@@ -37,32 +42,69 @@ describe("judge container lifetime", () => {
     expect(JUDGE_MAX_SCENARIOS).toBe(MAX_SCENARIOS_PER_SET);
   });
 
-  it("sut: one scenario, the probe and every step at its cap, and a margin", () => {
-    expect(judgeLifetimeSeconds("sut", judge())).toBe(JUDGE_PROBE_S + MAX_STEPS * step() + AGENT_LIFETIME_MARGIN_S);
-    expect(judgeLifetimeSeconds("sut", judge())).toBe(195);
+  it("derives the probe and the docker call caps from the caps of the code that runs them", () => {
+    expect(JUDGE_PROBE_S).toBe(PROBE_TIMEOUT_MS / 1000);
+    expect(JUDGE_DOCKER_CALL_S).toBe(META_MS / 1000);
+    expect(JUDGE_SAFETY_FACTOR).toBeGreaterThanOrEqual(1.5);
   });
 
-  it("harness: the whole round, load and verdict, begin and observe of every rep and scenario, and a margin", () => {
-    const calls = 2 + CONFIG_DEFAULTS.judge.k * MAX_SCENARIOS_PER_SET * (1 + MAX_STEPS);
-    expect(judgeLifetimeSeconds("harness", judge())).toBe(JUDGE_PROBE_S + calls * step() + AGENT_LIFETIME_MARGIN_S);
-    expect(judgeLifetimeSeconds("harness", judge())).toBe(39095);
+  it("sut: the probe and every step and observe at its cap, times the safety factor, and a margin", () => {
+    const worst = JUDGE_PROBE_S + MAX_STEPS * (step() + step());
+    expect(judgeLifetimeSeconds("sut", judge())).toBe(Math.ceil(JUDGE_SAFETY_FACTOR * worst) + AGENT_LIFETIME_MARGIN_S);
+    expect(judgeLifetimeSeconds("sut", judge())).toBe(443);
   });
 
-  it("workcopy: the probe, the boot caps, the gate execs at their cap, and a margin", () => {
-    expect(WORKCOPY_BOOT_S).toBe(120 + 600);
-    expect(judgeLifetimeSeconds("workcopy", judge())).toBe(
-      JUDGE_PROBE_S + WORKCOPY_BOOT_S + WORKCOPY_GATE_EXECS * WORKCOPY_GATE_EXEC_S + AGENT_LIFETIME_MARGIN_S,
+  it("harness: the whole round worst case, times the safety factor, and a margin", () => {
+    const config = CONFIG_DEFAULTS.judge;
+    const each =
+      step(config) + JUDGE_PROBE_S + JUDGE_SUT_DOCKER_CALLS * JUDGE_DOCKER_CALL_S + MAX_STEPS * 2 * step(config);
+    const worst = 2 * step(config) + JUDGE_PROBE_S + config.k * MAX_SCENARIOS_PER_SET * each;
+    expect(judgeLifetimeSeconds("harness", judge())).toBe(
+      Math.ceil(JUDGE_SAFETY_FACTOR * worst) + AGENT_LIFETIME_MARGIN_S,
     );
-    expect(judgeLifetimeSeconds("workcopy", judge())).toBe(19995);
+    expect(judgeLifetimeSeconds("harness", judge())).toBe(254363);
+  });
+
+  it("workcopy: the counted exec budget, times the safety factor, and a margin", () => {
+    expect(WORKCOPY_BOOT_S).toBe(120 + 600);
+    const worst = JUDGE_PROBE_S + WORKCOPY_BOOT_S + WORKCOPY_GATE_EXECS * WORKCOPY_GATE_EXEC_S;
+    expect(judgeLifetimeSeconds("workcopy", judge())).toBe(
+      Math.ceil(JUDGE_SAFETY_FACTOR * worst) + AGENT_LIFETIME_MARGIN_S,
+    );
+    expect(judgeLifetimeSeconds("workcopy", judge())).toBe(29963);
+  });
+
+  it("a round at the maximum caps fits inside the harness bound computed by the same caps", () => {
+    const max = { k: 10, step_timeout_ms: 120_000 };
+    const stepS = max.step_timeout_ms / 1000;
+    // The timeline of the host, call by call, from the caps of the code that makes each call.
+    const sutLife = JUDGE_PROBE_S + MAX_STEPS * (stepS + stepS);
+    let elapsed = stepS + stepS + JUDGE_PROBE_S; // load, verdict, harness probe
+    for (let rep = 0; rep < max.k; rep += 1) {
+      for (let scenario = 0; scenario < MAX_SCENARIOS_PER_SET; scenario += 1) {
+        elapsed += stepS; // begin
+        elapsed += (META_MS / 1000) * 3; // sut create, inspect, start
+        elapsed += PROBE_TIMEOUT_MS / 1000; // sut probe
+        elapsed += MAX_STEPS * (stepS + stepS); // step and observe
+        elapsed += (META_MS / 1000) * 2; // isRunning inspect, remove
+      }
+    }
+    expect(elapsed).toBeLessThanOrEqual(judgeLifetimeSeconds("harness", judge(max)) ?? 0);
+    expect(sutLife).toBeLessThanOrEqual(judgeLifetimeSeconds("sut", judge(max)) ?? 0);
+    expect(judgeLifetimeSeconds("harness", judge(max)) ?? 0).toBeLessThanOrEqual(2147483647);
   });
 
   it("moves with the configured step cap and with k, and rounds a step cap up to whole seconds", () => {
-    expect((judgeLifetimeSeconds("sut", judge({ step_timeout_ms: 20_000 })) ?? 0) - 195).toBe(MAX_STEPS * 10);
-    expect(judgeLifetimeSeconds("sut", judge({ step_timeout_ms: 1500 }))).toBe(15 + MAX_STEPS * 2 + 60);
+    const sutAt = (ms: number) => judgeLifetimeSeconds("sut", judge({ step_timeout_ms: ms })) ?? 0;
+    expect(sutAt(20_000)).toBe(Math.ceil(JUDGE_SAFETY_FACTOR * (JUDGE_PROBE_S + MAX_STEPS * 40)) + 60);
+    expect(sutAt(1500)).toBe(Math.ceil(JUDGE_SAFETY_FACTOR * (JUDGE_PROBE_S + MAX_STEPS * 4)) + 60);
     const harness = (k: number) => judgeLifetimeSeconds("harness", judge({ k })) ?? 0;
-    expect(harness(4) - harness(3)).toBe(MAX_SCENARIOS_PER_SET * (1 + MAX_STEPS) * 10);
+    const each = 10 + JUDGE_PROBE_S + JUDGE_SUT_DOCKER_CALLS * JUDGE_DOCKER_CALL_S + MAX_STEPS * 20;
+    expect(Math.abs(harness(4) - harness(3) - JUDGE_SAFETY_FACTOR * MAX_SCENARIOS_PER_SET * each)).toBeLessThanOrEqual(
+      1,
+    );
     // the work copy runs with its own fixed caps, so the step cap does not move it
-    expect(judgeLifetimeSeconds("workcopy", judge({ step_timeout_ms: 99_000 }))).toBe(19995);
+    expect(judgeLifetimeSeconds("workcopy", judge({ step_timeout_ms: 99_000 }))).toBe(29963);
   });
 
   it("never exceeds what sleep and assertSpec accept, however large the configured bounds", () => {
@@ -84,9 +126,9 @@ describe("judge container lifetime", () => {
   });
 
   it.each([
-    ["sut", "195"],
-    ["harness", "39095"],
-    ["workcopy", "19995"],
+    ["sut", "443"],
+    ["harness", "254363"],
+    ["workcopy", "29963"],
   ] as const)("pins the %s entrypoint argv: sleep for its lifetime, never the unbounded sleep", (role, seconds) => {
     const argv = createArgv(specFor(role), "ctx");
     expect(tail(argv)).toEqual(["--entrypoint", "sleep", specFor(role).image, seconds]);
@@ -104,6 +146,15 @@ describe("judge container lifetime", () => {
         limits: limitsFor(role),
       });
       expect(spec.lifetime_s).toBe(roleLifetimeSeconds(role, limitsFor(role)));
+    }
+  });
+
+  it("accepts the lifetime of every judge role at the default and at the maximum caps", () => {
+    for (const role of JUDGE) {
+      for (const config of [CONFIG_DEFAULTS.judge, { ...CONFIG_DEFAULTS.judge, k: 10, step_timeout_ms: 120_000 }]) {
+        const lifetime_s = roleLifetimeSeconds(role, { kind: "judge", judge: config });
+        expect(() => assertSpec({ ...specFor(role), lifetime_s })).not.toThrow();
+      }
     }
   });
 
@@ -127,9 +178,9 @@ describe("judge container lifetime", () => {
       seen[role] = [made.entrypoint, ...made.cmd];
     }
     expect(seen).toEqual({
-      sut: ["sleep", "195"],
-      harness: ["sleep", "39095"],
-      workcopy: ["sleep", "19995"],
+      sut: ["sleep", "443"],
+      harness: ["sleep", "254363"],
+      workcopy: ["sleep", "29963"],
     });
   });
 });

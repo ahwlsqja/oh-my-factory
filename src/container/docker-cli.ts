@@ -56,7 +56,8 @@ export interface DockerRuntimeOptions {
 /** A path that cannot exist, used when neither DOCKER_CONFIG nor an absolute HOME is known: the client then finds no context and fails closed. */
 const UNSET_HOME_DOCKER_CONFIG = "/nonexistent/omf-docker-config";
 const QUICK_MS = 15_000;
-const META_MS = 60_000;
+/** The cap of a docker call that creates, inspects, starts or removes a container, milliseconds. */
+export const META_MS = 60_000;
 const PULL_MS = 600_000;
 const META_BYTES = 4 * 1024 * 1024;
 const FAILURE_CAP = 2000;
