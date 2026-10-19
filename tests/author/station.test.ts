@@ -5,6 +5,7 @@ import { createContainerAuthor } from "../../src/author/codex-session.js";
 import { standingSeal } from "../../src/author/standing.js";
 import { type AuthorRefusalCode, type SealItemDeps, sealItem, standingSealStation } from "../../src/author/station.js";
 import type { ContainerRuntime } from "../../src/container/runtime.js";
+import { claimItem, releaseItem } from "../../src/work/claim.js";
 import { acquireLock, releaseLock } from "../../src/core/lock.js";
 import { loadRunIsolation } from "../../src/isolation/record.js";
 import { sealLockFile } from "../../src/seal/seal.js";
@@ -464,7 +465,7 @@ describe("sealItem", () => {
     expect(sessions).toBe(0);
   });
 
-  it("sweeps author containers of earlier passes of this item, and nothing else", async () => {
+  it("sweeps the author and implementer containers of earlier runs of this item, and nothing else", async () => {
     const r = rig();
     mkdirSync(join(r.l.f.item.dir, "runs", EARLIER), { recursive: true });
     r.runtime.owned = [
@@ -475,8 +476,24 @@ describe("sealItem", () => {
     ];
     expect((await sealItem(r.deps())).status).toBe("sealed");
     expect(r.runtime.owned.map((resource) => resource.name).sort()).toEqual(
-      [`omf-author-${OTHER_ITEM}-1-1`, `omf-implementer-${EARLIER}-1-2`, `omf-sut-${EARLIER}-1-3`].sort(),
+      [`omf-author-${OTHER_ITEM}-1-1`, `omf-sut-${EARLIER}-1-3`].sort(),
     );
+  });
+
+  it("keeps an implementer container while a live process holds the item claim, and still sweeps the author one", async () => {
+    const r = rig();
+    mkdirSync(join(r.l.f.item.dir, "runs", EARLIER), { recursive: true });
+    r.runtime.owned = [
+      { kind: "container", name: `omf-author-${EARLIER}-1-1`, run_id: EARLIER },
+      { kind: "container", name: `omf-implementer-${EARLIER}-1-2`, run_id: EARLIER },
+    ];
+    claimItem(r.l.f.item.dir);
+    try {
+      await sealItem(r.deps());
+    } finally {
+      releaseItem(r.l.f.item.dir);
+    }
+    expect(r.runtime.owned.map((resource) => resource.name)).toEqual([`omf-implementer-${EARLIER}-1-2`]);
   });
 
   it("stops at J7 and sweeps nothing while another seal pass holds seal.lock", async () => {

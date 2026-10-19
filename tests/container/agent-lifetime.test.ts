@@ -77,9 +77,14 @@ describe("agent container lifetime", () => {
     expect(argv).not.toContain("2147483647");
   });
 
-  it.each(["sut", "harness", "workcopy"] as const)("leaves the %s idle sleep as it was", (role) => {
-    expect(tail(createArgv(specFor(role), "ctx")).at(-1)).toBe("2147483647");
-  });
+  // Paired with the author lifetime in the same test, so the test is red on the code before the lifetime existed.
+  it.each(["sut", "harness", "workcopy"] as const)(
+    "leaves the %s idle sleep as it was while the author's is bounded",
+    (role) => {
+      expect(tail(createArgv(specFor("author"), "ctx")).at(-1)).toBe("765");
+      expect(tail(createArgv(specFor(role), "ctx")).at(-1)).toBe("2147483647");
+    },
+  );
 
   it("is built into the spec the stations use, from the role's own table", () => {
     for (const role of ["author", "implementer"] as const) {

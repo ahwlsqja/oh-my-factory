@@ -27,6 +27,7 @@ import { OPEN_STATES, TERMINAL_WORK_STATES, type WorkItem, type WorkState } from
 import { type LimitKind, microUsd, openItemBudget, raiseWorkLimit, WorkBudgetError } from "../work/w-budget.js";
 import { renderWorkItem } from "../work/work-item.js";
 import { confirmByTyping, type PromptStreams, requireTerminal, type TerminalStreams } from "./confirm.js";
+import { sweepItemBestEffort } from "./item-sweep.js";
 
 /** What a person typed after `omf budget declare|raise`: strings, because validation is `parseBudgetArgs`'s job. */
 export interface BudgetArgs {
@@ -569,10 +570,12 @@ export function registerWorkCommands(program: Command): void {
     .argument("<work_id>")
     .option("--reason <text>", "why, at most 500 characters", "vetoed")
     .description("veto a work item from any open state; no terminal needed, because a veto only restricts")
-    .action((workId: string, options: { reason: string }) => {
+    .action(async (workId: string, options: { reason: string }) => {
       const status = requireProject(process.cwd());
       const actor = humanActor(status.repo);
       const result = runVeto(status, workId, actor, options.reason);
+      // The vetoed item will never reach another station, so a container of a killed run would stay for ever without this.
+      await sweepItemBestEffort(status, workId, process.env);
       console.log(`vetoed ${workId} (was ${result.previous})`);
       if (result.claim.held) {
         const pid = result.claim.owner === null ? "unknown" : String(result.claim.owner.pid);

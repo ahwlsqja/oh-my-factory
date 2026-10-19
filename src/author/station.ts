@@ -3,10 +3,10 @@ import { join } from "node:path";
 import { findWorkItem } from "../adapters/state-markdown.js";
 import type { RecordSink, RunScope } from "../audit/work-audit.js";
 import { type ContainerRuntime, RuntimeError } from "../container/runtime.js";
+import { sweepItemOrphans } from "../container/item-sweep.js";
 import { assertName } from "../container/spec.js";
 import { type OmfConfig, readConfig } from "../core/config.js";
 import { Ledger } from "../core/ledger.js";
-import { isLockHeld, sealLockFile } from "../core/lock.js";
 import type { ProjectLocation } from "../core/paths.js";
 import { authorVendorRefusal, sameVendorRefusal } from "../core/roles.js";
 import { evaluateGate1, intentQuestionIds } from "../decision/gate1.js";
@@ -130,29 +130,6 @@ export async function sweepAuthorOrphans(input: {
 }
 
 /**
- * `sweepAuthorOrphans` for a command that does not hold `seal.lock`: every `omf seal`, whatever its outcome (a refused,
- * started, already sealed or GATE-1 failing item included), and nothing else needs the author. While another pass holds the
- * lock its container is that pass's own, so nothing is removed. Best effort: a daemon that cannot answer leaves the orphan
- * for the next command, and never changes what the command reports.
- */
-export async function sweepItemAuthorOrphans(input: {
-  runtime: Pick<ContainerRuntime, "listOwned" | "remove">;
-  itemDir: string;
-  currentPassId?: string;
-}): Promise<number> {
-  try {
-    if (isLockHeld(sealLockFile(input.itemDir))) return 0;
-    return await sweepAuthorOrphans({
-      runtime: input.runtime,
-      itemDir: input.itemDir,
-      currentPassId: input.currentPassId ?? "",
-    });
-  } catch {
-    return 0;
-  }
-}
-
-/**
  * Author calls this item has taken: one per `author.session_started` (written under `seal.lock` just before the model run,
  * so a pass killed in the call is counted), plus the passes of older ledgers, which have only an `author.session_completed`,
  * counted once per pass id that no started record names.
@@ -217,8 +194,8 @@ export function recordAuthorMeasurement(input: {
 
 /**
  * One `omf seal` pass (spec §5.3). In order:
- * 0. before anything else, whatever the pass will answer, `sweepItemAuthorOrphans` removes the author containers of earlier
- *    passes of the item (unless another pass holds `seal.lock`), so a pass killed after its container exists is cleaned up
+ * 0. before anything else, whatever the pass will answer, `sweepItemOrphans` removes the author containers of earlier
+ *    passes of the item (unless another pass holds `seal.lock`) and its implementer containers (unless a run holds the claim), so a pass killed after its container exists is cleaned up
  *    by the next seal even when that seal is refused, already sealed, or stopped by GATE-1;
  * 1. the line guard (sealed material in the repository, a symlink in the state tree) is a J7 stop;
  * 2. a standing seal whose author stage is measured L2 answers `already_sealed` here: no key, no daemon, no model call.
@@ -244,7 +221,7 @@ export async function sealItem(deps: SealItemDeps): Promise<SealPassResult> {
   const scope: DecisionScope = { goal_id: item.front.goal_id, work_id: item.front.work_id };
   const passId = newRunId(now());
   // Before any other check, so a pass killed after its container exists is cleaned up by the next seal whatever it answers.
-  await sweepItemAuthorOrphans({ runtime, itemDir: item.dir, currentPassId: passId });
+  await sweepItemOrphans({ runtime, itemDir: item.dir, currentPassId: passId });
   const stateEnv = locationEnv(location);
   try {
     assertLineSafe(location, stateEnv);

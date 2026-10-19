@@ -25,6 +25,7 @@ import { assertGoalExists, withTickLock } from "../goal/tick-lock.js";
 import { verifiedItems } from "../work/ledger-verify.js";
 import { OPEN_STATES, type RiskClass, type WorkState } from "../work/types.js";
 import { confirmByTyping, requireTerminal } from "./confirm.js";
+import { sweepItemBestEffort } from "./item-sweep.js";
 
 function collect(value: string, previous: string[]): string[] {
   return [...previous, value];
@@ -461,6 +462,8 @@ export function registerGoalCommands(program: Command): void {
           return;
         }
         const result = cancelGoal(ledger, store, goalId, actor, new Date());
+        // The cancelled items will never reach another station: a container of a killed run is removed now.
+        for (const workId of result.cancelled) await sweepItemBestEffort(status, workId, process.env);
         console.log(
           `cancelled ${goalId}; ${result.cancelled.length} work ${result.cancelled.length === 1 ? "item" : "items"} cancelled`,
         );

@@ -7,7 +7,7 @@ import { handoffFile } from "../work/handoff.js";
 import { type LineResult, runLine } from "../work/sequencer.js";
 import { WError } from "../work/w-verbs.js";
 import { EXIT, type ExitCode } from "./exit.js";
-import { assembleLine, checkOrder, exitForLine, judgeLine, openRuntime } from "./w-assembly.js";
+import { assembleLine, checkOrder, exitForLine, judgeLine, openRuntime, sweepItemBestEffort } from "./w-assembly.js";
 
 /**
  * The lines `omf run` prints for a result. Ids, enum members, closed codes and paths of the host state only: nothing an
@@ -69,6 +69,8 @@ export async function runVerb(workId: string, json: boolean): Promise<ExitCode> 
   const location = requireProject(process.cwd());
   const order = checkOrder(location, workId, "run", new Date());
   if (!order.ok) {
+    // A refusal never reaches S1, so the sweep of the line's start would never run: an exited container of a killed run goes here.
+    await sweepItemBestEffort(location, workId, process.env);
     // Exit 0 is the one refusal that is not a failure: the item already ran and awaits review.
     if (order.exit === 0) console.log(order.message);
     else console.error(order.message);
@@ -89,6 +91,7 @@ export async function runVerb(workId: string, json: boolean): Promise<ExitCode> 
   } catch (err) {
     // beginRun's refusals (claim_held, wrong_state, needs_human, governance, malformed) carry a code and a message built from ids.
     if (err instanceof WError) {
+      await sweepItemBestEffort(location, workId, process.env, runtime);
       console.error(`run refused: ${err.message}`);
       return err.code === "needs_human" ? EXIT.waiting : EXIT.cannotRun;
     }

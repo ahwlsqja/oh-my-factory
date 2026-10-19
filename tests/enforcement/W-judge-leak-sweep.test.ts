@@ -79,9 +79,13 @@ describe("W-judge-leak-sweep", () => {
     const itemDir = realTempDir("omf-sweep-item-");
     put(itemDir, `runs/${EARLIER}/marker`, "x");
     const memory = new MemoryRuntime();
-    memory.owned = [{ kind: "container", name: `omf-author-${OTHER_ITEM}-1-1`, run_id: OTHER_ITEM }];
-    expect(await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT })).toMatchObject({ containers: 0 });
-    expect(memory.owned).toHaveLength(1);
+    // This item's own earlier author container goes in the same call (red before the author role was swept); the other item's stays.
+    memory.owned = [
+      { kind: "container", name: `omf-author-${EARLIER}-1-1`, run_id: EARLIER },
+      { kind: "container", name: `omf-author-${OTHER_ITEM}-1-1`, run_id: OTHER_ITEM },
+    ];
+    expect(await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT })).toMatchObject({ containers: 1 });
+    expect(memory.owned.map((resource) => resource.run_id)).toEqual([OTHER_ITEM]);
   });
 
   it("sweepImplementerContainers removes this item's implementer containers, the current run's included, and nothing else", async () => {

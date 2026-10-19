@@ -1,13 +1,12 @@
 import type { Command } from "commander";
 import type { AuthorRefusalCode, SealPassResult } from "../author/station.js";
-import { sealItem, sweepItemAuthorOrphans } from "../author/station.js";
-import { findWorkItem } from "../adapters/state-markdown.js";
+import { sealItem } from "../author/station.js";
 import { createDockerRuntime } from "../container/docker-cli.js";
 import { readConfig } from "../core/config.js";
 import type { ProjectLocation } from "../core/paths.js";
 import { requireProject } from "../core/project.js";
 import type { ExitCode } from "./exit.js";
-import { type Order, checkOrder, openRuntime } from "./w-assembly.js";
+import { type Order, checkOrder, openRuntime, sweepItemBestEffort } from "./w-assembly.js";
 
 const CLOSED_CODE = /^[a-z][a-z0-9_]{0,63}$/;
 
@@ -112,18 +111,6 @@ function printRefusal(workId: string, order: Extract<Order, { ok: false }>, json
   return order.exit;
 }
 
-/** Best effort and silent: the answer of a refused seal is the refusal, not what the sweep found. */
-async function sweepRefusedItem(location: ProjectLocation, workId: string, env: NodeJS.ProcessEnv): Promise<void> {
-  try {
-    const item = findWorkItem(location.dir, workId);
-    const runtime = openRuntime(readConfig(location.dir), env);
-    if (item === null || runtime === null) return;
-    await sweepItemAuthorOrphans({ runtime, itemDir: item.dir });
-  } catch {
-    // nothing to report: the next seal sweeps again
-  }
-}
-
 /**
  * `omf seal`: the order check, then `sealItem`, then a closed report. Nothing here decides anything the station owns;
  * a ConfigError or a corrupt ledger throws and main.ts exits 2 with its hint.
@@ -134,7 +121,7 @@ export async function runSeal(input: RunSealInput): Promise<ExitCode> {
   const order = checkOrder(location, workId, "seal", now());
   if (!order.ok) {
     // A refusal here never reaches `sealItem`, but it must not leave an earlier pass's container running either.
-    await sweepRefusedItem(location, workId, env);
+    await sweepItemBestEffort(location, workId, env);
     return printRefusal(workId, order, json);
   }
   const config = readConfig(location.dir);

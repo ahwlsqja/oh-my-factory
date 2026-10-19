@@ -1,8 +1,5 @@
 import { findWorkItem } from "../adapters/state-markdown.js";
 import { standingSeal } from "../author/standing.js";
-import { createDockerRuntime } from "../container/docker-cli.js";
-import type { ContainerRuntime } from "../container/runtime.js";
-import type { OmfConfig } from "../core/config.js";
 import { Ledger, type LedgerEvent } from "../core/ledger.js";
 import type { ProjectLocation } from "../core/paths.js";
 import { safeText } from "../core/safe-text.js";
@@ -14,16 +11,6 @@ import { verifyItemAgainstLedger } from "../work/ledger-verify.js";
 import type { WorkItem } from "../work/types.js";
 import { WorkItemError } from "../work/work-item.js";
 import { decideReport } from "./decide.js";
-
-/**
- * The runtime of the configured Docker context, or null when `[judge] docker_context` is unset (the client's current
- * context is never used). A caller that still needs a runtime object passes `createDockerRuntime({ context: null })`,
- * which refuses every call, and lets the station report the missing context in its own refusal order.
- */
-export function openRuntime(config: OmfConfig, env: NodeJS.ProcessEnv): ContainerRuntime | null {
-  const context = config.judge.docker_context;
-  return context === null ? null : createDockerRuntime({ context, env });
-}
 
 export type OrderVerb = "seal" | "run" | "report";
 export type OrderMissing = "GATE-1" | "GATE-2" | "S7" | "item";
@@ -140,4 +127,5 @@ function lineOrder(input: {
   };
 }
 
+export { openRuntime, sweepItemBestEffort } from "./item-sweep.js";
 export { assembleLine, exitForLine, judgeLine, type LineAssembly } from "./w-line.js";
