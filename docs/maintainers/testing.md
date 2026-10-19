@@ -120,7 +120,7 @@ current Docker context is left alone (and put back if it changed anyway).
 ```sh
 npm run test:gated                                  # every gated suite
 npm run test:gated -- --only G-inspect-parser-real  # one suite
-npm run test:gated -- --record                      # also append a record per passed G- suite (clean tree only)
+npm run test:gated -- --record                      # also append a record per passed G- suite (clean tree; only the evidence file may differ)
 ```
 
 A gated suite that calls a real model reads its own keys. `G-implementer-real-run` and `G-e6-l2-leak-redteam` read
@@ -134,7 +134,9 @@ the keys are dropped. The author suites are described in [docs/author.md](../aut
 that has no spend limit.
 
 Records live in `docs/evidence/gated-runs.json` and are written only by `--record`, never from inside a test. Until a
-suite has a record, the docs say the behaviour it covers is not enforced. Gated suites are never part of CI.
+suite has a record, the docs say the behaviour it covers is not enforced. Gated suites are never part of CI. A gated test that runs a model session sets its own session timeout in its request, not the
+`[implementer] timeout_ms` default (30 minutes), and its vitest timeout is longer than that session timeout
+(`G-implementer-real-run`: 20 minutes for the session, 25 for the test).
 
 One older test predates this: the Docker case in `tests/adapters/measure-cmd.test.ts` runs only when
 `OMF_TEST_DOCKER=1` and uses the client's current Docker context, not the `omf-m3f` profile. It is not a gated suite,

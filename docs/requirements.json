@@ -557,7 +557,7 @@
     },
     {
       "id": "S5.0.run-refuses-out-of-order",
-      "source": "spec §5.0; M3h",
+      "source": "spec §5.0",
       "claim": "omf run refuses an item whose GATE-1 is open (exit 3) or that has no passing seal (exit 2) and names the missing gate; omf report names S7 when there is no trusted evidence; a refusal writes nothing.",
       "real_world": false,
       "surfaces": ["README.md"],
@@ -570,7 +570,7 @@
     },
     {
       "id": "S5.0.run-report-idempotent",
-      "source": "spec §5.0; M3h",
+      "source": "spec §5.0",
       "claim": "omf run on an item that already ran, and omf report, change nothing. omf report refuses a recommendation, outcome or isolation level the ledger does not vouch for; its other fields are shown as recorded in the run's evidence file.",
       "real_world": false,
       "surfaces": ["README.md"],
@@ -638,7 +638,7 @@
     },
     {
       "id": "S5.3.author-boundary-real",
-      "source": "spec §5.3, M3-D16",
+      "source": "spec §5.3",
       "claim": "A real author container measures L2, mounts only tmpfs, holds one scoped secret that docker inspect never shows, has no Claude binary and no credential directory, and has a writable answer path.",
       "real_world": true,
       "surfaces": ["docs/author.md"],
@@ -652,7 +652,7 @@
     },
     {
       "id": "S5.3.author-answer-no-leak",
-      "source": "spec §5.3 and F6, M3-D16",
+      "source": "spec §5.3 and F6",
       "claim": "The real Codex author's answer holds no goal canary, no marker from the worktree or the vault and not the key, and nothing OMF writes holds the key.",
       "real_world": true,
       "surfaces": ["docs/author.md"],
@@ -666,7 +666,7 @@
     },
     {
       "id": "S5.0.skeleton-real-line",
-      "source": "spec §5.0, M3-D14",
+      "source": "spec §5.0",
       "claim": "The line runs through omf seal, omf run and omf report with a real author and implementer, one rework round, outcome success, recommendation human_needed and run isolation level L2.",
       "real_world": true,
       "surfaces": ["docs/author.md"],

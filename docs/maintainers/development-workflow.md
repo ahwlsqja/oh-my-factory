@@ -182,7 +182,9 @@ The inspecting human records the inspected head SHA in the PR body or a comment.
 approval is not required (authors cannot approve their own PR); AI-authored comments cannot replace this evidence.
 
 Record the classification and required handoff in the PR. The manifest defines scope; it is not a CI
-classifier or proof of enforcement. Automatic classification/enforcement requires separate implementation.
+classifier or proof of enforcement. The advisory `kernel-paths` workflow (`.github/workflows/kernel-paths.yml`) reports which
+kernel paths a pull request touches; it is report-only and blocks nothing. Automatic classification/enforcement requires
+separate implementation.
 New, unclassified `src` roots require explicit classification and human review; they are not implicitly
 non-kernel. The manifest test checks source-root coverage, not GitHub merge decisions or personal human merge.
 

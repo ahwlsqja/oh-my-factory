@@ -5,9 +5,10 @@
 # It spends nothing and starts no container: a real item needs J1 and J2 signatures that refuse non-terminals, so the full
 # walk with a real model is the gated suite G-skeleton-real (docs/author.md, "Gated runs").
 #
-#   npm run build && OMF_AUTHOR_API_KEY=<dedicated, spend-limited key> OMF_IMPLEMENTER_API_KEY=<dedicated, spend-limited key> sh scripts/smoke-w.sh
+#   npm run build && OMF_AUTHOR_API_KEY="$(security find-generic-password -a "$USER" -s omf-gated-openai -w)" \
+#     OMF_IMPLEMENTER_API_KEY="$(security find-generic-password -a "$USER" -s omf-gated-anthropic -w)" sh scripts/smoke-w.sh
 #
-# The keys are read from this environment only, never written to a file and never printed. The colima-omf-m3f Docker
+# The keychain form keeps the key text out of the shell history. The keys are read from this environment only, never written to a file and never printed. The colima-omf-m3f Docker
 # context must exist (npm run test:gated creates it by starting the profile).
 # Exit codes: 0 every check held, 1 a check failed, 2 the script could not run.
 set -eu

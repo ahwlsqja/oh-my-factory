@@ -50,7 +50,7 @@ The four tmpfs sizes are charged to the container's memory, so their sum must fi
 
 ## The key
 
-The key is `OMF_AUTHOR_API_KEY`, set for the one command: `OMF_AUTHOR_API_KEY=... omf seal <work-id>`. OMF never reads `OPENAI_API_KEY`, `CODEX_API_KEY` or the implementer's variable, and a key is handed only to the exec that starts Codex, under the in-container name `CODEX_API_KEY`. That name is unverified against the pinned Codex until the first gated run. An author exec cannot carry the implementer's key, and the reverse.
+The key is `OMF_AUTHOR_API_KEY`, set for the one command: `OMF_AUTHOR_API_KEY="$(security find-generic-password -a "$USER" -s omf-gated-openai -w)" omf seal <work-id>` (the keychain form keeps the key out of the shell history). OMF never reads `OPENAI_API_KEY`, `CODEX_API_KEY` or the implementer's variable, and a key is handed only to the exec that starts Codex, under the in-container name `CODEX_API_KEY`. That name is unverified against the pinned Codex until the first gated run. An author exec cannot carry the implementer's key, and the reverse.
 
 The author's own tool calls in the container can read and use the key. The bound is a dedicated, spend-limited provider key; do not reuse a key that has no spend limit. `omf doctor --json` names the variable and whether it is set, never the value.
 
@@ -103,9 +103,20 @@ OMF_AUTHOR_API_KEY=<dedicated, spend-limited key> npm run test:gated -- --model 
 OMF_AUTHOR_API_KEY=<dedicated, spend-limited key> OMF_IMPLEMENTER_API_KEY=<dedicated, spend-limited key> npm run test:gated -- --model --only G-skeleton-real
 ```
 
-The driver starts the `omf-m3f` profile, passes each suite only the keys it reads under their own names and runs the output through a redactor. A key is passed on the command line of the one command that needs it and is never written to a file; the suites print nothing, and a failure message is a fixed string. Use dedicated keys with a provider-side spend limit: code in the container can read the key it is given, and author spend is not recorded or bounded by OMF in money (see What it costs for the wall-time, output and call caps it does enforce).
+Type the two key lines with the keychain form instead of the placeholder, so no key text enters the shell history (the leading `!` runs it in your shell; `omf-gated-openai` and `omf-gated-anthropic` are the keychain service names to store the keys under):
 
-To record a passing suite, add `--record` on a clean working tree. Then delete that suite's `[not enforced: ...]` marker in the table above; `tests/docs/m3h-gated-claims.test.ts` fails until you do.
+```console
+! OMF_AUTHOR_API_KEY="$(security find-generic-password -a "$USER" -s omf-gated-openai -w)" npm run test:gated -- --model --only G-author-canary
+! OMF_AUTHOR_API_KEY="$(security find-generic-password -a "$USER" -s omf-gated-openai -w)" OMF_IMPLEMENTER_API_KEY="$(security find-generic-password -a "$USER" -s omf-gated-anthropic -w)" npm run test:gated -- --model --only G-skeleton-real
+```
+
+The driver starts the `omf-m3f` profile, passes the test process the union of the keys that the suites matched by `--only` read (all of them without `--only`), each under its own name, so one vitest process holds every key of every matched suite and runs the output through a redactor. A key is passed on the command line of the one command that needs it and is never written to a file; the suites print nothing, and a failure message is a fixed string. Use dedicated keys with a provider-side spend limit: code in the container can read the key it is given, and author spend is not recorded or bounded by OMF in money (see What it costs for the wall-time, output and call caps it does enforce).
+
+To record a passing suite, add `--record` on a clean working tree; the evidence file `docs/evidence/gated-runs.json` may differ from an earlier `--record` run, and the driver says the records are pending until you commit it. Then:
+
+1. Delete that suite's `[not enforced: ...]` marker in the table above; `tests/docs/m3h-gated-claims.test.ts` fails until you do.
+2. A recorded `G-author-boundary-real` also covers `S5.3.author-measured-before-key`: delete its `[not enforced: S5.3.author-measured-before-key]` marker in `docs/isolation-and-gates.md` too.
+3. Regenerate `docs/conformance-matrix.md` with `node scripts/conformance-matrix.mjs --write` and commit it with the evidence file.
 
 The item of `G-skeleton-real` is staged on purpose: its constraints tell the implementer to leave the missing-value case for the feedback round, so the rework path is exercised without depending on a model error. If the implementer ignores that instruction the suite fails with the message `the line finished without a rework round`; that points at the fixture, not at the line. It also tells the implementer to change only `app/search-cli.mjs` and add no test file: a test file added anyway is a high-risk path, and the suite then fails with `the unverified areas are not only the noise check`.
 
