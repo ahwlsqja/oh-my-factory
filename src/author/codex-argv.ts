@@ -73,10 +73,19 @@ export function codexArgv(input: { model: string | null }): string[] {
   ];
 }
 
-const INTERACTIVE_TOKENS: ReadonlySet<string> = new Set(["--tty", "-t", "--resume", "resume", "login"]);
-
-/** Refuses an argv that is not a one-shot ephemeral `codex exec`, or that names a terminal, a resume or a login. */
+/**
+ * Refuses any argv that is not the pinned one-shot ephemeral `codex exec`, with only the model value free. The comparison is
+ * against `codexArgv` itself, so a terminal, a resume, a login, `--full-auto`, a wider `-s`/`--sandbox` and any `-c`
+ * override of the sandbox or the approval policy are refused at run time without a list of bad spellings to keep up to date.
+ */
 export function refuseInteractive(argv: readonly string[]): "interactive" | null {
-  if (argv[0] !== "codex" || argv[1] !== "exec" || !argv.includes("--ephemeral")) return "interactive";
-  return argv.some((part) => INTERACTIVE_TOKENS.has(part)) ? "interactive" : null;
+  const modelAt = argv.length - 3;
+  const model = argv[modelAt] === "-m" ? (argv[modelAt + 1] ?? null) : null;
+  let pinned: string[];
+  try {
+    pinned = codexArgv({ model });
+  } catch {
+    return "interactive";
+  }
+  return pinned.length === argv.length && pinned.every((part, index) => part === argv[index]) ? null : "interactive";
 }
