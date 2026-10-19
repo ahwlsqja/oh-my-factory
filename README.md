@@ -483,13 +483,31 @@ those stay in the report under host state.
 ### Work items
 
 Dispatched items live in `goals/<id>/work/<work-id>/`. Risk is classified by code from the paths a candidate
-declares. CI, auth, migrations, tests, lockfiles, goal and factory files and your watched paths are high risk: a
-high-risk item waits in `awaiting_approval` for `omf work approve`, any other item starts `ready`. You can
+declares. CI, auth, migrations, lockfiles, goal and factory files and your watched paths are high risk. A test file is not
+high risk by itself, neither when a candidate declares it nor when the audit reads the real diff. A declared test path has
+no diff yet, so it does not make an item high at dispatch. After the implementation the audit runs a deterministic
+test-weakening check on the diff and raises the item to high only for a change that weakens tests: a deleted test file,
+a test that loses more assertion lines than it gains, an added skip, only, todo, fixme, expected-failure or x- or f-prefixed marker (`xit`, `xdescribe`, `fit` and the like),
+a hook that changes how other tests run (a `conftest.py` at any depth, a Go `TestMain` or `func init()`, `this.skip()`, a process exit such as `os.Exit`, `sys.exit`, `process.exit` or `pytest.exit`), a lowered or removed threshold
+(every `key: number` pair of the code part of a line is compared, so a commented-out threshold counts as removed, and a line it cannot pair counts as weakening), a new or edited test
+runner or coverage config under a test path (unless it only raises threshold numbers and leaves the rest of every changed line exactly as it was; `.coveragerc`, `codecov.yml` and `package.json` under a test path are held to the same rule), or a binary section (one byte such as a NUL makes a section binary) on a test path or a coverage or runner config, which cannot be read and so counts as weakening. A mode-only change stays normal. A runner or coverage config outside a test
+path gets the numeric-threshold check, including conservative handling of ambiguous threshold lines. A test change that does not weaken tests no longer adds the high-risk-paths
+review area to the evidence, which it used to. When
+the check cannot run, for example the diff cannot be read in full, every test change stays high. Risk only rises between
+declaration and audit. The check reads changed lines and is not a proof; its known limits are listed below. A high-risk item waits in `awaiting_approval` for `omf work approve`, any other item starts `ready`. You can
 `omf veto <work-id>` anything that is open. The ledger, not the item file, decides whether an item was approved,
 vetoed or cancelled: an `item.md` edited by hand to look approved is listed by `omf work list` as malformed and
 is never dispatched.
 
+Quoted `#` and `//` markers remain part of the code; genuine trailing comments are ignored. A threshold-bearing line with an ambiguous comment boundary, such as an unquoted slash that could start a regular expression or an unfinished quote, is handled conservatively as weakening. Ambiguous lines cannot receive the threshold-only configuration exception; this can flag benign edits.
+
 Known limits of the goal loop:
+
+- The test-weakening check is line based. It does not follow a block comment that spans lines, an early `return` or
+  `if (false)` that stops a test from running, a weaker matcher (`toBeTruthy` for `toBe(1)`), an assertion replaced by
+  one that is always true, edits to snapshots or fixtures, or an `include` or `exclude` that narrows which tests run.
+  What a binary section changes is not inspected: it is flagged as unreadable, never judged. The check counts removed and added assertion lines, so a rewrite that keeps the count
+  looks unchanged. A raised tolerance (a codecov `threshold`, a screenshot threshold) is not detected.
 
 - The seed lint catches numbers and metric names, not paraphrase. A model that restates a threshold in other
   words gets through.

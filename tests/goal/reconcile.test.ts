@@ -848,6 +848,15 @@ describe("reconcileGoal: risk and dispatch", () => {
     expect(ofType(fx, "work.created").map((e) => e.payload.state)).toEqual(["ready", "awaiting_approval"]);
   });
 
+  it("does not hold a declared test-only candidate for approval because of its tests", async () => {
+    const fx = setupTickGoal();
+    const testsOnly = makeCandidate("Cover the renderer edge cases", ["tests/render.test.ts"]);
+    const result = await reconcileGoal(reconcileContext(fx, fakeReconciler(okResponse([testsOnly]))));
+    expect(result.created.map((item) => [item.front.state, item.front.risk.class, item.front.risk.rules])).toEqual([
+      ["ready", "normal", []],
+    ]);
+  });
+
   it("treats a candidate that touches a watched path as high risk without naming the metric", async () => {
     const fx = setupTickGoal();
     const touching = makeCandidate("Rework the benchmark helpers", ["bench"]);

@@ -3,6 +3,7 @@ import {
   type RiskInput,
   DEFAULT_HIGH_RISK,
   TEST_GLOBS,
+  classifyLiteralPaths,
   classifyRisk,
   isTestPath,
   raiseRisk,
@@ -18,12 +19,16 @@ describe("classifyRisk default rules", () => {
     [".github/workflows/ci.yml", "ci"],
     ["src/auth/login.ts", "auth"],
     ["db/migrations/001.sql", "migration"],
-    ["tests/a.test.ts", "test"],
     ["AGENTS.md", "goal-factory"],
     ["package-lock.json", "lockfile"],
     ["pkg/pnpm-lock.yaml", "lockfile"],
   ] as const)("%s is high by rule %s", (path, rule) => {
     expect(classifyRisk(input([path]))).toEqual({ class: "high", rules: [rule], paths: [path] });
+  });
+
+  it("a declared test path is not high at declaration: there is no diff to weaken yet", () => {
+    expect(classifyRisk(input(["tests/a.test.ts"]))).toEqual({ class: "normal", rules: [], paths: [] });
+    expect(classifyRisk(input(["tests"], { tracked: ["tests/a.test.ts"] })).class).toBe("normal");
   });
 
   it("covers every rule in the default table with at least one glob", () => {
@@ -63,8 +68,8 @@ describe("classifyRisk default rules", () => {
       classifyRisk(input(["src/render/button.ts", "tests/a.test.ts", "db/migrations/001.sql", "tests/a.test.ts"])),
     ).toEqual({
       class: "high",
-      rules: ["migration", "test"],
-      paths: ["db/migrations/001.sql", "tests/a.test.ts"],
+      rules: ["migration"],
+      paths: ["db/migrations/001.sql"],
     });
   });
 });
@@ -137,8 +142,8 @@ describe("classifyRisk fail closed", () => {
   it("keeps the other rules when one path is unclassifiable", () => {
     expect(classifyRisk(input(["tests/a.test.ts", "../x"]))).toEqual({
       class: "high",
-      rules: ["test", "unclassifiable"],
-      paths: ["tests/a.test.ts"],
+      rules: ["unclassifiable"],
+      paths: [],
     });
   });
 });
@@ -150,7 +155,7 @@ describe("classifyRisk purity", () => {
     const first = classifyRisk(input(declared, { tracked }));
     expect(classifyRisk(input(declared, { tracked }))).toEqual(first);
     expect(classifyRisk(input([...declared].reverse(), { tracked: [...tracked].reverse() }))).toEqual(first);
-    expect(first.rules).toEqual(["auth", "goal-factory", "test"]);
+    expect(first.rules).toEqual(["auth", "goal-factory"]);
   });
 });
 
@@ -168,10 +173,10 @@ describe("TEST_GLOBS and isTestPath", () => {
     ["**/*.spec.*", "x/a.spec.js"],
     ["**/*_test.*", "pkg/a_test.go"],
     ["**/*_spec.*", "a_spec.rb"],
-  ])("agrees with the test rule of classifyRisk for the default glob %s (%s)", (glob, path) => {
+  ])("agrees with the test rule of classifyLiteralPaths for the default glob %s (%s)", (glob, path) => {
     expect(TEST_GLOBS).toContain(glob);
     expect(isTestPath(path)).toBe(true);
-    expect(classifyRisk(input([path])).rules).toContain("test");
+    expect(classifyLiteralPaths({ paths: [path], watchedGlobs: [], extraGlobs: [] }).rules).toEqual(["test"]);
   });
 
   it("covers every default glob with at least one sample above", () => {
