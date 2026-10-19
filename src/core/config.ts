@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { parse as parseToml } from "smol-toml";
 import { isDigestPinned } from "../container/image-ref.js";
 import { sha256Hex } from "./canonical-json.js";
+import { vendorEnvName } from "./env-deny.js";
 import { validate } from "./schema.js";
 
 export type Vendor = "claude" | "codex";
@@ -137,6 +138,10 @@ export const SAME_VENDOR_KEY_REFUSAL =
 const NOT_MADE_YET = "is not available: it needs a credential decision that is not made yet";
 
 export class ConfigError extends Error {}
+
+/** The message names the variable, never its value. */
+export const passthroughRefusal = (name: string): string =>
+  `reconciler.env_passthrough must not list ${name}: it carries a vendor key or moves a vendor CLI's home or endpoint`;
 
 const ROLE_NAMES: readonly RoleName[] = ["author", "implementer", "judge", "reconciler"];
 
@@ -316,6 +321,8 @@ export function parseConfig(text: string): OmfConfig {
   for (const name of ROLE_NAMES) roles[name] = { ...CONFIG_DEFAULTS.roles[name], ...raw.roles?.[name] };
   const reconciler: ReconcilerConfig = { ...CONFIG_DEFAULTS.reconciler, ...raw.reconciler };
   reconciler.env_passthrough = [...reconciler.env_passthrough];
+  const denied = reconciler.env_passthrough.find(vendorEnvName);
+  if (denied !== undefined) throw new ConfigError(passthroughRefusal(denied));
   if (reconciler.kind === "command" && reconciler.command === null) {
     throw new ConfigError('reconciler.kind "command" requires reconciler.command');
   }
