@@ -10,7 +10,7 @@ import { isTestPath } from "./risk.js";
  * deleted, or a binary section (nothing to read) sits on a test path or a coverage/runner config. On an added line,
  * markers are searched in the code part, plus any code after a closed block comment or after a CR, U+2028 or U+2029
  * inside a comment; a pure comment line is not a marker. Comment stripping is unchanged for assertion counting and for
- * removed lines, and comment lines are never thresholds. In INI-style configs a line that starts with `;` is a comment.
+ * removed lines, and comment lines are never thresholds. In INI-style configs (`.coveragerc*`, any `.ini` or `.cfg` file) only a line that starts with `#` or `;` is a comment; an inline ` #` or ` ;` is not.
  * Touching a test file, or adding one, is not weakening by itself.
  *
  * Returns the sorted paths, or `null` when the diff cannot be read in full: a file section that does not parse, or, when
@@ -67,9 +67,9 @@ function isConftest(path: string): boolean {
   return basename(path).toLowerCase() === "conftest.py";
 }
 
-/** INI-style configs (`.coveragerc*`, `setup.cfg`, `tox.ini`, `pytest.ini`): a line that starts with `;` is a comment. */
+/** INI-style configs (`.coveragerc*` and any `.ini` or `.cfg` file): only a line that starts with `#` or `;` is a comment. */
 function isIniConfig(path: string): boolean {
-  return /^\.?coveragerc(\.[^/]+)?$|^(setup\.cfg|tox\.ini|pytest\.ini)$/i.test(basename(path));
+  return /^\.?coveragerc(\.[^/]+)?$|\.(ini|cfg)$/i.test(basename(path));
 }
 
 function isCoverageConfig(path: string): boolean {
@@ -160,7 +160,7 @@ interface LineCode {
 
 /**
  * Quoted markers are data. A prior unquoted slash may start a regex, so an apparent comment is ambiguous. In INI-style
- * configs `;` is a comment only as the first non-blank character: pytest and coverage.py do not strip inline comments.
+ * configs `#` and `;` are comments only as the first non-blank character: pytest and coverage.py do not strip inline comments.
  */
 function codeOf(line: string, hashComment = false, semicolonComment = false): LineCode {
   if (COMMENT_START.test(line) || (semicolonComment && /^\s*;/.test(line))) return { text: null, ambiguous: false };
@@ -198,14 +198,14 @@ function assertionsLost(removed: readonly string[], added: readonly string[]): b
 }
 
 const MARKER =
-  /\b(it|test|describe|suite|context|bench)(\.\w+)*\.(skip|only|todo|fixme|fails|skipIf|runIf)\b|\{[^}]*\b(skip|todo|only)\s*:\s*true|\b(ctx|context|t)\.(skip|todo)\(|(?<![\w.$])(xit|xtest|xdescribe|fit|ftest|fdescribe)\s*\(|\bpytest\.mark\.(skip|xfail)|\bpytest\.(skip|xfail)\(|@unittest\.skip|\bt\.Skip(f|Now)?\(|\bself\.skipTest\(|\.failing\b|expectedFailure|^\s*pytestmark\s*=|\bthis\.skip\s*\(|\bfunc\s+TestMain\s*\(|\bfunc\s+init\s*\(|\b(os\.(Exit|_exit)|sys\.exit|process\.exit|pytest\.exit)\s*\(|@Disabled\b|@Ignore\b|#\[ignore\b/;
+  /\b(it|test|describe|suite|context|bench)(\.\w+)*\.(skip|only|todo|fixme|fails|skipIf|runIf)\b|\{[^}]*\b(skip|todo|only)\s*:\s*true|\b(ctx|context|t)\.(skip|todo)\(|(?<![\w.$])(xit|xtest|xdescribe|fit|ftest|fdescribe)\s*\(|\bpytest\.mark\.(skip|xfail)|\bpytest\.(skip|xfail)\(|@unittest\.skip|\bt\.Skip(f|Now)?\(|\bself\.skipTest\(|\.failing\b|expectedFailure|(?:^|\n)\s*pytestmark\s*=|\bthis\.skip\s*\(|\bfunc\s+TestMain\s*\(|\bfunc\s+init\s*\(|\b(os\.(Exit|_exit)|sys\.exit|process\.exit|pytest\.exit)\s*\(|@Disabled\b|@Ignore\b|#\[ignore\b/;
 
 /** A CR, U+2028 or U+2029 ends a line for a JavaScript or Python reader even though `git diff` does not split there. */
 const LINE_TERMINATOR = /[\r\u2028\u2029]/;
 
 /**
  * The part of a comment-looking added line that a runner would still read as code: whatever follows a closed block comment
- * (`/* x *\/ describe.only(...)`), and whatever follows a CR or U+2028 line terminator inside a line comment. A line
+ * (`/* x *\/ describe.only(...)`), and whatever follows a CR, U+2028 or U+2029 line terminator inside a line comment. A line
  * comment that holds only text yields nothing, so a commented-out marker stays no marker.
  */
 function codeBehindComment(line: string): string {
@@ -224,14 +224,23 @@ function codeBehindComment(line: string): string {
 
 /** What follows a comment is code unless it opens another comment. */
 function afterComment(rest: string): string {
-  return codeOf(rest).text ?? codeBehindComment(rest);
+  return readableCode(rest);
+}
+
+/**
+ * The code a runner reads on one line: the code part, plus the code behind a trailing `//` comment that a CR, U+2028 or
+ * U+2029 ends early, or behind a comment opener when the line holds no code part. The parts are joined with a newline.
+ */
+function readableCode(line: string): string {
+  const code = codeOf(line).text;
+  if (code === null) return codeBehindComment(line);
+  return code.length < line.length ? `${code}\n${codeBehindComment(line.slice(code.length))}` : code;
 }
 
 /** Added lines are searched for markers after their comment part is dropped, including code that hides behind a comment opener. */
 function countAddedMarkers(added: readonly string[]): number {
   return added.filter((line) => {
-    const code = codeOf(line).text;
-    return MARKER.test(code ?? codeBehindComment(line));
+    return MARKER.test(readableCode(line));
   }).length;
 }
 
@@ -245,7 +254,7 @@ const THRESHOLD_KEYS =
 
 /** Configs also admit hash comments; ambiguous boundaries retain the raw text for conservative handling. */
 function configCodeOf(line: string, ini = false): LineCode {
-  return codeOf(line, true, ini);
+  return codeOf(line, !ini, ini);
 }
 
 /** Every `key: number` or `key = number` pair of the code part of a line, in order (a one-line `{ lines: 80, branches: 90 }` has two). */

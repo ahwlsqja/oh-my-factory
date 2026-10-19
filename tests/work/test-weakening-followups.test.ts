@@ -78,6 +78,30 @@ describe("markers on an added line that looks like a comment", () => {
     ],
     ["marker after a U+2028 terminator", "tests/new.spec.js", "// note describe.only('a', () => {});\n", "x\n"],
     ["marker after a CR terminator", "tests/new.spec.js", "// note\rdescribe.only('a', () => {});\n", "x\n"],
+    [
+      "marker after a trailing // and U+2028",
+      "tests/new.spec.js",
+      "const a = 1; // n\u2028describe.only('a', () => {});\n",
+      "x\n",
+    ],
+    [
+      "marker after a trailing // and CR",
+      "tests/new.spec.js",
+      "const a = 1; // n\rdescribe.only('a', () => {});\n",
+      "x\n",
+    ],
+    [
+      "marker after a trailing // and U+2029",
+      "tests/new.spec.js",
+      "const a = 1; // n\u2029describe.only('a', () => {});\n",
+      "x\n",
+    ],
+    [
+      "marker after a block comment, a trailing // and U+2028",
+      "tests/new.spec.js",
+      "/* a */ const a = 1; // n\u2028describe.only('a', () => {});\n",
+      "x\n",
+    ],
   ];
 
   it.each(cases)("%s is weakening in the pure check", (_name, path, added) => {
@@ -129,6 +153,16 @@ describe("INI semicolon comments", () => {
     const after = { ".coveragerc": "[report]\nfail_under = 95 ; fail_under = 10\n" };
     expect(findTestWeakening(realDiff(before, after), [])).toEqual([".coveragerc"]);
     expect(await audited(before, after)).toMatchObject({ class: "high" });
+  });
+
+  it.each([
+    ["pytest.ini", "[pytest]\naddopts = --cov=pkg --cov-fail-under=90\n"],
+    ["tox.ini", "[pytest]\naddopts = --cov=pkg --cov-fail-under=90\n"],
+    ["setup.cfg", "[tool:pytest]\naddopts = --cov=pkg --cov-fail-under=90\n"],
+  ])("%s: an inline # payload that really lowers the threshold is weakening", async (path, before) => {
+    const after = before.replace("--cov-fail-under=90", "--cov-fail-under=95 --junitxml # --cov-fail-under=10");
+    expect(findTestWeakening(realDiff({ [path]: before }, { [path]: after }), [])).toEqual([path]);
+    expect(await audited({ [path]: before }, { [path]: after })).toMatchObject({ class: "high" });
   });
 
   it("a trailing ; comment after a raised threshold is still a raise", () => {
