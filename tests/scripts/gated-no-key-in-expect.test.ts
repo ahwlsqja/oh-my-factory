@@ -6,10 +6,15 @@ import { describe, expect, it } from "vitest";
 // strings. The driver's redactor is the second line of defence, not the first.
 const GATED = new URL("../gated/", import.meta.url);
 const read = (name: string): string => readFileSync(new URL(name, GATED), "utf8");
-const MODEL_SUITES = ["implementer-real-run.test.ts", "e6-l2-leak-redteam.test.ts"] as const;
+const MODEL_SUITES = [
+  "implementer-real-run.test.ts",
+  "e6-l2-leak-redteam.test.ts",
+  "author-canary.test.ts",
+  "skeleton-real.test.ts",
+] as const;
 
 describe("gated suites that hold a real key", () => {
-  it.each([...MODEL_SUITES, "implementer-support.ts"])(
+  it.each([...MODEL_SUITES, "implementer-support.ts", "author-support.ts", "skeleton-kit.ts"])(
     "%s prints nothing, reads no key value and gives every assertion a fixed message",
     (name) => {
       const text = read(name);
