@@ -1,9 +1,8 @@
-import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { ProcessResult } from "../adapters/process-group.js";
 import type { PinnedImage } from "../container/image-ref.js";
 import type { ContainerHandle, ContainerRuntime, ExecSpec, ImageInfo, OwnedResource } from "../container/runtime.js";
-import { removeStagingDirs } from "../container/item-sweep.js";
+import { readRunIds, removeStagingDirs } from "../container/item-sweep.js";
 import { assertName, type ContainerRole, type ContainerSpec, type ImageId } from "../container/spec.js";
 import { registerCleanup } from "../core/cleanup-registry.js";
 import { isLockHeld, sealLockFile } from "../core/lock.js";
@@ -195,9 +194,11 @@ const ROLE_OF_NAME = /^omf-(sut|harness|workcopy|implementer|author)-/;
  */
 export async function sweepOrphans(input: SweepInput): Promise<SweepResult> {
   const runsDir = join(input.itemDir, "runs");
-  const earlier = new Set(existsSync(runsDir) ? readdirSync(runsDir) : []);
-  earlier.delete(input.currentRunId);
   const result: SweepResult = { containers: 0, images: 0, staging: 0, skipped: [] };
+  const runIds = readRunIds(runsDir);
+  if (runIds === null) return result;
+  const earlier = new Set(runIds);
+  earlier.delete(input.currentRunId);
   const sealing = isLockHeld(sealLockFile(input.itemDir));
   for (const resource of await input.runtime.listOwned({ run_id: null })) {
     if (!earlier.has(resource.run_id)) continue;
@@ -241,7 +242,9 @@ export async function sweepImplementerContainers(input: {
   workId: string;
 }): Promise<number> {
   const runsDir = join(input.itemDir, "runs");
-  const runs = new Set(existsSync(runsDir) ? readdirSync(runsDir) : []);
+  const runIds = readRunIds(runsDir);
+  if (runIds === null) return 0;
+  const runs = new Set(runIds);
   runs.add(input.currentRunId);
   let removed = 0;
   for (const resource of await input.runtime.listOwned({ run_id: null })) {

@@ -13,12 +13,39 @@ const ROLE_OF_NAME = /^omf-(sut|harness|workcopy|implementer|author)-/;
 /** The staging directories under `runs/<id>/` a killed run can leave: judge work copies and build contexts, implementer bundle, quarantine and tree. */
 export const STAGING_DIRS: readonly string[] = ["judge", "implementer-stage"];
 
+/** A plain directory, not a symlink to one: the sweeps never enter a `runs` that is anything else. */
+function isPlainDir(path: string): boolean {
+  try {
+    return lstatSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The run ids under `<item>/runs`: none when it does not exist, and null when it is not a plain directory (a symlink, a file),
+ * which a sweep answers by doing nothing at all.
+ */
+export function readRunIds(runsDir: string): string[] | null {
+  if (!existsSync(runsDir) && !isSymlink(runsDir)) return [];
+  return isPlainDir(runsDir) ? readdirSync(runsDir) : null;
+}
+
+function isSymlink(path: string): boolean {
+  try {
+    return lstatSync(path).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Removes the staging directories of the given runs, without following a symlink: a run directory that is not a plain directory
  * is skipped, and a staging entry that is a symlink is unlinked, never entered. Returns how many it removed. Best effort per
  * entry: one that cannot be removed is left for the next sweep. The run logs under `runs/<id>/implementer/` are not touched.
  */
 export function removeStagingDirs(runsDir: string, runIds: Iterable<string>): number {
+  if (!isPlainDir(runsDir)) return 0;
   let removed = 0;
   for (const runId of runIds) {
     const runDir = join(runsDir, runId);
@@ -67,7 +94,9 @@ export async function sweepItemOrphans(input: ItemSweepInput & { roles?: readonl
   const roles = input.roles ?? ALL_ROLES;
   try {
     const runsDir = join(input.itemDir, "runs");
-    const earlier = new Set(existsSync(runsDir) ? readdirSync(runsDir) : []);
+    const runIds = readRunIds(runsDir);
+    if (runIds === null) return 0;
+    const earlier = new Set(runIds);
     earlier.delete(input.currentPassId ?? "");
     const sealFree = roles.includes("author") && !isLockHeld(sealLockFile(input.itemDir));
     const wanted = roles.filter((role) => role !== "author");

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { sweepItemOrphans } from "../../src/container/item-sweep.js";
+import { removeStagingDirs, sweepItemOrphans } from "../../src/container/item-sweep.js";
 import { claimItem, releaseItem } from "../../src/work/claim.js";
 import { existsSync, mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
-import { sweepOrphans } from "../../src/judge/state.js";
+import { sweepImplementerContainers, sweepOrphans } from "../../src/judge/state.js";
 import { imageIdFor } from "../helpers/image-id.js";
 import { FakeDocker } from "../helpers/fake-docker.js";
 import { addImage } from "../helpers/fake-docker-core.mjs";
@@ -285,5 +285,57 @@ describe("a round image is removed by the id read when it was listed", () => {
     await sweepOrphans({ runtime, itemDir: item, currentRunId: "r-20261019T100000Z-bbbb", workId: WORK });
     expect(fake.state.images[mine]).toBeUndefined();
     expect(fake.state.images[other]).toBeDefined();
+  });
+});
+
+describe("a runs directory that is a symlink is never entered", () => {
+  const linkedRuns = () => {
+    const item = realTempDir("omf-sweep-linked-");
+    const outside = realTempDir("omf-sweep-linked-target-");
+    put(outside, `${EARLIER}/judge/file`, "x");
+    put(outside, `${EARLIER}/implementer-stage/file`, "x");
+    symlinkSync(outside, join(item, "runs"));
+    const memory = new MemoryRuntime();
+    memory.owned = [
+      { kind: "container", name: `omf-sut-${EARLIER}-1-1`, run_id: EARLIER, work_id: X },
+      { kind: "container", name: `omf-author-${EARLIER}-1-2`, run_id: EARLIER, work_id: X },
+      { kind: "container", name: `omf-implementer-${EARLIER}-1-3`, run_id: EARLIER, work_id: X },
+      { kind: "image", name: `omf-sut:${EARLIER}-1`, run_id: EARLIER, work_id: X },
+    ];
+    const kept = () =>
+      existsSync(join(outside, EARLIER, "judge", "file")) &&
+      existsSync(join(outside, EARLIER, "implementer-stage", "file"));
+    return { item, memory, kept };
+  };
+
+  it("removeStagingDirs removes nothing under a linked runs directory", () => {
+    const { item, kept } = linkedRuns();
+    expect(removeStagingDirs(join(item, "runs"), [EARLIER])).toBe(0);
+    expect(kept()).toBe(true);
+  });
+
+  it("the item sweep does nothing: no directory, no container, no image", async () => {
+    const { item, memory, kept } = linkedRuns();
+    expect(await sweepItemOrphans({ runtime: memory, itemDir: item, workId: X })).toBe(0);
+    expect(kept()).toBe(true);
+    expect(memory.owned).toHaveLength(4);
+    expect(memory.calls).toEqual([]);
+  });
+
+  it("the run-start sweep does nothing: no directory, no container, no image", async () => {
+    const { item, memory, kept } = linkedRuns();
+    const result = await sweepOrphans({ runtime: memory, itemDir: item, workId: X, currentRunId: CURRENT });
+    expect(result).toEqual({ containers: 0, images: 0, staging: 0, skipped: [] });
+    expect(kept()).toBe(true);
+    expect(memory.owned).toHaveLength(4);
+    expect(memory.calls).toEqual([]);
+  });
+
+  it("the implementer container sweep does nothing either", async () => {
+    const { item, memory } = linkedRuns();
+    expect(await sweepImplementerContainers({ runtime: memory, itemDir: item, currentRunId: CURRENT, workId: X })).toBe(
+      0,
+    );
+    expect(memory.calls).toEqual([]);
   });
 });
