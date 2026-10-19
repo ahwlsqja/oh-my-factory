@@ -74,10 +74,10 @@ The last command prints the image id (`sha256:...`). With it, the docker-only su
 OMF_GATED_IMPLEMENTER_IMAGE=sha256:<64 hex> npm run test:gated -- --only G-implementer-boundary-real --record
 ```
 
-The model suites need the key for that one command. Type this yourself (the leading `!` runs it in your shell; the key is read from the keychain, so its literal appears nowhere), with your image id in place:
+The model suites need the key for that one command. Type this yourself, as shown in bash or zsh, without a leading `!` (in those shells `!` negates the exit status; it is only a Claude Code prompt shortcut). The key is read from the keychain, so its literal appears nowhere. Put your image id in place:
 
 ```console
-! OMF_IMPLEMENTER_API_KEY="$(security find-generic-password -a "$USER" -s omf-gated-anthropic -w)" OMF_GATED_IMPLEMENTER_IMAGE=sha256:<64 hex> npm run test:gated -- --model --only G-implementer-real-run --record
+OMF_IMPLEMENTER_API_KEY="$(security find-generic-password -a "$USER" -s omf-gated-anthropic -w)" OMF_GATED_IMPLEMENTER_IMAGE=sha256:<64 hex> npm run test:gated -- --model --only G-implementer-real-run --record
 ```
 
 `--model` sets `OMF_GATED=docker+model`, passes that one variable to the test process only, and sends the process's output through a redactor, so a key a failing test prints becomes `[redacted]`. Without `--model` a key in your environment is dropped. Run `G-e6-l2-leak-redteam` the same way. The output of a model run appears when it ends, not live.
