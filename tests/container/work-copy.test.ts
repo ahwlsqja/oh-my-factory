@@ -2,7 +2,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MeasureError, NotGoldenError } from "../../src/container/measure.js";
-import { roleTmpfs, WORKCOPY_GATE_EXECS } from "../../src/container/spec.js";
+import { roleTmpfs, WORKCOPY_GATE_EXEC_S, WORKCOPY_GATE_EXECS } from "../../src/container/spec.js";
 import { ContainerWorkCopyFactory, type Launch, WorkCopyError } from "../../src/container/work-copy.js";
 import { revertPatch } from "../../src/git/ops.js";
 import { EXIT_0, exit, MemoryRuntime } from "../helpers/memory-runtime.js";
@@ -124,6 +124,22 @@ describe("ContainerWorkCopyFactory (spec section 4.8)", () => {
     expect(memory.specs).toHaveLength(2);
     await copy.dispose();
     expect(memory.live.size).toBe(0);
+  });
+
+  it("clamps an injected gate timeout to the cap the lifetime is sized from", async () => {
+    const fx = calcFixture();
+    const memory = new MemoryRuntime();
+    const timeouts: number[] = [];
+    memory.onExec = (_name, spec) => {
+      timeouts.push(spec.timeoutMs);
+      return EXIT_0;
+    };
+    const { factory } = workCopies(memory);
+    const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
+    await copy.run(["echo"], { timeoutMs: 3_600_000, maxOutputBytes: 1024 });
+    await copy.run(["echo"], { timeoutMs: 5000, maxOutputBytes: 1024 });
+    expect(timeouts.slice(-2)).toEqual([WORKCOPY_GATE_EXEC_S * 1000, 5000]);
+    await copy.dispose();
   });
 
   it("a recreate that fails comes back as an error result, not an exception", async () => {

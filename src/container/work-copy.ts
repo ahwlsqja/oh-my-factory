@@ -8,7 +8,7 @@ import type { StageGolden } from "../isolation/evaluate.js";
 import { containerSpecFor, goldenFor } from "./golden.js";
 import { createMeasured, type MeasureDeps, type MeasuredContainer, NotGoldenError } from "./measure.js";
 import type { ContainerHandle, ContainerRuntime, ImageInfo } from "./runtime.js";
-import { type ContainerSpec, type OwnedLabels, WORKCOPY_GATE_EXECS } from "./spec.js";
+import { type ContainerSpec, type OwnedLabels, WORKCOPY_GATE_EXEC_S, WORKCOPY_GATE_EXECS } from "./spec.js";
 import { tarOfDir } from "./tar-dir.js";
 
 export type WorkCopyErrorCode = "build_failed" | "extract_failed" | "not_golden" | "timeout";
@@ -42,8 +42,9 @@ export interface ContainerWorkCopyDeps {
   forbidden: readonly string[];
 }
 
-const EXTRACT_TIMEOUT_MS = 120_000;
-const BUILD_TIMEOUT_MS = 600_000;
+/** The caps of the two boot execs; `WORKCOPY_BOOT_S` in spec.ts is their sum in seconds. */
+export const EXTRACT_TIMEOUT_MS = 120_000;
+export const BUILD_TIMEOUT_MS = 600_000;
 const OUTPUT_LIMIT_BYTES = 1024 * 1024;
 
 let copySerial = 0;
@@ -150,6 +151,7 @@ class ContainerWorkCopy implements WorkCopy {
   }
 
   /**
+   * Every command runs at most `WORKCOPY_GATE_EXEC_S` seconds, whatever timeout the caller injects, because the lifetime is sized from it.
    * A container that has served `WORKCOPY_GATE_EXECS` commands is replaced like a stale one, so no container is asked for more than its
    * lifetime was sized for. A failure to recreate comes back as an error result, because `proveTest` does not catch a throw from `run` and `runGates` reads an
    * error result as `skip`. A timeout or the output limit kills only the docker client, not the process in the container, so the
@@ -167,7 +169,7 @@ class ContainerWorkCopy implements WorkCopy {
       const result = await this.ctx.runtime.exec(this.container, {
         argv,
         workdir: "/work",
-        timeoutMs: options.timeoutMs,
+        timeoutMs: Math.min(options.timeoutMs, WORKCOPY_GATE_EXEC_S * 1000),
         maxOutputBytes: options.maxOutputBytes,
       });
       if (result.kind === "timeout" || result.kind === "output_limit") {

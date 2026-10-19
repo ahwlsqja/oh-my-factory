@@ -34,9 +34,9 @@ const HEAD = (role: JudgeRole): string =>
 const OWNED = "nosuid,nodev,uid=65532,gid=65532";
 
 const GOLDEN: Record<JudgeRole, string> = {
-  sut: `${HEAD("sut")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /scratch:rw,size=64m,${OWNED} --entrypoint sleep ${SUT_BASE} 443`,
-  harness: `${HEAD("harness")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /state:rw,size=16m,${OWNED} --entrypoint sleep ${HARNESS_BASE} 254363`,
-  workcopy: `${HEAD("workcopy")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /work:rw,size=256m,nosuid,nodev,exec,uid=65532,gid=65532 --entrypoint sleep ${SUT_BASE} 29963`,
+  sut: `${HEAD("sut")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /scratch:rw,size=64m,${OWNED} --entrypoint sleep ${SUT_BASE} 1703`,
+  harness: `${HEAD("harness")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /state:rw,size=16m,${OWNED} --entrypoint sleep ${HARNESS_BASE} 578633`,
+  workcopy: `${HEAD("workcopy")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /work:rw,size=256m,nosuid,nodev,exec,uid=65532,gid=65532 --entrypoint sleep ${SUT_BASE} 32933`,
 };
 
 describe("the golden create argv", () => {

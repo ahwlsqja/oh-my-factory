@@ -50,7 +50,9 @@ export function gateValueOf(result: CommandResult): { value: GateLineValue; rule
   return { value: rules === 0 ? "empty" : "pass", rules };
 }
 
-const DEFAULT_OPTIONS: RunOptions = { timeoutMs: 600_000, maxOutputBytes: 1024 * 1024 };
+/** The default timeout of one gate, milliseconds; `WORKCOPY_GATE_EXEC_S` in the container layer is pinned to it. */
+export const GATE_DEFAULT_TIMEOUT_MS = 600_000;
+const DEFAULT_OPTIONS: RunOptions = { timeoutMs: GATE_DEFAULT_TIMEOUT_MS, maxOutputBytes: 1024 * 1024 };
 
 /**
  * Runs the declared gates fast, full, deep with no short-circuit (the line is complete evidence). The line is built
