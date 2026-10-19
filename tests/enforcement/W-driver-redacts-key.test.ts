@@ -32,6 +32,7 @@ interface Deps {
 const script = (await import(SCRIPT)) as {
   EXIT: { ok: number; failed: number; refused: number; colima: number };
   main: (argv: string[], env: Record<string, string | undefined>, deps: Deps) => number;
+  createRedactor: (secrets: string[]) => { write: (chunk: string | Uint8Array) => string; flush: () => string };
   runRedacted: (
     command: string,
     args: string[],
@@ -231,5 +232,73 @@ describe("W-driver-redacts-key", () => {
     expect(runs).toHaveLength(1);
     expect(runs[0]).toMatchObject({ test: "G-implementer-real-run", model: MODEL_REPORT });
     expect(readFileSync(r.evidenceFile, "utf8")).not.toContain(SENTINEL);
+  });
+
+  it("accepts a 512-character key and refuses 513, with only the implementer suite selected", () => {
+    const argv = ["--model", "--only", "G-implementer-real-run"];
+    const accepted = rig("pass");
+    const long = `k${"x".repeat(511)}`;
+    expect(script.main(argv, { PATH: "/bin", OMF_IMPLEMENTER_API_KEY: long }, accepted.deps)).toBe(EXIT.ok);
+    expect(accepted.vitestCall()?.options.env?.OMF_IMPLEMENTER_API_KEY).toBe(long);
+    const refused = rig("pass");
+    const tooLong = `k${"x".repeat(512)}`;
+    expect(script.main(argv, { PATH: "/bin", OMF_IMPLEMENTER_API_KEY: tooLong }, refused.deps)).toBe(EXIT.refused);
+    expect(refused.vitestCall()).toBeUndefined();
+    expect(refused.logs.join("\n")).not.toContain(tooLong);
+  });
+
+  it("--record refuses when the current commit cannot be read, before colima starts", () => {
+    for (const answer of [
+      { status: 1, stdout: `${"a".repeat(40)}\n`, stderr: "" },
+      { status: 0, stdout: "\n", stderr: "" },
+    ]) {
+      const r = rig("pass");
+      const inner = r.deps.run;
+      r.deps.run = (command, args, options) =>
+        command === "git" && args[0] === "rev-parse" ? answer : inner(command, args, options);
+      const code = script.main(
+        ["--model", "--only", "G-implementer-real-run", "--record"],
+        { PATH: "/bin", OMF_IMPLEMENTER_API_KEY: SENTINEL },
+        r.deps,
+      );
+      expect(code).toBe(EXIT.refused);
+      expect(r.logs.join("\n")).toContain("could not read the current commit");
+      expect(r.calls.some((call) => call.command === "colima" && call.args[0] !== "version")).toBe(false);
+      expect(r.vitestCall()).toBeUndefined();
+    }
+  });
+});
+
+describe("createRedactor", () => {
+  const redact = (secrets: string[], chunks: Array<string | Uint8Array>): string => {
+    const redactor = script.createRedactor(secrets);
+    return chunks.map((chunk) => redactor.write(chunk)).join("") + redactor.flush();
+  };
+
+  it("finds a secret and its JSON-escaped spelling split across chunks at every position", () => {
+    for (const secret of [SENTINEL, ESCAPED]) {
+      for (let cut = 1; cut < secret.length; cut += 1) {
+        const text = `before ${secret} after`;
+        const at = "before ".length + cut;
+        expect(redact([SENTINEL], [text.slice(0, at), text.slice(at)]), `${secret} cut at ${cut}`).toBe(
+          "before [redacted] after",
+        );
+      }
+    }
+  });
+
+  it("replaces a tail that is still the start of a secret when the stream ends, and delays nothing else", () => {
+    const redactor = script.createRedactor([SENTINEL]);
+    expect(redactor.write("plain text ")).toBe("plain text ");
+    expect(redactor.write(`and ${SENTINEL.slice(0, 5)}`)).toBe("and ");
+    expect(redactor.flush()).toBe("[redacted]");
+    expect(redact([SENTINEL], ["no secret here"])).toBe("no secret here");
+    expect(redact([SENTINEL], [SENTINEL.slice(0, 5)])).toBe("[redacted]");
+  });
+
+  it("keeps a multi-byte character that is split between two byte chunks", () => {
+    const bytes = Buffer.from("caf\u00e9 \u{1f600} done", "utf8");
+    const cut = bytes.indexOf(0xc3) + 1;
+    expect(redact([SENTINEL], [bytes.subarray(0, cut), bytes.subarray(cut)])).toBe("caf\u00e9 \u{1f600} done");
   });
 });
