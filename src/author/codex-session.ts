@@ -265,6 +265,8 @@ export function createContainerAuthor(deps: ContainerAuthorDeps): ContainerAutho
           error instanceof ContainerSpecError ||
           error instanceof ImageRefError;
         if (known) return fail("container_failed");
+        // An unexpected throw after the image was reached still spent a call: record it, then let it surface.
+        finalize("container_failed");
         throw error;
       }
 
@@ -328,6 +330,10 @@ export function createContainerAuthor(deps: ContainerAuthorDeps): ContainerAutho
         if (!answer.ok) return fail("no_output");
         finalize("completed");
         return { ok: true, output: answer.yaml, durationMs: elapsed() };
+      } catch (error) {
+        // A non-runtime throw (a bug, a broken adapter) leaves no facts yet; the call cap counts the ledger event.
+        if (facts === null) finalize("container_failed");
+        throw error;
       } finally {
         // Idempotent. A failed removal leaves an orphan with the omf.owner label for the author-role sweep.
         await runtime.remove(handle).catch(() => undefined);

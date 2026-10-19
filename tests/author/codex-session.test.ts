@@ -248,3 +248,23 @@ describe("createContainerAuthor inside runSealStage", () => {
     expect(session.takeFacts()?.input_sha256).toBe(sha256Hex(stdin));
   });
 });
+
+describe("createContainerAuthor: an unexpected throw still counts as a call", () => {
+  it("records the facts when the Codex exec throws a plain Error, then rethrows", async () => {
+    const double = authorDouble();
+    const runtime = new Proxy(double.runtime, {
+      get(target, prop, receiver) {
+        const value = Reflect.get(target, prop, receiver);
+        if (prop !== "exec" || typeof value !== "function") return value;
+        return async (handle: unknown, spec: { argv: string[] }) => {
+          if (spec.argv[0] === "codex") throw new Error("adapter bug");
+          return (value as (...a: unknown[]) => unknown).call(target, handle, spec);
+        };
+      },
+    });
+    const session = createContainerAuthor(authorDeps({ ...double, runtime }));
+    await expect(session.run(authorRequest())).rejects.toThrow("adapter bug");
+    expect(session.takeFacts()).toMatchObject({ outcome: "container_failed", vendor: "codex" });
+    expect(Object.keys(double.fake.state.containers)).toEqual([]);
+  });
+});
