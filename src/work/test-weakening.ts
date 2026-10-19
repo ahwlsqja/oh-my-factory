@@ -6,7 +6,7 @@ import { isTestPath } from "./risk.js";
  * paths where the change makes the tests weaker: the file is deleted, it loses more assertion lines than it gains, it gains
  * more skip/only/todo/x-prefixed markers than it loses, a numeric threshold goes down, or a runner or coverage config under
  * a test path (including `.coveragerc`, `codecov.yml` and `package.json`) is added or edited in any way other than raising
- * threshold numbers with the rest of every changed line unchanged (inside one contiguous change block), a `conftest.py` at any depth is added, edited or
+ * threshold numbers with the rest of every changed line unchanged, a `conftest.py` at any depth is added, edited or
  * deleted, or a binary section (nothing to read) sits on a test path or a coverage/runner config.
  *
  * Two rules decide the details. First, every added and removed line is split on CR, U+2028 and U+2029 into separate
@@ -90,9 +90,12 @@ function isCoverageConfig(path: string): boolean {
 }
 
 /**
- * A declarative runner or coverage config: INI-style (`.coveragerc` and `.coveragerc.*`, any `.ini` or `.cfg` file), TOML
- * (any `.toml` file, `pyproject.toml` among them) or YAML (any `.yml` or `.yaml` file, `codecov.yml` among them). The file
- * must also be a recognized runner or coverage config. JSON and JS/TS configs are not declarative here.
+ * A declarative runner or coverage config, and it must also be a recognized runner or coverage config. The file set is the
+ * one the regex below matches: `coveragerc` and `.coveragerc` and their `.*` variants, any `.ini` or `.cfg` file (the pytest
+ * 9 names `.pytest.ini`, `pytest.toml` and `.pytest.toml` among the runner configs), any `.toml` file (`pyproject.toml`
+ * among them), any `.yml` or `.yaml` file (`codecov.yml` among them), and the extensionless `.nycrc`, `.c8rc`, `.mocharc`
+ * and `codecov`. The extensionless `.nycrc` and `.c8rc` are treated as declarative even though they usually hold JSON.
+ * JS/TS configs and JSON files with an extension are not declarative here.
  */
 function isDeclarativeConfig(path: string): boolean {
   return (
@@ -411,7 +414,7 @@ function looserKeyTouched(removed: readonly string[], added: readonly string[]):
   return [...removed, ...added].some((line) => pairsOf(line).some(([key]) => LOOSER_KEYS.test(key)));
 }
 
-const EXACT_PAIR = /^([ \t]*([A-Za-z_][\w-]*)[ \t]*[=:][ \t]*)(\d+(?:\.\d+)?)(%?[ \t]*)$/;
+const EXACT_PAIR = /^([ \t]*([A-Za-z_][\w-]*)[ \t]*[=:][ \t]*)((?:0|[1-9]\d*)(?:\.\d+)?)(%?[ \t]*)$/;
 
 /** The line with its threshold number replaced by a placeholder, with the key and the number; null when it is not `KEY = NUMBER`. */
 function exactPair(line: string): { template: string; key: string; value: number } | null {

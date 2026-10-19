@@ -96,6 +96,14 @@ const weakening: Case[] = [
   ["added empty .pytest.toml", ".pytest.toml", null, ""],
   ["added empty extensionless .nycrc", ".nycrc", null, ""],
   ["edited extensionless .mocharc", ".mocharc", "retries: 1\n", "retries: 0\n"],
+  [
+    "codecov target 70 -> 070 (octal in YAML 1.1)",
+    "codecov.yml",
+    "coverage:\n  target: 70\n",
+    "coverage:\n  target: 070\n",
+  ],
+  ["codecov target 90 -> 0100", "codecov.yml", "coverage:\n  target: 90\n", "coverage:\n  target: 0100\n"],
+  [".nycrc.yml lines 70 -> 070", ".nycrc.yml", "lines: 70\n", "lines: 070\n"],
 ];
 
 const controls: Case[] = [
@@ -107,6 +115,8 @@ const controls: Case[] = [
     "[tool.coverage.report]\nfail_under = 95\n",
   ],
   ["codecov target raise", "codecov.yml", "coverage:\n  target: 80%\n", "coverage:\n  target: 90%\n"],
+  ["decimal raise 0.5 -> 0.75", ".coveragerc", "[report]\nfail_under = 0.5\n", "[report]\nfail_under = 0.75\n"],
+  ["decimal raise 90 -> 90.5", ".coveragerc", "[report]\nfail_under = 90\n", "[report]\nfail_under = 90.5\n"],
 ];
 
 function diffOf(path: string, before: string | null, after: string | null): string {
