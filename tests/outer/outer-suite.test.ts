@@ -136,7 +136,7 @@ console.log(JSON.stringify(Object.keys(cleanEnv(process.env)).sort()));`;
   });
 
   // K03 drives a terminal. Without python3 and pty the proof is skipped with its reason, never silently; with
-  // OMF_OUTER_REQUIRE_TTY=1 (what CI sets, like the runner's --require-tty) the missing driver fails the test instead.
+  // OMF_OUTER_REQUIRE_TTY=1 (what a CI job will set once one exists, like the runner's --require-tty) the missing driver fails the test instead.
   it("K03 fails against a build that approves without a terminal", { timeout: 240_000 }, (context) => {
     if (!HAS_PYTHON) {
       if (process.env.OMF_OUTER_REQUIRE_TTY === "1") {

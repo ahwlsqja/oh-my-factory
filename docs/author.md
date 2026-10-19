@@ -1,6 +1,6 @@
 # The sealing author container
 
-How OMF runs the sealing author (Codex) in a container whose isolation it measures first, what crosses the boundary in each direction, what the key exposes, and what none of it proves. `omf seal <work-id>` runs it (`src/author/`). Every claim below about a real container or a real model is not enforced until the gated suites in the table are recorded in `docs/evidence/gated-runs.json`.
+How OMF runs the sealing author (Codex) in a container whose isolation it measures first, what crosses the boundary in each direction, what the key exposes, and what none of it proves. `omf seal <work-id>` runs it (`src/author/`). Every claim below about a real container or a real model is not enforced until the planned gated suites in the table are written and recorded in `docs/evidence/gated-runs.json`.
 
 ## Status
 
@@ -71,4 +71,4 @@ OMF neither records nor bounds the spend of an author call. The only bound is th
 
 ## Running the gated suites
 
-Nothing here is run by an agent. The author suites follow the procedure of `docs/implementer.md` (the dedicated colima profile `omf-m3f`, an image built inside it, `npm run test:gated -- --only <suite> --record`). See `docs/container-judge.md` for how the driver confines the Docker context.
+The three suites above are planned and not written yet: `tests/gated/` holds none of them and `scripts/gated-docker.mjs` does not know them. Once they exist they will follow the procedure of `docs/implementer.md` (the dedicated colima profile `omf-m3f`, an image built inside it) and be run by the owner, never by an agent. See `docs/container-judge.md` for how the driver confines the Docker context.

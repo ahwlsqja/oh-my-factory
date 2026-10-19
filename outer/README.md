@@ -29,7 +29,7 @@ To check a new build with the suite of an older release, check that release out 
 A ready work item needs two decisions only a person can make (J1 approving the goal, J2 resolving a decision), and OMF
 refuses to make them without an interactive terminal. The contracts that need a ready item drive a pseudo terminal
 with `lib/tty-run.py` (Python 3, standard library). Without `python3` those contracts are reported as skipped, with
-the reason, and `--require-tty` turns the skip into a failure. CI passes `--require-tty`.
+the reason, and `--require-tty` turns the skip into a failure. A CI job that passes `--require-tty` is planned; no workflow runs the outer suite yet.
 
 ## The contracts
 
