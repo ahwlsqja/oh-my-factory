@@ -233,7 +233,7 @@ export async function sweepOrphans(input: SweepInput): Promise<SweepResult> {
 }
 
 /**
- * Removes every implementer container of this item, the current run's included, for the end of a line (finished, vetoed,
+ * Removes every implementer container of this item (by `omf.work` label and run id), the current run's included, for the end of a line (finished, vetoed,
  * stopped at a goal or wall-time limit, or aborted): the run's own cleanup removes the tracked ones, and this catches one
  * whose removal failed. Containers only: no image, no host directory. A name off the full pattern is left alone.
  */
@@ -241,6 +241,8 @@ export async function sweepImplementerContainers(input: {
   runtime: Pick<ContainerRuntime, "listOwned" | "remove">;
   itemDir: string;
   currentRunId: string;
+  /** The item's id: a run id is only unique to the second, so a container counts only when its `omf.work` label is this item. */
+  workId: string;
 }): Promise<number> {
   const runsDir = join(input.itemDir, "runs");
   const runs = new Set(existsSync(runsDir) ? readdirSync(runsDir) : []);
@@ -248,7 +250,7 @@ export async function sweepImplementerContainers(input: {
   let removed = 0;
   for (const resource of await input.runtime.listOwned({ run_id: null })) {
     if (resource.kind !== "container" || !resource.name.startsWith("omf-implementer-")) continue;
-    if (!runs.has(resource.run_id)) continue;
+    if (!runs.has(resource.run_id) || resource.work_id !== input.workId) continue;
     try {
       assertName(resource.name);
     } catch {

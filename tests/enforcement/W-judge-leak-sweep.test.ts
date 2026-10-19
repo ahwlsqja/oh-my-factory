@@ -108,7 +108,7 @@ describe("W-judge-leak-sweep", () => {
       { kind: "container", name: `omf-author-${EARLIER}-1-1`, run_id: EARLIER, work_id: WORK },
       { kind: "image", name: `omf-sut:${CURRENT}-1`, run_id: CURRENT, work_id: "" },
     ];
-    expect(await sweepImplementerContainers({ runtime: memory, itemDir, currentRunId: CURRENT })).toBe(2);
+    expect(await sweepImplementerContainers({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK })).toBe(2);
     expect(memory.owned.map((resource) => resource.name).sort()).toEqual(
       [
         `omf-author-${EARLIER}-1-1`,
@@ -117,6 +117,18 @@ describe("W-judge-leak-sweep", () => {
         `omf-sut:${CURRENT}-1`,
       ].sort(),
     );
+  });
+
+  it("sweepImplementerContainers leaves another item's implementer container that shares the run id", async () => {
+    const itemDir = realTempDir("omf-sweep-item-");
+    put(itemDir, `runs/${CURRENT}/marker`, "x");
+    const memory = new MemoryRuntime();
+    memory.owned = [
+      { kind: "container", name: `omf-implementer-${CURRENT}-1-1`, run_id: CURRENT, work_id: OTHER_WORK },
+      { kind: "container", name: `omf-implementer-${CURRENT}-1-2`, run_id: CURRENT, work_id: WORK },
+    ];
+    expect(await sweepImplementerContainers({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK })).toBe(1);
+    expect(memory.owned.map((resource) => resource.work_id)).toEqual([OTHER_WORK]);
   });
 
   it("also removes an earlier run's implementer container", async () => {

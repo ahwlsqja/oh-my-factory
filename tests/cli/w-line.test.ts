@@ -125,6 +125,40 @@ describe("assembleLine container sweeps", () => {
     expect(names(jl)).not.toContain(implementer);
   });
 
+  it("the end sweep runs once: a second onLineEnd call makes no docker call", async () => {
+    const { jl, location, workId } = await sealed();
+    jl.fake.state.containers = {};
+    const line = assembleLine({ location, runtime: jl.runtime, env: {} });
+    await runLine({ location, workId, stations: line.stations, onLineEnd: line.onLineEnd });
+    const calls = jl.fake.state.calls.length;
+    await line.onLineEnd();
+    expect(jl.fake.state.calls.length).toBe(calls);
+  });
+
+  it("the end sweep leaves another item's implementer container that shares the run id", async () => {
+    const { jl, location, workId } = await sealed();
+    jl.fake.state.containers = {};
+    const line = assembleLine({ location, runtime: jl.runtime, env: {} });
+    let other = "";
+    const stations = {
+      ...line.stations,
+      S3: {
+        id: "S3" as const,
+        run: () => {
+          const planted = plantOwnedContainer(jl.fake.state, "implementer", THIS_RUN, "w-ba9876543210");
+          other = `omf-implementer-${THIS_RUN}-1-2`;
+          const made = jl.fake.state.containers[planted];
+          delete jl.fake.state.containers[planted];
+          if (made !== undefined) jl.fake.state.containers[other] = { ...made, name: other };
+          plantOwnedContainer(jl.fake.state, "implementer", THIS_RUN, workId);
+          return { kind: "blocked" as const, reason_code: "infra_failure" as const };
+        },
+      },
+    };
+    await runLine({ location, workId, stations, onLineEnd: line.onLineEnd, newRunId: () => THIS_RUN });
+    expect(names(jl)).toEqual([other]);
+  });
+
   it("removes an implementer container the line could not remove itself, when the line stops", async () => {
     const { jl, location, workId } = await sealed();
     jl.fake.state.containers = {};

@@ -298,7 +298,6 @@ function printTick(goalId: string, result: TickResult): void {
   if (result.report !== null) console.log(`report: ${result.report}`);
 }
 
-/** Goal and metric commands (spec §9). Errors propagate to main.ts, which exits 2. */
 /**
  * The cancel of `omf goal cancel` and what follows it, under the tick lock the caller holds: the goal and its open items are
  * cancelled, the result line is printed, and only then are the cancelled items' containers of a killed run swept (best effort,
@@ -323,6 +322,7 @@ export async function cancelGoalAndSweep(input: {
   return result;
 }
 
+/** Goal and metric commands (spec §9). Errors propagate to main.ts, which exits 2. */
 export function registerGoalCommands(program: Command): void {
   const goal = program.command("goal").description("define, approve and measure goals");
 

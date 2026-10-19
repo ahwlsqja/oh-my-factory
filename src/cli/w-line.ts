@@ -15,6 +15,8 @@ import { EXIT, type ExitCode } from "./exit.js";
 export interface LineAssembly {
   stations: Record<StationId, Station>;
   onLineEnd: () => Promise<void>;
+  /** Whether the line's first station (S1, the start sweep) ran: when it did not, the caller sweeps the item itself. */
+  startRan: () => boolean;
 }
 
 /** S7 has no work of its own in v0.1: the sequencer's bookkeeping around it is the whole station. */
@@ -30,13 +32,16 @@ const alwaysOk = (id: "S7"): Station => ({ id, run: () => ({ kind: "ok" }) });
 function containerSweeps(runtime: ContainerRuntime): {
   start: Station;
   end: () => Promise<void>;
+  startRan: () => boolean;
 } {
-  let seen: { itemDir: string; runId: string } | null = null;
+  let seen: { itemDir: string; runId: string; workId: string } | null = null;
+  let started = false;
   return {
     start: {
       id: "S1",
       async run(ctx) {
-        seen = { itemDir: ctx.item.dir, runId: ctx.runId };
+        started = true;
+        seen = { itemDir: ctx.item.dir, runId: ctx.runId, workId: ctx.workId };
         try {
           await sweepOrphans({ runtime, itemDir: ctx.item.dir, currentRunId: ctx.runId, workId: ctx.workId });
         } catch {
@@ -46,13 +51,22 @@ function containerSweeps(runtime: ContainerRuntime): {
       },
     },
     async end() {
-      if (seen === null) return;
+      // Once: a second call (the caller's finally after the sequencer's own) finds nothing and makes no docker call.
+      const taken = seen;
+      seen = null;
+      if (taken === null) return;
       try {
-        await sweepImplementerContainers({ runtime, itemDir: seen.itemDir, currentRunId: seen.runId });
+        await sweepImplementerContainers({
+          runtime,
+          itemDir: taken.itemDir,
+          currentRunId: taken.runId,
+          workId: taken.workId,
+        });
       } catch {
         // the next run's start sweeps what is left
       }
     },
+    startRan: () => started,
   };
 }
 
@@ -85,6 +99,7 @@ export function assembleLine(input: {
       S7: alwaysOk("S7"),
     },
     onLineEnd: combineLineEnd(() => judge.dispose(), implementer.dispose, sweeps.end),
+    startRan: sweeps.startRan,
   };
 }
 

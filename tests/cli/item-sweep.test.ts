@@ -198,7 +198,7 @@ describe("omf run sweeps on every error outcome", () => {
     expect(names(bin)).toEqual([]);
   });
 
-  it("a finished goal refuses the run with goal_stopped and still removes both orphans", async () => {
+  it("negative guard: a finished goal refuses the run with goal_stopped and still removes both orphans", async () => {
     const l = setupLine();
     configureSeal(l);
     await plantStandingSeal(l, { measured: true });
@@ -236,7 +236,7 @@ describe("a claim.lock nobody can read", () => {
     expect(names(bin)).toEqual([]);
   });
 
-  it("younger than the grace still shields it: only the listing is allowed", () => {
+  it("a claim file dated in the future still shields it: only the listing is allowed", () => {
     const l = setupLine();
     configureSeal(l);
     const bin = fakeDockerBin();
@@ -247,6 +247,41 @@ describe("a claim.lock nobody can read", () => {
     expect(out.code).toBe(2);
     expect(verbs).toEqual(LISTING);
     expect(names(bin)).toEqual([implementer]);
+  });
+
+  it("dated 100 ms ago still shields it: only the listing is allowed", () => {
+    const l = setupLine();
+    configureSeal(l);
+    const bin = fakeDockerBin();
+    const implementer = plantKilled(l, bin, "implementer");
+    veto(l);
+    unreadableClaim(l, Date.now() - 100);
+    const { out, verbs } = command(bin, () => cli(l, bin, ["seal", l.f.workId], { OMF_AUTHOR_API_KEY: AUTHOR_KEY }));
+    expect(out.code).toBe(2);
+    expect(verbs).toEqual(LISTING);
+    expect(names(bin)).toEqual([implementer]);
+  });
+});
+
+describe("omf run stopped at the line entry sweeps the item's orphans", () => {
+  it("after the same park reason three times, GATE-4 stops the line before S1 and both orphans are removed: only the listing and the planted removals are allowed", async () => {
+    const l = setupLine();
+    configureSeal(l);
+    await plantStandingSeal(l, { measured: true });
+    const bin = fakeDockerBin();
+    for (let pass = 0; pass < 3; pass += 1) {
+      const parked = cli(l, bin, ["run", l.f.workId]);
+      expect(parked.stdout).toContain("disclosure_unavailable");
+    }
+    plantKilled(l, bin, "author");
+    bin.update((state) => {
+      plantOwnedContainer(state, "implementer", KILLED, l.f.workId);
+    });
+    expect(names(bin)).toHaveLength(2);
+    const { out, verbs } = command(bin, () => cli(l, bin, ["run", l.f.workId]));
+    expect(out.stdout).toContain("reentry_loop");
+    expect(verbs).toEqual([...LISTING, "rm", "rm"]);
+    expect(names(bin)).toEqual([]);
   });
 });
 

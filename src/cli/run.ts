@@ -102,9 +102,8 @@ export async function runVerb(workId: string, json: boolean): Promise<ExitCode> 
   } finally {
     await line.onLineEnd();
   }
-  // A line that ended aborted before S1 ran (the entry recheck, a lost claim) never reached a station's own sweep either.
-  if (result.kind === "aborted" && result.at === "S1")
-    await sweepItemBestEffort(location, workId, process.env, runtime);
+  // A line that stopped before S1 ran (the GATE-4 entry stop, the entry recheck, a lost claim) never reached a station's own sweep either.
+  if (!line.startRan()) await sweepItemBestEffort(location, workId, process.env, runtime);
   const code = exitForLine(result);
   if (json) {
     console.log(JSON.stringify(summaryOf(result, order.item.dir, code), null, 2));

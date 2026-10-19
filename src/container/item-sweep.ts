@@ -72,8 +72,9 @@ function claimHeld(itemDir: string): boolean {
     if (status.owner !== null) return true;
     try {
       return Date.now() - statSync(claimFile(itemDir)).mtimeMs <= UNREADABLE_GRACE_MS;
-    } catch {
-      return false;
+    } catch (err) {
+      // Only a claim that vanished is not held; any other failure to read it keeps the orphan.
+      return (err as NodeJS.ErrnoException).code !== "ENOENT";
     }
   } catch {
     return true;
