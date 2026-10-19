@@ -57,7 +57,7 @@ describe("docs/implementer.md", () => {
 
   it("the prepared owner command parses with the driver's own argument parser and the colima commands equal its plan", () => {
     const page = read(PAGE);
-    const line = page.split("\n").find((l) => l.startsWith("! OMF_IMPLEMENTER_API_KEY="));
+    const line = page.split("\n").find((l) => l.startsWith("OMF_IMPLEMENTER_API_KEY="));
     expect(line).toBeDefined();
     const flags = (line ?? "").split(" -- ")[1]?.split(" ") ?? [];
     expect(script.parseArgs(flags)).toEqual({ only: "G-implementer-real-run", record: true, model: true });
