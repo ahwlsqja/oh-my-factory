@@ -379,3 +379,16 @@ Options:
   --json      print the validated evidence document as JSON
   -h, --help  display help for command
 ```
+
+## omf ui
+
+```text
+Usage: omf ui [options]
+
+open a local read-only dashboard for this repository
+
+Options:
+  --port <port>  loopback port (0 chooses an available port) (default: 0)
+  --no-open      print the URL without opening a browser
+  -h, --help     display help for command
+```
