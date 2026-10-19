@@ -52,6 +52,8 @@ function printAudit(report: AuditReport): void {
   if (report.wall_time_exceeded) console.log("wall time exceeded (J6)");
   printList("problems", report.problems);
   printList("needs re-approval (J1)", report.regime_changes);
+  printList("warnings", report.warnings);
+  printList("still template text in goal.md (replace before you approve)", report.placeholders);
 }
 
 const listOrNone = (items: readonly string[]): string => (items.length === 0 ? "none" : items.join(", "));
@@ -107,6 +109,7 @@ export function approvalScreen(
   out(
     `decision rule: ${safeText(front.prereg.decision_rule)} (minimum observation ${safeText(front.prereg.min_observation)})`,
   );
+  for (const warning of audit.warnings) out(`warning: ${safeText(warning)}`);
   const metrics: Record<string, string> = {};
   for (const id of referencedMetrics(front)) {
     const proposal = readProposal(status.dir, id);
@@ -304,7 +307,9 @@ export function registerGoalCommands(program: Command): void {
       const status = requireProject(process.cwd());
       const file = createGoal(status.dir, goalId);
       console.log(`created ${file}`);
-      console.log(`edit it, propose its metrics with omf metric propose, then run omf goal audit ${goalId}`);
+      console.log(
+        `edit it (the comments in the file explain each field), propose its metrics with omf metric propose, then run omf goal audit ${goalId}`,
+      );
     });
 
   goal

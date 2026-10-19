@@ -10,7 +10,7 @@ import type { LedgerEvent } from "../../src/core/ledger.js";
 import { validate } from "../../src/core/schema.js";
 import { releaseFeedback } from "../../src/feedback/release.js";
 import type { GapSummary } from "../../src/goal/gap-summary.js";
-import { type GoalDoc, goalDir, parseGoal } from "../../src/goal/goal-file.js";
+import { type GoalDoc, goalDir, goalTemplate, parseGoal } from "../../src/goal/goal-file.js";
 import {
   MAX_CANDIDATES,
   RECONCILE_OUTPUT_SCHEMA_FILE,
@@ -263,6 +263,62 @@ describe("buildReconcilerInput", () => {
     expect(input.approach).toContain("Trim the work done while rendering a page.");
     expect(JSON.stringify(input)).not.toContain("current reading");
     expect(input.objective).toBe("Make the storefront feel quicker for visitors");
+  });
+
+  it("shows the Why, Constraints and Done when subsections, and not the locked target or the front matter", () => {
+    const text = goalTemplate("g-tidy")
+      .replace(/m-replace-me/g, "m-zebra-quokka")
+      .replace("value: 0", "value: 3719")
+      .replace("The outcome you want, in plain words", "Keep the code base tidy")
+      .replace("Replace this line with the reason this goal matters.", "Warnings hide real problems.")
+      .replace("Replace this line with what must not change and what is out of scope.", "Leave the public API alone.")
+      .replace(
+        "Replace this line with what you could observe in the product when the goal is reached.",
+        "A clean lint run.",
+      );
+    const doc = parseGoal(text);
+    const input = buildReconcilerInput({
+      front: doc.front,
+      body: doc.body,
+      summary: SUMMARY,
+      items: [],
+      tracked: TRACKED,
+      watchedGlobs: [],
+      terms: forbiddenTermsFor(doc.front),
+      cap: 3,
+      recent: NO_RECENT,
+    });
+    if ("problem" in input) throw new Error("unexpected problem");
+    for (const text of [
+      "### Why",
+      "Warnings hide real problems.",
+      "### Constraints",
+      "Leave the public API alone.",
+      "### Done when",
+      "A clean lint run.",
+    ]) {
+      expect(input.approach).toContain(text);
+    }
+    const shown = JSON.stringify(input);
+    for (const secret of ["m-zebra-quokka", "3719", "unit:", "metrics_judged", "state_source", "Placeholder"]) {
+      expect(shown).not.toContain(secret);
+    }
+  });
+
+  it("accepts the untouched template text as a usable approach", () => {
+    const doc = parseGoal(goalTemplate("g-tidy"));
+    const input = buildReconcilerInput({
+      front: doc.front,
+      body: doc.body,
+      summary: SUMMARY,
+      items: [],
+      tracked: TRACKED,
+      watchedGlobs: [],
+      terms: forbiddenTermsFor(doc.front),
+      cap: 3,
+      recent: NO_RECENT,
+    });
+    expect("problem" in input).toBe(false);
   });
 
   it("refuses an approach or objective that carries a threshold or a metric name", () => {

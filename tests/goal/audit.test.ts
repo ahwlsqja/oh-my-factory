@@ -1,7 +1,8 @@
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { auditGoal } from "../../src/goal/audit.js";
+import { auditGoal, observationWarning } from "../../src/goal/audit.js";
+import { goalTemplate } from "../../src/goal/goal-file.js";
 import { goalLockFile, lockGoal } from "../../src/goal/goal-lock.js";
 import { lockFile, proposeMetric } from "../../src/goal/metrics.js";
 import { raiseWallTime } from "../../src/goal/wall-time.js";
@@ -13,6 +14,16 @@ describe("auditGoal", () => {
     const report = auditGoal(fx.location, "g-fast");
     expect(report.state).toBe("draft");
     expect(report.problems).toEqual(["metric m-unknown has no proposal; run omf metric propose m-unknown"]);
+  });
+
+  it("lists template placeholders apart from the problems, and keeps the existing check", () => {
+    const fx = setupGoal();
+    writeFileSync(fx.goalFile, goalTemplate("g-fast"));
+    const report = auditGoal(fx.location, "g-fast");
+    expect(report.state).toBe("draft");
+    expect(report.problems).toEqual(["metric m-replace-me has no proposal; run omf metric propose m-replace-me"]);
+    expect(report.placeholders[0]).toMatch(/^metric id m-replace-me is a placeholder/);
+    expect(report.placeholders.length).toBeGreaterThan(1);
   });
 
   it("reports a draft that is ready for J1", () => {
@@ -250,5 +261,72 @@ describe("auditGoal wall time and stale mark", () => {
     expect(report.problems).toEqual([]);
     lockGoal(fx.location, "g-fast", "human:dev");
     expect(auditGoal(fx.location, "g-fast")).toMatchObject({ state: "approved", regime_changes: [] });
+  });
+});
+
+describe("auditGoal observation against wall time", () => {
+  const withWallTime = (fx: ReturnType<typeof setupGoal>, wall: string): void =>
+    writeFileSync(fx.goalFile, readFileSync(fx.goalFile, "utf8").replace(/wall_time: \w+/, `wall_time: ${wall}`));
+
+  it("ships a template whose wall time is longer than its minimum observation, with no warning", () => {
+    expect(goalTemplate("g-x")).toContain("min_observation: 7d");
+    expect(goalTemplate("g-x")).toContain("wall_time: 14d");
+    const fx = setupGoal();
+    withWallTime(fx, "14d");
+    expect(auditGoal(fx.location, "g-fast").warnings).toEqual([]);
+    lockGoal(fx.location, "g-fast", "human:dev");
+    expect(auditGoal(fx.location, "g-fast").warnings).toEqual([]);
+  });
+
+  it("warns on a draft whose wall time cannot cover the minimum observation, without blocking approval", () => {
+    const fx = setupGoal();
+    withWallTime(fx, "72h");
+    const report = auditGoal(fx.location, "g-fast");
+    expect(report).toMatchObject({ state: "draft", problems: [] });
+    expect(report.warnings).toHaveLength(1);
+    expect(report.warnings[0]).toContain("wall time 72h is not longer than the minimum observation 7d");
+    expect(report.warnings[0]).toContain("omf budget raise <goal_id> wall_time <duration>");
+    expect(report.warnings[0]).toContain("omf goal resume <goal_id>");
+  });
+
+  it("treats equal durations as incompatible and one minute more as compatible", () => {
+    const fx = setupGoal();
+    withWallTime(fx, "7d");
+    expect(auditGoal(fx.location, "g-fast").warnings).toHaveLength(1);
+    withWallTime(fx, "10081m");
+    expect(auditGoal(fx.location, "g-fast").warnings).toEqual([]);
+  });
+
+  it("keeps warning after approval and stops once a person raises the cap past the observation", () => {
+    const fx = setupGoal();
+    withWallTime(fx, "72h");
+    lockGoal(fx.location, "g-fast", "human:dev");
+    const before = auditGoal(fx.location, "g-fast");
+    expect(before.state).toBe("approved");
+    expect(before.warnings).toHaveLength(1);
+    expect(before.warnings[0]).toContain("wall time 72h is not longer than");
+    raiseWallTime(fx.ledger, "g-fast", "100h", "human:dev");
+    const after = auditGoal(fx.location, "g-fast");
+    expect(after.warnings).toEqual([]);
+    expect(after.wall_time_exceeded).toBe(false);
+  });
+
+  it("does not refill the budget: elapsed time still counts from the first approval after a raise", () => {
+    const fx = setupGoal();
+    withWallTime(fx, "72h");
+    const approval = lockGoal(fx.location, "g-fast", "human:dev");
+    const at = (hours: number): Date => new Date(Date.parse(approval.first_approved_at) + hours * 3_600_000);
+    expect(auditGoal(fx.location, "g-fast", at(73)).wall_time_exceeded).toBe(true);
+    raiseWallTime(fx.ledger, "g-fast", "100h", "human:dev");
+    expect(auditGoal(fx.location, "g-fast", at(73)).wall_time_exceeded).toBe(false);
+    expect(auditGoal(fx.location, "g-fast", at(173)).wall_time_exceeded).toBe(true);
+  });
+
+  it("prints the minimum observation through the same duration formatter", () => {
+    expect(observationWarning("10080m", 1000, "1000m")).toContain("the minimum observation 7d,");
+  });
+
+  it("stays quiet when a duration cannot be read", () => {
+    expect(observationWarning("soon", 1000, "1s")).toBeNull();
   });
 });

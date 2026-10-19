@@ -52,6 +52,27 @@ body:
     validations:
       required: true
   - type: textarea
+    id: implementation-contract
+    attributes:
+      label: Implementation contract (maintainers complete before Ready)
+      description: |
+        Optional for reporters. Follow docs/maintainers/development-workflow.md when picking up the fix.
+        Link the parent goal or name the invariant/scenario; do not invent a numeric KPI.
+      value: |
+        State: Backlog
+
+        ## Problem / goal and contribution evidence
+
+        ## Scope and non-goals
+
+        ## Acceptance
+        - [ ]
+
+        ## Validation
+
+        ## Context
+        Owner, design/related links, dependencies, risks and unresolved decisions (or none).
+  - type: textarea
     id: extra
     attributes:
       label: Anything else
