@@ -134,9 +134,11 @@ the keys are dropped. The author suites are described in [docs/author.md](../aut
 that has no spend limit.
 
 Records live in `docs/evidence/gated-runs.json` and are written only by `--record`, never from inside a test. Until a
-suite has a record, the docs say the behaviour it covers is not enforced. Gated suites are never part of CI. A gated test that runs a model session sets its own session timeout in its request, not the
-`[implementer] timeout_ms` default (30 minutes), and its vitest timeout is longer than that session timeout
-(`G-implementer-real-run`: 20 minutes for the session, 25 for the test).
+suite has a record, the docs say the behaviour it covers is not enforced. Gated suites are never part of CI. A gated suite that calls the implementer directly (`G-implementer-real-run`, `G-e6-l2-leak-redteam`) passes its own
+session timeout in the request instead of the `[implementer] timeout_ms` default (30 minutes): 20 minutes for the
+session, 25 for the vitest test. Suites driven through the CLI or the author (`G-skeleton-real`, `G-author-canary`) take
+their session limit from config (`implementer.timeout_ms`, and `author.timeout_ms` capped at 10 minutes), and their vitest
+timeout (90 and 30 minutes) is set above it.
 
 One older test predates this: the Docker case in `tests/adapters/measure-cmd.test.ts` runs only when
 `OMF_TEST_DOCKER=1` and uses the client's current Docker context, not the `omf-m3f` profile. It is not a gated suite,
