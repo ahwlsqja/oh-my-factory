@@ -180,7 +180,7 @@ describe("UI browser launcher host-process boundary", () => {
     url.replace(":12345", ":0"),
     url.replace("127.0.0.1", "localhost"),
     url.replace("http:", "https:"),
-    url.replace("127.0.0.1", "user@127.0.0.1"),
+    url.replace("://", "://user@"),
     url.replace(":12345", ":65536"),
     url.replace(":12345", ":012345"),
     "http://127.0.0.1:12345/",
