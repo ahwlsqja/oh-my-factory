@@ -29,7 +29,10 @@ const alwaysOk = (id: "S7"): Station => ({ id, run: () => ({ kind: "ok" }) });
  * finished, vetoed or stopped, any implementer container of the item still there goes too. Both are best effort: a daemon
  * that cannot answer never changes what the line returns.
  */
-function containerSweeps(runtime: ContainerRuntime): {
+function containerSweeps(
+  runtime: ContainerRuntime,
+  location: ProjectLocation,
+): {
   start: Station;
   end: () => Promise<void>;
   startRan: () => boolean;
@@ -43,7 +46,13 @@ function containerSweeps(runtime: ContainerRuntime): {
         started = true;
         seen = { itemDir: ctx.item.dir, runId: ctx.runId, workId: ctx.workId };
         try {
-          await sweepOrphans({ runtime, itemDir: ctx.item.dir, currentRunId: ctx.runId, workId: ctx.workId });
+          await sweepOrphans({
+            runtime,
+            itemDir: ctx.item.dir,
+            currentRunId: ctx.runId,
+            workId: ctx.workId,
+            projectDir: location.dir,
+          });
         } catch {
           // the next run sweeps again
         }
@@ -87,7 +96,7 @@ export function assembleLine(input: {
   const feedback = createFeedbackSlot();
   const implementer = implementerStations({ location, runtime, feedback, env, ...clock });
   const judge = judgeStations({ location, runtime, candidates: implementer.candidates, feedback, ...clock });
-  const sweeps = containerSweeps(runtime);
+  const sweeps = containerSweeps(runtime, location);
   return {
     stations: {
       S1: sweeps.start,

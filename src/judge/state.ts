@@ -171,6 +171,8 @@ export interface SweepInput {
   currentRunId: string;
   /** The item's id: only containers whose `omf.work` label is this item are selected, since two items can share a run id. */
   workId: string;
+  /** The project's state directory (`location.dir`): the root the staging path must really lie under (`runsOnStatePath`). */
+  projectDir?: string;
 }
 
 export interface SweepResult {
@@ -225,7 +227,7 @@ export async function sweepOrphans(input: SweepInput): Promise<SweepResult> {
     }
   }
   // `judge` holds judge staging; `implementer-stage` holds an implementer bundle, quarantine and tree. Symlinks are never followed.
-  result.staging += removeStagingDirs(runsDir, earlier);
+  result.staging += removeStagingDirs(runsDir, earlier, input.projectDir);
   return result;
 }
 

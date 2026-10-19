@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createDockerRuntime } from "../../src/container/docker-cli.js";
 import { removeStagingDirs, sweepItemOrphans } from "../../src/container/item-sweep.js";
 import { claimItem, releaseItem } from "../../src/work/claim.js";
@@ -243,22 +243,30 @@ describe("host staging is removed only on the real state path", () => {
     expect(survives(workDir)).toBe(true);
   });
 
-  it("a symlinked OMF home is not a symlink in the state tree: the staging under it is removed", async () => {
+  it("a symlinked state directory is not a symlink in the tree: the staging under it is removed", async () => {
     const real = realTempDir("omf-sweep-home-real-");
     const parent = realTempDir("omf-sweep-home-link-");
-    const home = join(parent, "omf");
-    symlinkSync(real, home);
-    const itemDir = join(home, "projects", "p1", "goals", "g1", "work", "w1");
-    put(join(real, "projects", "p1", "goals", "g1", "work", "w1"), `runs/${OUTSIDE_RUN}/judge/ctx`, "x");
-    vi.stubEnv("OMF_HOME", home);
-    try {
-      expect(removeStagingDirs(join(itemDir, "runs"), [OUTSIDE_RUN])).toBe(1);
-    } finally {
-      vi.unstubAllEnvs();
-    }
-    expect(existsSync(join(real, "projects", "p1", "goals", "g1", "work", "w1", "runs", OUTSIDE_RUN, "judge"))).toBe(
-      false,
-    );
+    const projectDir = join(parent, "omf", "projects", "p1");
+    symlinkSync(real, join(parent, "omf"));
+    const itemDir = join(projectDir, "goals", "g1", "work", "w1");
+    const workDir = join(real, "projects", "p1", "goals", "g1", "work", "w1");
+    put(workDir, `runs/${OUTSIDE_RUN}/judge/ctx`, "x");
+    expect(removeStagingDirs(join(itemDir, "runs"), [OUTSIDE_RUN], projectDir)).toBe(1);
+    expect(existsSync(join(workDir, "runs", OUTSIDE_RUN, "judge"))).toBe(false);
+  });
+
+  it("a symlink below the state directory still blocks the removal when the project directory is given", async () => {
+    const { itemDir, workDir, state } = linked("goal");
+    expect(removeStagingDirs(join(itemDir, "runs"), [OUTSIDE_RUN], state)).toBe(0);
+    const result = await sweepOrphans({
+      runtime: new MemoryRuntime(),
+      itemDir,
+      workId: X,
+      currentRunId: CURRENT,
+      projectDir: state,
+    });
+    expect(result.staging).toBe(0);
+    expect(survives(workDir)).toBe(true);
   });
 });
 

@@ -195,7 +195,13 @@ async function runS3(
   try {
     if (!(await runtime.info()).ok || !(await runtime.endpoint()).local) return stopFor({ from: "environment" });
     // Leftovers of earlier runs, quarantines that may hold a key included, go before anything is created, even when S4 never ran.
-    await sweepOrphans({ runtime, itemDir: ctx.item.dir, currentRunId: ctx.runId, workId: ctx.workId });
+    await sweepOrphans({
+      runtime,
+      itemDir: ctx.item.dir,
+      currentRunId: ctx.runId,
+      workId: ctx.workId,
+      projectDir: location.dir,
+    });
   } catch {
     return stopFor({ from: "environment" });
   }

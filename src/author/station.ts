@@ -225,7 +225,7 @@ export async function sealItem(deps: SealItemDeps): Promise<SealPassResult> {
   const scope: DecisionScope = { goal_id: item.front.goal_id, work_id: item.front.work_id };
   const passId = newRunId(now());
   // Before any other check, so a pass killed after its container exists is cleaned up by the next seal whatever it answers.
-  await sweepItemOrphans({ runtime, itemDir: item.dir, currentPassId: passId, workId });
+  await sweepItemOrphans({ runtime, itemDir: item.dir, currentPassId: passId, workId, projectDir: location.dir });
   const stateEnv = locationEnv(location);
   try {
     assertLineSafe(location, stateEnv);

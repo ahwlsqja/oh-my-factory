@@ -1,6 +1,5 @@
 import { existsSync, lstatSync, readdirSync, realpathSync, rmSync, statSync, unlinkSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
-import { omfHome } from "../core/paths.js";
 import type { ContainerRuntime } from "./runtime.js";
 import { type ImageId, assertName } from "./spec.js";
 import { UNREADABLE_GRACE_MS, isLockHeld, sealLockFile } from "../core/lock.js";
@@ -41,24 +40,22 @@ function isSymlink(path: string): boolean {
 }
 
 /**
- * Whether `runsDir` really lives where it is written: the real path of `runsDir` equals the path as written under the project
- * OMF state root (the real path of the OMF home plus the part of the written path below it, so a symlinked home is no
- * symlink in the tree). A symlink anywhere above `runs` (`goals`, `goals/<g>`, `work`, the work id directory) makes the real
- * path differ, and the staging below it may be a directory outside the state tree. A `runsDir` that is not under the OMF home
- * (a caller that hands its own item directory) is compared with itself as written. Any failure to resolve says no.
+ * Whether `runsDir` really lives where it is written: the real path of `runsDir` equals its path as written under the project's
+ * OMF state directory (`projectDir`, `<home>/projects/<id>`). The state directory itself is resolved first, so a symlinked home
+ * (a dotfile manager, `/var -> /private/var`) is no link in the tree; a symlink anywhere below it (`goals`, a goal directory,
+ * `work`, the work id directory, `runs`) makes the real path differ, and the staging under it may be a directory outside the
+ * state tree. Without `projectDir`, or when `runsDir` is not below it, the written path itself is the expectation. Any failure
+ * to resolve says no.
  */
-export function runsOnStatePath(runsDir: string): boolean {
+export function runsOnStatePath(runsDir: string, projectDir?: string): boolean {
   try {
     const written = resolve(runsDir);
     let expected = written;
-    try {
-      const home = resolve(omfHome());
-      const below = relative(home, written);
-      if (below !== "" && below !== ".." && !below.startsWith(`..${sep}`) && resolve(home, below) === written) {
-        expected = join(realpathSync.native(home), below);
+    if (projectDir !== undefined) {
+      const below = relative(resolve(projectDir), written);
+      if (below !== "" && below !== ".." && !below.startsWith(`..${sep}`)) {
+        expected = join(realpathSync.native(resolve(projectDir)), below);
       }
-    } catch {
-      // no usable OMF home: the written path itself is the expectation
     }
     return realpathSync.native(runsDir) === expected;
   } catch {
@@ -73,8 +70,8 @@ export function runsOnStatePath(runsDir: string): boolean {
  * Nothing is removed unless `runsDir` is on the real state path (`runsOnStatePath`): a symlink above `runs` could point the
  * staging at a directory outside the state tree, which every caller (the item sweep and the run-start sweep) is then spared.
  */
-export function removeStagingDirs(runsDir: string, runIds: Iterable<string>): number {
-  if (!isPlainDir(runsDir) || !runsOnStatePath(runsDir)) return 0;
+export function removeStagingDirs(runsDir: string, runIds: Iterable<string>, projectDir?: string): number {
+  if (!isPlainDir(runsDir) || !runsOnStatePath(runsDir, projectDir)) return 0;
   let removed = 0;
   for (const runId of runIds) {
     const runDir = join(runsDir, runId);
@@ -104,6 +101,8 @@ interface ItemSweepInput {
   itemDir: string;
   /** The item's id: a run id is only unique to the second, so a container counts only when its `omf.work` label is this item. */
   workId: string;
+  /** The project's state directory (`location.dir`): the root the staging path must really lie under (`runsOnStatePath`). */
+  projectDir?: string;
   /** The pass of the calling `omf seal`, whose marker may already exist; never selected. */
   currentPassId?: string;
 }
@@ -158,7 +157,7 @@ export async function sweepItemOrphans(input: ItemSweepInput & { roles?: readonl
     } catch {
       // the daemon cannot answer: the host staging below is still swept
     }
-    if (claimFree) removeStagingDirs(runsDir, earlier);
+    if (claimFree) removeStagingDirs(runsDir, earlier, input.projectDir);
     return removed;
   } catch {
     return 0;
