@@ -57,7 +57,19 @@ export interface SealDeps {
    * when the stage fails, is blocked or reuses a seal.
    */
   afterSealCompleted?: (sealed: SealedPass) => void;
+  /**
+   * Called once, under `seal.lock`, after GATE-1 passed, the inputs were built and `seal.requested` was appended, and right
+   * before the author runs: the one place a pass may take an author call, because only a pass that gets here runs the model.
+   * `{ ok: false }` ends the stage as `refused` with that reason and the author is not called. A throw ends the stage with
+   * that error.
+   */
+  beforeAuthorRun?: (info: { round: number }) => Promise<BeforeAuthorRun>;
 }
+
+export type BeforeAuthorRun = { ok: true } | { ok: false; reason: AuthorRunRefusal };
+
+/** Why a pass that reached the author was stopped just before the model ran. */
+export type AuthorRunRefusal = "author_call_cap" | "author_pass_setup_failed";
 
 export type SealStageResult =
   // "stored", not "sealed": a host stub author is unmeasured.
@@ -66,7 +78,7 @@ export type SealStageResult =
   | { status: "reused"; seal: SealRecord }
   | { status: "blocked_gate1"; reasons: Gate1Reason[] }
   | { status: "blocked_input"; code: SealInputErrorCode }
-  | { status: "refused"; reason: "implementation_started" | "seal_in_progress" }
+  | { status: "refused"; reason: "implementation_started" | "seal_in_progress" | AuthorRunRefusal }
   | { status: "failed"; code: SealFailureCode };
 
 /**
@@ -87,7 +99,7 @@ export function sealLockFile(itemDir: string): string {
  * 4. fold, GATE-1 under `now`: not pass is `blocked_gate1`, nothing appended, author uncalled;
  * 5. `sealInputsFor` and `buildSealPrompt` (`blocked_input` on a `SealInputError`);
  * 6. append `seal.requested`, with `round` = completed seals + 1;
- * 7. run the author. A failure appends `seal.failed` and consumes no round;
+ * 7. `beforeAuthorRun`, if any, may stop the pass (`refused`) with the author uncalled; then run the author. A failure appends `seal.failed` and consumes no round;
  * 8. intake. The author's identity is the session's own `vendor`, `model` and `isolation` plus the injected clock; whatever
  *    the YAML says about itself is ignored and counted. Zero stored is `seal.failed no_valid_scenarios`;
  * 9. write the set into `<work_id>/<seal_id>/`, files first. The name is unique per seal, so concurrent or crashed seals
@@ -172,6 +184,10 @@ async function sealLocked(deps: SealDeps): Promise<SealStageResult> {
     }),
   );
 
+  if (deps.beforeAuthorRun !== undefined) {
+    const taken = await deps.beforeAuthorRun({ round });
+    if (!taken.ok) return { status: "refused", reason: taken.reason };
+  }
   const outcome = await session.run({ prompt, inputs, timeoutMs: deps.timeoutMs ?? DEFAULT_AUTHOR_TIMEOUT_MS });
   const fail = (code: SealFailureCode, durationMs: number): SealStageResult => {
     ledger.append(sealFailedEvent(scope, { round, code, duration_ms: Math.round(durationMs) }));

@@ -6,7 +6,6 @@ import { type ContainerRuntime, RuntimeError } from "../container/runtime.js";
 import { assertName } from "../container/spec.js";
 import { type OmfConfig, readConfig } from "../core/config.js";
 import { Ledger } from "../core/ledger.js";
-import { acquireLock, LockHeldError, releaseLock } from "../core/lock.js";
 import type { ProjectLocation } from "../core/paths.js";
 import { authorVendorRefusal, sameVendorRefusal } from "../core/roles.js";
 import { evaluateGate1, intentQuestionIds } from "../decision/gate1.js";
@@ -21,7 +20,7 @@ import { trackRuntime } from "../judge/state.js";
 import { authorPrecedesStart, foldSeals, type SealFailureCode, sealFeedbackFromEvents } from "../scenario/events.js";
 import { createHostFixtureRunner } from "../scenario/fixtures.js";
 import { randomIds } from "../scenario/intake.js";
-import { sealLockFile } from "../seal/seal.js";
+import type { BeforeAuthorRun } from "../seal/seal.js";
 import { runS2ThenGate2 } from "../seal/station.js";
 import { assertLineSafe, guardRefusal, locationEnv } from "../vault/line-guard.js";
 import { openVault } from "../vault/vault.js";
@@ -130,22 +129,25 @@ export async function sweepAuthorOrphans(input: {
 }
 
 /**
- * Author calls this item has taken: the distinct pass ids named by an `author.session_started` (written under `seal.lock`
- * before any container) or an `author.session_completed` (older ledgers have only that one). A pass that never reached its
- * completed event still counts.
+ * Author calls this item has taken: one per `author.session_started` (written under `seal.lock` just before the model run,
+ * so a pass killed in the call is counted), plus the passes of older ledgers, which have only an `author.session_completed`,
+ * counted once per pass id that no started record names.
  */
 function authorCallsUsed(
   events: readonly { type: string; payload: Record<string, unknown> }[],
   scope: DecisionScope,
 ): number {
-  const passes = new Set<unknown>();
-  for (const event of events) {
-    if (event.type !== AUTHOR_SESSION_EVENT && event.type !== AUTHOR_STARTED_EVENT) continue;
-    if (event.payload.goal_id === scope.goal_id && event.payload.work_id === scope.work_id) {
-      passes.add(event.payload.pass_id);
-    }
-  }
-  return passes.size;
+  const mine = events.filter(
+    (event) => event.payload.goal_id === scope.goal_id && event.payload.work_id === scope.work_id,
+  );
+  const started = mine.filter((event) => event.type === AUTHOR_STARTED_EVENT);
+  const startedPasses = new Set(started.map((event) => event.payload.pass_id));
+  const legacy = new Set(
+    mine
+      .filter((event) => event.type === AUTHOR_SESSION_EVENT && !startedPasses.has(event.payload.pass_id))
+      .map((event) => event.payload.pass_id),
+  );
+  return started.length + legacy.size;
 }
 
 /** Thrown inside the ledger lock when the seal a measurement was made for is not the item's latest any more. */
@@ -195,12 +197,16 @@ export function recordAuthorMeasurement(input: {
  * 2. a standing seal whose author stage is measured L2 answers `already_sealed` here: no key, no daemon, no model call.
  *    A standing seal with an unmeasured author falls through and is sealed again;
  * 3. the refusals of `authorRefusal`: nothing is written;
- * 4. under `seal.lock`: the call cap is checked again against the ledger as it is now, the pass marker `runs/<pass id>/`
- *    is created BEFORE any `docker create`, author containers of earlier passes are swept, and `author.session_started`
- *    is appended: that record is what the cap counts, so a pass killed mid-call is counted. A lock held by another pass is a J7 stop `seal_in_progress`;
- * 5. S2 and GATE-2 over the container author. The session's measurement is recorded by `afterSealCompleted`, inside the
+ * 4. S2 and GATE-2 over the container author, with `seal.lock` taken by the seal stage. Only a pass that clears GATE-1,
+ *    `implementation_started` and the seal inputs reaches the model, and only then, under that lock and right before the
+ *    model run, does `beforeAuthorRun` sweep author containers of earlier passes of the item (so a killed pass's orphan is
+ *    removed even when this pass is refused at the cap), count the call cap against the ledger as it is now
+ *    (`author_call_cap`), create the pass marker `runs/<pass id>/` before any `docker create`, and append
+ *    `author.session_started`: that record is what the cap counts, so a pass killed mid-call is counted. A lock held by
+ *    another pass is a J7 stop `seal_in_progress`;
+ * The session's measurement is recorded by `afterSealCompleted`, inside the
  *    seal lock and bound to this pass's seal. A crash between `seal.completed` and the record leaves the seal unmeasured;
- * 6. `author.session_completed` is appended once per container run, whatever the outcome; the tracked runtime is closed.
+ * 5. `author.session_completed` is appended once per container run, whatever the outcome; the tracked runtime is closed.
  * The result reads the ledger again: `sealed` only when `standingSeal` says the author is measured.
  */
 export async function sealItem(deps: SealItemDeps): Promise<SealPassResult> {
@@ -227,42 +233,32 @@ export async function sealItem(deps: SealItemDeps): Promise<SealPassResult> {
 
   const cleared = await authorRefusal({ location, runtime, env: deps.env });
   if (cleared.refused !== null) return { status: "refused", code: cleared.refused };
-  // A cheap refusal before the lock; the count that decides is the one taken under the lock below.
-  if (authorCallsUsed(before, scope) >= cleared.config.author.max_calls) {
-    return { status: "refused", code: "author_call_cap" };
-  }
-
   const passId = newRunId(now());
-  const lock = sealLockFile(item.dir);
-  try {
-    acquireLock(lock);
-  } catch (error) {
-    if (error instanceof LockHeldError) return { status: "blocked", route: "J7", code: "seal_in_progress" };
-    throw error;
-  }
-  let callsBefore: number;
-  let round: number;
-  try {
-    // Under the lock: the call is counted from the ledger as it is now and taken by a record written before any container.
-    const current = ledger.readVerified();
-    callsBefore = authorCallsUsed(current, scope);
-    round = foldSeals(current, scope).completed + 1;
-    if (callsBefore >= cleared.config.author.max_calls) return { status: "refused", code: "author_call_cap" };
-    mkdirSync(join(item.dir, "runs", passId), { recursive: true, mode: 0o700 });
-    await sweepAuthorOrphans({ runtime, itemDir: item.dir, currentPassId: passId });
-    ledger.append(
-      authorSessionStartedEvent(scope, {
-        pass_id: passId,
-        round,
-        calls_before: callsBefore,
-        limit_calls: cleared.config.author.max_calls,
-      }),
-    );
-  } catch {
-    return { status: "blocked", route: "J7", code: "author_pass_setup_failed" };
-  } finally {
-    releaseLock(lock);
-  }
+  let callsBefore = 0;
+  let round = foldSeals(before, scope).completed + 1;
+  // Runs inside `runSealStage`, under `seal.lock`, once GATE-1 and the seal inputs have cleared and right before the model:
+  // sweep, count the cap against the ledger as it is now, then take the call. A pass that never gets here spends nothing.
+  const beforeAuthorRun = async (info: { round: number }): Promise<BeforeAuthorRun> => {
+    try {
+      await sweepAuthorOrphans({ runtime, itemDir: item.dir, currentPassId: passId });
+      const current = ledger.readVerified();
+      callsBefore = authorCallsUsed(current, scope);
+      round = info.round;
+      if (callsBefore >= cleared.config.author.max_calls) return { ok: false, reason: "author_call_cap" };
+      mkdirSync(join(item.dir, "runs", passId), { recursive: true, mode: 0o700 });
+      ledger.append(
+        authorSessionStartedEvent(scope, {
+          pass_id: passId,
+          round,
+          calls_before: callsBefore,
+          limit_calls: cleared.config.author.max_calls,
+        }),
+      );
+      return { ok: true };
+    } catch {
+      return { ok: false, reason: "author_pass_setup_failed" };
+    }
+  };
 
   const tracked = trackRuntime(runtime);
   const session =
@@ -273,9 +269,9 @@ export async function sealItem(deps: SealItemDeps): Promise<SealPassResult> {
       config: cleared.config,
       credential: cleared.credential,
       passId,
-      round,
+      round: () => round,
       workId,
-      callsBefore,
+      callsBefore: () => callsBefore,
       now,
     });
   const feedback = sealFeedbackFromEvents(before, scope);
@@ -293,6 +289,7 @@ export async function sealItem(deps: SealItemDeps): Promise<SealPassResult> {
     runner: createHostFixtureRunner(),
     exposureCount: exposureCountFor(before, scope.goal_id, scope.work_id),
     ...(feedback === null ? {} : { feedback }),
+    beforeAuthorRun,
     afterSealCompleted: (sealed) => {
       const measurement = session.takeMeasurement();
       if (measurement !== null)
@@ -306,6 +303,8 @@ export async function sealItem(deps: SealItemDeps): Promise<SealPassResult> {
 
   switch (pass.status) {
     case "stop":
+      // The cap is a refusal, not a stop on a route: the person raises `max_calls`.
+      if (pass.code === "author_call_cap") return { status: "refused", code: "author_call_cap" };
       return { status: "blocked", route: pass.route, code: pass.code };
     case "retry_s2":
       return { status: "retry", code: pass.code };

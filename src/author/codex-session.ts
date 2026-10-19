@@ -58,13 +58,15 @@ export interface ContainerAuthorDeps {
   credential: Credential;
   /** The pass's run-shaped id, used as the container label `run_id`. */
   passId: string;
-  /** A label only, >= 1. */
-  round: number;
+  /** A label only, >= 1. A function is read when the run starts, after the pass has taken its call. */
+  round: number | (() => number);
   workId: string;
-  /** Author calls this work item already has in the ledger; recorded in the facts. Default 0. */
-  callsBefore?: number;
+  /** Author calls this work item already has in the ledger; recorded in the facts. Default 0. A function is read when the run starts. */
+  callsBefore?: number | (() => number);
   now: () => Date;
 }
+
+const resolved = (value: number | (() => number)): number => (typeof value === "function" ? value() : value);
 
 let authorSerial = 0;
 
@@ -246,7 +248,7 @@ export function createContainerAuthor(deps: ContainerAuthorDeps): ContainerAutho
         if (seen.imageId === null) return;
         facts = {
           pass_id: deps.passId,
-          round: deps.round,
+          round: resolved(deps.round),
           vendor: "codex",
           model: stampedModel,
           outcome,
@@ -261,7 +263,7 @@ export function createContainerAuthor(deps: ContainerAuthorDeps): ContainerAutho
           limit_timeout_ms: Math.min(request.timeoutMs, config.author.timeout_ms),
           limit_output_bytes: config.author.max_output_bytes,
           limit_calls: config.author.max_calls,
-          calls_before: deps.callsBefore ?? 0,
+          calls_before: resolved(deps.callsBefore ?? 0),
           injected_secret_names: ["CODEX_API_KEY"],
         };
       };
@@ -296,7 +298,7 @@ export function createContainerAuthor(deps: ContainerAuthorDeps): ContainerAutho
         const spec = containerSpecFor({
           role: "author",
           image: info.id,
-          labels: { work_id: deps.workId, run_id: deps.passId, round: deps.round },
+          labels: { work_id: deps.workId, run_id: deps.passId, round: resolved(deps.round) },
           serial: authorSerial,
           limits: { kind: "author", author: config.author },
         });

@@ -17,7 +17,7 @@ import {
   withOverrides,
   writeAuthorConfig,
 } from "../helpers/author-session.js";
-import { NOW } from "../helpers/decision-fixture.js";
+import { NOW, addOpen, resolveOpen } from "../helpers/decision-fixture.js";
 import { ledgerEvents } from "../helpers/enforcement-goal.js";
 import { type LineFixture, ROUND1, ROUND2, setupLine, writeYaml } from "../helpers/line-fixture.js";
 import { MemoryRuntime } from "../helpers/memory-runtime.js";
@@ -127,48 +127,132 @@ describe("sealItem", () => {
     expect(ledgerEvents(l.f.fx, "author.session_completed")).toHaveLength(1);
   });
 
-  it("counts a pass that was abandoned after its start record: the next pass is refused at the cap", async () => {
+  it("does not spend a call on a pass that GATE-1 refuses: the model never ran", async () => {
+    const { l, deps } = rig({ authorLines: ["max_calls = 2"] });
+    addOpen(l.f, "d-extra", "compatibility");
+    let runs = 0;
+    const counting = (): SealItemDeps =>
+      deps({
+        session: (_credential, passId) => {
+          const inner = scriptedAuthor(l, writeYaml(l, "x.yaml", ROUND2), passId);
+          return {
+            ...inner,
+            run: async (request) => {
+              runs += 1;
+              return inner.run(request);
+            },
+          };
+        },
+      });
+    for (let pass = 0; pass < 2; pass += 1) {
+      expect(await sealItem(counting())).toEqual({ status: "blocked", route: "J2", code: "gate1_not_passing" });
+    }
+    expect(runs).toBe(0);
+    expect(ledgerEvents(l.f.fx, "author.session_started")).toHaveLength(0);
+    expect(ledgerEvents(l.f.fx, "author.session_completed")).toHaveLength(0);
+    expect(passDirs(l)).toEqual([]);
+    resolveOpen(l.f, "d-extra");
+    // The extra decision is not linked by the scenarios, so GATE-2 sends the pass back; the model did run.
+    expect(await sealItem(counting())).toEqual({ status: "retry", code: "gate2_back_to_s2" });
+    expect(ledgerEvents(l.f.fx, "author.session_started")).toHaveLength(1);
+    expect(runs).toBe(1);
+  });
+
+  it("counts a pass killed after its start record: the next pass is refused at the cap", async () => {
     const { l, deps } = rig({ authorLines: ["max_calls = 1"] });
     await expect(
       sealItem(
         deps({
-          session: () => {
-            throw new Error("host killed before the call finished");
-          },
+          session: () => ({
+            ...scriptedAuthor(l, writeYaml(l, "x.yaml", ROUND2), "unused"),
+            run: async () => {
+              throw new Error("host killed before the call finished");
+            },
+          }),
         }),
       ),
     ).rejects.toThrow(/host killed/);
     expect(ledgerEvents(l.f.fx, "author.session_completed")).toHaveLength(0);
     expect(ledgerEvents(l.f.fx, "author.session_started")).toHaveLength(1);
-    let sessions = 0;
+    let ran = 0;
     const second = await sealItem(
       deps({
-        session: () => {
-          sessions += 1;
-          throw new Error("no session may start");
-        },
+        session: (_credential, passId) => ({
+          ...scriptedAuthor(l, writeYaml(l, "y.yaml", ROUND2), passId),
+          run: async () => {
+            ran += 1;
+            throw new Error("no model run may start");
+          },
+        }),
       }),
     );
     expect(second).toEqual({ status: "refused", code: "author_call_cap" });
-    expect(sessions).toBe(0);
+    expect(ran).toBe(0);
+    expect(ledgerEvents(l.f.fx, "author.session_started")).toHaveLength(1);
   });
 
-  it("lets exactly one of two racing passes start when one call is left", async () => {
-    const { l, yaml, deps } = rig({ authorLines: ["max_calls = 1"] });
-    let sessions = 0;
-    const racing = (): Promise<unknown> =>
+  it("sweeps the orphan of a killed pass even when the next seal is refused at the cap", async () => {
+    const { l, runtime, deps } = rig({ authorLines: ["max_calls = 1"] });
+    await expect(
       sealItem(
         deps({
-          session: (_credential, passId) => {
-            sessions += 1;
-            return scriptedAuthor(l, yaml, passId, { failure: "no_output" });
+          session: () => ({
+            ...scriptedAuthor(l, writeYaml(l, "x.yaml", ROUND2), "unused"),
+            run: async () => {
+              throw new Error("host killed before the call finished");
+            },
+          }),
+        }),
+      ),
+    ).rejects.toThrow(/host killed/);
+    const killed = String(ledgerEvents(l.f.fx, "author.session_started")[0]?.payload.pass_id);
+    runtime.owned = [{ kind: "container", name: `omf-author-${killed}-1-1`, run_id: killed }];
+    expect(await sealItem(deps())).toEqual({ status: "refused", code: "author_call_cap" });
+    expect(runtime.owned).toEqual([]);
+  });
+
+  it("lets only the pass that took the last call run, when another pass checked the ledger before it was written", async () => {
+    const { l, yaml, runtime, deps } = rig({ authorLines: ["max_calls = 1"] });
+    let runs = 0;
+    const counted = (passId: string) => {
+      const inner = scriptedAuthor(l, yaml, passId);
+      return {
+        ...inner,
+        run: async (request: Parameters<typeof inner.run>[0]) => {
+          runs += 1;
+          return inner.run(request);
+        },
+      };
+    };
+    let startedA = (): void => undefined;
+    const aStarted = new Promise<void>((resolve) => {
+      startedA = resolve;
+    });
+    const a = sealItem(
+      deps({
+        session: (_credential, passId) => {
+          startedA();
+          return counted(passId);
+        },
+      }),
+    );
+    // B reads the ledger before A wrote anything, then waits until A is through and has released seal.lock.
+    const b = sealItem(
+      deps({
+        runtime: withOverrides(runtime, {
+          info: async () => {
+            await aStarted;
+            await a;
+            return { ok: true, server_version: "memory" };
           },
         }),
-      );
-    const results = (await Promise.all([racing(), racing()])) as Array<{ status: string }>;
-    expect(sessions).toBe(1);
+        session: (_credential, passId) => counted(passId),
+      }),
+    );
+    expect(await a).toMatchObject({ status: "sealed" });
+    expect(await b).toEqual({ status: "refused", code: "author_call_cap" });
+    expect(runs).toBe(1);
     expect(ledgerEvents(l.f.fx, "author.session_started")).toHaveLength(1);
-    expect(results.map((result) => result.status).sort()).not.toContain("sealed");
   });
 
   it("counts one call per pass, however many events the pass left", async () => {
