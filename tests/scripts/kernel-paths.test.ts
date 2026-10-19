@@ -52,9 +52,17 @@ describe("parseList", () => {
     ["../outside/**", "repository-relative"],
     ["src/../x.ts", "repository-relative"],
     ["C:\\x", "repository-relative"],
+    ["C:/x", "repository-relative"],
+    ["C:x", "repository-relative"],
+    ["z:", "repository-relative"],
     ["src\\x.ts", "repository-relative"],
     ["src/{a,b}.ts", "does not support"],
     ["!src/a.ts", "does not support"],
+    ["src/[ab].ts", "does not support"],
+    ["src/a].ts", "does not support"],
+    ["src/(a).ts", "does not support"],
+    ["src/a).ts", "does not support"],
+    ["src/a}.ts", "does not support"],
   ])("refuses %j with the line number", (line, part) => {
     expect(() => parseList(`ok/**\n${line}\n`)).toThrow(`kernel-paths: line 2`);
     expect(() => parseList(`${line}\n`)).toThrow(part);
@@ -81,6 +89,26 @@ describe("matchKernelPaths", () => {
     ["enforcement/a.ts", "**/enforcement/*.ts", true],
     ["package.json", "package.json", true],
     ["a.package.json", "package.json", false],
+    ["src/core/ledgerXts", "src/core/ledger.ts", false],
+    ["axb", "a.b", false],
+    ["a.b", "a.b", true],
+    ["a+b", "a+b", true],
+    ["aab", "a+b", false],
+    ["a|b", "a|b", true],
+    ["a", "a|b", false],
+    ["a$b", "a$b", true],
+    ["ab", "a$b", false],
+    ["a^b", "a^b", true],
+    ["a/b", "a?b", false],
+    ["a/b", "a/**/b", true],
+    ["a/x/y/b", "a/**/b", true],
+    ["a/xb", "a/**/b", false],
+    ["a(b)", "a(b)", true],
+    ["ab", "a(b)", false],
+    ["a[b]", "a[b]", true],
+    ["ab", "a[b]", false],
+    ["a{b}", "a{b}", true],
+    ["a\\b", "a\\b", true],
   ])("%s against %s is %s", (file, pattern, expected) => {
     expect(hits(file, pattern)).toBe(expected);
   });
@@ -150,17 +178,6 @@ describe("scripts/kernel-paths.mjs CLI", () => {
     expect(out.stdout).toContain("`.github/workflows/ci.yml`");
   });
 
-  it.each([
-    ["no arguments", []],
-    ["a flag with no value", ["--base"]],
-    ["an unknown flag", ["--bogus", "x"]],
-    ["a base that is not a full sha", ["--base", "main", "--head", "0".repeat(40)]],
-  ])("exits 2 for %s", (_name, args) => {
-    const out = report(args as string[]);
-    expect(out.status).toBe(2);
-    expect(out.stderr).toContain("kernel-paths:");
-  });
-
   it("exits 2 when git cannot diff the two shas, and when the list is unsafe", () => {
     const { repo, base, head: tip } = renamedRepo();
     const unknown = report(["--repo", repo, "--base", "1".repeat(40), "--head", tip]);
@@ -171,5 +188,88 @@ describe("scripts/kernel-paths.mjs CLI", () => {
     const unsafe = report(["--repo", repo, "--base", base, "--head", tip, "--list", list]);
     expect(unsafe.status).toBe(2);
     expect(unsafe.stderr).toContain("line 1");
+  });
+
+  it("reads the diff against the merge base: what the base branch gained meanwhile is not reported", () => {
+    const repo = makeGitRepo();
+    write(repo, "README.md", "# r\n");
+    commitAll(repo, "root");
+    const fork = head(repo);
+    gitIn(repo, "checkout", "-q", "-b", "feature");
+    write(repo, "docs/f.md", "# f\n");
+    commitAll(repo, "feature");
+    const feature = head(repo);
+    gitIn(repo, "checkout", "-q", "main");
+    write(repo, "src/decision/main-only.ts", "export const m = 1;\n");
+    commitAll(repo, "main moves on");
+    const main = head(repo);
+    expect(gitIn(repo, "merge-base", main, feature).trim()).toBe(fork);
+    const list = join(makeTempDir("omf-kp-"), "list.txt");
+    writeFileSync(list, "src/decision/**\n");
+    const out = report(["--repo", repo, "--base", main, "--head", feature, "--list", list]);
+    expect(out.status).toBe(0);
+    expect(out.stdout).toContain("No kernel path touched.");
+    expect(out.stdout).not.toContain("main-only");
+  });
+
+  it("names a file with a space, a backtick or non-ASCII letters in its name, escaped in the code span", () => {
+    const repo = makeGitRepo();
+    write(repo, "README.md", "# r\n");
+    commitAll(repo, "root");
+    const base = head(repo);
+    write(repo, "src/decision/a b.ts", "x\n");
+    write(repo, "src/decision/tick`name.ts", "x\n");
+    write(repo, "src/decision/caf\u00e9.ts", "x\n");
+    commitAll(repo, "odd names");
+    const list = join(makeTempDir("omf-kp-"), "list.txt");
+    writeFileSync(list, "src/decision/**\n");
+    const out = report(["--repo", repo, "--base", base, "--head", head(repo), "--list", list]);
+    expect(out.status, out.stderr).toBe(0);
+    expect(out.stdout).toContain("Files on kernel paths: 3 of 3 changed.");
+    expect(out.stdout).toContain("- `src/decision/a b.ts` (src/decision/**)");
+    expect(out.stdout).toContain("- `src/decision/tick'name.ts` (src/decision/**)");
+    expect(out.stdout).toContain("- `src/decision/caf\u00e9.ts` (src/decision/**)");
+    expect(out.stdout.split("\n").filter((line) => line.startsWith("- ")).length).toBe(3);
+  });
+
+  it("states which list it used and how many patterns it holds", () => {
+    const { repo, base, head: tip } = renamedRepo();
+    const list = join(makeTempDir("omf-kp-"), "list.txt");
+    writeFileSync(list, "# c\nsrc/decision/**\n.github/**\n");
+    const fromFile = report(["--repo", repo, "--base", base, "--head", tip, "--list", list]);
+    expect(fromFile.stdout).toContain("List: docs/maintainers/kernel-paths.txt (2 patterns).");
+    const fallback = report(["--repo", repo, "--base", base, "--head", tip, "--list", join(repo, "absent.txt")]);
+    expect(fallback.stdout).toContain(
+      `List: built-in default; docs/maintainers/kernel-paths.txt is absent (${DEFAULT_KERNEL_PATHS.length} patterns).`,
+    );
+  });
+
+  it.each([
+    ["no arguments", [], "--base must be a full 40-character"],
+    ["a flag with no value", ["--base"], "usage: --repo"],
+    [
+      "an unknown flag",
+      ["--bogus", "x"],
+      'usage: --repo <dir> --base <sha> --head <sha> [--list <file>] (got "--bogus")',
+    ],
+    [
+      "a base that is not a full sha",
+      ["--base", "main", "--head", "0".repeat(40)],
+      "--base must be a full 40-character",
+    ],
+    ["an abbreviated base", ["--base", "abcdef1", "--head", "0".repeat(40)], "--base must be a full 40-character"],
+    ["an uppercase base", ["--base", "A".repeat(40), "--head", "0".repeat(40)], "--base must be a full 40-character"],
+    [
+      "a base one character too long",
+      ["--base", "a".repeat(41), "--head", "0".repeat(40)],
+      "--base must be a full 40-character",
+    ],
+    ["a head that is not a sha", ["--base", "0".repeat(40), "--head", "HEAD"], "--head must be a full 40-character"],
+    ["a missing head", ["--base", "0".repeat(40)], "--head must be a full 40-character"],
+  ])("exits 2 for %s and says why", (_name, args, message) => {
+    const out = report(args as string[]);
+    expect(out.status).toBe(2);
+    expect(out.stderr).toContain(message);
+    expect(out.stdout).toBe("");
   });
 });
