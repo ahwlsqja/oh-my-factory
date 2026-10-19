@@ -65,7 +65,7 @@ describe("W-judge-k-runs-flaky", () => {
     expect(verdict.counts).toEqual({ total: 3, pass: 1, fail: 1, flaky: 1, error: 0 });
   });
 
-  it("scores a timeout, an output limit, invalid UTF-8 and a container the candidate ended as fail, never as error", async () => {
+  it("negative guard: scores a timeout, an output limit, invalid UTF-8 and a container the candidate ended as fail, never as error", async () => {
     const verdict = await runRound(
       new RuntimeDouble(candidate),
       [scenario(1, "timeout"), scenario(2, "limit"), scenario(3, "utf8"), scenario(4, "dead")],

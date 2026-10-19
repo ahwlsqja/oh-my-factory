@@ -122,7 +122,7 @@ describe("W-gates-run-in-container", () => {
     await copy.dispose();
   });
 
-  it("a test command whose work copy the host lost could not run: MISCONFIGURED with no test status", async () => {
+  it("negative guard: a test command whose work copy the host lost could not run: MISCONFIGURED with no test status", async () => {
     const fx = calcFixture();
     const memory = new MemoryRuntime();
     hostClock.now = () => 0;

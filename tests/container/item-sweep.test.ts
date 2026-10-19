@@ -288,7 +288,7 @@ describe("host staging is removed only on the real state path", () => {
     expect(existsSync(join(state, "goals", "g1", "work-moved", "w1", "runs", OUTSIDE_RUN, "judge"))).toBe(false);
   });
 
-  it("a symlinked state directory is not a symlink in the tree: the staging under it is removed", async () => {
+  it("negative guard: a symlinked state directory is not a symlink in the tree: the staging under it is removed", async () => {
     const real = realTempDir("omf-sweep-home-real-");
     const parent = realTempDir("omf-sweep-home-link-");
     const projectDir = join(parent, "omf", "projects", "p1");

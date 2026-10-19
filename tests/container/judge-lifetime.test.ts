@@ -70,7 +70,7 @@ describe("judge container lifetime", () => {
     let t = JUDGE_PROBE_S;
     for (let n = 0; n < MAX_STEPS; n += 1) {
       t += JUDGE_STEP_EXEC_CALLS * stepS; // step and observe
-      t += meta(JUDGE_STEP_DOCKER_CALLS); // isRunning inspect
+      t += meta(JUDGE_STEP_DOCKER_CALLS); // containerState inspect after a non-zero exit, an exec client error or a null status
     }
     return t + meta(JUDGE_SUT_END_DOCKER_CALLS); // stop remove, close remove
   }

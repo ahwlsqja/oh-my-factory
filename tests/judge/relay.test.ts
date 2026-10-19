@@ -9,6 +9,7 @@ import {
 } from "../../src/container/lifecycle.js";
 import { createContainerScenarioRunner } from "../../src/judge/relay.js";
 import type { ScenarioSession, StepInput, StepLimits } from "../../src/scenario/runner.js";
+import { statusRows } from "../helpers/status-rows.js";
 import { type Candidate, exited, RuntimeDouble } from "../helpers/sut-double.js";
 
 const LIMITS: StepLimits = { timeoutMs: 1000, maxOutputBytes: 4096 };
@@ -92,7 +93,7 @@ describe("container scenario runner", () => {
     expect(double.calls).not.toContain("remove:omf-sut-test-1");
   });
 
-  it("an exec client error from a container that is alive is a runtime fault", async () => {
+  it("negative guard: an exec client error from a container that is alive is a runtime fault", async () => {
     const alive = relay(() => ({ kind: "error", code: "EIO", message: "client failed" }));
     expect(await (await alive.open()).runStep(step(["x"]), LIMITS)).toEqual({ outcome: "error" });
   });
@@ -106,9 +107,9 @@ describe("container scenario runner", () => {
     expect(gone.double.calls).toContain("remove:omf-sut-test-1");
   });
 
-  it.each([1, 125, 137])(
-    "a non-zero exit (status %i) from a container that is gone, with no start recorded, is a runtime fault",
-    async (status) => {
+  it.each(statusRows([1, 125, 137], [1]))(
+    "a non-zero exit (%s) from a container that is gone, with no start recorded, is a runtime fault",
+    async (_title, status) => {
       const cut = relay(({ state }) => {
         state.dead = true;
         return exited("", status);
@@ -121,11 +122,14 @@ describe("container scenario runner", () => {
     },
   );
 
-  it.each([1, 137])("a failed inspect after a non-zero exit (status %i) is a runtime fault", async (status) => {
-    const blind = relay(() => exited("", status), { startedAt: 0 });
-    blind.double.failInspect = true;
-    expect(await (await blind.open()).runStep(step(["x"]), LIMITS)).toEqual({ outcome: "error" });
-  });
+  it.each(statusRows([1, 137], [1]))(
+    "a failed inspect after a non-zero exit (%s) is a runtime fault",
+    async (_title, status) => {
+      const blind = relay(() => exited("", status), { startedAt: 0 });
+      blind.double.failInspect = true;
+      expect(await (await blind.open()).runStep(step(["x"]), LIMITS)).toEqual({ outcome: "error" });
+    },
+  );
 
   describe("a container that stopped early on its own is the candidate's doing", () => {
     const ending =
@@ -136,9 +140,9 @@ describe("container scenario runner", () => {
       };
     const execError = () => ({ kind: "error", code: "EIO", message: "client failed" }) as const;
 
-    it.each([1, 125, 137])(
-      "a non-zero exit (status %i) is signaled container_exited, and the container is removed",
-      async (status) => {
+    it.each(statusRows([1, 125, 137], [125, 137]))(
+      "a non-zero exit (%s) is signaled container_exited, and the container is removed",
+      async (_title, status) => {
         const cut = relay(ending(exited.bind(null, ""), status), { startedAt: 0 });
         hostClock.now = () => 60_000; // one minute into a lifetime of 1703 seconds
         const session = await cut.open();
@@ -149,7 +153,7 @@ describe("container scenario runner", () => {
       },
     );
 
-    it("an exec client error is signaled container_exited", async () => {
+    it("negative guard: an exec client error is signaled container_exited", async () => {
       const cut = relay(ending(execError, 0), { startedAt: 0 });
       hostClock.now = () => 1000;
       expect(await (await cut.open()).runStep(step(["x"]), LIMITS)).toEqual({
@@ -158,7 +162,7 @@ describe("container scenario runner", () => {
       });
     });
 
-    it("an early stop the memory limit caused (State.OOMKilled true) is signaled container_exited", async () => {
+    it("negative guard: an early stop the memory limit caused (State.OOMKilled true) is signaled container_exited", async () => {
       const cut = relay(ending(exited.bind(null, ""), 137), { startedAt: 0 });
       cut.double.stopState.set("omf-sut-test-1", { OOMKilled: true, ExitCode: 137 });
       hostClock.now = () => 1000;
@@ -170,19 +174,22 @@ describe("container scenario runner", () => {
   });
 
   describe("a container the host ended is infrastructure, whatever the exit status", () => {
-    it.each([1, 137])("a stop at the elapsed lifetime (status %i) is a runtime fault", async (status) => {
-      const cut = relay(
-        ({ state }) => {
-          state.dead = true;
-          hostClock.now = () => LIFETIME_S * 1000 - LIFETIME_SLACK_MS;
-          return exited("", status);
-        },
-        { startedAt: 0 },
-      );
-      expect(await (await cut.open()).runStep(step(["x"]), LIMITS)).toEqual({ outcome: "error" });
-    });
+    it.each(statusRows([1, 137], [1]))(
+      "a stop at the elapsed lifetime (%s) is a runtime fault",
+      async (_title, status) => {
+        const cut = relay(
+          ({ state }) => {
+            state.dead = true;
+            hostClock.now = () => LIFETIME_S * 1000 - LIFETIME_SLACK_MS;
+            return exited("", status);
+          },
+          { startedAt: 0 },
+        );
+        expect(await (await cut.open()).runStep(step(["x"]), LIMITS)).toEqual({ outcome: "error" });
+      },
+    );
 
-    it("a stop one millisecond before the elapsed lifetime is still the candidate's", async () => {
+    it("negative guard: a stop one millisecond before the elapsed lifetime is still the candidate's", async () => {
       const cut = relay(
         ({ state }) => {
           state.dead = true;

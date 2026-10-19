@@ -152,9 +152,9 @@ describe("ContainerWorkCopyFactory (spec section 4.8)", () => {
   };
 
   it.each([
-    ["status 1", exit(1)],
-    ["status 125", exit(125)],
-    ["status 137", exit(137)],
+    ["negative guard: status 1", exit(1)],
+    ["negative guard: status 125", exit(125)],
+    ["negative guard: status 137", exit(137)],
     ["an exec client error", { kind: "error", code: "EIO", message: "client failed" } as const],
   ])(
     "a failed exec (%s) in a container whose lifetime ran out is an infrastructure error, and the next command gets a fresh one",
@@ -184,7 +184,7 @@ describe("ContainerWorkCopyFactory (spec section 4.8)", () => {
     },
   );
 
-  it("a failed inspect after a non-zero exit is an infrastructure error, never the gate's result", async () => {
+  it("negative guard: a failed inspect after a non-zero exit is an infrastructure error, never the gate's result", async () => {
     const fx = calcFixture();
     const memory = new MemoryRuntime();
     const { factory } = workCopies(memory);
@@ -198,7 +198,7 @@ describe("ContainerWorkCopyFactory (spec section 4.8)", () => {
     await copy.dispose();
   });
 
-  it("a container the host removed during the command is an infrastructure error", async () => {
+  it("negative guard: a container the host removed during the command is an infrastructure error", async () => {
     const fx = calcFixture();
     const memory = new MemoryRuntime();
     const { factory } = workCopies(memory);
