@@ -183,3 +183,48 @@ describe("the run-start sweep does not follow a symlink either", () => {
     expect(existsSync(join(outside, "judge", "file"))).toBe(true);
   });
 });
+
+describe("the item sweep removes round images by item and run id", () => {
+  const image = (run: string, round: number, work: string) => ({
+    kind: "image" as const,
+    name: `omf-sut:${run}-${round}`,
+    run_id: run,
+    work_id: work,
+  });
+
+  it("two items share a run id: sweeping item Y never removes item X's round image", async () => {
+    const itemY = realTempDir("omf-sweep-image-y-");
+    put(itemY, `runs/${EARLIER}/marker`, "x");
+    const memory = new MemoryRuntime();
+    memory.owned = [image(EARLIER, 1, X), image(EARLIER, 2, Y), image(EARLIER, 3, "")];
+    await sweepItemOrphans({ runtime: memory, itemDir: itemY, workId: Y });
+    expect(memory.owned.map((resource) => resource.name).sort()).toEqual(
+      [`omf-sut:${EARLIER}-1`, `omf-sut:${EARLIER}-3`].sort(),
+    );
+    expect(memory.calls.filter((call) => call.startsWith("rmi "))).toEqual([`rmi omf-sut:${EARLIER}-2`]);
+  });
+
+  it("keeps the current pass, an unknown run, the cached harness image and, while a live process holds the claim, every round image", async () => {
+    const item = realTempDir("omf-sweep-image-");
+    put(item, `runs/${EARLIER}/marker`, "x");
+    put(item, `runs/${CURRENT}/marker`, "x");
+    const memory = new MemoryRuntime();
+    memory.owned = [
+      image(CURRENT, 1, X),
+      image("r-20260101T000000Z-ffff", 1, X),
+      { kind: "image", name: "omf-harness:0123456789ab", run_id: "", work_id: X },
+      image(EARLIER, 1, X),
+    ];
+    claimItem(item);
+    try {
+      await sweepItemOrphans({ runtime: memory, itemDir: item, workId: X, currentPassId: CURRENT });
+    } finally {
+      releaseItem(item);
+    }
+    expect(memory.owned).toHaveLength(4);
+    await sweepItemOrphans({ runtime: memory, itemDir: item, workId: X, currentPassId: CURRENT });
+    expect(memory.owned.map((resource) => resource.name).sort()).toEqual(
+      [`omf-sut:${CURRENT}-1`, "omf-sut:r-20260101T000000Z-ffff-1", "omf-harness:0123456789ab"].sort(),
+    );
+  });
+});

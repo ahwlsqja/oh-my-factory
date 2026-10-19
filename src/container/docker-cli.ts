@@ -27,7 +27,7 @@ import {
   type SecretHandle,
 } from "./runtime.js";
 import { isMeasured } from "./measured-handles.js";
-import { ContainerSpecError, ROLE_SECRET, isImageId } from "./spec.js";
+import { ContainerSpecError, ROLE_SECRET, WORK_ID_RE, isImageId } from "./spec.js";
 
 export type DockerRunner = (
   argv: readonly string[],
@@ -316,6 +316,19 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
     },
 
     async listOwned(filter) {
+      const roundImageWork = async (tag: string, contextName: string): Promise<string> => {
+        try {
+          const docs = JSON.parse(await succeed(imageInspectArgv(tag, contextName), META_MS)) as unknown;
+          const labels = (Array.isArray(docs) ? docs[0] : undefined)?.Config?.Labels as
+            | Record<string, unknown>
+            | null
+            | undefined;
+          const work = labels?.["omf.work"];
+          return typeof work === "string" && WORK_ID_RE.test(work) ? work : "";
+        } catch {
+          return "";
+        }
+      };
       const name = await requireLocal();
       const resources: OwnedResource[] = [];
       for (const line of (await succeed(listOwnedArgv("container", filter.run_id, name), META_MS)).split("\n")) {
@@ -326,8 +339,12 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
         const tag = line.trim();
         if (!tag || tag.startsWith("<none>")) continue;
         const run = /^omf-sut:(.+)-\d+$/.exec(tag)?.[1] ?? "";
-        if (filter.run_id === null || run === filter.run_id)
-          resources.push({ kind: "image", name: tag, run_id: run, work_id: "" });
+        if (filter.run_id === null || run === filter.run_id) {
+          // `image ls` cannot print a label, so a round image's `omf.work` label is read by inspect. One that cannot be read
+          // (gone since the listing, no label, not a work id) has no work id, and a sweep never selects it.
+          const work_id = run === "" ? "" : await roundImageWork(tag, name);
+          resources.push({ kind: "image", name: tag, run_id: run, work_id });
+        }
       }
       return resources;
     },

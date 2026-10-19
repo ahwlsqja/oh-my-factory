@@ -31,10 +31,10 @@ describe("W-judge-leak-sweep", () => {
     memory.owned = [
       { kind: "container", name: `omf-sut-${EARLIER}-1-1`, run_id: EARLIER, work_id: WORK },
       { kind: "container", name: `omf-workcopy-${EARLIER}-1-2`, run_id: EARLIER, work_id: WORK },
-      { kind: "image", name: `omf-sut:${EARLIER}-1`, run_id: EARLIER, work_id: "" },
+      { kind: "image", name: `omf-sut:${EARLIER}-1`, run_id: EARLIER, work_id: WORK },
       { kind: "image", name: "omf-harness:0123456789ab", run_id: EARLIER, work_id: "" }, // the cached harness image is the exemption
       { kind: "container", name: `omf-sut-${CURRENT}-1-1`, run_id: CURRENT, work_id: WORK },
-      { kind: "image", name: `omf-sut:${CURRENT}-1`, run_id: CURRENT, work_id: "" },
+      { kind: "image", name: `omf-sut:${CURRENT}-1`, run_id: CURRENT, work_id: WORK },
       { kind: "container", name: `omf-sut-${OTHER_ITEM}-1-1`, run_id: OTHER_ITEM, work_id: OTHER_WORK }, // another work item's run: not under this item's runs/
     ];
     const swept = await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK });
@@ -106,7 +106,7 @@ describe("W-judge-leak-sweep", () => {
       { kind: "container", name: `omf-implementer-${OTHER_ITEM}-1-1`, run_id: OTHER_ITEM, work_id: OTHER_WORK },
       { kind: "container", name: `omf-sut-${CURRENT}-1-1`, run_id: CURRENT, work_id: WORK },
       { kind: "container", name: `omf-author-${EARLIER}-1-1`, run_id: EARLIER, work_id: WORK },
-      { kind: "image", name: `omf-sut:${CURRENT}-1`, run_id: CURRENT, work_id: "" },
+      { kind: "image", name: `omf-sut:${CURRENT}-1`, run_id: CURRENT, work_id: WORK },
     ];
     expect(await sweepImplementerContainers({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK })).toBe(2);
     expect(memory.owned.map((resource) => resource.name).sort()).toEqual(
@@ -173,7 +173,7 @@ describe("W-judge-leak-sweep", () => {
     memory.owned = [
       { kind: "container", name: odd, run_id: EARLIER, work_id: WORK },
       { kind: "container", name: `omf-sut-${EARLIER}-1-1`, run_id: EARLIER, work_id: WORK },
-      { kind: "image", name: `omf-sut:${EARLIER}-1`, run_id: EARLIER, work_id: "" },
+      { kind: "image", name: `omf-sut:${EARLIER}-1`, run_id: EARLIER, work_id: WORK },
     ];
     // The real runtime refuses a name outside the container name pattern when it builds the removal argv.
     const strict = {
@@ -238,5 +238,21 @@ describe("W-judge-leak-sweep", () => {
     });
     expect(swept.containers).toBe(2);
     expect(memory.owned).toEqual([]);
+  });
+
+  it("selects round images by item: two items that share a run id, and sweeping one never removes the other's image", async () => {
+    const itemDir = realTempDir("omf-sweep-item-");
+    put(itemDir, `runs/${EARLIER}/audit-1.json`, "{}");
+    const memory = new MemoryRuntime();
+    memory.owned = [
+      { kind: "image", name: `omf-sut:${EARLIER}-1`, run_id: EARLIER, work_id: WORK },
+      { kind: "image", name: `omf-sut:${EARLIER}-2`, run_id: EARLIER, work_id: OTHER_WORK },
+      { kind: "image", name: `omf-sut:${EARLIER}-3`, run_id: EARLIER, work_id: "" }, // no label read: never selected
+    ];
+    const swept = await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK });
+    expect(swept).toMatchObject({ images: 1 });
+    expect(memory.owned.map((resource) => resource.name).sort()).toEqual(
+      [`omf-sut:${EARLIER}-2`, `omf-sut:${EARLIER}-3`].sort(),
+    );
   });
 });

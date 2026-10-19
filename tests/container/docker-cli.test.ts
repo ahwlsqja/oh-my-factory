@@ -208,15 +208,38 @@ describe("listOwned and removeImage through the real adapter", () => {
 
   it("derives a round image's run id from its tag and removes it", async () => {
     const fake = new FakeDocker();
-    addImage(fake.state, "omf-sut:run-9-2", { labels: { "omf.owner": "omf" } });
+    addImage(fake.state, "omf-sut:run-9-2", { labels: { "omf.owner": "omf", "omf.work": FIXTURE_WORK_ID } });
     addImage(fake.state, "omf-harness:0123456789ab", { labels: { "omf.owner": "omf" } });
     const runtime = fakeRuntime(fake);
     expect(await runtime.listOwned({ run_id: null })).toEqual([
-      { kind: "image", name: "omf-sut:run-9-2", run_id: "run-9", work_id: "" },
+      { kind: "image", name: "omf-sut:run-9-2", run_id: "run-9", work_id: FIXTURE_WORK_ID },
       { kind: "image", name: "omf-harness:0123456789ab", run_id: "", work_id: "" },
     ]);
     await runtime.removeImage("omf-sut:run-9-2" as ImageId);
     expect((await runtime.listOwned({ run_id: "run-9" })).length).toBe(0);
+  });
+});
+
+describe("a round image carries its item", () => {
+  it("is labelled at build time and listed with the work id of its omf.work label", async () => {
+    const fake = new FakeDocker();
+    const runtime = fakeRuntime(fake);
+    const labels = labelsFor("sut");
+    await runtime.build({ contextDir: "/work/ctx", tag: `omf-sut:${FIXTURE_RUN_ID}-1`, labels, timeoutMs: 1000 });
+    const built = Object.values(fake.state.images).find((image) => image.tags.includes(`omf-sut:${FIXTURE_RUN_ID}-1`));
+    expect(built?.labels).toMatchObject({ "omf.owner": "omf", "omf.work": FIXTURE_WORK_ID, "omf.run": FIXTURE_RUN_ID });
+    expect((await runtime.listOwned({ run_id: null })).filter((resource) => resource.kind === "image")).toEqual([
+      { kind: "image", name: `omf-sut:${FIXTURE_RUN_ID}-1`, run_id: FIXTURE_RUN_ID, work_id: FIXTURE_WORK_ID },
+    ]);
+  });
+
+  it("is listed with no work id when it has no omf.work label or the label is not a work id, and the harness image never has one", async () => {
+    const fake = new FakeDocker();
+    addImage(fake.state, "omf-sut:run-1-1", { labels: { "omf.owner": "omf" } });
+    addImage(fake.state, "omf-sut:run-2-1", { labels: { "omf.owner": "omf", "omf.work": "not a work id" } });
+    addImage(fake.state, "omf-harness:0123456789ab", { labels: { "omf.owner": "omf", "omf.work": FIXTURE_WORK_ID } });
+    const listed = await fakeRuntime(fake).listOwned({ run_id: null });
+    expect(listed.map((resource) => resource.work_id)).toEqual(["", "", ""]);
   });
 });
 

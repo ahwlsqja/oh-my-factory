@@ -188,9 +188,8 @@ const ROLE_OF_NAME = /^omf-(sut|harness|workcopy|implementer|author)-/;
 /**
  * Removes what earlier runs of THIS work item left in the daemon and on disk. The item claim allows one run at a time, so any
  * other run of the item is an orphan. Selection is by run id and by the `omf.work` label: run ids are only unique to the
- * second, so a container counts only when its run is under `<item>/runs/` and its label is this item. Round images carry no
- * label and are selected by run id. Only per-round SUT images (`omf-sut:`) are removed; the cached harness image is kept. Containers go first, then host directories. A resource whose name does not match the container name
- * pattern is left alone; an owned container whose name is off the full pattern is reported in `skipped`.
+ * second, so a container or round image counts only when its run is under `<item>/runs/` and its `omf.work` label is this item. Only per-round SUT images (`omf-sut:`) are removed; the cached harness image is kept.
+ * Containers go first, then host directories. A resource whose name does not match the container name pattern is left alone; an owned container whose name is off the full pattern is reported in `skipped`.
  * An author container of an earlier pass is removed too, except while the item's `seal.lock` is held: a running
  * `omf seal` owns its own author container, and the lock is held for the whole call.
  */
@@ -202,8 +201,10 @@ export async function sweepOrphans(input: SweepInput): Promise<SweepResult> {
   const sealing = isLockHeld(sealLockFile(input.itemDir));
   for (const resource of await input.runtime.listOwned({ run_id: null })) {
     if (!earlier.has(resource.run_id)) continue;
+    // A container and a round image are both selected by the `omf.work` label as well as the run id: run ids are only unique
+    // to the second, and an image whose label could not be read (empty) is never selected.
+    if (resource.work_id !== input.workId) continue;
     if (resource.kind === "container") {
-      if (resource.work_id !== input.workId) continue;
       const role = ROLE_OF_NAME.exec(resource.name)?.[1] as ContainerRole | undefined;
       if (role === undefined) continue;
       if (role === "author" && sealing) continue;

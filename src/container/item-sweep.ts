@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, readdirSync, rmSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import type { ContainerRuntime } from "./runtime.js";
-import { assertName } from "./spec.js";
+import { type ImageId, assertName } from "./spec.js";
 import { UNREADABLE_GRACE_MS, isLockHeld, sealLockFile } from "../core/lock.js";
 import { claimFile, claimStatus } from "../work/claim.js";
 
@@ -44,7 +44,7 @@ export function removeStagingDirs(runsDir: string, runIds: Iterable<string>): nu
 }
 
 interface ItemSweepInput {
-  runtime: Pick<ContainerRuntime, "listOwned" | "remove">;
+  runtime: Pick<ContainerRuntime, "listOwned" | "remove" | "removeImage">;
   itemDir: string;
   /** The item's id: a run id is only unique to the second, so a container counts only when its `omf.work` label is this item. */
   workId: string;
@@ -77,8 +77,15 @@ export async function sweepItemOrphans(input: ItemSweepInput & { roles?: readonl
     let removed = 0;
     try {
       for (const resource of await input.runtime.listOwned({ run_id: null })) {
-        if (resource.kind !== "container" || resource.work_id !== input.workId || !earlier.has(resource.run_id))
+        if (resource.work_id !== input.workId || !earlier.has(resource.run_id)) continue;
+        // A round image is selected like a container, by its `omf.work` label and run id; the cached harness image is kept.
+        if (resource.kind === "image") {
+          if (claimFree && resource.name.startsWith("omf-sut:")) {
+            await input.runtime.removeImage(resource.name as ImageId);
+            removed += 1;
+          }
           continue;
+        }
         const role = ROLE_OF_NAME.exec(resource.name)?.[1] as SweepRole | undefined;
         if (role === undefined || !free(role)) continue;
         try {

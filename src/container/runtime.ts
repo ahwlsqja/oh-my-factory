@@ -28,7 +28,7 @@ export interface OwnedResource {
   kind: "container" | "image";
   name: string;
   run_id: string;
-  /** The container's `omf.work` label: the work item it belongs to. Empty for an image, which carries none. */
+  /** The `omf.work` label: the work item it belongs to. A round image's is read by inspecting it; empty when it cannot be read and for the cached harness image, which belongs to no item. */
   work_id: string;
 }
 
