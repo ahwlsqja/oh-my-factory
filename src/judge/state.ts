@@ -217,8 +217,9 @@ export async function sweepOrphans(input: SweepInput): Promise<SweepResult> {
       }
       await input.runtime.remove({ name: resource.name, id: resource.name, role });
       result.containers += 1;
-    } else if (resource.name.startsWith("omf-sut:")) {
-      await input.runtime.removeImage(resource.name as ImageId);
+    } else if (resource.name.startsWith("omf-sut:") && resource.image_id !== undefined) {
+      // By the id read at inspect time, so a tag another item took over since the listing is not removed.
+      await input.runtime.removeImage(resource.image_id as ImageId);
       result.images += 1;
     }
   }

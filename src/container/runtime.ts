@@ -30,6 +30,8 @@ export interface OwnedResource {
   run_id: string;
   /** The `omf.work` label: the work item it belongs to. A round image's is read by inspecting it; empty when it cannot be read and for the cached harness image, which belongs to no item. */
   work_id: string;
+  /** A round image's id (`sha256:` and 64 hex) as it was when inspected; a sweep removes by this, never by the tag. Absent for containers and for an image that could not be read. */
+  image_id?: string;
 }
 
 /**

@@ -1,3 +1,4 @@
+import { imageIdFor } from "./image-id.js";
 import type { ProcessResult } from "../../src/adapters/process-group.js";
 import type {
   ContainerHandle,
@@ -29,6 +30,12 @@ export interface RecordedExec {
  * store, so it serves the tests of lifecycle and work-copy behaviour; measurement is tested against the fake docker (Task 4).
  * `calls` lists the daemon-changing requests in order: "create N", "start N", "remove N", "removeAllSync N,M", "rmi ID".
  */
+/** A labelled round image is listed with the id the daemon reported when it was inspected; the double derives one from the name. */
+const withImageId = (resource: OwnedResource): OwnedResource =>
+  resource.kind === "image" && resource.work_id !== "" && resource.image_id === undefined
+    ? { ...resource, image_id: imageIdFor(resource.name) }
+    : resource;
+
 export class MemoryRuntime implements ContainerRuntime {
   readonly context = "colima-omf-m3f";
   readonly specs: ContainerSpec[] = [];
@@ -91,11 +98,13 @@ export class MemoryRuntime implements ContainerRuntime {
   async removeImage(id: ImageId): Promise<void> {
     if (this.failImageRemoval) throw new Error("image removal failed");
     this.calls.push(`rmi ${id}`);
-    this.owned = this.owned.filter((resource) => !(resource.kind === "image" && resource.name === id));
+    this.owned = this.owned.filter((resource) => !(resource.kind === "image" && withImageId(resource).image_id === id));
   }
 
   async listOwned(filter: { run_id: string | null }): Promise<OwnedResource[]> {
-    return this.owned.filter((resource) => filter.run_id === null || resource.run_id === filter.run_id);
+    return this.owned
+      .filter((resource) => filter.run_id === null || resource.run_id === filter.run_id)
+      .map(withImageId);
   }
 
   removeAllSync(names: readonly string[]): void {

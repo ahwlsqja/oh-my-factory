@@ -80,8 +80,9 @@ export async function sweepItemOrphans(input: ItemSweepInput & { roles?: readonl
         if (resource.work_id !== input.workId || !earlier.has(resource.run_id)) continue;
         // A round image is selected like a container, by its `omf.work` label and run id; the cached harness image is kept.
         if (resource.kind === "image") {
-          if (claimFree && resource.name.startsWith("omf-sut:")) {
-            await input.runtime.removeImage(resource.name as ImageId);
+          if (claimFree && resource.name.startsWith("omf-sut:") && resource.image_id !== undefined) {
+            // By the id read at inspect time, so a tag another item took over since the listing is not removed.
+            await input.runtime.removeImage(resource.image_id as ImageId);
             removed += 1;
           }
           continue;

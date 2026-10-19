@@ -4,6 +4,10 @@ import { claimItem, releaseItem } from "../../src/work/claim.js";
 import { existsSync, mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { sweepOrphans } from "../../src/judge/state.js";
+import { imageIdFor } from "../helpers/image-id.js";
+import { FakeDocker } from "../helpers/fake-docker.js";
+import { addImage } from "../helpers/fake-docker-core.mjs";
+import { fakeRuntime } from "../helpers/fake-runtime.js";
 import { MemoryRuntime } from "../helpers/memory-runtime.js";
 import { put, realTempDir } from "../helpers/ops-fixture.js";
 
@@ -201,7 +205,9 @@ describe("the item sweep removes round images by item and run id", () => {
     expect(memory.owned.map((resource) => resource.name).sort()).toEqual(
       [`omf-sut:${EARLIER}-1`, `omf-sut:${EARLIER}-3`].sort(),
     );
-    expect(memory.calls.filter((call) => call.startsWith("rmi "))).toEqual([`rmi omf-sut:${EARLIER}-2`]);
+    expect(memory.calls.filter((call) => call.startsWith("rmi "))).toEqual([
+      `rmi ${imageIdFor(`omf-sut:${EARLIER}-2`)}`,
+    ]);
   });
 
   it("keeps the current pass, an unknown run, the cached harness image and, while a live process holds the claim, every round image", async () => {
@@ -226,5 +232,58 @@ describe("the item sweep removes round images by item and run id", () => {
     expect(memory.owned.map((resource) => resource.name).sort()).toEqual(
       [`omf-sut:${CURRENT}-1`, "omf-sut:r-20260101T000000Z-ffff-1", "omf-harness:0123456789ab"].sort(),
     );
+  });
+});
+
+describe("a round image is removed by the id read when it was listed", () => {
+  const WORK = "w-0123456789ab";
+  const RUN = "r-20261001T090000Z-aaaa";
+  const tag = `omf-sut:${RUN}-1`;
+  const setup = () => {
+    const fake = new FakeDocker();
+    const mine = addImage(fake.state, tag, { labels: { "omf.owner": "omf", "omf.work": WORK, "omf.run": RUN } });
+    const other = addImage(fake.state, "omf-sut:other-staging", {
+      labels: { "omf.owner": "omf", "omf.work": "w-ba9876543210", "omf.run": RUN },
+    });
+    const base = fakeRuntime(fake);
+    // Between the listing and the removal another item takes the tag over.
+    const runtime = {
+      ...base,
+      listOwned: async (filter: { run_id: string | null }) => {
+        const listed = await base.listOwned(filter);
+        const mineImage = fake.state.images[mine];
+        const otherImage = fake.state.images[other];
+        if (mineImage !== undefined && otherImage !== undefined) {
+          mineImage.tags = [];
+          otherImage.tags = [tag];
+        }
+        return listed;
+      },
+    };
+    return { fake, runtime, mine, other };
+  };
+
+  it("lists the image id next to the tag", async () => {
+    const { fake, mine } = setup();
+    const listed = await fakeRuntime(fake).listOwned({ run_id: null });
+    expect(listed.find((resource) => resource.name === tag)?.image_id).toBe(mine);
+  });
+
+  it("item sweep: a tag taken over after the listing is not removed", async () => {
+    const { fake, runtime, mine, other } = setup();
+    const item = realTempDir("omf-sweep-retag-");
+    put(item, `runs/${RUN}/marker`, "x");
+    expect(await sweepItemOrphans({ runtime, itemDir: item, workId: WORK })).toBe(1);
+    expect(fake.state.images[mine]).toBeUndefined();
+    expect(fake.state.images[other]).toBeDefined();
+  });
+
+  it("run-start sweep: a tag taken over after the listing is not removed", async () => {
+    const { fake, runtime, mine, other } = setup();
+    const item = realTempDir("omf-sweep-retag-");
+    put(item, `runs/${RUN}/marker`, "x");
+    await sweepOrphans({ runtime, itemDir: item, currentRunId: "r-20261019T100000Z-bbbb", workId: WORK });
+    expect(fake.state.images[mine]).toBeUndefined();
+    expect(fake.state.images[other]).toBeDefined();
   });
 });

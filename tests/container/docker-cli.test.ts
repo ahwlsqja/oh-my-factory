@@ -208,11 +208,13 @@ describe("listOwned and removeImage through the real adapter", () => {
 
   it("derives a round image's run id from its tag and removes it", async () => {
     const fake = new FakeDocker();
-    addImage(fake.state, "omf-sut:run-9-2", { labels: { "omf.owner": "omf", "omf.work": FIXTURE_WORK_ID } });
+    const sutId = addImage(fake.state, "omf-sut:run-9-2", {
+      labels: { "omf.owner": "omf", "omf.work": FIXTURE_WORK_ID },
+    });
     addImage(fake.state, "omf-harness:0123456789ab", { labels: { "omf.owner": "omf" } });
     const runtime = fakeRuntime(fake);
     expect(await runtime.listOwned({ run_id: null })).toEqual([
-      { kind: "image", name: "omf-sut:run-9-2", run_id: "run-9", work_id: FIXTURE_WORK_ID },
+      { kind: "image", name: "omf-sut:run-9-2", run_id: "run-9", work_id: FIXTURE_WORK_ID, image_id: sutId },
       { kind: "image", name: "omf-harness:0123456789ab", run_id: "", work_id: "" },
     ]);
     await runtime.removeImage("omf-sut:run-9-2" as ImageId);
@@ -229,7 +231,13 @@ describe("a round image carries its item", () => {
     const built = Object.values(fake.state.images).find((image) => image.tags.includes(`omf-sut:${FIXTURE_RUN_ID}-1`));
     expect(built?.labels).toMatchObject({ "omf.owner": "omf", "omf.work": FIXTURE_WORK_ID, "omf.run": FIXTURE_RUN_ID });
     expect((await runtime.listOwned({ run_id: null })).filter((resource) => resource.kind === "image")).toEqual([
-      { kind: "image", name: `omf-sut:${FIXTURE_RUN_ID}-1`, run_id: FIXTURE_RUN_ID, work_id: FIXTURE_WORK_ID },
+      {
+        kind: "image",
+        name: `omf-sut:${FIXTURE_RUN_ID}-1`,
+        run_id: FIXTURE_RUN_ID,
+        work_id: FIXTURE_WORK_ID,
+        image_id: built?.id,
+      },
     ]);
   });
 

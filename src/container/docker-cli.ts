@@ -317,17 +317,18 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
     },
 
     async listOwned(filter) {
-      const roundImageWork = async (tag: string, contextName: string): Promise<string> => {
+      const roundImage = async (tag: string, contextName: string): Promise<{ work: string; id: string } | null> => {
         try {
           const docs = JSON.parse(await succeed(imageInspectArgv(tag, contextName), META_MS)) as unknown;
-          const labels = (Array.isArray(docs) ? docs[0] : undefined)?.Config?.Labels as
-            | Record<string, unknown>
-            | null
-            | undefined;
+          const doc = Array.isArray(docs) ? docs[0] : undefined;
+          const labels = doc?.Config?.Labels as Record<string, unknown> | null | undefined;
           const work = labels?.["omf.work"];
-          return typeof work === "string" && WORK_ID_RE.test(work) ? work : "";
+          const id = doc?.Id;
+          return typeof work === "string" && WORK_ID_RE.test(work) && typeof id === "string" && isImageId(id)
+            ? { work, id }
+            : null;
         } catch {
-          return "";
+          return null;
         }
       };
       const name = await requireLocal();
@@ -342,9 +343,15 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
         const run = /^omf-sut:(.+)-\d+$/.exec(tag)?.[1] ?? "";
         if (filter.run_id === null || run === filter.run_id) {
           // `image ls` cannot print a label, so a round image's `omf.work` label is read by inspect. One that cannot be read
-          // (gone since the listing, no label, not a work id) has no work id, and a sweep never selects it.
-          const work_id = run === "" ? "" : await roundImageWork(tag, name);
-          resources.push({ kind: "image", name: tag, run_id: run, work_id });
+          // (gone since the listing, no label, not a work id, no image id) has no work id, and a sweep never selects it.
+          const read = run === "" ? null : await roundImage(tag, name);
+          resources.push({
+            kind: "image",
+            name: tag,
+            run_id: run,
+            work_id: read?.work ?? "",
+            ...(read === null ? {} : { image_id: read.id }),
+          });
         }
       }
       return resources;
