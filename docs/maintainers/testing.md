@@ -123,11 +123,15 @@ npm run test:gated -- --only G-inspect-parser-real  # one suite
 npm run test:gated -- --record                      # also append a record per passed G- suite (clean tree only)
 ```
 
-A gated suite that calls a real model needs the implementer key, and only that key. Create a dedicated Anthropic
-workspace key with a spend limit and pass it as `OMF_IMPLEMENTER_API_KEY` for that one command, for example
-`OMF_IMPLEMENTER_API_KEY=... npm run test:gated -- --model --only G-<suite>`. With `--model` the driver passes that variable to the
-test process only, sends its output through a redactor and passes nothing else secret; without `--model` the key is dropped; it never forwards `ANTHROPIC_API_KEY`, which is the reconciler's host key, and
-the implementer never falls back to it. Do not reuse a key that has no spend limit.
+A gated suite that calls a real model reads its own keys. `G-implementer-real-run` and `G-e6-l2-leak-redteam` read
+`OMF_IMPLEMENTER_API_KEY`, `G-author-canary` reads `OMF_AUTHOR_API_KEY`, and `G-skeleton-real` reads both. Create dedicated
+Anthropic workspace keys with a spend limit and pass them for that one command, for example
+`OMF_IMPLEMENTER_API_KEY=... npm run test:gated -- --model --only G-<suite>`. With `--model` the driver passes the test process
+only the keys that the suites matched by `--only` read (all of them when there is no `--only`), each under its own name and never
+under a vendor name such as `ANTHROPIC_API_KEY`, which is the reconciler's host key; the implementer and the author never fall
+back to it. It sends the output through a redactor and refuses, naming the variable, when a key is missing. Without `--model`
+the keys are dropped. The author suites are described in [docs/author.md](../author.md) under "Gated runs". Do not reuse a key
+that has no spend limit.
 
 Records live in `docs/evidence/gated-runs.json` and are written only by `--record`, never from inside a test. Until a
 suite has a record, the docs say the behaviour it covers is not enforced. Gated suites are never part of CI.
