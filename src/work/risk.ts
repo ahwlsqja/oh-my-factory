@@ -89,8 +89,13 @@ function isClassifiable(raw: string, normalized: string): boolean {
 export function classifyRisk(input: RiskInput): RiskAssessment {
   if (input.declaredPaths.length === 0) return { class: "high", rules: ["undeclared"], paths: [] };
 
+  // A declared test path is not high by itself: before the implementation there is no diff to weaken. The audit adds the
+  // `test-weakening` rule (or the conservative `test` rule) from the real diff, and risk only rises from there.
   const rules: Array<{ rule: RiskRule; matches: (path: string) => boolean }> = [
-    ...DEFAULT_HIGH_RISK.map(({ rule, globs }) => ({ rule, matches: picomatch([...globs], MATCH_OPTIONS) })),
+    ...DEFAULT_HIGH_RISK.filter(({ rule }) => rule !== "test").map(({ rule, globs }) => ({
+      rule,
+      matches: picomatch([...globs], MATCH_OPTIONS),
+    })),
   ];
   if (input.watchedGlobs.length > 0)
     rules.push({ rule: "watched-path", matches: picomatch([...input.watchedGlobs], MATCH_OPTIONS) });
@@ -129,10 +134,29 @@ export function classifyLiteralPaths(input: {
   paths: readonly string[];
   watchedGlobs: readonly string[];
   extraGlobs: readonly string[];
+  /**
+   * The paths `findTestWeakening` flagged in the real diff. When given (even empty), a test change is high only for these
+   * paths, under the rule `test-weakening`. When absent or `null` the weakening check could not run (no diff text), so every
+   * test path stays high under the rule `test`.
+   */
+  weakeningPaths?: readonly string[] | null | undefined;
+  /** Literal test paths or directories the project configured outside the default test globs; they stay `test` when the check could not run. */
+  explicitTestPaths?: readonly string[] | undefined;
 }): RiskAssessment {
+  const checked = input.weakeningPaths !== undefined && input.weakeningPaths !== null;
   const rules: Array<{ rule: RiskRule; matches: (path: string) => boolean }> = [
-    ...DEFAULT_HIGH_RISK.map(({ rule, globs }) => ({ rule, matches: picomatch([...globs], MATCH_OPTIONS) })),
+    ...DEFAULT_HIGH_RISK.filter(({ rule }) => !(checked && rule === "test")).map(({ rule, globs }) => ({
+      rule,
+      matches:
+        rule === "test"
+          ? (path: string) => isTestPath(path, input.explicitTestPaths ?? [])
+          : picomatch([...globs], MATCH_OPTIONS),
+    })),
   ];
+  if (checked) {
+    const weakened = new Set((input.weakeningPaths ?? []).map((path) => normalizePath(path)));
+    rules.push({ rule: "test-weakening", matches: (path) => weakened.has(path) });
+  }
   if (input.watchedGlobs.length > 0)
     rules.push({ rule: "watched-path", matches: picomatch([...input.watchedGlobs], MATCH_OPTIONS) });
   if (input.extraGlobs.length > 0)

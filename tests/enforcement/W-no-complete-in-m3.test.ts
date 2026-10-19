@@ -43,8 +43,19 @@ function filesMentioningDone(): string[] {
  * The files that may name the state: its type and the transition table, the verifier (it refuses a
  * hand-edited `done`) and the reconciler's outcome counts. If this test names another file, read it: it
  * may compare against "done", never assign it. Then add it here with the reason.
+ *
+ * implementer/workspace.ts: the literal is the shell loop keyword inside the in-container kill-all script, not the
+ * work item state; it never writes or compares a work state.
  */
-const MAY_NAME_DONE = ["goal/reconcile.ts", "work/ledger-verify.ts", "work/transitions.ts", "work/types.ts"];
+const MAY_NAME_DONE = [
+  "goal/reconcile.ts",
+  "implementer/workspace.ts",
+  "work/ledger-verify.ts",
+  "work/transitions.ts",
+  "work/types.ts",
+  // Read-only work-state allowlist and counts; this projection never assigns the done state.
+  "ui/read-model.ts",
+];
 
 function commandNames(help: string): string[] {
   const lines = help.split("\n");

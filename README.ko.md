@@ -125,15 +125,16 @@ OMF 는 루프 두 개를 돌립니다.
 | 명령 | 하는 일 |
 |---|---|
 | `omf init` | 현재 저장소의 호스트 상태를 `~/.omf` 아래에 만듭니다. 저장소와 에이전트 CLI 설정에는 아무것도 쓰지 않습니다. |
+| `omf ui [--port <port>] [--no-open]` | 선택적으로 사용하는 로컬 읽기 전용 운영 대시보드를 엽니다. 검증된 스냅샷의 목표 ID, 공개된 격차 구간, 작업, 사람 확인 코드, 기록된 증거 추천과 최근 이벤트를 보여 줍니다. 승인이나 실행은 하지 않습니다. 기본 포트 `0`은 사용 가능한 루프백 포트를 고르고, `--no-open`은 세션 URL만 출력합니다. [UI 안내](docs/ui.md)를 참고하세요. |
 | `omf doctor [--json] [--strict]` | git, Docker, Claude Code, Codex, 저장소, 원장을 점검하고 `preflight.json` 을 씁니다. 에이전트 CLI 는 쓰고 버리는 임시 홈에서 실행합니다. Docker 가 없거나 실행 중이 아니거나 에이전트 CLI 가 없으면 필요한 단계를 밝힌 경고로 보고하고, 문제와 경고마다 한 줄 조치(`fix`)가 붙습니다. `--strict` 는 도구 누락 경고를 문제로 봅니다(원장 꼬리 손상은 경고로 남습니다). 설정의 `[judge]` 에 이미지와 Docker 컨텍스트가 있으면 격리 수준을 쓰고 버리는 컨테이너로 참고용 점검하고, 없으면 이유와 함께 `unmeasurable` 로 보고합니다. JSON 보고서에는 참고용 `implementer` 항목도 있어, 구현자 이미지가 설정됐는지와 `OMF_IMPLEMENTER_API_KEY` 설정 여부를 이름만으로 알려 줍니다(값은 절대 싣지 않습니다). |
 | `omf ledger verify [--json]` | 원장의 해시 체인을 확인합니다. 원장이 손상됐으면 stderr 둘째 줄에 경로, 줄 번호, 다음 행동이 나오고 `--json` 은 같은 내용을 필드로 냅니다. `--json` 의 오류는 모두 `{ "ok": false, "error": { "code": "...", "message": "..." } }` 형태입니다(code: `not_initialized`, `ledger_corrupt`, `not_a_git_repository`, `git_not_found`, `unsupported_repository`, `symlink_refused`, `cannot_run`). 키는 snake_case 입니다. `omf init` 전에는 종료 코드 2 입니다. |
 | `omf goal new <id>` | 템플릿으로 호스트 상태에 `goal.md` 를 만듭니다. |
 | `omf metric propose <id> --unit <u> -- <command>` | 지표를 제안합니다. 값을 출력하는 명령, 단위, 바뀌면 체제 변경(regime change)이 되는 경로를 적습니다. |
-| `omf goal audit <id>` | 목표, 잠금, 원장을 점검하고 체제 변경을 알려 줍니다. 아무것도 쓰지 않습니다. |
+| `omf goal audit <id>` | 목표, 잠금, 원장을 점검하고 체제 변경을 알려 주며, 아직 바꾸지 않은 템플릿 문구도 나열합니다(`--json` 의 `placeholders`). 아무것도 쓰지 않습니다. |
 | `omf goal approve <id>` | J1: 잠글 내용(지표와 그 관리 한계)을 보여 주고, 터미널에서 목표 id 를 직접 입력하면 승인합니다. |
 | `omf goal measure <id>` | 잠긴 지표를 실행하고(Docker, 또는 `--runner host` 로 호스트에서), 목표값까지의 차이와 관리 한계(control band)를 계산해 격차 보고서를 호스트 상태에 씁니다. |
 | `omf goal tick <id>` | 목표 루프를 한 바퀴 돕니다(명세 §4.4). 점검, 측정, 모델에게 작업 요청, 후보를 코드로 걸러 내기, 작업 항목 내보내기, 낡음과 루프 보호 장치 확인. 조정 모델이 필요합니다("목표 루프 돌리기" 참고). |
-| `omf goal status <id>` | 실행 상태(`running`, `blocked_on_user`, `failed`, `finish`, `cancelled`), 열린 에스컬레이션과 풀 수 있는 명령, 남은 라운드, 열린 작업 항목을 보여 줍니다. |
+| `omf goal status <id>` | 실행 상태(`running`, `blocked_on_user`, `failed`, `finish`, `cancelled`. 아직 초안이거나 재승인이 필요한 목표는 `running` 대신 그렇게 표시하고, 승인됐지만 아직 틱이 없는 목표도 그렇게 표시합니다), 열린 에스컬레이션과 풀 수 있는 명령, 남은 라운드, 열린 작업 항목을 보여 줍니다. |
 | `omf goal resume <id>` | J6 계속: 멈추게 한 원인을 고친 뒤, 터미널에서 확인을 입력하면 틱이 다시 돕니다. |
 | `omf goal cancel <id>` | J6 중지: 터미널에서 확인을 입력하면 목표와 열린 작업 항목을 모두 취소합니다. |
 | `omf budget show <id> [--json]` | 라운드, 공개, 벽시계 시간 예산의 선언값, 상향값, 사용량, 남은 양을 출력합니다. |
@@ -213,7 +214,7 @@ initialized ~/.omf/projects/3186047891f1f0a0
 
 $ omf goal new g-demo
 created ~/.omf/projects/3186047891f1f0a0/goals/g-demo/goal.md
-edit it, propose its metrics with omf metric propose, then run omf goal audit g-demo
+edit it (the comments in the file explain each field), propose its metrics with omf metric propose, then run omf goal audit g-demo
 
 $ # goal.md 를 고칩니다: 목표 m-demo <= 5 ms, lagging: [m-demo]
 $ omf metric propose m-demo --unit ms -- sh -c 'echo 7'
@@ -228,7 +229,7 @@ goal g-demo: Say what this goal is in a few words
 objective: The outcome you want, in plain words
 target: m-demo <= 5 ms
 leading: none; lagging: m-demo; guardrails: none
-budget: 10 rounds, 72h wall time, at most 2 open work items
+budget: 10 rounds, 14d wall time, at most 2 open work items
 decision rule: target met for 2 consecutive measurements and no guardrail breach (minimum observation 7d)
 metric m-demo: ["sh","-c","echo 7"] -> ms; watches none
 bands m-demo: none (not monitored)
@@ -239,13 +240,40 @@ $ omf goal measure g-demo --runner host
 goal g-demo (regime 1), runner host
 target m-demo: 7 ms; target <= 5 ms; gap 2 (decrease, medium)
   m-demo [target, lagging]: 7 ms
+measured at revision 4f1c9a0e7b2d (clean), observed 2026-10-12T06:27:24.995Z
+working directory: repository root (host, no isolation)
+fingerprint: 9be03c51a7d2 (recorded in the ledger as input_sha256)
+limit: The tree was observed once, before the first metric ran; it was not watched while the metrics ran.
+limit: The fingerprint covers HEAD and the list of changed paths, not file contents: an edit to a file that was already modified keeps the same fingerprint.
+limit: An edit made while a metric runs can change its value without changing this record.
+limit: Gitignored files are not part of the observation.
 report: ~/.omf/projects/3186047891f1f0a0/goals/g-demo/reports/2026-10-12T06-27-24-995Z-gap.json
 warning: measured on the host without isolation (--runner host)
 ```
 
+출처(provenance) 줄은 보고서에도 `provenance` 로 저장되며, 어느 커밋을 측정했는지, 작업 트리가 깨끗했는지 아니면
+바뀐 경로가 몇 개인지, 지표가 어디서 돌았는지(호스트에서는 저장소 루트, Docker 에서는 읽기 전용으로 마운트한
+`/work`)를 알려 줍니다. 보고서의 나머지와 같이 호스트 전용입니다. 지문(fingerprint)은 원장이 이미 기록하는
+`input_sha256` 과 같은 값이고 첫 지표를 돌리기 전에 한 번 잡습니다. 지표가 도는 동안 파일이 그대로였다는 증명은
+아니며, 이미 수정된 파일을 다시 수정해도 구별하지 못합니다. 그러므로 체크아웃을 편집하는 동안 측정한 값은 표시된
+리비전과 다를 수 있습니다.
+
+생성된 `goal.md` 는 front matter 안의 `#` 메모로 각 필드를 설명합니다. `## Approach` 아래에는 채울 소제목 셋
+(`### Why`, `### Constraints`, `### Done when`)이 있습니다. 이 섹션과 `objective` 만 모델에 보이므로("목표 루프 돌리기" 참고), 숫자나 지표 id 없이
+말로 쓰세요. `omf goal audit` 은 아직 바꾸지 않은 템플릿 문구(예: 자리표시자 지표 id `m-replace-me`)도 나열합니다.
+이 목록은 안내일 뿐 감사 결과를 바꾸지 않습니다.
+같은 목록이 `omf goal audit --json` 의 `placeholders` 필드입니다.
+템플릿의 `#` 메모는 OMF 기본값이라 그대로 둬도 되는 값(예산)과 직접 정해야 하는 값(목표값과 연산자, `min_observation`, `decision_rule`)도 구분해 둡니다.
+
 재승인 화면은 먼저 왜 필요한지 보여 줍니다. 잠금 문제, 체제 변경, 바뀐 감시 경로의 diff 입니다. 읽는 동안
 목표나 지표가 바뀌면 아무것도 승인되지 않습니다. 재승인은 예산을 바꾸지 않습니다. `goal.md` 의 라운드 수나
 벽시계 시간이 이미 적용된 값과 다르면 `omf goal approve` 가 거부하고, 늘리는 것은 별도 결정(J8)입니다.
+
+벽시계 시간은 첫 승인부터 흐르는 달력 시간이고, 성공 판정에는 최소 관찰 기간에 걸친 측정이 필요합니다. 그래서
+생성되는 `goal.md` 는 최소 관찰 7d 에 벽시계 시간 14d 를 짝지어 둡니다. 벽시계 시간을 최소 관찰 기간보다 길지
+않게 정하면 `omf goal audit` 과 승인 화면이 "예산이 끝나기 전에는 성공에 닿을 수 없다"고 경고합니다. 거부가
+아니라 경고입니다. 그대로 승인할 수 있고, 예산이 다 되면 `omf budget raise <id> wall_time <기간>` 으로 늘린 뒤
+`omf goal resume <id>` 로 이어 갑니다. 예산을 대신 늘리거나 경과 시간을 되돌리는 일은 없습니다.
 
 "지표 코드는 조용히 바뀌지 않습니다" 의 한계:
 
@@ -437,12 +465,29 @@ kind = "claude"          # 또는 "command": 프롬프트를 stdin 으로 읽고
 ### 작업 항목
 
 내보낸 항목은 `goals/<id>/work/<work-id>/` 에 있습니다. 위험도는 후보가 선언한 경로로 코드가 계산합니다. CI,
-인증, 마이그레이션, 시험, 락 파일, 목표와 팩토리 파일, 감시 경로는 고위험입니다. 고위험 항목은
+인증, 마이그레이션, 락 파일, 목표와 팩토리 파일, 감시 경로는 고위험입니다. 시험 파일은 그 자체로는 고위험이 아니며,
+후보가 선언했을 때도, 감사가 실제 diff 를 읽을 때도 마찬가지입니다. 선언된 시험 경로는 아직 diff 가 없으므로
+디스패치 시점에는 항목을 고위험으로 만들지 않습니다. 구현 뒤에 감사가 diff 에 결정론적 시험 약화 검사를 돌려, 시험을
+약화하는 변경만 고위험으로 올립니다. 시험 파일 삭제, 지운 단언 줄이 더한 단언 줄보다 많은 변경, skip·only·todo·fixme·예상 실패 또는 x·f 접두 표식(`xit`, `xdescribe`,
+`fit` 등) 추가, 다른 시험의 실행 방식을 바꾸는 훅(어느 깊이의 `conftest.py`, Go `TestMain`·`func init()`, `this.skip()`, `os.Exit`·`sys.exit`·`process.exit`·`pytest.exit` 같은 프로세스 종료), 임계값 하향·삭제(한 줄의
+코드 부분의 `키: 숫자` 쌍을 모두 비교하므로 주석 처리한 임계값은 삭제로 보고, 짝지을 수 없는 줄은 약화로 봅니다), 시험 경로 아래 시험 러너·커버리지 설정의 신규·수정(임계값 숫자만 올리고 바뀐 줄의 나머지가 그대로인 경우는 제외하며, 시험 경로 아래의 `.coveragerc`·`codecov.yml`·`package.json` 도 같은 기준이다),
+시험 경로나 커버리지·러너 설정의 바이너리 구역(NUL 한 바이트만 있어도 구역이 바이너리가 되며, 읽을 수 없으므로 약화로 봅니다)이
+해당합니다. 모드만 바뀐 변경은 그대로 정상입니다. 시험 경로 밖의 러너·커버리지 설정에는 숫자 임계값 검사를 적용하며, 임계값이 있는 줄의 해석이 모호할 때도 보수적으로 처리합니다. 시험을 약화하지 않는 시험 변경은 이제 근거에
+고위험 경로 검토 영역을 더하지 않습니다(예전에는 더했습니다).
+검사를 돌릴 수 없으면(예: diff 를 끝까지 읽지 못함) 모든 시험 변경은 고위험으로 남습니다. 위험도는 선언과 감사 사이에서
+올라가기만 합니다. 검사는 바뀐 줄을 읽을 뿐 증명이 아니며, 알려진 한계는 아래에 있습니다. 고위험 항목은
 `awaiting_approval` 에서 `omf work approve` 를 기다리고, 나머지는 `ready` 로 시작합니다. 열려 있는 항목은
 언제든 `omf veto <work-id>` 로 거부할 수 있습니다. 항목의 승인, 거부, 취소 여부는 항목 파일이 아니라 원장이
 정합니다. 승인된 것처럼 손으로 고친 `item.md` 는 `omf work list` 가 손상된 항목으로 알리고, 내보내지 않습니다.
 
+따옴표 안의 `#`와 `//`는 코드에 남기고, 실제 줄 끝 주석은 무시합니다. 임계값이 있는 줄에서 따옴표 밖의 슬래시가 정규식을 시작할 수 있거나 따옴표가 닫히지 않아 주석 경계가 모호하면 약화로 판정합니다. 이런 줄에는 임계값만 올렸다는 설정 예외를 적용하지 않으므로, 정상 변경도 보수적으로 표시할 수 있습니다.
+
 목표 루프의 한계:
+
+- 시험 약화 검사는 줄 단위입니다. 여러 줄에 걸친 블록 주석, 시험을 건너뛰게 하는 이른 `return` 이나 `if (false)`,
+  더 약한 매처(`toBe(1)` 대신 `toBeTruthy`), 항상 참인 단언으로의 교체, 스냅샷·픽스처 수정, 돌릴 시험을 좁히는
+  `include`·`exclude` 는 따라가지 못합니다. 바이너리 구역이 무엇을 바꾸는지는 검사하지 않고 읽을 수 없는 구역으로 표시할 뿐입니다. 지운 단언 줄과 더한 단언 줄의 개수를
+  비교하므로, 개수를 유지하는 재작성은 그대로로 보입니다. 올린 허용치(codecov `threshold`, 스크린샷 임계값)는 감지하지 못합니다.
 
 - 시드 린트는 숫자와 지표 이름을 잡을 뿐, 말 바꾸기는 잡지 못합니다. 임계값을 다른 말로 다시 쓰면 통과합니다.
 - 중복 검사는 제목의 낱말과 선언한 경로를 비교합니다. 같은 변경을 제목만 바꿔 내면 새 항목입니다.

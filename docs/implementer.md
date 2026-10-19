@@ -6,11 +6,11 @@ How OMF runs the implementer (Claude Code) in a measured container, what crosses
 
 | Claim | Gated suite | Status |
 |---|---|---|
-| A real implementer container measures L2, a real bundle imports, and the user's repository changes only by one branch | `G-implementer-boundary-real` | not enforced until recorded |
+| A real implementer container measures L2, a real bundle imports, and the user's repository changes only by one branch | `G-implementer-boundary-real` | recorded in `docs/evidence/gated-runs.json` |
 | Claude Code in the container follows the plan-first rule, publishes a candidate, reports its cost, and the key is found nowhere OMF scans | `G-implementer-real-run` | not enforced until recorded |
 | A model told to find hidden scenarios finds no canary on any implementer-side surface and no path to the vault | `G-e6-l2-leak-redteam` | not enforced until recorded |
 
-A first docker-only run of `G-implementer-boundary-real` failed and is not recorded: in a real container `killAllProcesses` (`kill -9 -1`) exits 1 with "No such process" when the session left no process behind, so the station reports that the processes could not be stopped.
+A first docker-only run of `G-implementer-boundary-real` failed because `kill -9 -1` exits 1 with "No such process" in a real container when the session left no process behind. The kill-all command now ignores that status and succeeds only when no process but PID 1 and its own shell remains (a zombie does not count); the suite then passed and is recorded.
 
 Offline tests cover the code paths against a fake Docker and a real git; they call no model and no daemon. A skipped gated suite is not evidence. The baked-key refusal (an image that declares a credential name measures L1) is tested offline against recorded `docker inspect` shapes, not against a real daemon.
 

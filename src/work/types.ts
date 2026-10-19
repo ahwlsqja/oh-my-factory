@@ -30,6 +30,7 @@ export type RiskRule =
   | "auth"
   | "migration"
   | "test"
+  | "test-weakening"
   | "goal-factory"
   | "lockfile"
   | "watched-path"

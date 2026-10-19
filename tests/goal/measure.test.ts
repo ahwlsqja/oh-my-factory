@@ -7,6 +7,7 @@ import { lockGoal } from "../../src/goal/goal-lock.js";
 import { GoalStopError, aggregateGuardrails, measureGoal } from "../../src/goal/measure.js";
 import { lockFile } from "../../src/goal/metrics.js";
 import { setupGoal, writeBands } from "../helpers/goal.js";
+import { commitAll } from "../helpers/tmp.js";
 
 const types = (dir: string): string[] => new Ledger(dir).readVerified().map((e) => e.type);
 
@@ -54,6 +55,39 @@ describe("measureGoal", () => {
     expect(report.metrics[1]).toMatchObject({ metric_id: "m-errors", value: null, failure: "exit code 3" });
     expect(report.target.measured).toBe(312);
     expect(types(fx.location.dir)).toContain("metric.measure_failed");
+  });
+
+  it.each([
+    ["prints nothing and exits zero", "true\n", "empty_output"],
+    ["prints text", "echo n/a\n", "unparsable_output"],
+    ["prints 0 and then fails", "echo 0\nexit 2\n", "nonzero_exit"],
+    ["prints a value that is too large", "echo 1e999\n", "not_finite"],
+  ])("never reads a target metric that %s as a number or as met", async (_name, script, code) => {
+    const fx = setupGoal();
+    // Zero would satisfy this target, so a failure read as zero would count as met.
+    writeFileSync(join(fx.repo, "bench", "p95.sh"), script);
+    commitAll(fx.repo, "break bench");
+    lockGoal(fx.location, "g-fast", "human:dev");
+    const { report, file } = await measureGoal(fx.location, "g-fast", { runner: "host" });
+    expect(report.target).toMatchObject({ operator: "<=", measured: null, result: null });
+    expect(report.metrics[0]).toMatchObject({ metric_id: "m-p95", value: null, failure_code: code, band: null });
+    expect(report.metrics[0]?.failure).toEqual(expect.any(String));
+    expect(JSON.parse(readFileSync(file, "utf8")).target.measured).toBeNull();
+    const events = new Ledger(fx.location.dir).readVerified();
+    expect(events.filter((e) => e.type === "metric.measured" && e.payload.metric_id === "m-p95")).toEqual([]);
+    expect(events.find((e) => e.type === "metric.measure_failed")?.payload).toMatchObject({ reason_code: code });
+    expect(events.filter((e) => e.type === "goal.measured").at(-1)?.payload.target_met).toBeNull();
+  });
+
+  it("does not let an unmeasured guardrail pass, even with a long baseline", async () => {
+    const fx = setupGoal();
+    writeBands(fx, "m-errors");
+    lockGoal(fx.location, "g-fast", "human:dev");
+    for (let i = 0; i < 6; i++) await measureGoal(fx.location, "g-fast", { runner: "host" });
+    writeFileSync(join(fx.repo, "bench", "errors.sh"), "true\n");
+    const { report } = await measureGoal(fx.location, "g-fast", { runner: "host" });
+    expect(report.metrics[1]).toMatchObject({ value: null, failure_code: "empty_output", band: null });
+    expect(report.guardrails).toEqual([{ metric_id: "m-errors", status: "unevaluated" }]);
   });
 
   it("evaluates a guardrail against its bands once the baseline is long enough", async () => {

@@ -558,7 +558,20 @@ untrusted_fields: [plan_summary, implementer_notes]  # written by the implemente
 
 **Risk class is mechanical.** It is computed from the diff and paths, never chosen by an agent. The
 default high-risk paths are CI and workflow files, authentication, migrations, watched
-(instrumentation) paths, test files, goal and factory files, and lockfiles. People extend the list
+(instrumentation) paths, goal and factory files, and lockfiles. A test file is not high risk by itself,
+declared or changed. A declared test path has no diff to weaken yet, so it does not make an item high at dispatch. After
+the implementation, the audit runs a deterministic test-weakening check on the real diff and raises the class to high when
+a change deletes a test file, loses more assertion lines than it gains, adds a skip, only, todo, fixme, expected-failure or x- or f-prefixed marker, adds a hook that changes how other tests run (a `conftest.py` at any depth, a Go `TestMain` or `func init()`, `this.skip()`, a process exit such as `os.Exit`, `sys.exit`, `process.exit` or `pytest.exit`), lowers or removes a numeric
+threshold in a test or coverage config (every `key: number` pair of the code part of a line is compared, so a commented-out threshold counts as removed; a line it cannot pair counts as weakening), adds or edits a test runner or coverage config under a test path (unless it only raises threshold numbers and leaves the rest of every changed line exactly as it was; `.coveragerc`, `codecov.yml` and `package.json` under a test path are held to the same rule), or changes a test path or a coverage or runner config in a binary section (one byte such as a NUL makes a section binary; it cannot be read, so it counts as weakening). A mode-only change stays normal. A runner or coverage config outside a test path gets the numeric-threshold check, including conservative handling of ambiguous threshold lines. A test change that does not weaken tests no longer adds the high-risk-paths review area to the evidence, which it used to. Comment lines count as neither assertions nor markers. When the check cannot run, because the diff text is
+not available or does not match the list of changed paths, any test change stays high. The audit only adds rules to the
+declared risk, so risk only rises between declaration and audit.
+
+Quoted `#` and `//` markers remain part of the code; genuine trailing comments are ignored. A threshold-bearing line with an ambiguous comment boundary, such as an unquoted slash that could start a regular expression or an unfinished quote, is handled conservatively as weakening. Ambiguous lines cannot receive the threshold-only configuration exception; this can flag benign edits.
+
+Known limits of the line-based check: it does not follow a block comment spanning lines, an early return or `if (false)`
+that stops a test from running, a weaker matcher, an assertion replaced by one that is always true, snapshot or fixture
+edits, or an include or exclude that narrows which tests run. What a binary section changes is not inspected: it is flagged as unreadable, never judged. The check compares counts of
+removed and added assertion lines, so a rewrite that keeps the count looks unchanged. A raised tolerance (a codecov `threshold`, a screenshot threshold) is not detected. People extend the list
 at J3.
 
 ### 6.1 Back-pressure

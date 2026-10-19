@@ -31,7 +31,7 @@ describe("S5 audit station", () => {
       prove_test: "pass",
       judge_config_touched: false,
     });
-    expect(ctx.inputs.high_risk_paths_touched).toEqual(["tests/calc.test.mjs"]);
+    expect(ctx.inputs.high_risk_paths_touched).toEqual([]);
     expect(ctx.inputs.isolation_level).toBe("unmeasured");
     expect(fx.round.flawed_signal).toBe(false);
 

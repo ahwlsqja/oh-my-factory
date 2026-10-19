@@ -9,7 +9,8 @@ import type { LedgerEvent, NewEvent } from "../core/ledger.js";
 import type { JudgeConfigDecl } from "../decision/types.js";
 import type { ProveTestResult } from "../gate/prove-test.js";
 import type { GitTarget } from "../git/hardened.js";
-import { rawDiff, treePaths } from "../git/ops.js";
+import { rawDiff, treePaths, unifiedDiff } from "../git/ops.js";
+import { findTestWeakening } from "../work/test-weakening.js";
 import type { RiskAssessment } from "../work/types.js";
 import { assessDiffRisk, classifyDiff } from "./diff.js";
 import { type AuditSurface, type CanaryScan, scanCanaries } from "./canary-scan.js";
@@ -61,6 +62,16 @@ const capRisk = (risk: RiskAssessment): RiskAssessment => ({
   paths: cap(risk.paths),
 });
 
+/** The test-weakening check on the real diff text. A diff that cannot be read in full (`output_limit`, a failure) gives `null`: the risk stays conservative. */
+async function testWeakening(input: AuditInput, auditedPaths: readonly string[]): Promise<string[] | null> {
+  try {
+    const text = (await unifiedDiff(input.quarantine, input.base, input.head)).toString("utf8");
+    return findTestWeakening(text, input.explicitTestPaths, auditedPaths);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The audit of the real diff between two shas of the quarantine repository. A git failure (a path that is not valid UTF-8, a
  * missing repository) rejects: an audit that could not look at the diff is not an audit. An empty diff skips the risk recompute. The judge config comes from the ledger argvs; zero resolved files gives
@@ -76,10 +87,12 @@ export async function runAudit(input: AuditInput): Promise<WorkAudit> {
   );
   const judge = resolveJudgeFiles(argvs, baseTree, facts.paths);
   const canary = await scanCanaries(input.canaries, input.surfaces);
-  const risk = assessDiffRisk(facts, input.declaredRisk, {
-    watchedGlobs: input.watchedGlobs,
-    extraGlobs: input.extraGlobs,
-  });
+  const risk = assessDiffRisk(
+    facts,
+    input.declaredRisk,
+    { watchedGlobs: input.watchedGlobs, extraGlobs: input.extraGlobs, explicitTestPaths: input.explicitTestPaths },
+    await testWeakening(input, facts.paths),
+  );
   return {
     schema_version: 1,
     diff: { files: facts.files, empty: facts.empty, special_entries: facts.special_entries },

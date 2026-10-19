@@ -44,7 +44,7 @@ export interface PokaYokeScope {
 
 export interface ScanOptions {
   stateRoot: string;
-  /** Default 300_000 entries across the repository and every worktree. */
+  /** Default DEFAULT_MAX_SCAN_ENTRIES entries across the repository and every worktree. */
   maxEntries?: number;
   /** Default 1 MiB; a larger regular file is not read. */
   maxFileBytes?: number;
@@ -63,7 +63,13 @@ export interface ScanResult {
   canary_hits: CanaryHit[];
 }
 
-const DEFAULT_MAX_ENTRIES = 300_000;
+/**
+ * Entries (files, directories, links) the scan visits across the repository and every worktree before it gives up
+ * and reports `scan_incomplete`. Directories named in SKIP_NAMES count as one entry and are not descended into.
+ * One million covers a checkout with several hundred thousand untracked or ignored entries (build output,
+ * caches) while a runaway tree still stops the scan. Reaching the cap blocks; it never passes.
+ */
+export const DEFAULT_MAX_SCAN_ENTRIES = 1_000_000;
 const DEFAULT_MAX_FILE_BYTES = 1024 * 1024;
 
 /** Fixed dependency and cache directories, skipped at any depth. Nothing else is skipped. */
@@ -200,7 +206,7 @@ function scanRoot(
 function scanScope(scope: { repo: string | null; worktrees: readonly string[] }, options: ScanOptions): ScanResult {
   const limits: Limits = {
     stateRoot: options.stateRoot,
-    maxEntries: options.maxEntries ?? DEFAULT_MAX_ENTRIES,
+    maxEntries: options.maxEntries ?? DEFAULT_MAX_SCAN_ENTRIES,
     maxFileBytes: options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES,
     known: options.knownCanaries ?? new Set<string>(),
   };
@@ -317,8 +323,15 @@ export function scanWorktreeCanaries(
 const PROBLEM_PREFIX = "sealed material inside the repository or an OMF worktree";
 const PROBLEM_LISTED = 5;
 
-/** The `omf doctor` problem line for this project, or null when the scan is clean. Paths only. */
-export function sealedProblem(location: ProjectLocation, env: NodeJS.ProcessEnv = process.env): string | null {
+const VAULT_FIX = "move the listed vault files out of the repository and the OMF worktrees, then run omf doctor again";
+const CANARY_FIX =
+  "a canary-shaped string sits in an ordinary file, such as a test fixture or a documentation example; do not move source or tests into the vault. Build such a value at run time, or use a placeholder that does not match the pattern, then run omf doctor again. If the string is a genuine sealed canary that reached a committed file, the scenarios are exposed: remove it and treat the sealed set as burned (re-author and re-seal), because editing the working tree leaves the value in git history";
+
+/** The `omf doctor` problem line and its fix for this project, or null when the scan is clean. Paths only. */
+export function sealedReport(
+  location: ProjectLocation,
+  env: NodeJS.ProcessEnv = process.env,
+): { problem: string; fix: string } | null {
   const { findings } = fullScan(location, env);
   if (findings.length === 0) return null;
   const listed = findings
@@ -326,5 +339,13 @@ export function sealedProblem(location: ProjectLocation, env: NodeJS.ProcessEnv 
     .map((finding) => `${finding.kind}: ${finding.path}`)
     .join(", ");
   const more = findings.length > PROBLEM_LISTED ? ", ..." : "";
-  return `${PROBLEM_PREFIX}: ${findings.length} finding(s) (${listed}${more})`;
+  const hasCanary = findings.some((finding) => finding.kind === "canary");
+  const hasOther = findings.some((finding) => finding.kind !== "canary");
+  const fix = hasCanary ? (hasOther ? `${VAULT_FIX}; for a canary finding, ${CANARY_FIX}` : CANARY_FIX) : VAULT_FIX;
+  return { problem: `${PROBLEM_PREFIX}: ${findings.length} finding(s) (${listed}${more})`, fix };
+}
+
+/** The `omf doctor` problem line for this project, or null when the scan is clean. Paths only. */
+export function sealedProblem(location: ProjectLocation, env: NodeJS.ProcessEnv = process.env): string | null {
+  return sealedReport(location, env)?.problem ?? null;
 }

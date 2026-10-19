@@ -66,18 +66,22 @@ export interface RiskOutcome {
 /**
  * The risk of the real diff, and the effective risk. An empty diff skips the recompute: `classifyRisk` would return
  * `undeclared` for zero paths, which is not a finding about the diff, so the effective risk is the declared one. Otherwise the diff's
- * own paths are classified as literal paths (a `[` in `app/posts/[id]/page.tsx` is not a glob) and `raiseRisk` can only raise.
+ * `weakeningPaths` is `findTestWeakening` on the diff text: given (even empty), a test change is high only where it weakens tests; `undefined` or
+ * `null` means the check could not run, so every test change stays high (rule `test`). The diff's own paths are classified as literal paths (a `[` in `app/posts/[id]/page.tsx` is not a glob) and `raiseRisk` can only raise.
  */
 export function assessDiffRisk(
   facts: DiffFacts,
   declared: RiskAssessment,
-  globs: { watchedGlobs: readonly string[]; extraGlobs: readonly string[] },
+  globs: { watchedGlobs: readonly string[]; extraGlobs: readonly string[]; explicitTestPaths?: readonly string[] },
+  weakeningPaths?: readonly string[] | null,
 ): RiskOutcome {
   if (facts.empty) return { recomputed: null, effective: declared, raised: false };
   const recomputed = classifyLiteralPaths({
     paths: facts.paths,
     watchedGlobs: globs.watchedGlobs,
     extraGlobs: globs.extraGlobs,
+    explicitTestPaths: globs.explicitTestPaths,
+    weakeningPaths,
   });
   const effective = raiseRisk(declared, recomputed);
   const raised = effective.class !== declared.class || effective.rules.some((rule) => !declared.rules.includes(rule));

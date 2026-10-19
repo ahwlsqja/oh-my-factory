@@ -3,6 +3,9 @@
 OMF is pre-alpha. The documents below are the whole documentation set; there is no documentation site yet.
 Start with the top-level [README](../README.md) for what OMF is and the command reference.
 
+- [Local read-only dashboard](ui.md): optional browser observation with `omf ui`, its privacy boundary and unavailable states.
+- [Dashboard design contract](../DESIGN.md): information hierarchy, visual language, accessibility and implementation constraints.
+
 ## Design
 
 - [v0 design](design/2026-10-12-omf-v0-design.md): the specification. Canonical language is English.

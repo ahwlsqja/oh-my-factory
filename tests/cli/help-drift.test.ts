@@ -60,6 +60,7 @@ describe("documentation drift", () => {
       "seal",
       "run",
       "report",
+      "ui",
     ]) {
       expect(paths).toContain(path);
     }
