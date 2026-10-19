@@ -165,9 +165,9 @@ describe("INI semicolon comments", () => {
     expect(await audited({ [path]: before }, { [path]: after })).toMatchObject({ class: "high" });
   });
 
-  it("a trailing ; comment after a raised threshold is still a raise", () => {
+  it("a trailing ; comment after a raised threshold is weakening (only an exact `key = number` raise passes)", () => {
     const diff = realDiff({ ".coveragerc": "fail_under = 80\n" }, { ".coveragerc": "fail_under = 90 ; raised\n" });
-    expect(findTestWeakening(diff, [])).toEqual([]);
+    expect(findTestWeakening(diff, [])).toEqual([".coveragerc"]);
   });
 });
 
@@ -183,9 +183,9 @@ describe("deleting a hook or a binary config", () => {
     expect(await audited({ [path]: "a\0b\n" }, { [path]: null })).toMatchObject({ class: "high" });
   });
 
-  it("deleting a text coverage config with no threshold is still read as before", () => {
+  it("deleting a text declarative coverage config is weakening even with no threshold", () => {
     const diff = realDiff({ ".coveragerc": "[run]\nbranch = true\n" }, { ".coveragerc": null });
-    expect(findTestWeakening(diff, [])).toEqual([]);
+    expect(findTestWeakening(diff, [])).toEqual([".coveragerc"]);
   });
 });
 
@@ -207,5 +207,71 @@ describe("mode-only changes", () => {
     const diff = git("diff", "--binary", "--full-index", "--no-renames", "--no-ext-diff", "--no-textconv", base, head);
     expect(diff).toContain("old mode 100644");
     expect(findTestWeakening(diff, [])).toEqual(["tests/conftest.py", "tests/vitest.config.ts"]);
+  });
+});
+
+describe("lines are split on CR, U+2028 and U+2029 before analysis", () => {
+  it("a Python marker after a CR that ends a # comment is weakening", async () => {
+    const base = { "tests/test_x.py": "from pytest import mark\n" };
+    const head = { "tests/test_x.py": "from pytest import mark\nx = 1  # n\rpytestmark = mark.skip\n" };
+    expect(findTestWeakening(realDiff(base, head), [])).toEqual(["tests/test_x.py"]);
+    expect(await audited(base, head)).toEqual({ class: "high", rules: ["test-weakening"], paths: ["tests/test_x.py"] });
+  });
+
+  it("a CRLF file whose value is raised stays a plain raise", () => {
+    const diff = realDiff(
+      { ".coveragerc": "[report]\r\nfail_under = 90\r\n" },
+      { ".coveragerc": "[report]\r\nfail_under = 95\r\n" },
+    );
+    expect(findTestWeakening(diff, [])).toEqual([]);
+  });
+});
+
+describe("declarative configs: only an exact `key = number` raise is not weakening", () => {
+  const weak: Array<[string, string, string]> = [
+    [".coveragerc", "[report]\nfail_under = 90\n", "[report]\n#[ fail_under = 90\n"],
+    ["pytest.ini", "[pytest]\naddopts = --cov-fail-under=90\n", "[pytest]\n#[addopts = --cov-fail-under=90\n"],
+    [
+      "pytest.ini",
+      "[pytest]\naddopts = --deselect a --cov-fail-under=90\n",
+      "[pytest]\naddopts = --deselect // --cov-fail-under=10\n",
+    ],
+    [
+      "tox.ini",
+      "[pytest]\naddopts = --deselect a --cov-fail-under=90\n",
+      "[pytest]\naddopts = --deselect // --cov-fail-under=10\n",
+    ],
+    [
+      "setup.cfg",
+      "[tool:pytest]\naddopts = --deselect a --cov-fail-under=90\n",
+      "[tool:pytest]\naddopts = --deselect // --cov-fail-under=10\n",
+    ],
+    [
+      ".coveragerc",
+      "[report]\ntitle = Cov\nfail_under = 90\n\n[html]\n",
+      "[report]\nfail_under = 90\n\n[html]\ntitle = Cov # fail_under = 90\n",
+    ],
+    [".coveragerc", "[report]\nfail_under = 90\n", "[report]\nxfail_under = 1 ; fail_under = 90\n"],
+    [".coveragerc", "[report]\nfail_under = 90\n", "[report]\n[unused]\nfail_under = 90\n"],
+    [
+      "pytest.ini",
+      "[pytest]\naddopts =\n    --cov-fail-under=90\n",
+      "[pytest]\naddopts =\n    --cov-fail-under=90\n    --cov-fail-under=10\n",
+    ],
+    ["pyproject.toml", "[tool.coverage.report]\nfail_under = 90\n", "[tool.coverage.report]\n#[ fail_under = 90\n"],
+  ];
+
+  it.each(weak)("%s: %j -> %j is weakening", async (path, before, after) => {
+    expect(findTestWeakening(realDiff({ [path]: before }, { [path]: after }), [])).toEqual([path]);
+    expect(await audited({ [path]: before }, { [path]: after })).toMatchObject({ class: "high" });
+  });
+
+  it.each([
+    [".coveragerc", "[report]\nfail_under = 90\n", "[report]\nfail_under = 95\n"],
+    ["pyproject.toml", "[tool.coverage.report]\nfail_under = 90\n", "[tool.coverage.report]\nfail_under = 95\n"],
+    ["codecov.yml", "coverage:\n  status:\n    target: 80%\n", "coverage:\n  status:\n    target: 90%\n"],
+  ])("%s: an exact raise is normal", async (path, before, after) => {
+    expect(findTestWeakening(realDiff({ [path]: before }, { [path]: after }), [])).toEqual([]);
+    expect(await audited({ [path]: before }, { [path]: after })).toMatchObject({ class: "normal" });
   });
 });
