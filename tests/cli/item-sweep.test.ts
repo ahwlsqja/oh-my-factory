@@ -22,7 +22,11 @@ const KILLED = "r-20261001T080000Z-dddd";
 const LISTING = ["context inspect", "ps", "image ls"];
 
 /** A run that was killed after its container exists: the run marker `runs/<id>` and an exited container with the omf.owner label. */
-function plantKilled(l: LineFixture, bin: FakeDockerBin, role: "author" | "implementer"): string {
+function plantKilled(
+  l: LineFixture,
+  bin: FakeDockerBin,
+  role: "author" | "implementer" | "sut" | "harness" | "workcopy",
+): string {
   mkdirSync(join(l.f.item.dir, "runs", KILLED), { recursive: true });
   let name = "";
   bin.update((state) => {
@@ -137,6 +141,53 @@ describe("an implementer container of a killed run on an item that is vetoed", (
     }
     const free = command(bin, () => cli(l, bin, ["run", l.f.workId]));
     expect(free.verbs).toEqual([...LISTING, "rm"]);
+    expect(names(bin)).toEqual([]);
+  });
+});
+
+const JUDGE_ROLES = ["sut", "harness", "workcopy"] as const;
+
+describe("judge containers of a killed run on an item that is vetoed", () => {
+  const plantJudge = (l: LineFixture, bin: FakeDockerBin): string[] =>
+    JUDGE_ROLES.map((role) => plantKilled(l, bin, role));
+
+  it("the next omf seal and the next omf run remove them: only the listing and the planted removals are allowed", () => {
+    const l = setupLine();
+    configureSeal(l);
+    const bin = fakeDockerBin();
+    plantJudge(l, bin);
+    veto(l);
+    const seal = command(bin, () => cli(l, bin, ["seal", l.f.workId], { OMF_AUTHOR_API_KEY: AUTHOR_KEY }));
+    expect(seal.out.code).toBe(2);
+    expect(seal.verbs).toEqual([...LISTING, "rm", "rm", "rm"]);
+    expect(names(bin)).toEqual([]);
+    plantJudge(l, bin);
+    expect(names(bin)).toHaveLength(3);
+    const run = command(bin, () => cli(l, bin, ["run", l.f.workId]));
+    expect(run.out.code).toBe(2);
+    expect(run.verbs).toEqual([...LISTING, "rm", "rm", "rm"]);
+    expect(names(bin)).toEqual([]);
+  });
+
+  it("stay while a live process holds the claim, and go once it is released: only the listing is allowed while held", () => {
+    const l = setupLine();
+    configureSeal(l);
+    const bin = fakeDockerBin();
+    const planted = plantJudge(l, bin);
+    veto(l);
+    claimItem(l.f.item.dir);
+    try {
+      const held = command(bin, () => cli(l, bin, ["seal", l.f.workId], { OMF_AUTHOR_API_KEY: AUTHOR_KEY }));
+      expect(held.out.code).toBe(2);
+      expect(held.verbs).toEqual(LISTING);
+      const run = command(bin, () => cli(l, bin, ["run", l.f.workId]));
+      expect(run.verbs).toEqual(LISTING);
+      expect(names(bin)).toEqual([...planted].sort());
+    } finally {
+      releaseItem(l.f.item.dir);
+    }
+    const free = command(bin, () => cli(l, bin, ["run", l.f.workId]));
+    expect(free.verbs).toEqual([...LISTING, "rm", "rm", "rm"]);
     expect(names(bin)).toEqual([]);
   });
 });
