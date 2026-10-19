@@ -1,3 +1,4 @@
+import { parseAllDocuments } from "yaml";
 import type { ProcessResult } from "../adapters/process-group.js";
 import { containerSpecFor, goldenFor } from "../container/golden.js";
 import { ImageRefError, pinnedImage } from "../container/image-ref.js";
@@ -82,7 +83,7 @@ export function parseAnswer(text: string): { ok: true; yaml: string } | { ok: fa
 /**
  * The spellings of the key searched in the answer: as text, JSON-escaped (the answer is JSON, so a quote in the key is
  * escaped), base64 with and without padding, base64url, hex in both cases and URL-encoded. A key that is split, reversed or
- * otherwise transformed is not found; docs/author.md says so and asks for a dedicated, capped, short-lived key.
+ * otherwise transformed is not found (the decoded answer and scenarios are searched too: see decodedKeyHits); docs/author.md says so and asks for a dedicated, capped, short-lived key.
  */
 function keySpellings(plain: string): string[] {
   const bytes = Buffer.from(plain, "utf8");
@@ -105,6 +106,29 @@ function keySpellings(plain: string): string[] {
 /** Occurrences of the key in any of its searched spellings. */
 function keyHits(text: string, credential: Credential): number {
   return keySpellings(credential.reveal()).reduce((hits, spelling) => hits + (text.split(spelling).length - 1), 0);
+}
+
+// The options intake parses with (src/scenario/intake.ts): no aliases, so no expansion bomb.
+const YAML_OPTIONS = { schema: "core", uniqueKeys: true, maxAliasCount: 0 } as const;
+
+/**
+ * What intake will store, decoded the way intake decodes it: each YAML document of the answer as plain data, written as
+ * JSON. A key spelled with YAML double-quoted `\x`/`\u` escapes or joined by a line continuation is plain here. A stream
+ * that does not parse is left to intake to reject; it stores nothing.
+ */
+function decodedScenarioTexts(yaml: string): string[] {
+  try {
+    return parseAllDocuments(yaml, YAML_OPTIONS).map((doc) => JSON.stringify(doc.toJS()));
+  } catch {
+    return [];
+  }
+}
+
+/** Occurrences of the key in the answer after the JSON decode and in the scenario documents after the YAML decode. */
+function decodedKeyHits(yaml: string, credential: Credential): number {
+  return (
+    keyHits(yaml, credential) + decodedScenarioTexts(yaml).reduce((hits, text) => hits + keyHits(text, credential), 0)
+  );
 }
 
 const fileEntry = (path: string, text: string): TarEntry => ({
@@ -328,6 +352,11 @@ export function createContainerAuthor(deps: ContainerAuthorDeps): ContainerAutho
         seen.answerBytes = Buffer.byteLength(text);
         const answer = parseAnswer(text);
         if (!answer.ok) return fail("no_output");
+        const decodedLeak = decodedKeyHits(answer.yaml, credential);
+        if (decodedLeak > 0) {
+          seen.hits += decodedLeak;
+          return fail("credential_in_output");
+        }
         finalize("completed");
         return { ok: true, output: answer.yaml, durationMs: elapsed() };
       } catch (error) {
