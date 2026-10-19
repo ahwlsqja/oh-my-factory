@@ -8,12 +8,17 @@ deliberately not automated, and how to cut `0.1.0` when the time comes.
 - `package.json` has `"private": true`, so `npm publish` refuses to run. That is intentional.
 - No workflow in this repository publishes to npm. `release-please.yml` only opens and updates a
   release pull request and, when that pull request is merged, creates a git tag and a GitHub Release.
-- The current version is `0.0.1` (recorded in `.release-please-manifest.json`). Nothing has been tagged yet.
-- `CHANGELOG.md` does not exist yet; release-please creates it with the first release pull request.
-- **The release job is off by default.** It runs only when the repository variable
+- The version for this checkout is recorded in the [release manifest](../../.release-please-manifest.json)
+  and [package metadata](../../package.json). Check the repository's
+  [tags](https://github.com/ahwlsqja/oh-my-factory/tags) and
+  [GitHub Releases](https://github.com/ahwlsqja/oh-my-factory/releases) for released versions.
+- release-please maintains [CHANGELOG.md](../../CHANGELOG.md) through release pull requests.
+- **The release job is opt-in.** The [workflow](../../.github/workflows/release-please.yml) runs only when
+  the repository variable
   `RELEASE_PLEASE_ENABLED` is set to `true` (Settings > Secrets and variables > Actions > Variables).
-  Until the owner sets it, the workflow is skipped on every push to `main`. Set it only after the
-  token decision below is made.
+  If the variable is unset or has another value, the release job is skipped on pushes to `main`.
+  Check the repository settings for its current value. Set it only after the token decision below is
+  made.
 
 Publishing is a separate decision for the owner. When it is made, it needs its own workflow (trusted
 publishing with provenance is the intended route), and removing `"private": true` is part of that change.
@@ -30,7 +35,8 @@ publishing with provenance is the intended route), and removing `"private": true
    below) and merges it.
 4. On that merge release-please creates the tag `vX.Y.Z` and a GitHub Release with the changelog entry.
 
-Configuration lives in `release-please-config.json`. Notes on the choices:
+Configuration lives in [release-please-config.json](../../release-please-config.json). Notes on the
+choices:
 
 - Pre-1.0 policy: `bump-minor-pre-major` and `bump-patch-for-minor-pre-major` are both on. While the
   major version is `0`, a breaking change bumps the minor version and a feature bumps only the patch
@@ -55,8 +61,9 @@ release-please must be able to create a pull request. Choose one before setting
 option.
 
 - **Option 1: `GITHUB_TOKEN` (no secret).** Requires the repository setting "Allow GitHub Actions to
-  create and approve pull requests" (Settings > Actions > General > Workflow permissions), which is
-  currently off. Without it release-please fails to open the release pull request.
+  create and approve pull requests" (Settings > Actions > General > Workflow permissions) to be enabled.
+  Check that setting before using this option; without it release-please fails to open the release pull
+  request.
 - **Option 2: a GitHub App token.** Create a GitHub App with Contents, Pull requests and Issues
   write access, install it on this repository, store the App id and private key as repository
   secrets, and mint a token in the workflow with `actions/create-github-app-token`, passing it to the
@@ -88,8 +95,7 @@ appear in the changelog because `chore` is hidden.
 
 ## Cutting 0.1.0 later
 
-`0.1.0` is the first version the owner is expected to treat as a real release. When the owner decides
-it is time:
+When the owner decides it is time to cut `0.1.0`:
 
 1. Make sure `main` is green and the release pull request, if one is open, is understood.
 2. Force the version with a `Release-As` footer on any commit that lands on `main` (an empty commit works):
