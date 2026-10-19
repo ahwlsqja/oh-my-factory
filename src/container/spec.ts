@@ -27,8 +27,8 @@ export const ROLE_NETWORK: Readonly<Record<ContainerRole, "none" | "bridge">> = 
 export const SANDBOX_USER = "65532:65532";
 /** Containers idle until `docker exec` gives them work. The base image must ship `sleep` (a stated limit). */
 export const IDLE_ENTRYPOINT = "sleep";
-/** What a judge container sleeps for: it is removed by the run, and a killed run's leftovers by the next sweep. */
-export const IDLE_ARGS: readonly string[] = ["2147483647"];
+/** The longest a container may sleep: `assertSpec` refuses a longer lifetime. */
+export const MAX_LIFETIME_S = 2147483647;
 
 /**
  * Seconds of slack on top of an agent container's own bounds: the daemon's start-up, the time between the host's
@@ -46,6 +46,50 @@ export const AUTHOR_STEPS_S = 15 + 30 + 30 + 30;
  * capture (300) and the finalize (120).
  */
 export const IMPLEMENTER_STEPS_S = 15 + 30 + (30 + 4 * 120) + 30 + 300 + 120;
+
+/** The isolation probe `createMeasured` runs in every container, seconds (its cap, `PROBE_TIMEOUT_MS`). */
+export const JUDGE_PROBE_S = 15;
+/**
+ * The scenario bounds the judge lifetimes are sized from: at most this many steps in a scenario and scenarios in a set.
+ * Copies of `MAX_STEPS` and `MAX_SCENARIOS_PER_SET` in src/scenario/types.ts so the container layer imports nothing from
+ * there; tests/container/judge-lifetime.test.ts pins both.
+ */
+export const JUDGE_MAX_STEPS = 12;
+export const JUDGE_MAX_SCENARIOS = 100;
+/** The caps of the two execs that boot a work copy, seconds: the `tar -x` upload (120) and the declared build (600). */
+export const WORKCOPY_BOOT_S = 120 + 600;
+/** The most gate execs one work copy container is sized to serve, and the cap of each, seconds. A stale copy gets a fresh container. */
+export const WORKCOPY_GATE_EXECS = 32;
+export const WORKCOPY_GATE_EXEC_S = 600;
+
+/**
+ * How long a judge container sleeps before it stops itself, so a run killed by SIGKILL cannot leave one behind for ever
+ * (the next item sweep removes it earlier). Sized from the exec caps the role serves and the margin of the agent roles:
+ * - sut serves one scenario: the probe and at most `JUDGE_MAX_STEPS` steps at `judge.step_timeout_ms`;
+ * - harness serves the whole round: the probe, `load`, `verdict`, and a `begin` plus up to `JUDGE_MAX_STEPS` `observe` calls
+ *   for each of `judge.k` reps of up to `JUDGE_MAX_SCENARIOS` scenarios, each at `judge.step_timeout_ms`;
+ * - workcopy serves a tree: the probe, the boot caps and `WORKCOPY_GATE_EXECS` execs at `WORKCOPY_GATE_EXEC_S`.
+ * Never more than `MAX_LIFETIME_S`. An agent role has no judge lifetime (null).
+ */
+export function judgeLifetimeSeconds(role: ContainerRole, limits: RoleLimits): number | null {
+  if (role === "author" || role === "implementer") return null;
+  if (limits.kind !== "judge") throw new ContainerSpecError("invalid_limits");
+  const stepS = Math.ceil(limits.judge.step_timeout_ms / 1000);
+  const execsS =
+    role === "sut"
+      ? JUDGE_MAX_STEPS * stepS
+      : role === "harness"
+        ? (2 + limits.judge.k * JUDGE_MAX_SCENARIOS * (1 + JUDGE_MAX_STEPS)) * stepS
+        : WORKCOPY_BOOT_S + WORKCOPY_GATE_EXECS * WORKCOPY_GATE_EXEC_S;
+  return Math.min(MAX_LIFETIME_S, JUDGE_PROBE_S + execsS + AGENT_LIFETIME_MARGIN_S);
+}
+
+/** The lifetime of any role: `agentLifetimeSeconds` for the agents, `judgeLifetimeSeconds` for the judge roles. */
+export function roleLifetimeSeconds(role: ContainerRole, limits: RoleLimits): number {
+  const seconds = agentLifetimeSeconds(role, limits) ?? judgeLifetimeSeconds(role, limits);
+  if (seconds === null) throw new ContainerSpecError("invalid_limits");
+  return seconds;
+}
 
 /**
  * How long an agent container sleeps before it stops itself, so a host killed by SIGKILL cannot leave a container with a
@@ -191,10 +235,10 @@ export interface ContainerSpec {
   tmpfs: readonly TmpfsSpec[];
   limits: { memory_mb: number; cpus: number; pids: number };
   /**
-   * Seconds the container sleeps before it stops itself (`agentLifetimeSeconds`). Required for the two agent roles, refused
-   * for the judge roles, which keep the idle sleep.
+   * Seconds the container sleeps before it stops itself (`roleLifetimeSeconds`). Required for every role: no container sleeps
+   * for ever.
    */
-  lifetime_s?: number;
+  lifetime_s: number;
 }
 
 // The run id pattern of the W events and the work id pattern of the W verbs, repeated here so the container layer imports
@@ -274,10 +318,8 @@ export function assertSpec(spec: ContainerSpec): void {
     cpus > 0 &&
     cpus <= 64;
   if (!limitsOk) throw new ContainerSpecError("invalid_limits");
-  const agent = spec.labels.role === "implementer" || spec.labels.role === "author";
   const { lifetime_s: lifetime } = spec;
-  if (agent !== (lifetime !== undefined)) throw new ContainerSpecError("invalid_limits");
-  if (lifetime !== undefined && !(Number.isInteger(lifetime) && lifetime >= 1 && lifetime <= 2147483647)) {
+  if (!(Number.isInteger(lifetime) && lifetime >= 1 && lifetime <= MAX_LIFETIME_S)) {
     throw new ContainerSpecError("invalid_limits");
   }
 }

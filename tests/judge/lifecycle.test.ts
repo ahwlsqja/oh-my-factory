@@ -10,6 +10,7 @@ const spec = (role: "sut" | "harness", serial: number): ContainerSpec => ({
   labels: { work_id: "w-0123456789ab", run_id: "r-20261014T091500Z-ab12", round: 1, role },
   tmpfs: [],
   limits: { memory_mb: 64, cpus: 1, pids: 16 },
+  lifetime_s: 195,
 });
 const lease = (letter: string): { sut: { id: ImageId } } => ({ sut: { id: `sha256:${letter.repeat(64)}` as ImageId } });
 

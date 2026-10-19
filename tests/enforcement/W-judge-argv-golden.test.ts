@@ -34,9 +34,9 @@ const HEAD = (role: JudgeRole): string =>
 const OWNED = "nosuid,nodev,uid=65532,gid=65532";
 
 const GOLDEN: Record<JudgeRole, string> = {
-  sut: `${HEAD("sut")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /scratch:rw,size=64m,${OWNED} --entrypoint sleep ${SUT_BASE} 2147483647`,
-  harness: `${HEAD("harness")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /state:rw,size=16m,${OWNED} --entrypoint sleep ${HARNESS_BASE} 2147483647`,
-  workcopy: `${HEAD("workcopy")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /work:rw,size=256m,nosuid,nodev,exec,uid=65532,gid=65532 --entrypoint sleep ${SUT_BASE} 2147483647`,
+  sut: `${HEAD("sut")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /scratch:rw,size=64m,${OWNED} --entrypoint sleep ${SUT_BASE} 195`,
+  harness: `${HEAD("harness")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /state:rw,size=16m,${OWNED} --entrypoint sleep ${HARNESS_BASE} 39095`,
+  workcopy: `${HEAD("workcopy")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /work:rw,size=256m,nosuid,nodev,exec,uid=65532,gid=65532 --entrypoint sleep ${SUT_BASE} 19995`,
 };
 
 describe("the golden create argv", () => {
@@ -125,6 +125,6 @@ describe("no builder can emit a mount, a privilege or a network other than none"
       Absent<"env">,
     ] = [true, true, true, true, true, true, true];
     expect(absent.every(Boolean)).toBe(true);
-    expect(Object.keys(specFor("sut")).sort()).toEqual(["image", "labels", "limits", "name", "tmpfs"]);
+    expect(Object.keys(specFor("sut")).sort()).toEqual(["image", "labels", "lifetime_s", "limits", "name", "tmpfs"]);
   });
 });

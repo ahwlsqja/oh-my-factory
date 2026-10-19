@@ -7,6 +7,7 @@ import {
   ContainerSpecError,
   agentLifetimeSeconds,
   assertSpec,
+  roleLifetimeSeconds,
 } from "../../src/container/spec.js";
 import { CONFIG_DEFAULTS } from "../../src/core/config.js";
 import {
@@ -77,11 +78,6 @@ describe("agent container lifetime", () => {
     expect(argv).not.toContain("2147483647");
   });
 
-  // A negative guard: green before the lifetime existed, kept so the judge containers keep their idle sleep.
-  it.each(["sut", "harness", "workcopy"] as const)("negative guard: the %s idle sleep stays 2147483647", (role) => {
-    expect(tail(createArgv(specFor(role), "ctx")).at(-1)).toBe("2147483647");
-  });
-
   it("is built into the spec the stations use, from the role's own table", () => {
     for (const role of ["author", "implementer"] as const) {
       const spec = containerSpecFor({ role, image: specFor(role).image, labels, serial: 1, limits: limitsFor(role) });
@@ -94,18 +90,18 @@ describe("agent container lifetime", () => {
       serial: 1,
       limits: limitsFor("sut"),
     });
-    expect(judge.lifetime_s).toBeUndefined();
+    expect(judge.lifetime_s).toBe(roleLifetimeSeconds("sut", limitsFor("sut")));
   });
 
-  it("refuses an agent spec with no lifetime, a judge spec with one, and a lifetime that is not a positive integer", () => {
+  it("refuses an agent spec with no lifetime and a lifetime that is not a positive integer", () => {
     for (const role of ["author", "implementer"] as const) {
       const { lifetime_s: _dropped, ...bare } = specFor(role);
-      expect(codeOf(() => assertSpec(bare))).toBe("invalid_limits");
+      expect(codeOf(() => assertSpec(bare as never))).toBe("invalid_limits");
       for (const lifetime_s of [0, -1, 1.5, Number.NaN, 2147483648]) {
         expect(codeOf(() => assertSpec({ ...specFor(role), lifetime_s }))).toBe("invalid_limits");
       }
     }
-    expect(codeOf(() => assertSpec({ ...specFor("sut"), lifetime_s: 60 }))).toBe("invalid_limits");
+    expect(codeOf(() => assertSpec({ ...specFor("sut"), lifetime_s: 60 }))).toBe("no error");
   });
 
   it("reaches the daemon: the docker double records the sleep argument of each role", async () => {
@@ -123,7 +119,7 @@ describe("agent container lifetime", () => {
     expect(seen).toEqual({
       author: ["sleep", "765"],
       implementer: ["sleep", "2865"],
-      sut: ["sleep", "2147483647"],
+      sut: ["sleep", "195"],
     });
   });
 });

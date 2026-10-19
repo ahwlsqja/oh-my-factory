@@ -7,7 +7,6 @@ import {
   type ContainerRole,
   type ContainerSpec,
   ContainerSpecError,
-  IDLE_ARGS,
   IDLE_ENTRYPOINT,
   IMPLEMENTER_FIXED_ENV,
   type ImageId,
@@ -105,7 +104,7 @@ export function createArgv(spec: ContainerSpec, context: string | null): string[
     "--entrypoint",
     IDLE_ENTRYPOINT,
     spec.image,
-    ...(spec.lifetime_s === undefined ? IDLE_ARGS : [String(spec.lifetime_s)]),
+    String(spec.lifetime_s),
   ];
 }
 
