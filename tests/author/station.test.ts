@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { createContainerAuthor } from "../../src/author/codex-session.js";
 import { standingSeal } from "../../src/author/standing.js";
 import { type AuthorRefusalCode, type SealItemDeps, sealItem, standingSealStation } from "../../src/author/station.js";
 import type { ContainerRuntime } from "../../src/container/runtime.js";
@@ -9,6 +10,7 @@ import { loadRunIsolation } from "../../src/isolation/record.js";
 import { sealLockFile } from "../../src/seal/seal.js";
 import { emptyEvidenceInputs } from "../../src/work/classify.js";
 import type { StationContext } from "../../src/work/sequencer.js";
+import { authorConfig, authorDouble } from "../helpers/author-container.js";
 import {
   AUTHOR_KEY,
   type AuthorConfigOptions,
@@ -158,6 +160,7 @@ describe("sealItem", () => {
     expect(runs).toBe(1);
   });
 
+  // Green at 7dc0cf0 and kept as a regression guard.
   it("counts a pass killed after its start record: the next pass is refused at the cap", async () => {
     const { l, deps } = rig({ authorLines: ["max_calls = 1"] });
     await expect(
@@ -191,6 +194,43 @@ describe("sealItem", () => {
     expect(ledgerEvents(l.f.fx, "author.session_started")).toHaveLength(1);
   });
 
+  it("ends credential_in_output for a \\x-escaped key next to a *nope document: no seal, nothing in the vault", async () => {
+    const { l, deps } = rig();
+    const hex = [...AUTHOR_KEY].map((c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`).join("");
+    const scenario = [
+      "decision_refs: []",
+      "kind: behavior",
+      "split: train",
+      "interface: cli",
+      "steps:",
+      '  - invoke: { argv: ["echo"], stdin: "" }',
+      `    expect: { exit_code: 0, note: "${hex}" }`,
+      "",
+    ].join("\n");
+    const answer = `${JSON.stringify({ scenarios_yaml: `${scenario}---\n*nope\n` })}\n`;
+    expect(answer).not.toContain(AUTHOR_KEY);
+    const double = authorDouble({ answer });
+    const result = await sealItem(
+      deps({
+        session: (credential, passId) =>
+          createContainerAuthor({
+            runtime: double.runtime,
+            location: l.f.fx.location,
+            config: authorConfig(),
+            credential,
+            passId,
+            round: 1,
+            workId: l.f.workId,
+            now: () => NOW,
+          }),
+      }),
+    );
+    expect(result).toMatchObject({ status: "blocked", code: "credential_in_output" });
+    expect(ledgerEvents(l.f.fx, "seal.completed")).toHaveLength(0);
+    const workDir = join(l.vault.dir, l.f.workId);
+    expect(existsSync(workDir) ? readdirSync(workDir) : []).toEqual([]);
+  });
+
   it("sweeps the orphan of a killed pass even when the next seal is refused at the cap", async () => {
     const { l, runtime, deps } = rig({ authorLines: ["max_calls = 1"] });
     await expect(
@@ -211,7 +251,8 @@ describe("sealItem", () => {
     expect(runtime.owned).toEqual([]);
   });
 
-  it("lets only the pass that took the last call run, when another pass checked the ledger before it was written", async () => {
+  // Green at 7dc0cf0 and kept as a regression guard: the call is taken under seal.lock, so one pass of two runs.
+  it("lets exactly one of two racing passes take the last call", async () => {
     const { l, yaml, runtime, deps } = rig({ authorLines: ["max_calls = 1"] });
     let runs = 0;
     const counted = (passId: string) => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { execArgv } from "../../src/container/argv.js";
-import { markMeasured } from "../../src/container/measured-handles.js";
 import { createDockerRuntime } from "../../src/container/docker-cli.js";
+import { markMeasured } from "../../src/container/measured-handles.js";
 import {
   CREDENTIAL_SHAPED_ENV_NAMES,
   ContainerSpecError,
@@ -157,7 +157,7 @@ describe("the runtime binds a secret to its role", () => {
       runSync: fake.runSync,
       env: { PATH: "/usr/bin", HOME: "/home/x" },
     });
-    const handle = await runtime.create(specFor("author"));
+    const handle = markMeasured(await runtime.create(specFor("author")));
     await runtime.start(handle);
     await runtime.exec(handle, PLAIN);
     const result = await runtime.exec(handle, { ...PLAIN, secret: secretHandle(CODEX_KEY, "CODEX_API_KEY") });

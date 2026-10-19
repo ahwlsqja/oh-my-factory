@@ -203,9 +203,9 @@ export function recordAuthorMeasurement(input: {
  *    removed even when this pass is refused at the cap), count the call cap against the ledger as it is now
  *    (`author_call_cap`), create the pass marker `runs/<pass id>/` before any `docker create`, and append
  *    `author.session_started`: that record is what the cap counts, so a pass killed mid-call is counted. A lock held by
- *    another pass is a J7 stop `seal_in_progress`;
- * The session's measurement is recorded by `afterSealCompleted`, inside the
- *    seal lock and bound to this pass's seal. A crash between `seal.completed` and the record leaves the seal unmeasured;
+ *    another pass is a J7 stop `seal_in_progress`.
+ *    The session's measurement is recorded by `afterSealCompleted`, inside the seal lock and bound to this pass's seal.
+ *    A crash between `seal.completed` and the record leaves the seal unmeasured;
  * 5. `author.session_completed` is appended once per container run, whatever the outcome; the tracked runtime is closed.
  * The result reads the ledger again: `sealed` only when `standingSeal` says the author is measured.
  */
