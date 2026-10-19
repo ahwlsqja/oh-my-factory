@@ -7,6 +7,7 @@ import { type CliLine, type CliResult, setupCliLine } from "../helpers/cli-line.
 import { verbOf } from "../helpers/fake-docker.js";
 import { omfRefs } from "../helpers/implementer-line.js";
 import { gitIn } from "../helpers/tmp.js";
+import { runWithWarningBeforeDocker } from "../helpers/warn-gate.js";
 
 // covers: S7.unmeasured-stage-no-claim
 //
@@ -94,4 +95,17 @@ describe("W-cli-fake-docker-unmeasured", () => {
     for (const text of surfaces) expect(text).not.toContain(key);
     expect(line.containers(), "the combined line end removed every container").toEqual([]);
   });
+
+  it("prints the unmeasured-author warning before any docker call is made", async () => {
+    const fresh = await setupCliLine();
+    const out = await runWithWarningBeforeDocker(
+      fresh,
+      ["run", fresh.workId],
+      "warning: the author stage is unmeasured",
+    );
+    expect(out.violations, "docker calls that started before the warning was seen").toEqual([]);
+    expect(out.stderr).toContain("warning: the author stage is unmeasured");
+    expect(out.code, `${out.stdout}${out.stderr}`).toBe(2);
+    expect(fresh.bin.state().calls.length).toBeGreaterThan(0);
+  }, 180_000);
 });

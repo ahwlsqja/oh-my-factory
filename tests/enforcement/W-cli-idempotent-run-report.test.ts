@@ -25,10 +25,25 @@ async function reviewed(options: { unmeasured?: boolean } = {}) {
   if (options.unmeasured !== true) expect(l.stateOf()).toBe("awaiting_review");
   const read = readEvidence(l.itemDir);
   if (!read.ok) throw new Error("the finished line wrote no evidence");
-  const snapshot = (): { ledger: string; files: string[]; evidence: string } => ({
+  const text = (name: string): string | null => {
+    try {
+      return readFileSync(join(l.itemDir, name), "utf8");
+    } catch {
+      return null;
+    }
+  };
+  const snapshot = (): {
+    ledger: string;
+    files: string[];
+    evidence: string;
+    md: string | null;
+    item: string | null;
+  } => ({
     ledger: readFileSync(l.fx.ledger.file, "utf8"),
     files: l.files(),
     evidence: readFileSync(join(l.itemDir, "evidence.json"), "utf8"),
+    md: text("evidence.md"),
+    item: text("item.md"),
   });
   return { l, doc: read.doc, snapshot };
 }
@@ -56,14 +71,29 @@ describe("W-cli-idempotent (run and report)", () => {
     expect(snapshot()).toEqual(before);
   });
 
-  it("a hand-edited evidence.md is never printed", async () => {
-    const { l, doc } = await reviewed({ unmeasured: true });
-    writeFileSync(join(l.itemDir, "evidence.md"), "planted-md-8842\n- isolation level: L2\n");
+  it("a hand-edited evidence.md is never printed and never rewritten", async () => {
+    const { l, doc, snapshot } = await reviewed({ unmeasured: true });
+    const planted = "planted-md-8842\n- isolation level: L2\n";
+    writeFileSync(join(l.itemDir, "evidence.md"), planted);
+    const before = snapshot();
     const out = omf(["report", l.workId], l.fx.repo, l.fx.home);
+    expect(readFileSync(join(l.itemDir, "evidence.md"), "utf8")).toBe(planted);
+    expect(snapshot()).toEqual(before);
     expect(out.code, out.stderr).toBe(0);
     expect(out.stdout).not.toContain("planted-md-8842");
     expect(out.stdout.startsWith(renderEvidenceMd(doc))).toBe(true);
     expect(out.stderr).toContain("evidence.md differs from evidence.json");
+  });
+
+  it("omf report --json prints the validated evidence document and nothing else, and writes nothing", async () => {
+    const { l, doc, snapshot } = await reviewed({ unmeasured: true });
+    const before = snapshot();
+    const out = omf(["report", l.workId, "--json"], l.fx.repo, l.fx.home);
+    expect(out.code, out.stderr).toBe(0);
+    expect(JSON.parse(out.stdout)).toEqual(JSON.parse(JSON.stringify(doc)));
+    expect(out.stdout).not.toContain(JUDGE_LINE);
+    expect(out.stdout.startsWith(renderEvidenceMd(doc))).toBe(false);
+    expect(snapshot()).toEqual(before);
   });
 
   it("a hand-edited evidence.json is untrusted: exit 2, nothing printed", async () => {

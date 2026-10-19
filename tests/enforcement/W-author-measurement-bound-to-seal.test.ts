@@ -82,4 +82,29 @@ describe("W-author-measurement-bound-to-seal", () => {
     });
     expect(authorLevel(l)).toBe("L2");
   });
+
+  it("needs both halves of the seal: the real seal id with another set hash is unknown and writes nothing", async () => {
+    const l = setupLine();
+    const sealed = await sealStamped(l, writeYaml(l, "a.yaml", ROUND2));
+    const before = l.f.fx.ledger.readVerified().length;
+    expect(record(l, { seal_id: sealed.seal_id, set_sha256: "f".repeat(64) })).toBe(false);
+    expect(l.f.fx.ledger.readVerified()).toHaveLength(before);
+    expect(authorLevel(l)).toBeUndefined();
+    expect(record(l, sealed)).toBe(true);
+  });
+
+  it("moves the binding on a reseal that keeps the same set hash: the seq alone retires the older measurement", async () => {
+    const l = setupLine();
+    const first = await sealStamped(l, writeYaml(l, "a.yaml", ROUND2));
+    expect(record(l, first)).toBe(true);
+    expect(authorLevel(l)).toBe("L2");
+    const completed = l.f.fx.ledger.readVerified().find((event) => event.type === "seal.completed");
+    const resealed = l.f.fx.ledger.append({
+      actor: "omf",
+      type: "seal.completed",
+      payload: { ...completed?.payload, round: 2, seal_id: `seal-${"c".repeat(16)}` },
+    });
+    expect(resealed.payload.set_sha256).toBe(first.set_sha256);
+    expect(authorLevel(l)).toBeUndefined();
+  });
 });
