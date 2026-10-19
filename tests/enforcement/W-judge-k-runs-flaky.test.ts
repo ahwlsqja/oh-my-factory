@@ -7,8 +7,9 @@ import { type Candidate, exited, RuntimeDouble } from "../helpers/sut-double.js"
 vi.mock("../../src/container/measure.js", async () => (await import("../helpers/measure-mock.js")).measureMockModule());
 beforeEach(resetMeasureHook);
 
-// Spec 5.5, M3f-D8: k reps; mixed pass and fail is flaky, never a pass; a stop the candidate causes is a fail, never an
-// environment error; only a runtime fault is `error`, and any `error` fails the round.
+// Spec 5.5, M3f-D8: k reps; mixed pass and fail is flaky, never a pass; a stop the candidate causes (timeout, output limit,
+// invalid UTF-8) is a fail, never an environment error; a runtime fault, and a container that is gone (a candidate cannot end
+// its own: PID 1 is the idle sleep), is `error`, and any `error` fails the round.
 let flips = 0;
 beforeEach(() => {
   flips = 0;
@@ -54,14 +55,19 @@ describe("W-judge-k-runs-flaky", () => {
     expect(verdict.counts).toEqual({ total: 3, pass: 1, fail: 1, flaky: 1, error: 0 });
   });
 
-  it("scores a timeout, an output limit, invalid UTF-8 and a dead container as fail, never as error", async () => {
+  it("scores a timeout, an output limit and invalid UTF-8 as fail, never as error", async () => {
     const verdict = await runRound(
       new RuntimeDouble(candidate),
-      [scenario(1, "timeout"), scenario(2, "limit"), scenario(3, "utf8"), scenario(4, "dead")],
+      [scenario(1, "timeout"), scenario(2, "limit"), scenario(3, "utf8")],
       { k: 2 },
     );
-    expect(verdict.tallies.map((tally) => tally.verdict)).toEqual(["fail", "fail", "fail", "fail"]);
-    expect(verdict.counts).toEqual({ total: 4, pass: 0, fail: 4, flaky: 0, error: 0 });
+    expect(verdict.tallies.map((tally) => tally.verdict)).toEqual(["fail", "fail", "fail"]);
+    expect(verdict.counts).toEqual({ total: 3, pass: 0, fail: 3, flaky: 0, error: 0 });
+  });
+
+  it("fails the round when a container is gone after the step, whatever the candidate did", async () => {
+    const rejected = runRound(new RuntimeDouble(candidate), [scenario(1, "ok"), scenario(2, "dead")], { k: 2 });
+    await expect(rejected).rejects.toMatchObject({ code: "round_error" });
   });
 
   it("fails the round when a runtime fault makes a scenario error", async () => {
