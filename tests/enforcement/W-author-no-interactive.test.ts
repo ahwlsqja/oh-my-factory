@@ -60,11 +60,23 @@ describe("W-author-no-interactive: run() refuses a refused argv before it spends
 });
 
 describe("W-author-no-interactive: a failed put", () => {
-  it("is container_failed and never starts Codex", async () => {
+  // Each put is failed on its own, so a run that ignores one of them cannot hide behind the other.
+  it.each([
+    ["the inputs put", "/in"],
+    ["the agent put", "/agent"],
+  ])("is container_failed and never starts Codex when only %s fails", async (_label, dest) => {
     const double = authorDouble();
-    double.fake.intercept = (argv) =>
-      argv.includes("tar") ? { kind: "exited", status: 1, signal: null, stdout: "", stderr: "x" } : null;
+    const failed: string[] = [];
+    double.fake.intercept = (argv) => {
+      if (!argv.includes("tar")) return null;
+      const target = argv[argv.indexOf("-C") + 1] ?? "";
+      const hit = dest === "/in" ? target !== "/agent" : target === "/agent";
+      if (!hit) return null;
+      failed.push(target);
+      return { kind: "exited", status: 1, signal: null, stdout: "", stderr: "x" };
+    };
     const outcome = await createContainerAuthor(authorDeps(double)).run(authorRequest());
+    expect(failed).toHaveLength(1);
     expect(outcome).toMatchObject({ ok: false, code: "container_failed" });
     expect(double.fake.calls("exec").some((call) => call.argv.includes("codex"))).toBe(false);
   });
