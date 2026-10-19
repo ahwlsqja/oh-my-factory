@@ -26,9 +26,10 @@ const ROOT = fileURLToPath(new URL("../../", import.meta.url));
  *  - risk globs (DEFAULT_HIGH_RISK in src/work/risk.ts, EXTRA_HIGH_RISK_GLOBS in src/core/config.ts): these are
  *    policy data, not directory lists. tests/work/risk.test.ts and tests/core/config.test.ts cover their
  *    behaviour; no completeness check is added because there is no directory they must enumerate.
- *  - source roots: src/* subdirectories are covered wholesale by tsconfig "include": ["src"] and the coverage
- *    include "src/**" in vitest.config.ts, so no per-directory registry exists. Only top-level entries are checked.
- *  - kernel path manifest (#39): no such file exists in this tree, so there is nothing to check here.
+ *  - source roots: tsconfig "include": ["src"] and coverage include "src/**" cover compilation and coverage.
+ *    Contributor kernel classification is checked separately by tests/docs/kernel-paths.test.ts.
+ *  - docs/maintainers/kernel-paths.txt: tests/docs/kernel-paths.test.ts checks source-root coverage and
+ *    protection of the manifest and policy instructions.
  *  - golden argv files: src/container/golden.ts builds them from the role table; tests/container/golden.test.ts
  *    covers every role, so there is no second list.
  */
