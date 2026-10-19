@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createDockerRuntime } from "../../src/container/docker-cli.js";
 import { removeStagingDirs, sweepItemOrphans } from "../../src/container/item-sweep.js";
 import { claimItem, releaseItem } from "../../src/work/claim.js";
 import { existsSync, mkdirSync, symlinkSync } from "node:fs";
@@ -337,5 +338,37 @@ describe("a runs directory that is a symlink is never entered", () => {
       0,
     );
     expect(memory.calls).toEqual([]);
+  });
+});
+
+describe("an unset docker_context still lets the sweep remove host staging", () => {
+  // `omf seal` hands `sealItem` a runtime with no context when `[judge] docker_context` is unset; the sweep runs first.
+  const stage = () => {
+    const item = realTempDir("omf-sweep-nocontext-");
+    put(item, `runs/${EARLIER}/judge/file`, "x");
+    put(item, `runs/${EARLIER}/implementer-stage/file`, "x");
+    put(item, `runs/${EARLIER}/implementer/round-1/log`, "x");
+    return item;
+  };
+  const noContext = () => createDockerRuntime({ context: null, env: {} });
+
+  it("removes the staging of earlier runs while no live process holds the claim, and keeps the run logs", async () => {
+    const item = stage();
+    await sweepItemOrphans({ runtime: noContext(), itemDir: item, workId: X });
+    expect(existsSync(join(item, "runs", EARLIER, "judge"))).toBe(false);
+    expect(existsSync(join(item, "runs", EARLIER, "implementer-stage"))).toBe(false);
+    expect(existsSync(join(item, "runs", EARLIER, "implementer", "round-1", "log"))).toBe(true);
+  });
+
+  it("negative guard: keeps the staging while a live process holds the claim", async () => {
+    const item = stage();
+    claimItem(item);
+    try {
+      await sweepItemOrphans({ runtime: noContext(), itemDir: item, workId: X, roles: ["implementer"] });
+    } finally {
+      releaseItem(item);
+    }
+    expect(existsSync(join(item, "runs", EARLIER, "judge", "file"))).toBe(true);
+    expect(existsSync(join(item, "runs", EARLIER, "implementer-stage", "file"))).toBe(true);
   });
 });

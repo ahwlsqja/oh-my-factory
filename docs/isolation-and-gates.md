@@ -16,6 +16,7 @@ judge (`docs/container-judge.md`) supplies a container-backed one.
 | Isolation types | `src/isolation/types.ts` | Per stage (`author`, `implementer`, `sut`, `harness`) measurements. The stage level is the minimum over its measurements and the run level is the minimum over the stages, with `unmeasured` lowest. |
 | GATE-3 | `src/gate/gate3.ts` | A pure function over what was measured. |
 | GATE-3 adapter | `src/gate/gate3-gate.ts` | Registered in `defaultGates()`. Reads the round's gate run, audit, judge and isolation events from the ledger and the item directory, nothing else. |
+| Container lifetime and item sweep | `src/container/spec.ts`, `src/container/item-sweep.ts` | No container sleeps for ever: each role stops itself after a bound sized from the exec caps it serves (`docs/author.md`, `docs/implementer.md`, `docs/container-judge.md`). A killed run's containers, round images and host staging are also removed by an item sweep while no live process holds the item claim. The sweep is best effort: when the daemon or a read fails it removes nothing more, and the next command that sweeps repeats it. Tested offline against a docker double only. |
 
 ## GATE-3
 
@@ -46,7 +47,6 @@ a run directory are views of those events.
 
 ## Not enforced
 
-- No container sleeps for ever: the agent and the judge roles each stop themselves after a bound sized from the exec caps they serve (`docs/author.md`, `docs/implementer.md`, `docs/container-judge.md`), and a killed run's containers, round images and host staging are removed by an item sweep while no live process holds the item claim, offline-tested against a docker double only.
 - A level measured on a real container is not enforced until a gated run is recorded in `docs/evidence/gated-runs.json`. The `docker inspect` parser is tested against recorded real output and the stage evaluator against fixtures; a fake Docker stands in everywhere else.
 - `omf seal` runs the author container and `omf run` runs the implementer container (`src/author/` and `src/implementer/`, see `docs/author.md` and `docs/implementer.md`); both are tested offline against a fake Docker and, for the implementer, a real git, and neither has been run against a real daemon or model. Their behaviour in a real container and with a real model is not enforced until `G-implementer-real-run` and `G-e6-l2-leak-redteam` are recorded (`G-implementer-boundary-real` is recorded) in `docs/evidence/gated-runs.json`, and for the author container until `G-author-boundary-real`, `G-author-canary` and `G-skeleton-real` are recorded. The golden values of the SUT and harness stages and the harness image digest are not enforced until their gated runs are recorded.
 - A scenario set that is sealed against the implementer is not enforced by this page; see the design spec.
