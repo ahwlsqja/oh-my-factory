@@ -249,7 +249,7 @@ describe("a claim.lock nobody can read", () => {
     expect(names(bin)).toEqual([implementer]);
   });
 
-  it("dated 100 ms ago still shields it: only the listing is allowed", () => {
+  it("negative guard: dated 100 ms ago still shields it: only the listing is allowed", () => {
     const l = setupLine();
     configureSeal(l);
     const bin = fakeDockerBin();

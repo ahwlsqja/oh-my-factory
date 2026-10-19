@@ -180,9 +180,10 @@ export function repairGoal(ctx: WContext, goalId: string): string[] {
 }
 
 /**
- * Enters one work item: governance, sweep, claim, then the entry checks. Order matters (governance, sweep, claim, entry checks):
- * rule 5 first, so a stopped goal never touches a claim; the sweep before the claim, so this item's own
- * repair runs under a claim of its own; every failure after the claim releases it.
+ * Enters one work item: governance, claim, then the entry checks. Order matters:
+ * rule 5 first, so a stopped goal never touches a claim; every failure after the claim releases it.
+ * beginRun makes no sweep call: the item sweeps are made by the callers in src/cli/run.ts
+ * (sweepItemBestEffort) and by the stations.
  */
 export function beginRun(options: BeginRunOptions): WRun {
   const now = options.now ?? ((): Date => new Date());
