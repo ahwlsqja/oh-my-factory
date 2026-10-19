@@ -157,6 +157,7 @@ describe("the runtime binds a secret to its role", () => {
     });
     const handle = await runtime.create(specFor("author"));
     await runtime.start(handle);
+    await runtime.exec(handle, PLAIN);
     const result = await runtime.exec(handle, { ...PLAIN, secret: secretHandle(CODEX_KEY, "CODEX_API_KEY") });
     await runtime.remove(handle);
     const carrying = seen.filter((call) => call.env !== undefined && Object.keys(call.env).length > 0);
