@@ -109,6 +109,7 @@ console.log(JSON.stringify(Object.keys(cleanEnv(process.env)).sort()));`;
       "OPENAI_API_KEY",
       "GITHUB_TOKEN",
       "GH_TOKEN",
+      "GH_HOST",
       "AWS_ACCESS_KEY_ID",
       "AWS_REGION",
       "DOCKER_HOST",
