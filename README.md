@@ -491,13 +491,15 @@ a test that loses more assertion lines than it gains, an added skip, only, todo,
 a hook that changes how other tests run (a `conftest.py` at any depth, a Go `TestMain` or `func init()`, `this.skip()`, a process exit such as `os.Exit`, `sys.exit`, `process.exit` or `pytest.exit`), a lowered or removed threshold
 (every `key: number` pair of the code part of a line is compared, so a commented-out threshold counts as removed, and a line it cannot pair counts as weakening), a new or edited test
 runner or coverage config under a test path (unless it only raises threshold numbers and leaves the rest of every changed line exactly as it was; `.coveragerc`, `codecov.yml` and `package.json` under a test path are held to the same rule), or a binary section (one byte such as a NUL makes a section binary) on a test path or a coverage or runner config, which cannot be read and so counts as weakening. A mode-only change stays normal. A runner or coverage config outside a test
-path gets only the lowered-threshold check. A test change that does not weaken tests no longer adds the high-risk-paths
+path gets the numeric-threshold check, including conservative handling of ambiguous threshold lines. A test change that does not weaken tests no longer adds the high-risk-paths
 review area to the evidence, which it used to. When
 the check cannot run, for example the diff cannot be read in full, every test change stays high. Risk only rises between
 declaration and audit. The check reads changed lines and is not a proof; its known limits are listed below. A high-risk item waits in `awaiting_approval` for `omf work approve`, any other item starts `ready`. You can
 `omf veto <work-id>` anything that is open. The ledger, not the item file, decides whether an item was approved,
 vetoed or cancelled: an `item.md` edited by hand to look approved is listed by `omf work list` as malformed and
 is never dispatched.
+
+Quoted `#` and `//` markers remain part of the code; genuine trailing comments are ignored. A threshold-bearing line with an ambiguous comment boundary, such as an unquoted slash that could start a regular expression or an unfinished quote, is handled conservatively as weakening. Ambiguous lines cannot receive the threshold-only configuration exception; this can flag benign edits.
 
 Known limits of the goal loop:
 

@@ -55,6 +55,71 @@ afterEach(() => {
 });
 
 describe("findTestWeakening on a real git diff", () => {
+  it.each(["#", "//"])("does not hide coverage disabling after quoted comment markers: %s", (marker) => {
+    const diff = realDiff(
+      {
+        "tests/vitest.config.ts": `coverage: { thresholds: { lines: 80 }, reportsDirectory: "coverage ${marker} html", enabled: true },\n`,
+      },
+      {
+        "tests/vitest.config.ts": `coverage: { thresholds: { lines: 90 }, reportsDirectory: "coverage ${marker} html", enabled: false },\n`,
+      },
+    );
+    expect(findTestWeakening(diff, [])).toEqual(["tests/vitest.config.ts"]);
+  });
+
+  it.each(["#", "//"])("detects lower root thresholds after quoted comment markers: %s", (marker) => {
+    const diff = realDiff(
+      { "vitest.config.ts": `coverage: { reportsDirectory: "coverage ${marker} html", thresholds: { lines: 90 } },\n` },
+      { "vitest.config.ts": `coverage: { reportsDirectory: "coverage ${marker} html", thresholds: { lines: 0 } },\n` },
+    );
+    expect(findTestWeakening(diff, [])).toEqual(["vitest.config.ts"]);
+  });
+
+  it.each([
+    ["single quotes", "'coverage # html'"],
+    ["escaped double quote", '"coverage \\" // html"'],
+    ["escaped single quote", "'coverage \\' # html'"],
+    ["template literal", "`coverage // html`"],
+  ])("compares the whole config after %s", (_label, directory) => {
+    const diff = realDiff(
+      {
+        "tests/vitest.config.ts": `coverage: { thresholds: { lines: 80 }, reportsDirectory: ${directory}, enabled: true },\n`,
+      },
+      {
+        "tests/vitest.config.ts": `coverage: { thresholds: { lines: 90 }, reportsDirectory: ${directory}, enabled: false },\n`,
+      },
+    );
+    expect(findTestWeakening(diff, [])).toEqual(["tests/vitest.config.ts"]);
+  });
+
+  it.each(["#", "//"])("permits a pure threshold raise with a quoted %s marker", (marker) => {
+    const diff = realDiff(
+      {
+        "tests/vitest.config.ts": `coverage: { reportsDirectory: "coverage ${marker} html", thresholds: { lines: 80 } },\n`,
+      },
+      {
+        "tests/vitest.config.ts": `coverage: { reportsDirectory: "coverage ${marker} html", thresholds: { lines: 90 } },\n`,
+      },
+    );
+    expect(findTestWeakening(diff, [])).toEqual([]);
+  });
+
+  it("refuses the threshold exemption at an ambiguous regex comment boundary", () => {
+    const diff = realDiff(
+      { "tests/vitest.config.ts": "{ lines: 80, testNamePattern: / # /, enabled: true }\n" },
+      { "tests/vitest.config.ts": "{ lines: 90, testNamePattern: / # /, enabled: false }\n" },
+    );
+    expect(findTestWeakening(diff, [])).toEqual(["tests/vitest.config.ts"]);
+  });
+
+  it("keeps root threshold checks conservative at a regex comment boundary", () => {
+    const diff = realDiff(
+      { "vitest.config.ts": "{ testNamePattern: / # /, thresholds: { lines: 90 } }\n" },
+      { "vitest.config.ts": "{ testNamePattern: / # /, thresholds: { lines: 0 } }\n" },
+    );
+    expect(findTestWeakening(diff, [])).toEqual(["vitest.config.ts"]);
+  });
+
   it("flags a new spec with this.skip() and a NUL byte: the binary section cannot be read", () => {
     const diff = realDiff({ "README.md": "x\n" }, { "tests/a.spec.ts": "this.skip();\n\u0000\n" });
     expect(diff).toContain("GIT binary patch");

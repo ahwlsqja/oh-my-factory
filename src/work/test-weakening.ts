@@ -143,15 +143,39 @@ const ASSERTION =
 
 const COMMENT_START = /^\s*(\/\/|#(?!\[)|\/\*|\*|<!--)/;
 
-/** The code part of a line, or null for a comment line. A trailing `// ...` comment (after whitespace) is cut off. */
-function codeOf(line: string): string | null {
-  if (COMMENT_START.test(line)) return null;
-  return line.replace(/\s\/\/.*$/, "");
+interface LineCode {
+  text: string | null;
+  ambiguous: boolean;
+}
+
+/** Quoted markers are data. A prior unquoted slash may start a regex, so an apparent comment is ambiguous. */
+function codeOf(line: string, hashComment = false): LineCode {
+  if (COMMENT_START.test(line)) return { text: null, ambiguous: false };
+  let quote: string | null = null;
+  let unquotedSlash = false;
+  for (let at = 0; at < line.length; at += 1) {
+    const char = line[at];
+    if (quote !== null) {
+      if (char === "\\") at += 1;
+      else if (char === quote) quote = null;
+    } else if (char === '"' || char === "'" || char === "`") {
+      quote = char;
+    } else if (
+      at > 0 &&
+      /\s/.test(line[at - 1] ?? "") &&
+      ((char === "/" && line[at + 1] === "/") || (hashComment && char === "#"))
+    ) {
+      return unquotedSlash ? { text: line, ambiguous: true } : { text: line.slice(0, at), ambiguous: false };
+    } else if (char === "/") {
+      unquotedSlash = true;
+    }
+  }
+  return { text: line, ambiguous: quote !== null };
 }
 
 function count(lines: readonly string[], pattern: RegExp): number {
   return lines.filter((line) => {
-    const code = codeOf(line);
+    const code = codeOf(line).text;
     return code !== null && pattern.test(code);
   }).length;
 }
@@ -171,15 +195,14 @@ const PAIR = /([A-Za-z_][\w-]*)["']?\s*[:=]\s*(\d+(?:\.\d+)?)\b/g;
 const THRESHOLD_KEYS =
   /^(threshold|thresholds|lines|branches|functions|statements|min|minimum|min_coverage|coverage|fail[_-]under|cov-fail-under|target|percent|\w*threshold\w*)$/i;
 
-/** The code part of a config line: null for a comment line, and a trailing ` # ...` or ` // ...` comment is cut off. */
-function configCodeOf(line: string): string | null {
-  const code = codeOf(line);
-  return code === null ? null : code.replace(/\s#.*$/, "");
+/** Configs also admit hash comments; ambiguous boundaries retain the raw text for conservative handling. */
+function configCodeOf(line: string): LineCode {
+  return codeOf(line, true);
 }
 
 /** Every `key: number` or `key = number` pair of the code part of a line, in order (a one-line `{ lines: 80, branches: 90 }` has two). */
 function pairsOf(line: string): Array<[string, number]> {
-  return [...(configCodeOf(line) ?? "").matchAll(PAIR)].map((match) => [
+  return [...(configCodeOf(line).text ?? "").matchAll(PAIR)].map((match) => [
     (match[1] ?? "").toLowerCase(),
     Number(match[2]),
   ]);
@@ -204,8 +227,9 @@ const VALUE_END = /^%?\s*(?:[,}\];)]|$)/;
  * Returns null for a comment line, for a non-finite value, and for a value that is part of an expression (`80 + 5`).
  */
 function maskThresholds(line: string): Masked | null {
-  const code = configCodeOf(line);
-  if (code === null) return null;
+  const parsed = configCodeOf(line);
+  const code = parsed.text;
+  if (code === null || parsed.ambiguous) return null;
   let text = "";
   let last = 0;
   const keys: string[] = [];
@@ -246,6 +270,13 @@ function onlyRaisesThresholds(removed: readonly string[], added: readonly string
 }
 
 function thresholdLowered(removed: readonly string[], added: readonly string[]): boolean {
+  if (
+    [...removed, ...added].some(
+      (line) => configCodeOf(line).ambiguous && pairsOf(line).some(([key]) => THRESHOLD_KEYS.test(key)),
+    )
+  ) {
+    return true;
+  }
   const after = thresholds(added);
   // A threshold key that disappears (the line or the whole config file is removed) counts as lowered.
   return thresholds(removed).some(([key, before]) => {

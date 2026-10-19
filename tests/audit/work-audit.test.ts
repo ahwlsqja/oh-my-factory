@@ -34,6 +34,30 @@ describe("runAudit test-weakening risk", () => {
     expect(risk).toEqual({ class: "high", rules: ["test-weakening"], paths: ["tests/vitest.config.ts"] });
   });
 
+  it.each(["#", "//"])("keeps disabled coverage high after quoted comment markers: %s", async (marker) => {
+    const risk = await effective(
+      {
+        "src/a.ts": "1\n",
+        "tests/vitest.config.ts": `coverage: { thresholds: { lines: 80 }, reportsDirectory: "coverage ${marker} html", enabled: true },\n`,
+      },
+      {
+        "tests/vitest.config.ts": `coverage: { thresholds: { lines: 90 }, reportsDirectory: "coverage ${marker} html", enabled: false },\n`,
+      },
+    );
+    expect(risk).toEqual({ class: "high", rules: ["test-weakening"], paths: ["tests/vitest.config.ts"] });
+  });
+
+  it.each(["#", "//"])("keeps lower root thresholds high after quoted comment markers: %s", async (marker) => {
+    const risk = await effective(
+      {
+        "src/a.ts": "1\n",
+        "vitest.config.ts": `coverage: { reportsDirectory: "coverage ${marker} html", thresholds: { lines: 90 } },\n`,
+      },
+      { "vitest.config.ts": `coverage: { reportsDirectory: "coverage ${marker} html", thresholds: { lines: 0 } },\n` },
+    );
+    expect(risk).toEqual({ class: "high", rules: ["test-weakening"], paths: ["vitest.config.ts"] });
+  });
+
   it("an edit that keeps every assertion is not high", async () => {
     expect(
       (await effective({ "tests/a.test.ts": "expect(a).toBe(1);\n" }, { "tests/a.test.ts": "expect(a).toBe(2);\n" }))
