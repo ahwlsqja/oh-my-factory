@@ -24,11 +24,11 @@
 > budgets that never reset), defining, approving and measuring goals (J1 locks, the gap to the
 > target, control bands), the J8 budget commands, the work-item store with its `work` and `veto`
 > commands, and the goal loop: `omf goal tick` turns the gap into work items with a model that
-> never sees the numbers. `omf run` runs the verification line (S1 to S7: sealed scenarios and GATE-2, the implementer
-> container, the judge, audit and test-split stations and GATE-3) and `omf report` prints its evidence; both are tested offline against a fake Docker.
-> The real-model gated runs are not recorded yet. `omf seal` exists and runs the Codex author in a measured container, but it has not been run against a real daemon or model. Gated container runs are recorded for the `docker
-> inspect` parser, the work copy, the two-container round trip and the real isolation probe; none is
-> recorded for the implementer container or for any suite that calls a model.
+> never sees the numbers. The verification line runs through three commands: `omf seal` (the sealing author in a container),
+> `omf run` and `omf report`. Every test of them runs offline against a fake Docker, so no run has yet shown that a
+> real container isolates a real model. Gated container runs are recorded for the `docker inspect` parser, the work
+> copy, the two-container round trip and the real isolation probe; no gated run of the author container or of the
+> whole line is recorded, and none is recorded for the implementer container or for any suite that calls a model.
 > See [What works today](#what-works-today).
 
 ---

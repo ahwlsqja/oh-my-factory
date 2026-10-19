@@ -7,7 +7,7 @@ Generated from `docs/requirements.json` by `node scripts/conformance-matrix.mjs 
 - **deferred**: the design states it and v0.1 does not implement it. It has no test, and the documents say `not implemented`.
 - **missing**: no test counts, or a mapped file is absent. CI fails.
 
-Totals: 36 covered, 5 unproven, 7 deferred, 0 missing.
+Totals: 36 covered, 8 unproven, 7 deferred, 0 missing.
 
 | Id | State | Last recorded | Tests | Claim |
 |---|---|---|---|---|
@@ -47,7 +47,7 @@ Totals: 36 covered, 5 unproven, 7 deferred, 0 missing.
 | `S5.3.author-container-argv` | covered | - | 3 offline | The sealing author's container is made by the one reviewed argv builder: tmpfs-only /tmp, /in, /out and /agent, no bind mount or volume, a fixed environment, no secret at create time; a container that deviates from its golden is measured below L2 before it starts. |
 | `S5.3.role-bound-secrets` | covered | - | 1 offline | A vendor key reaches a container only as a name-only environment flag on an exec, and only the role it belongs to may carry it: the implementer the Anthropic key, the author the Codex key. Every other pairing is refused before a process starts or the value is read. |
 | `S5.3.author-one-shot-ephemeral` | covered | - | 2 offline | The Codex author runs as one ephemeral exec whose prompt arrives on a pipe; nothing about the invocation is interactive. |
-| `S5.3.author-measured-before-key` | unproven | - | 1 offline | The author key reaches a container only after that container measured golden; a container that does not measure golden never receives it. |
+| `S5.3.author-measured-before-key` | unproven | - | 1 offline, 1 gated | The author key reaches a container only after that container measured golden; a container that does not measure golden never receives it. |
 | `S4.6.author-answer-closed` | covered | - | 1 offline | Only one string field of a closed answer envelope leaves the author container; a malformed answer or one holding the key is dropped, and a failed run leaves a closed code. |
 | `S5.3.author-measurement-bound` | covered | - | 1 offline | The author container measurement counts only for the seal it was made for; a later or superseded seal is never attested by it. |
 | `S5.3.standing-seal-rule` | covered | - | 1 offline | A seal stands only while its vault set matches its digest, the decisions are unchanged and the latest GATE-2 passed it; its author counts as measured only when an L2 author measurement is bound to exactly that seal. |
@@ -59,3 +59,6 @@ Totals: 36 covered, 5 unproven, 7 deferred, 0 missing.
 | `S13.cli-usage-drift` | covered | - | 2 offline | Every leaf command's --help text is reproduced byte for byte in docs/cli-usage.md and has a README row; a command without a block, or a block that differs, fails npm test and names the verb. |
 | `S7.unmeasured-stage-no-claim` | covered | - | 2 offline, 1 wiring only | A stage no container measured leaves the run's isolation label unmeasured. omf report refuses an isolation level above the ledger's measured one; its other fields are shown as recorded in the run's evidence file. |
 | `S11.5.outer-contracts-hold` | covered | - | 2 offline | The kernel promises checked from outside (ledger tamper stop, no approval without a terminal, exit codes, state outside the repository, out-of-order refusals, no sealing without a runtime) hold for the built executable, checked by a suite that imports none of the code it checks. |
+| `S5.3.author-boundary-real` | unproven | - | 1 gated | A real author container measures L2, mounts only tmpfs, holds one scoped secret that docker inspect never shows, has no Claude binary and no credential directory, and has a writable answer path. |
+| `S5.3.author-answer-no-leak` | unproven | - | 1 gated | The real Codex author's answer holds no goal canary, no marker from the worktree or the vault and not the key, and nothing OMF writes holds the key. |
+| `S5.0.skeleton-real-line` | unproven | - | 1 gated | The line runs through omf seal, omf run and omf report with a real author and implementer, one rework round, outcome success, recommendation human_needed and run isolation level L2. |

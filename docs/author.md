@@ -1,6 +1,6 @@
 # The sealing author container
 
-How OMF runs the sealing author (Codex) in a container whose isolation it measures first, what crosses the boundary in each direction, what the key exposes, and what none of it proves. `omf seal <work-id>` runs it (`src/author/`). Every claim below about a real container or a real model is not enforced until the planned gated suites in the table are written and recorded in `docs/evidence/gated-runs.json`.
+How OMF runs the sealing author (Codex) in a container whose isolation it measures first, what crosses the boundary in each direction, what the key exposes, and what none of it proves. `omf seal <work-id>` runs it (`src/author/`). Every claim below about a real container or a real model is not enforced until the gated suites in the table are recorded in `docs/evidence/gated-runs.json`.
 
 ## Status
 
@@ -69,6 +69,38 @@ OMF neither records nor bounds the spend of an author call. The only bound is th
 - `omf seal` on a seal that is current for the decisions and whose author stage is measured exits 0 as `already_sealed` and needs no key, no daemon and no model.
 - A killed `omf seal` can leave an author container behind. The next `omf seal` on the same work item removes the author containers that its earlier seal passes left behind, and never the container of the current pass.
 
-## Running the gated suites
+## Gated runs
 
-The three suites above are planned and not written yet: `tests/gated/` holds none of them and `scripts/gated-docker.mjs` does not know them. Once they exist they will follow the procedure of `docs/implementer.md` (the dedicated colima profile `omf-m3f`, an image built inside it) and be run by the owner, never by an agent. See `docs/container-judge.md` for how the driver confines the Docker context.
+Three suites in `tests/gated` check the author container against a real Docker daemon on the `omf-m3f` colima profile. They are written and not recorded. Until `docs/evidence/gated-runs.json` holds a passing record for a suite, what it backs is not enforced, and this page says so. The owner runs them, never an agent; `docs/container-judge.md` says how the driver confines the Docker context.
+
+| Suite | Needs | What it checks | Status |
+|---|---|---|---|
+| `G-author-boundary-real` | Docker, the author image | A real author container measures L2 with the real probe, mounts only the four tmpfs paths, has no `claude` binary and no `.codex` directory, shows the secret to one exec only and never to `docker inspect`, and has a writable answer path | not enforced [not enforced: S5.3.author-boundary-real] |
+| `G-author-canary` | Docker, the author image, `OMF_AUTHOR_API_KEY` | The real Codex author answers through `omf seal`; the answer holds no goal canary, no marker planted in the worktree or the vault and not the key; the daemon's document of the container names no host path; no file OMF writes holds the key | not enforced [not enforced: S5.3.author-answer-no-leak] |
+| `G-skeleton-real` | Docker, the three images, both keys | `omf seal`, `omf run` and `omf report` on a staged item with a real author and a real implementer: one rework round, outcome `success`, recommendation `human_needed`, run isolation level `L2`, and `noise_check_not_evaluated` as the only unverified area | not enforced [not enforced: S5.0.skeleton-real-line] |
+
+Under the noise-check decision of the container judge a run never reaches `merge_recommended`, so the strongest result a recorded run can show is `success` with `human_needed`.
+
+### Running them
+
+Name the images once, as digest references or local image ids. The harness image must ship Node: the staged item runs `node app/search-cli.mjs` in the judge's container.
+
+```sh
+npm run build
+export OMF_GATED_AUTHOR_IMAGE=<author image: digest reference or local image id>
+export OMF_GATED_IMPLEMENTER_IMAGE=<implementer image: digest reference or local image id>
+export OMF_GATED_HARNESS_IMAGE=<digest reference of a base image with Node>
+npm run test:gated -- --only G-author-boundary-real
+OMF_AUTHOR_API_KEY=<dedicated, spend-limited key> npm run test:gated -- --model --only G-author-canary
+OMF_AUTHOR_API_KEY=<dedicated, spend-limited key> OMF_IMPLEMENTER_API_KEY=<dedicated, spend-limited key> npm run test:gated -- --model --only G-skeleton-real
+```
+
+The driver starts the `omf-m3f` profile, passes each suite only the keys it reads under their own names and runs the output through a redactor. A key is passed on the command line of the one command that needs it and is never written to a file; the suites print nothing, and a failure message is a fixed string. Use dedicated keys with a provider-side spend limit: code in the container can read the key it is given, and author spend is not recorded or bounded by OMF.
+
+To record a passing suite, add `--record` on a clean working tree. Then delete that suite's `[not enforced: ...]` marker in the table above; `tests/docs/m3h-gated-claims.test.ts` fails until you do.
+
+The item of `G-skeleton-real` is staged on purpose: its constraints tell the implementer to leave the missing-value case for the feedback round, so the rework path is exercised without depending on a model error. If the implementer ignores that instruction the suite fails with the message `the line finished without a rework round`; that points at the fixture, not at the line. It also tells the implementer to change only `app/search-cli.mjs` and add no test file: a test file added anyway is a high-risk path, and the suite then fails with `the unverified areas are not only the noise check`.
+
+One known risk to check on the first `G-author-canary` run: the Codex exec's stdout and stderr together are capped at 1 MiB. They are only scanned for the key (the answer leaves through `/out/answer.json`), but a longer transcript is stopped as `output_limit` and the seal pass asks for a rerun that spends again. If the canary run stops that way, the Codex exec needs its own larger cap.
+
+`scripts/smoke-w.sh` is a cheaper check. In a throwaway repository, home and Docker config limited to the `omf-m3f` context, it runs the three verbs against an item that does not exist and checks that each refuses in order, names the item and prints no key. It spends nothing and needs both keys in its environment only so it can prove they are never printed.

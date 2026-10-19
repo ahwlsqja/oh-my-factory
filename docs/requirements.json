@@ -465,6 +465,11 @@
         {
           "path": "tests/enforcement/W-author-measure-before-key.test.ts",
           "proves": "behavior"
+        },
+        {
+          "path": "tests/gated/author-boundary-real.test.ts",
+          "gated": "G-author-boundary-real",
+          "proves": "behavior"
         }
       ]
     },
@@ -627,6 +632,48 @@
         },
         {
           "path": "tests/enforcement/W-outer-no-src-import.test.ts",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.3.author-boundary-real",
+      "source": "spec §5.3, M3-D16",
+      "claim": "A real author container measures L2, mounts only tmpfs, holds one scoped secret that docker inspect never shows, has no Claude binary and no credential directory, and has a writable answer path.",
+      "real_world": true,
+      "surfaces": ["docs/author.md"],
+      "tests": [
+        {
+          "path": "tests/gated/author-boundary-real.test.ts",
+          "gated": "G-author-boundary-real",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.3.author-answer-no-leak",
+      "source": "spec §5.3 and F6, M3-D16",
+      "claim": "The real Codex author's answer holds no goal canary, no marker from the worktree or the vault and not the key, and nothing OMF writes holds the key.",
+      "real_world": true,
+      "surfaces": ["docs/author.md"],
+      "tests": [
+        {
+          "path": "tests/gated/author-canary.test.ts",
+          "gated": "G-author-canary",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.0.skeleton-real-line",
+      "source": "spec §5.0, M3-D14",
+      "claim": "The line runs through omf seal, omf run and omf report with a real author and implementer, one rework round, outcome success, recommendation human_needed and run isolation level L2.",
+      "real_world": true,
+      "surfaces": ["docs/author.md"],
+      "tests": [
+        {
+          "path": "tests/gated/skeleton-real.test.ts",
+          "gated": "G-skeleton-real",
           "proves": "behavior"
         }
       ]
