@@ -1,8 +1,9 @@
-import { existsSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { ProcessResult } from "../adapters/process-group.js";
 import type { PinnedImage } from "../container/image-ref.js";
 import type { ContainerHandle, ContainerRuntime, ExecSpec, ImageInfo, OwnedResource } from "../container/runtime.js";
+import { removeStagingDirs } from "../container/item-sweep.js";
 import { assertName, type ContainerRole, type ContainerSpec, type ImageId } from "../container/spec.js";
 import { registerCleanup } from "../core/cleanup-registry.js";
 import { isLockHeld, sealLockFile } from "../core/lock.js";
@@ -220,15 +221,8 @@ export async function sweepOrphans(input: SweepInput): Promise<SweepResult> {
       result.images += 1;
     }
   }
-  for (const runId of earlier) {
-    // `judge` holds judge staging; `implementer-stage` holds an implementer bundle, quarantine and tree that may carry the key.
-    for (const name of ["judge", "implementer-stage"]) {
-      const stageDir = join(runsDir, runId, name);
-      if (!existsSync(stageDir)) continue;
-      rmSync(stageDir, { recursive: true, force: true });
-      result.staging += 1;
-    }
-  }
+  // `judge` holds judge staging; `implementer-stage` holds an implementer bundle, quarantine and tree. Symlinks are never followed.
+  result.staging += removeStagingDirs(runsDir, earlier);
   return result;
 }
 

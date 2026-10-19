@@ -192,6 +192,44 @@ describe("judge containers of a killed run on an item that is vetoed", () => {
   });
 });
 
+describe("host staging of a killed run on an item that is vetoed", () => {
+  const plantStaging = (l: LineFixture): string[] => {
+    const run = join(l.f.item.dir, "runs", KILLED);
+    mkdirSync(join(run, "judge", "wc-1-1"), { recursive: true });
+    mkdirSync(join(run, "implementer-stage", "round-1", "tree-1"), { recursive: true });
+    return [join(run, "judge"), join(run, "implementer-stage")];
+  };
+
+  it("the next omf seal and the next omf run remove it", () => {
+    const l = setupLine();
+    configureSeal(l);
+    const bin = fakeDockerBin();
+    const dirs = plantStaging(l);
+    veto(l);
+    cli(l, bin, ["seal", l.f.workId], { OMF_AUTHOR_API_KEY: AUTHOR_KEY });
+    expect(dirs.map((dir) => existsSync(dir))).toEqual([false, false]);
+    plantStaging(l);
+    cli(l, bin, ["run", l.f.workId]);
+    expect(dirs.map((dir) => existsSync(dir))).toEqual([false, false]);
+  });
+
+  it("stays while a live process holds the claim", () => {
+    const l = setupLine();
+    configureSeal(l);
+    const bin = fakeDockerBin();
+    const dirs = plantStaging(l);
+    veto(l);
+    claimItem(l.f.item.dir);
+    try {
+      cli(l, bin, ["seal", l.f.workId], { OMF_AUTHOR_API_KEY: AUTHOR_KEY });
+      cli(l, bin, ["run", l.f.workId]);
+      expect(dirs.map((dir) => existsSync(dir))).toEqual([true, true]);
+    } finally {
+      releaseItem(l.f.item.dir);
+    }
+  });
+});
+
 describe("omf run refused before S1 sweeps the item's orphans", () => {
   it("omf run refused at GATE-1 removes the author orphan with a free seal.lock and the implementer orphan: only the listing and the planted removals are allowed", () => {
     const l = setupLine({ decisions: false });

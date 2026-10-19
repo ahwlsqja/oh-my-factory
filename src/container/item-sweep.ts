@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, rmSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import type { ContainerRuntime } from "./runtime.js";
 import { assertName } from "./spec.js";
@@ -9,6 +9,39 @@ import { claimFile, claimStatus } from "../work/claim.js";
 export type SweepRole = "author" | "implementer" | "sut" | "harness" | "workcopy";
 const ALL_ROLES: readonly SweepRole[] = ["author", "implementer", "sut", "harness", "workcopy"];
 const ROLE_OF_NAME = /^omf-(sut|harness|workcopy|implementer|author)-/;
+
+/** The staging directories under `runs/<id>/` a killed run can leave: judge work copies and build contexts, implementer bundle, quarantine and tree. */
+export const STAGING_DIRS: readonly string[] = ["judge", "implementer-stage"];
+
+/**
+ * Removes the staging directories of the given runs, without following a symlink: a run directory that is not a plain directory
+ * is skipped, and a staging entry that is a symlink is unlinked, never entered. Returns how many it removed. Best effort per
+ * entry: one that cannot be removed is left for the next sweep. The run logs under `runs/<id>/implementer/` are not touched.
+ */
+export function removeStagingDirs(runsDir: string, runIds: Iterable<string>): number {
+  let removed = 0;
+  for (const runId of runIds) {
+    const runDir = join(runsDir, runId);
+    try {
+      if (!lstatSync(runDir).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    for (const name of STAGING_DIRS) {
+      const path = join(runDir, name);
+      try {
+        const stat = lstatSync(path);
+        if (stat.isSymbolicLink()) unlinkSync(path);
+        else if (stat.isDirectory()) rmSync(path, { recursive: true, force: true });
+        else continue;
+        removed += 1;
+      } catch {
+        // absent or not removable now: the next sweep tries again
+      }
+    }
+  }
+  return removed;
+}
 
 interface ItemSweepInput {
   runtime: Pick<ContainerRuntime, "listOwned" | "remove">;
@@ -22,11 +55,13 @@ interface ItemSweepInput {
 /**
  * One item-level sweep for a command that holds neither `seal.lock` nor the item claim. It removes this item's author orphans
  * while `seal.lock` is free, and this item's implementer, SUT, harness and work copy orphans while the claim is not held by
- * a live run (the judge containers belong to the run that holds the claim), so a live container is never removed. Race-free order, the same as `sweepOrphans` (src/judge/state.ts): the directories under `runs/`
+ * a live run (the judge containers belong to the run that holds the claim), so a live container is never removed. While the
+ * claim is free it also removes `runs/<id>/judge` and `runs/<id>/implementer-stage` of every earlier run (`removeStagingDirs`),
+ * whatever the daemon answered. Race-free order, the same as `sweepOrphans` (src/judge/state.ts): the directories under `runs/`
  * are read first, then each lock is probed, then the daemon is listed once. A pass or run that starts after the read has
  * a marker this sweep never saw, so its container is not selected whatever the probes say. Nothing is listed when both
- * roles are held. Best effort: any failure (an unreadable claim, a daemon that cannot answer) removes nothing more, leaves
- * the orphan for the next command and never changes what the command reports.
+ * roles are held. Best effort: any failure (an unreadable claim, a daemon that cannot answer) removes nothing more of that
+ * kind, leaves the orphan for the next command and never changes what the command reports.
  */
 export async function sweepItemOrphans(input: ItemSweepInput & { roles?: readonly SweepRole[] }): Promise<number> {
   const roles = input.roles ?? ALL_ROLES;
@@ -40,18 +75,24 @@ export async function sweepItemOrphans(input: ItemSweepInput & { roles?: readonl
     const free = (role: SweepRole): boolean => (role === "author" ? sealFree : claimFree && wanted.includes(role));
     if (!sealFree && !claimFree) return 0;
     let removed = 0;
-    for (const resource of await input.runtime.listOwned({ run_id: null })) {
-      if (resource.kind !== "container" || resource.work_id !== input.workId || !earlier.has(resource.run_id)) continue;
-      const role = ROLE_OF_NAME.exec(resource.name)?.[1] as SweepRole | undefined;
-      if (role === undefined || !free(role)) continue;
-      try {
-        assertName(resource.name);
-      } catch {
-        continue;
+    try {
+      for (const resource of await input.runtime.listOwned({ run_id: null })) {
+        if (resource.kind !== "container" || resource.work_id !== input.workId || !earlier.has(resource.run_id))
+          continue;
+        const role = ROLE_OF_NAME.exec(resource.name)?.[1] as SweepRole | undefined;
+        if (role === undefined || !free(role)) continue;
+        try {
+          assertName(resource.name);
+        } catch {
+          continue;
+        }
+        await input.runtime.remove({ name: resource.name, id: resource.name, role });
+        removed += 1;
       }
-      await input.runtime.remove({ name: resource.name, id: resource.name, role });
-      removed += 1;
+    } catch {
+      // the daemon cannot answer: the host staging below is still swept
     }
+    if (claimFree) removeStagingDirs(runsDir, earlier);
     return removed;
   } catch {
     return 0;

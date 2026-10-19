@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { sweepItemOrphans } from "../../src/container/item-sweep.js";
 import { claimItem, releaseItem } from "../../src/work/claim.js";
+import { existsSync, mkdirSync, symlinkSync } from "node:fs";
+import { join } from "node:path";
+import { sweepOrphans } from "../../src/judge/state.js";
 import { MemoryRuntime } from "../helpers/memory-runtime.js";
 import { put, realTempDir } from "../helpers/ops-fixture.js";
 
@@ -91,5 +94,92 @@ describe("the item sweep reaches the judge roles", () => {
     memory.owned = judgeOf(EARLIER, X);
     expect(await sweepItemOrphans({ runtime: memory, itemDir: item, workId: X, roles: ["author"] })).toBe(0);
     expect(memory.owned).toHaveLength(3);
+  });
+});
+
+describe("the item sweep removes the host staging of a run that is not live", () => {
+  const stage = (item: string, run: string): void => {
+    put(item, `runs/${run}/judge/${"1-train"}/ctx`, "x");
+    put(item, `runs/${run}/judge/wc-1-1/tree`, "x");
+    put(item, `runs/${run}/implementer-stage/round-1/quarantine/blob`, "x");
+    put(item, `runs/${run}/implementer-stage/round-1/tree-1/file`, "x");
+    put(item, `runs/${run}/implementer/round-1/implementer.log`, "log");
+    put(item, `runs/${run}/marker`, "x");
+  };
+
+  it("removes runs/<id>/judge and runs/<id>/implementer-stage of an earlier run while the claim is free, and keeps the logs", async () => {
+    const item = realTempDir("omf-sweep-stage-");
+    stage(item, EARLIER);
+    await sweepItemOrphans({ runtime: new MemoryRuntime(), itemDir: item, workId: X });
+    expect(existsSync(join(item, "runs", EARLIER, "judge"))).toBe(false);
+    expect(existsSync(join(item, "runs", EARLIER, "implementer-stage"))).toBe(false);
+    expect(existsSync(join(item, "runs", EARLIER, "implementer", "round-1", "implementer.log"))).toBe(true);
+    expect(existsSync(join(item, "runs", EARLIER, "marker"))).toBe(true);
+  });
+
+  it("keeps them while a live process holds the claim, and for the current pass", async () => {
+    const item = realTempDir("omf-sweep-stage-");
+    stage(item, EARLIER);
+    stage(item, CURRENT);
+    claimItem(item);
+    try {
+      await sweepItemOrphans({ runtime: new MemoryRuntime(), itemDir: item, workId: X, currentPassId: CURRENT });
+    } finally {
+      releaseItem(item);
+    }
+    expect(existsSync(join(item, "runs", EARLIER, "judge"))).toBe(true);
+    expect(existsSync(join(item, "runs", EARLIER, "implementer-stage"))).toBe(true);
+    await sweepItemOrphans({ runtime: new MemoryRuntime(), itemDir: item, workId: X, currentPassId: CURRENT });
+    expect(existsSync(join(item, "runs", EARLIER, "judge"))).toBe(false);
+    expect(existsSync(join(item, "runs", CURRENT, "judge"))).toBe(true);
+    expect(existsSync(join(item, "runs", CURRENT, "implementer-stage"))).toBe(true);
+  });
+
+  it("removes the staging even when the daemon cannot answer the listing", async () => {
+    const item = realTempDir("omf-sweep-stage-");
+    stage(item, EARLIER);
+    const memory = new MemoryRuntime();
+    memory.listOwned = async () => {
+      throw new Error("daemon down");
+    };
+    expect(await sweepItemOrphans({ runtime: memory, itemDir: item, workId: X })).toBe(0);
+    expect(existsSync(join(item, "runs", EARLIER, "judge"))).toBe(false);
+  });
+
+  it("leaves the target of a symlink alone: a linked judge directory is unlinked, a linked run directory is skipped", async () => {
+    const item = realTempDir("omf-sweep-stage-");
+    const outside = realTempDir("omf-sweep-outside-");
+    put(outside, "keep/file", "x");
+    put(outside, "judge/file", "x");
+    put(outside, "implementer-stage/file", "x");
+    mkdirSync(join(item, "runs", EARLIER), { recursive: true });
+    symlinkSync(join(outside, "keep"), join(item, "runs", EARLIER, "judge"));
+    symlinkSync(outside, join(item, "runs", "r-20261002T090000Z-cccc"));
+    await sweepItemOrphans({ runtime: new MemoryRuntime(), itemDir: item, workId: X });
+    expect(existsSync(join(item, "runs", EARLIER, "judge"))).toBe(false);
+    expect(existsSync(join(outside, "keep", "file"))).toBe(true);
+    expect(existsSync(join(outside, "judge", "file"))).toBe(true);
+    expect(existsSync(join(outside, "implementer-stage", "file"))).toBe(true);
+  });
+});
+
+describe("the run-start sweep does not follow a symlink either", () => {
+  it("unlinks a linked judge directory and skips a linked run directory, leaving their targets", async () => {
+    const item = realTempDir("omf-sweep-stage-");
+    const outside = realTempDir("omf-sweep-outside-");
+    put(outside, "keep/file", "x");
+    put(outside, "judge/file", "x");
+    mkdirSync(join(item, "runs", EARLIER), { recursive: true });
+    symlinkSync(join(outside, "keep"), join(item, "runs", EARLIER, "judge"));
+    symlinkSync(outside, join(item, "runs", "r-20261002T090000Z-cccc"));
+    const result = await sweepOrphans({
+      runtime: new MemoryRuntime(),
+      itemDir: item,
+      workId: X,
+      currentRunId: CURRENT,
+    });
+    expect(result.staging).toBe(1);
+    expect(existsSync(join(outside, "keep", "file"))).toBe(true);
+    expect(existsSync(join(outside, "judge", "file"))).toBe(true);
   });
 });
