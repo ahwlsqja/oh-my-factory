@@ -2,6 +2,7 @@ import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  UNMEASURED_CODES,
   dockerArgs,
   isolationOf,
   parseMeasurement,
@@ -21,14 +22,30 @@ describe("parseMeasurement", () => {
   });
 
   it("fails on empty output or a non-number (empty means fail)", () => {
-    expect(parseMeasurement("")).toEqual({ ok: false, reason: "the command printed nothing" });
-    expect(parseMeasurement("n/a\n")).toEqual({ ok: false, reason: "the last line of stdout is not a number" });
-    expect(parseMeasurement("0x10")).toEqual({ ok: false, reason: "the last line of stdout is not a number" });
+    expect(parseMeasurement("")).toEqual({ ok: false, code: "empty_output", reason: "the command printed nothing" });
+    expect(parseMeasurement("n/a\n")).toEqual({
+      ok: false,
+      code: "unparsable_output",
+      reason: "the last line of stdout is not a number",
+    });
+    expect(parseMeasurement("0x10")).toEqual({
+      ok: false,
+      code: "unparsable_output",
+      reason: "the last line of stdout is not a number",
+    });
   });
 
   it("fails on a value that is not finite, which the ledger cannot store", () => {
-    expect(parseMeasurement("1e999")).toEqual({ ok: false, reason: "the value is not a finite number" });
-    expect(parseMeasurement("-1e999")).toEqual({ ok: false, reason: "the value is not a finite number" });
+    expect(parseMeasurement("1e999")).toEqual({
+      ok: false,
+      code: "not_finite",
+      reason: "the value is not a finite number",
+    });
+    expect(parseMeasurement("-1e999")).toEqual({
+      ok: false,
+      code: "not_finite",
+      reason: "the value is not a finite number",
+    });
   });
 });
 
@@ -44,6 +61,7 @@ describe("runOnHost", () => {
   it("reports a non-zero exit", async () => {
     expect(await runOnHost(["sh", "-c", "echo 1; exit 3"], makeTempDir(), env)).toEqual({
       ok: false,
+      code: "nonzero_exit",
       reason: "exit code 3",
     });
   });
@@ -56,6 +74,7 @@ describe("runOnHost", () => {
   it("times out", async () => {
     expect(await runOnHost(["sh", "-c", "sleep 5"], makeTempDir(), env, 200)).toEqual({
       ok: false,
+      code: "timeout",
       reason: "timed out",
     });
   });
@@ -65,6 +84,7 @@ describe("runOnHost", () => {
     const script = 'sleep 20 & echo "$$ $!" > "$1"; wait';
     expect(await runOnHost(["sh", "-c", script, "sh", pidFile], makeTempDir(), env, 500)).toEqual({
       ok: false,
+      code: "timeout",
       reason: "timed out",
     });
     const [, background] = await waitForPids(pidFile);
@@ -94,8 +114,68 @@ describe("runOnHost", () => {
     if (!outcome.ok) expect(outcome.reason).toMatch(/^could not run: .*ENOENT/);
   });
 
+  it("reports a command that prints nothing and exits zero as empty output, not zero", async () => {
+    expect(await runOnHost(["sh", "-c", "true"], makeTempDir(), env)).toMatchObject({
+      ok: false,
+      code: "empty_output",
+    });
+    expect(await runOnHost(["sh", "-c", "echo; echo '  '"], makeTempDir(), env)).toMatchObject({
+      ok: false,
+      code: "empty_output",
+    });
+  });
+
+  it("reports text that is not a number as unparsable, whatever the exit status", async () => {
+    expect(await runOnHost(["sh", "-c", "echo ok"], makeTempDir(), env)).toMatchObject({
+      ok: false,
+      code: "unparsable_output",
+    });
+  });
+
+  it("does not read a failing command's printed 0 as a measurement", async () => {
+    expect(await runOnHost(["sh", "-c", "echo 0; exit 1"], makeTempDir(), env)).toMatchObject({
+      ok: false,
+      code: "nonzero_exit",
+    });
+  });
+
+  it("reports a command killed by a signal", async () => {
+    expect(await runOnHost(["sh", "-c", "kill -9 $$"], makeTempDir(), env)).toMatchObject({
+      ok: false,
+      code: "killed_by_signal",
+    });
+  });
+
+  it("reports a command the shell may not execute as a permission failure", async () => {
+    const dir = makeTempDir();
+    writeFileSync(join(dir, "denied.sh"), "echo 0\n", { mode: 0o644 });
+    expect(await runOnHost(["sh", "-c", "./denied.sh"], dir, env)).toMatchObject({
+      ok: false,
+      code: "permission_denied",
+    });
+    expect(await runOnHost([join(dir, "denied.sh")], dir, env)).toMatchObject({
+      ok: false,
+      code: "permission_denied",
+    });
+  });
+
+  it("reports output over the limit with its own code", async () => {
+    expect(await runOnHost(["yes", "0"], makeTempDir(), env, 10_000)).toMatchObject({
+      ok: false,
+      code: "output_limit",
+    });
+  });
+
+  it("keeps every unmeasured code distinct", () => {
+    expect(new Set(UNMEASURED_CODES).size).toBe(UNMEASURED_CODES.length);
+  });
+
   it("fails on an empty command", async () => {
-    expect(await runOnHost([], makeTempDir(), env)).toEqual({ ok: false, reason: "empty command" });
+    expect(await runOnHost([], makeTempDir(), env)).toEqual({
+      ok: false,
+      code: "empty_command",
+      reason: "empty command",
+    });
   });
 });
 
@@ -127,6 +207,7 @@ describe("docker runner", () => {
     const metric = { metric_id: "m-x", command: ["sh", "x.sh"], unit: "ms", watched_paths: [], image: null };
     expect(await runMeasurement(metric, makeTempDir(), "docker")).toEqual({
       ok: false,
+      code: "no_image",
       reason: "metric m-x has no image; propose it with --image or measure with --runner host",
     });
   });
@@ -140,6 +221,7 @@ describe("docker runner", () => {
     const env = { PATH: `${bin}:${process.env.PATH}`, LOG: log };
     expect(await runInDocker(["sh", "-c", "echo 1"], makeTempDir(), "alpine:3.20", env, 300)).toEqual({
       ok: false,
+      code: "timeout",
       reason: "timed out",
     });
     expect(readFileSync(log, "utf8")).toMatch(/^rm --force omf-measure-[0-9a-f]{8}\n$/);
