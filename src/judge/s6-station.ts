@@ -109,7 +109,7 @@ function rework(deps: S6StationDeps, ctx: StationContext, state: RoundState, led
 
 /**
  * The single use of the test split. `beginTestRun` writes the consumption before anything runs, so a crash or a judge
- * failure leaves "consumed, incomplete" and the next run is blocked until a person acts (M3d). A split with no behavior
+ * failure leaves "consumed, incomplete" and the next run is blocked until a person acts. A split with no behavior
  * scenario fails `beginTestRun` as invalid input: zero is never a pass.
  */
 async function testSplit(

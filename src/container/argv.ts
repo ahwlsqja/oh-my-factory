@@ -1,7 +1,10 @@
 import { isAbsolute } from "node:path";
+import { agentExecEnvRefused } from "../core/env-deny.js";
 import { isDigestPinned } from "./image-ref.js";
 import type { PinnedImage } from "./image-ref.js";
 import {
+  AUTHOR_FIXED_ENV,
+  type ContainerRole,
   type ContainerSpec,
   ContainerSpecError,
   IDLE_ARGS,
@@ -9,6 +12,7 @@ import {
   IMPLEMENTER_FIXED_ENV,
   type ImageId,
   type OwnedLabels,
+  ROLE_NETWORK,
   SANDBOX_USER,
   SECRET_ENV_NAMES,
   type SecretEnvName,
@@ -22,7 +26,7 @@ import {
 } from "./spec.js";
 
 /**
- * The only place a `docker` command line for a container is assembled (spec §7, M3f-D2). Every builder returns the argv
+ * The only place a `docker` command line for a container is assembled (spec §7). Every builder returns the argv
  * AFTER the program name and starts with `--context <ctx>` when a context is given. Names, labels, contexts and tags are
  * validated against closed patterns first, so a bad input throws `ContainerSpecError` before any argv exists. Candidate
  * and scenario data enters only as `docker exec` elements after the container name, never in a flag position.
@@ -55,9 +59,16 @@ function tmpfsOption(tmpfs: TmpfsSpec): string {
   return `${tmpfs.destination}:rw,size=${tmpfs.size_mb}m,nosuid,nodev${tmpfs.exec ? ",exec" : ""}${tmpfs.owned ? `,uid=${owner}` : ""}`;
 }
 
+/** The create-time environment a role carries besides `LC_ALL`: constants of spec.ts, never caller input. */
+function fixedEnvOf(role: ContainerRole): readonly (readonly [name: string, value: string])[] {
+  if (role === "implementer") return IMPLEMENTER_FIXED_ENV;
+  if (role === "author") return AUTHOR_FIXED_ENV;
+  return [];
+}
+
 /**
- * Every role gets the same hardening flags. The implementer differs in exactly two values: it is the only role on a network
- * (`bridge`, so the vendor CLI can reach its API; spec §7 L2) and it carries the fixed environment of `IMPLEMENTER_FIXED_ENV`.
+ * Every role gets the same hardening flags. The two agent roles differ in exactly two values: they are the only roles on a
+ * network (`bridge`, so the vendor CLI can reach its API; spec §7 L2) and each carries its own fixed environment.
  */
 export function createArgv(spec: ContainerSpec, context: string | null): string[] {
   assertSpec(spec);
@@ -71,7 +82,7 @@ export function createArgv(spec: ContainerSpec, context: string | null): string[
     "never",
     ...labelArgs(spec.labels),
     "--network",
-    spec.labels.role === "implementer" ? "bridge" : "none",
+    ROLE_NETWORK[spec.labels.role],
     "--cap-drop",
     "ALL",
     "--security-opt",
@@ -89,14 +100,12 @@ export function createArgv(spec: ContainerSpec, context: string | null): string[
     "1",
     "--env",
     "LC_ALL=C",
-    ...(spec.labels.role === "implementer"
-      ? IMPLEMENTER_FIXED_ENV.flatMap(([name, value]) => ["--env", `${name}=${value}`])
-      : []),
+    ...fixedEnvOf(spec.labels.role).flatMap(([name, value]) => ["--env", `${name}=${value}`]),
     ...spec.tmpfs.flatMap((tmpfs) => ["--tmpfs", tmpfsOption(tmpfs)]),
     "--entrypoint",
     IDLE_ENTRYPOINT,
     spec.image,
-    ...IDLE_ARGS,
+    ...(spec.lifetime_s === undefined ? IDLE_ARGS : [String(spec.lifetime_s)]),
   ];
 }
 
@@ -117,6 +126,12 @@ export interface ExecArgvSpec {
   env?: Readonly<Record<string, string>>;
   /** Emitted as `--env <NAME>` with no value; the docker client takes the value from its own environment. */
   secret?: SecretEnvName;
+  /**
+   * The role of the container. For an agent role (implementer, author) `env` may not set HOME, a vendor variable
+   * (CODEX_*, OPENAI_*, ANTHROPIC_*, CLAUDE_CONFIG_DIR) or a credential-shaped name: those would move the CLI's home or
+   * endpoint, or hand it a second key. Nothing sets an env on an agent exec today; this keeps it that way.
+   */
+  role?: ContainerRole;
   /** True adds `-i`; the bytes themselves travel on the process stdin, never in argv. */
   stdin: boolean;
 }
@@ -138,6 +153,9 @@ export function execArgv(name: string, exec: ExecArgvSpec, context: string | nul
     if (!ENV_NAME_RE.test(key) || (SECRET_ENV_NAMES as readonly string[]).includes(key) || value.includes("\0")) {
       throw new ContainerSpecError("invalid_exec");
     }
+    if ((exec.role === "implementer" || exec.role === "author") && agentExecEnvRefused(key)) {
+      throw new ContainerSpecError("invalid_exec");
+    }
     flags.push("--env", `${key}=${value}`);
   }
   if (exec.secret !== undefined) {
@@ -151,7 +169,7 @@ export interface BuildArgvSpec {
   contextDir: string;
   tag: string;
   labels: OwnedLabels;
-  /** Full hash of the harness build context; lets a cached image be reused only when the hash matches (Task 5). */
+  /** Full hash of the harness build context; lets a cached image be reused only when the hash matches. */
   contextHash?: string;
 }
 
@@ -196,7 +214,8 @@ export function listOwnedArgv(kind: "container" | "image", runId: string | null,
     return [...contextArgs(context), "image", "ls", ...owner, "--format", "{{.Repository}}:{{.Tag}}"];
   }
   const run = runId === null ? [] : ["--filter", `label=omf.run=${runId}`];
-  return [...contextArgs(context), "ps", "--all", ...owner, ...run, "--format", '{{.Names}}\t{{.Label "omf.run"}}'];
+  const format = '{{.Names}}\t{{.Label "omf.run"}}\t{{.Label "omf.work"}}';
+  return [...contextArgs(context), "ps", "--all", ...owner, ...run, "--format", format];
 }
 
 /** Removes one OMF round image or harness image by tag, or any local image by id. Never a base image by tag. */
@@ -214,7 +233,7 @@ export function imageInspectArgv(ref: string, context: string | null): string[] 
   return [...contextArgs(context), "image", "inspect", ref];
 }
 
-/** Only a digest reference can be pulled: the daemon fetches an immutable name (M3f-D24). */
+/** Only a digest reference can be pulled: the daemon fetches an immutable name. */
 export function pullArgv(ref: PinnedImage, context: string | null): string[] {
   if (!isDigestPinned(ref)) throw new ContainerSpecError("invalid_image");
   return [...contextArgs(context), "pull", "--quiet", ref];

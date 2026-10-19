@@ -12,8 +12,7 @@ import {
 } from "./types.js";
 
 /**
- * The expected values for one stage. M3f supplies them for `sut` and `harness`, M3g for `implementer`,
- * M3h for `author`; this module owns only the rule shape.
+ * The expected values for one stage. The judge containers supply them for `sut` and `harness`, the implementer container for `implementer`,\n * the author container for `author`; this module owns only the rule shape.
  */
 export interface StageGolden {
   /** `source` is a realpath. A mount matches only when source and destination are equal; a different `read_only` is a violation. */

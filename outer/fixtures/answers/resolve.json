@@ -1,0 +1,13 @@
+{
+  "choice": "A command line tool",
+  "rationale": "People run it from a shell.",
+  "rejected": [],
+  "interface": {
+    "kind": "cli",
+    "build": ["npm", "run", "build"],
+    "run": ["node", "dist/main.js"],
+    "io_contract": "Prints one line per result and exits zero.",
+    "gates": { "fast": ["npm", "test"], "full": null, "deep": null, "required": ["fast"] },
+    "test_command": ["npm", "test"]
+  }
+}

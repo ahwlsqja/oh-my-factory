@@ -1,3 +1,4 @@
+// covers: F8.open-decision-blocks
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { runDecideDefer, runDecideNa, runDecideResolve } from "../../src/cli/decide.js";

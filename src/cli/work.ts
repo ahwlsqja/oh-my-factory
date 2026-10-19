@@ -16,7 +16,7 @@ import { Ledger, type LedgerEvent } from "../core/ledger.js";
 import type { ProjectLocation } from "../core/paths.js";
 import { requireProject } from "../core/project.js";
 import { parseDuration } from "../goal/duration.js";
-import { GoalFileError, assertGoalId, goalFile } from "../goal/goal-file.js";
+import { assertGoalId, GoalFileError, goalFile } from "../goal/goal-file.js";
 import { type GoalLock, GoalLockError, latestApproval, readGoalLock } from "../goal/goal-lock.js";
 import { raiseWallTime, wallTimeLimitMs } from "../goal/wall-time.js";
 import { type ClaimStatus, claimStatus } from "../work/claim.js";
@@ -24,9 +24,10 @@ import { renderIntent } from "../work/intent-md.js";
 import { verifiedItems, verifyItemAgainstLedger } from "../work/ledger-verify.js";
 import { canTransition } from "../work/transitions.js";
 import { OPEN_STATES, TERMINAL_WORK_STATES, type WorkItem, type WorkState } from "../work/types.js";
+import { type LimitKind, microUsd, openItemBudget, raiseWorkLimit, WorkBudgetError } from "../work/w-budget.js";
 import { renderWorkItem } from "../work/work-item.js";
-import { type LimitKind, WorkBudgetError, microUsd, openItemBudget, raiseWorkLimit } from "../work/w-budget.js";
-import { type PromptStreams, type TerminalStreams, confirmByTyping, requireTerminal } from "./confirm.js";
+import { confirmByTyping, type PromptStreams, requireTerminal, type TerminalStreams } from "./confirm.js";
+import { sweepItemBestEffort } from "./item-sweep.js";
 
 /** What a person typed after `omf budget declare|raise`: strings, because validation is `parseBudgetArgs`'s job. */
 export interface BudgetArgs {
@@ -39,7 +40,7 @@ export interface BudgetArgs {
 }
 
 /**
- * `wall_time` is a J8 cap too (D26) but it is not a counted budget, so it stays out of `BudgetKind` and
+ * `wall_time` is a J8 cap too but it is not a counted budget, so it stays out of `BudgetKind` and
  * is parsed here. It can only be raised: its base comes from goal.md at J1.
  */
 export type ParsedBudgetArgs =
@@ -132,7 +133,7 @@ const WORK_ID_ARG = /^w-[0-9a-f]{12}$/;
 const USD_ARG = /^(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$/;
 
 /**
- * Splits `omf budget raise` into its two forms without touching the ledger (M3b2 section 7). `--rounds` or
+ * Splits `omf budget raise` into its two forms without touching the ledger. `--rounds` or
  * `--usd` or a `w-` id selects the work item form; anything else is the goal form, unchanged. Amounts that
  * are not positive (a zero, a sign, an exponent, a result that is not a safe integer of micro-dollars) are
  * `WorkBudgetError("invalid_amount")`; main.ts exits 2 for every error, like the goal form.
@@ -197,7 +198,7 @@ export function workLimitLines(location: ProjectLocation, workId: string): strin
  * Everything `omf budget raise <work_id> --rounds|--usd` does after parsing: a terminal, the limits in force,
  * the person retypes the work id, then the J8 write. Returns the exit code: 0 raised, 1 declined. Streams and
  * `print` are parameters so a test runs the whole path without a terminal. It resumes nothing; a person then
- * runs the item again (`omf run`, after M3h).
+ * runs the item again (`omf run`).
  */
 export async function workLimitRaiseFlow(
   location: ProjectLocation,
@@ -220,7 +221,7 @@ export async function workLimitRaiseFlow(
   return 0;
 }
 
-/** The wall time clock as `auditGoal` enforces it: the limit is the approved time plus the raises (D26). */
+/** The wall time clock as `auditGoal` enforces it: the limit is the approved time plus the raises. */
 export interface WallTimeReport {
   base_ms: number;
   raised_ms: number;
@@ -427,8 +428,8 @@ function assertApprovable(location: ProjectLocation, workId: string, actor: stri
 
 /**
  * Approves an `awaiting_approval` item. The ledger event comes first, then item.md (the ledger is
- * authoritative, D27): a crash in between leaves a recorded approval and an item still awaiting one,
- * which `omf work approve` can finish. No J number: the spec has no item-approval judgment (D5).
+ * authoritative): a crash in between leaves a recorded approval and an item still awaiting one,
+ * which `omf work approve` can finish. No J number: the spec has no item-approval judgment.
  */
 export function runWorkApprove(
   location: ProjectLocation,
@@ -446,7 +447,7 @@ export function runWorkApprove(
 }
 
 /**
- * Vetoes an item from any open state, also while a run holds its claim (D28): a veto only restricts, so
+ * Vetoes an item from any open state, also while a run holds its claim: a veto only restricts, so
  * it needs no terminal. The run sees the new state when it re-reads the item at its next station.
  */
 export function runVeto(
@@ -474,8 +475,7 @@ export function runVeto(
 
 /** Work item and veto commands (spec §4.4 step 5, §9). Errors propagate to main.ts, which exits 2. */
 /**
- * What `work list` and `work show` print for an item whose file is exactly one W edge behind the ledger
- * (M3b1-D4, D5). The reason is a person's question ("did someone edit this by hand?"): the ledger is the
+ * What `work list` and `work show` print for an item whose file is exactly one W edge behind the ledger. The reason is a person's question ("did someone edit this by hand?"): the ledger is the
  * authority, so a crash leftover is healed by the next W entry on the goal, never by editing item.md.
  * Display only: `--json` keeps the machine reason `w_repairable`.
  */
@@ -570,7 +570,7 @@ export function registerWorkCommands(program: Command): void {
     .argument("<work_id>")
     .option("--reason <text>", "why, at most 500 characters", "vetoed")
     .description("veto a work item from any open state; no terminal needed, because a veto only restricts")
-    .action((workId: string, options: { reason: string }) => {
+    .action(async (workId: string, options: { reason: string }) => {
       const status = requireProject(process.cwd());
       const actor = humanActor(status.repo);
       const result = runVeto(status, workId, actor, options.reason);
@@ -579,5 +579,8 @@ export function registerWorkCommands(program: Command): void {
         const pid = result.claim.owner === null ? "unknown" : String(result.claim.owner.pid);
         console.log(`note: a run holds the claim (pid ${pid}); it stops when it re-reads the item at its next station`);
       }
+      // After the print, so a daemon that never answers cannot hide the recorded veto. The vetoed item will never reach
+      // another station, so a container of a killed run would stay for ever without this.
+      await sweepItemBestEffort(status, workId, process.env);
     });
 }

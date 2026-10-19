@@ -195,7 +195,15 @@ async function runS3(
   try {
     if (!(await runtime.info()).ok || !(await runtime.endpoint()).local) return stopFor({ from: "environment" });
     // Leftovers of earlier runs, quarantines that may hold a key included, go before anything is created, even when S4 never ran.
-    await sweepOrphans({ runtime, itemDir: ctx.item.dir, currentRunId: ctx.runId });
+    await sweepOrphans({ runtime, itemDir: ctx.item.dir, currentRunId: ctx.runId, workId: ctx.workId });
+  } catch {
+    return stopFor({ from: "environment" });
+  }
+
+  // The run marker `runs/<run id>` before the first container: a run killed after `docker create` leaves a container that the
+  // next sweep selects through the directories under `runs/`. Taken here, under the item claim, as the author takes its own.
+  try {
+    mkdirSync(join(ctx.item.dir, "runs", ctx.runId), { recursive: true, mode: 0o700 });
   } catch {
     return stopFor({ from: "environment" });
   }

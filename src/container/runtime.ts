@@ -4,7 +4,7 @@ import type { ContainerRole, ContainerSpec, ImageId, OwnedLabels, SecretEnvName 
 
 export interface EndpointInfo {
   kind: "unix" | "tcp" | "ssh" | "other";
-  /** Only a local `unix://` socket is local: untrusted code is never built or run elsewhere (M3f-D3). */
+  /** Only a local `unix://` socket is local: untrusted code is never built or run elsewhere. */
   local: boolean;
 }
 
@@ -28,6 +28,8 @@ export interface OwnedResource {
   kind: "container" | "image";
   name: string;
   run_id: string;
+  /** The container's `omf.work` label: the work item it belongs to. Empty for an image, which carries none. */
+  work_id: string;
 }
 
 /**

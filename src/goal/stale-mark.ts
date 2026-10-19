@@ -4,7 +4,7 @@ const TRIPPED = new Set(["age", "commits", "target_move"]);
 
 /**
  * The signals of the latest `goal.stale` event since the latest `goal.approved` of this goal, or null.
- * A new approval clears the mark (D21), so re-approving a stale goal is the way out of the J1 stop.
+ * A new approval clears the mark, so re-approving a stale goal is the way out of the J1 stop.
  */
 function markOf(events: readonly LedgerEvent[], goalId: string): string[] | null {
   let mark: string[] | null = null;

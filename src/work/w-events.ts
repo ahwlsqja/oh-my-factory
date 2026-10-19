@@ -5,7 +5,7 @@ import type { WorkState } from "./types.js";
 
 /**
  * Ledger events of the W loop (spec §5.0, §4.4 step 5). The ledger is the authority for a work item's W state:
- * the store file only catches up to it (M2b D27). Every payload is ids, timestamps and members of a closed
+ * the store file only catches up to it. Every payload is ids, timestamps and members of a closed
  * list, so the event stream stays safe for the E2 scans (nothing a model wrote, no metric text).
  */
 
@@ -38,7 +38,7 @@ export function newRunId(at: Date, hex4: () => string = () => randomBytes(2).toS
 
 /**
  * Closed list of reasons a run parks or fails an item (mirrored as an enum in work-event.schema.json; a test
- * compares the two). A free-text reason could carry a metric name into the ledger, so none exists. M3b2 adds
+ * compares the two). A free-text reason could carry a metric name into the ledger, so none exists. The line sequencer adds
  * codes by editing this list and the schema together.
  */
 export const W_REASON_CODES = [
@@ -48,7 +48,7 @@ export const W_REASON_CODES = [
   "infra_failure",
   "manual_required",
   "station_error",
-  // Added by M3b2 (the line sequencer, GATE-4 and the outcome classifier). The schema enum gets the same twelve.
+  // Added for the line sequencer, GATE-4 and the outcome classifier. The schema enum gets the same twelve.
   "visit_cap",
   "stalled",
   "gate_not_run",
@@ -63,7 +63,7 @@ export const W_REASON_CODES = [
   "reentry_loop",
   // Added by the real GATE-2: the sealed scenarios, or what they were written from, need a person.
   "scenarios_need_review",
-  // M3d: the test split and the feedback channel. All four need a person (or a forced downgrade), so none counts as a retryable failure.
+  // The test split and the feedback channel. All four need a person (or a forced downgrade), so none counts as a retryable failure.
   "test_run_incomplete",
   "test_reseal_required",
   "noise_unverified",

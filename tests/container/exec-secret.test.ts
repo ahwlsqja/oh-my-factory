@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { execArgv } from "../../src/container/argv.js";
+import { markMeasured } from "../../src/container/measured-handles.js";
 import { createDockerRuntime } from "../../src/container/docker-cli.js";
 import { createDockerRuntimeSync } from "../../src/container/docker-sync.js";
 import { ContainerSpecError, SECRET_ENV_NAMES, type SecretEnvName } from "../../src/container/spec.js";
@@ -40,14 +41,15 @@ function runtimeOver(fake: FakeDocker, log: Logged[]) {
 async function started(fake: FakeDocker, log: Logged[]) {
   addImage(fake.state, IMPLEMENTER_BASE);
   const runtime = runtimeOver(fake, log);
-  const handle = await runtime.create(spec);
+  // Stands in for createMeasured: a secret exec needs a handle that was measured.
+  const handle = markMeasured(await runtime.create(spec));
   await runtime.start(handle);
   return { runtime, handle };
 }
 
 describe("execArgv and a secret", () => {
-  it("names exactly one secret, after the plain env flags and before the container name", () => {
-    expect(SECRET_ENV_NAMES).toEqual(["ANTHROPIC_API_KEY"]);
+  it("passes a secret by name after the plain env flags and before the container name", () => {
+    expect(SECRET_ENV_NAMES).toEqual(["ANTHROPIC_API_KEY", "CODEX_API_KEY"]);
     const base = { argv: ["claude", "-p"], workdir: "/work", env: { LANG: "C" }, stdin: true };
     const plain = execArgv(spec.name, base, "ctx");
     const withSecret = execArgv(spec.name, { ...base, secret: "ANTHROPIC_API_KEY" }, "ctx");
@@ -56,7 +58,7 @@ describe("execArgv and a secret", () => {
     expect(withSecret.some((element) => element.startsWith("ANTHROPIC_API_KEY="))).toBe(false);
   });
 
-  it.each(["ANTHROPIC_API_KEY"])("refuses %s=value in env, where a value could reach argv", (name) => {
+  it.each(["ANTHROPIC_API_KEY", "CODEX_API_KEY"])("refuses %s=value in env, where a value could reach argv", (name) => {
     expect(codeOf(() => execArgv(spec.name, { argv: ["env"], env: { [name]: "x" }, stdin: false }, null))).toBe(
       "invalid_exec",
     );
@@ -160,7 +162,8 @@ describe("the runtime and a secret", () => {
       context: "fake",
       env: { PATH: bin.path, HOME: "/home/x", ANTHROPIC_API_KEY: "caller-env-must-not-pass" },
     });
-    const handle = await runtime.create(spec);
+    // Stands in for createMeasured: a secret exec needs a handle that was measured.
+    const handle = markMeasured(await runtime.create(spec));
     await runtime.start(handle);
     await runtime.exec(handle, PLAIN);
     await runtime.exec(handle, { ...PLAIN, secret: secretHandle() });

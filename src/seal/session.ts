@@ -2,11 +2,15 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { runProcessGroup } from "../adapters/process-group.js";
+import { vendorEnvName } from "../core/env-deny.js";
 import { MAX_AUTHOR_OUTPUT_BYTES } from "../scenario/types.js";
 import type { AuthorFailureCode, AuthorIsolation } from "../scenario/types.js";
+import type { SealInputs } from "./prompt.js";
 
 export interface AuthorRequest {
   prompt: string;
+  /** The closed object `buildSealPrompt` turned into `prompt`. The container author writes these into files; the command author ignores them. */
+  inputs: SealInputs;
   timeoutMs: number;
 }
 
@@ -18,7 +22,7 @@ export type AuthorOutcome =
 export const DEFAULT_AUTHOR_TIMEOUT_MS = 300_000;
 
 /**
- * The port M3h implements with a container session (spec §5.3). `vendor`, `model` and `isolation` are OMF's own
+ * The port implemented with a container session (spec §5.3). `vendor`, `model` and `isolation` are OMF's own
  * statement about the session, not the author's: they are what `runSealStage` stamps into the ledger and the
  * scenario files. Only a failure code leaves a failed run, never text the author or its stderr printed (spec §4.6).
  */
@@ -34,7 +38,7 @@ export interface CommandAuthorConfig {
   command: readonly string[];
   /** Caps the request's own limit; the shorter of the two applies. */
   timeoutMs?: number;
-  /** Names copied from the caller's environment. Nothing else is inherited. */
+  /** Names copied from the caller's environment. Nothing else is inherited. A vendor key or vendor variable (`vendorEnvName`) is refused: the run ends `misconfigured`. */
   envPassthrough?: readonly string[];
 }
 
@@ -79,6 +83,8 @@ export function createCommandAuthor(
       const fail = (code: AuthorFailureCode): AuthorOutcome => ({ ok: false, code, durationMs: elapsed() });
       const timeoutMs = Math.min(request.timeoutMs, config.timeoutMs ?? request.timeoutMs);
       if (config.command.length === 0 || !Number.isFinite(timeoutMs) || timeoutMs < 1) return fail("misconfigured");
+      // The same deny the reconciler applies: a vendor key or a vendor base URL never rides a passthrough.
+      if ((config.envPassthrough ?? []).some(vendorEnvName)) return fail("misconfigured");
 
       const scratch = mkdtempSync(join(tmpdir(), "omf-author-"));
       try {

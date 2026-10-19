@@ -16,7 +16,7 @@ import { fakeRuntime } from "./fake-runtime.js";
 import { makeTempDir } from "./tmp.js";
 
 /** The directories of the tools the scripts use. The double's PATH holds these and nothing else (no shim, no developer tool). */
-const TOOL_PATH = [
+export const TOOL_PATH = [
   ...new Set(
     ["git", "tar", "base64", "tr", "sleep"].map((tool) =>
       dirname(execFileSync("/bin/sh", ["-c", `command -v ${tool}`], { encoding: "utf8" }).trim()),

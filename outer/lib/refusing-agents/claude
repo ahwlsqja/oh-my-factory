@@ -1,0 +1,5 @@
+#!/bin/sh
+# A stand-in that exits 97, so no contract can reach a real claude (doctor probes the agent CLIs, and a real one
+# could write into the temporary HOME and look like a write by omf).
+echo "claude is not available in the outer suite" >&2
+exit 97

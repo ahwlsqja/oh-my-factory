@@ -5,6 +5,7 @@ import type { PinnedImage } from "../container/image-ref.js";
 import type { ContainerHandle, ContainerRuntime, ExecSpec, ImageInfo, OwnedResource } from "../container/runtime.js";
 import { assertName, type ContainerRole, type ContainerSpec, type ImageId } from "../container/spec.js";
 import { registerCleanup } from "../core/cleanup-registry.js";
+import { isLockHeld, sealLockFile } from "../core/lock.js";
 
 /** A runtime that remembers every container it made and can remove them without a handle. */
 export interface TrackedRuntime extends ContainerRuntime {
@@ -168,6 +169,8 @@ export interface SweepInput {
   /** `<project>/items/<work_id>`; its `runs/` directory names every run this item ever started. */
   itemDir: string;
   currentRunId: string;
+  /** The item's id: only containers whose `omf.work` label is this item are selected, since two items can share a run id. */
+  workId: string;
 }
 
 export interface SweepResult {
@@ -179,25 +182,30 @@ export interface SweepResult {
   skipped: string[];
 }
 
-const ROLE_OF_NAME = /^omf-(sut|harness|workcopy|implementer)-/;
+const ROLE_OF_NAME = /^omf-(sut|harness|workcopy|implementer|author)-/;
 
 /**
  * Removes what earlier runs of THIS work item left in the daemon and on disk. The item claim allows one run at a time, so any
- * other run of the item is an orphan. Selection is by run id: a run id belongs to exactly one item, and `<item>/runs/` lists this
- * item's runs, so another item's resources are never selected. Only per-round SUT images (`omf-sut:`) are removed; the cached
- * harness image is kept. Containers go first, then host directories. A resource whose name does not match the container name
+ * other run of the item is an orphan. Selection is by run id and by the `omf.work` label: run ids are only unique to the
+ * second, so a container counts only when its run is under `<item>/runs/` and its label is this item. Round images carry no
+ * label and are selected by run id. Only per-round SUT images (`omf-sut:`) are removed; the cached harness image is kept. Containers go first, then host directories. A resource whose name does not match the container name
  * pattern is left alone; an owned container whose name is off the full pattern is reported in `skipped`.
+ * An author container of an earlier pass is removed too, except while the item's `seal.lock` is held: a running
+ * `omf seal` owns its own author container, and the lock is held for the whole call.
  */
 export async function sweepOrphans(input: SweepInput): Promise<SweepResult> {
   const runsDir = join(input.itemDir, "runs");
   const earlier = new Set(existsSync(runsDir) ? readdirSync(runsDir) : []);
   earlier.delete(input.currentRunId);
   const result: SweepResult = { containers: 0, images: 0, staging: 0, skipped: [] };
+  const sealing = isLockHeld(sealLockFile(input.itemDir));
   for (const resource of await input.runtime.listOwned({ run_id: null })) {
     if (!earlier.has(resource.run_id)) continue;
     if (resource.kind === "container") {
+      if (resource.work_id !== input.workId) continue;
       const role = ROLE_OF_NAME.exec(resource.name)?.[1] as ContainerRole | undefined;
       if (role === undefined) continue;
+      if (role === "author" && sealing) continue;
       // The runtime refuses a name outside the full pattern; one such resource must not stop the sweep of the others.
       try {
         assertName(resource.name);
@@ -222,6 +230,36 @@ export async function sweepOrphans(input: SweepInput): Promise<SweepResult> {
     }
   }
   return result;
+}
+
+/**
+ * Removes every implementer container of this item (by `omf.work` label and run id), the current run's included, for the end of a line (finished, vetoed,
+ * stopped at a goal or wall-time limit, or aborted): the run's own cleanup removes the tracked ones, and this catches one
+ * whose removal failed. Containers only: no image, no host directory. A name off the full pattern is left alone.
+ */
+export async function sweepImplementerContainers(input: {
+  runtime: Pick<ContainerRuntime, "listOwned" | "remove">;
+  itemDir: string;
+  currentRunId: string;
+  /** The item's id: a run id is only unique to the second, so a container counts only when its `omf.work` label is this item. */
+  workId: string;
+}): Promise<number> {
+  const runsDir = join(input.itemDir, "runs");
+  const runs = new Set(existsSync(runsDir) ? readdirSync(runsDir) : []);
+  runs.add(input.currentRunId);
+  let removed = 0;
+  for (const resource of await input.runtime.listOwned({ run_id: null })) {
+    if (resource.kind !== "container" || !resource.name.startsWith("omf-implementer-")) continue;
+    if (!runs.has(resource.run_id) || resource.work_id !== input.workId) continue;
+    try {
+      assertName(resource.name);
+    } catch {
+      continue;
+    }
+    await input.runtime.remove({ name: resource.name, id: resource.name, role: "implementer" });
+    removed += 1;
+  }
+  return removed;
 }
 
 export type { FeedbackSlot, RoundState } from "./round-state.js";

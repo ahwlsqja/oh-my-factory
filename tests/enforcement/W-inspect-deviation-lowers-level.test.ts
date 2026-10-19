@@ -1,3 +1,5 @@
+// covers: S7.isolation-measured
+// covers: S7.docker-client-trusted
 import { describe, expect, it } from "vitest";
 import { NotGoldenError, createMeasured } from "../../src/container/measure.js";
 import { DEVIATIONS, measureFixture } from "../helpers/measure-fixture.js";

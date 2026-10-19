@@ -5,10 +5,10 @@ import { CONTAINER_PROBE_ARGV } from "../../src/container/measure.js";
 import type { ContainerRuntime } from "../../src/container/runtime.js";
 import { declareBudget } from "../../src/core/budget.js";
 import type { ProjectLocation } from "../../src/core/paths.js";
-import { type ImplementerStations, combineLineEnd } from "../../src/implementer/station.js";
+import { combineLineEnd, type ImplementerStations } from "../../src/implementer/station.js";
 import type { CandidateRef } from "../../src/judge/candidate.js";
 import { HARNESS_EXEC_ARGV, type HarnessRequest } from "../../src/judge/harness-protocol.js";
-import { type FeedbackSlot, createFeedbackSlot } from "../../src/judge/round-state.js";
+import { createFeedbackSlot, type FeedbackSlot } from "../../src/judge/round-state.js";
 import { judgeStations } from "../../src/judge/stations.js";
 import { foldSeals } from "../../src/scenario/events.js";
 import { s2Station } from "../../src/seal/s2-station.js";
@@ -21,14 +21,23 @@ import { FakeDocker } from "./fake-docker.js";
 import type { FakeExecCall, FakeResult } from "./fake-docker-core.mjs";
 import { fakeRuntime } from "./fake-runtime.js";
 import { gitFixture } from "./git-fixture.js";
-import { type LineFixture, ROUND2, sealDeps, setupLine, writeYaml } from "./line-fixture.js";
 import { station } from "./line.js";
+import { type LineFixture, ROUND2, type ScenarioSpec, sealDeps, setupLine, writeYaml } from "./line-fixture.js";
 import { BUGGY, FIXED, testFile } from "./prove-fixture.js";
 import { HarnessDouble } from "./sut-double.js";
 
-export type JudgeLineCandidate = "good" | "null_impl" | "edits_test" | "canary_in_prompt" | "red_gate";
+/** `fixed_in_round_2`: the SUT answers nothing in round 1 (the train split fails and masked feedback is released) and the fix in round 2. */
+export type JudgeLineCandidate =
+  | "good"
+  | "null_impl"
+  | "edits_test"
+  | "canary_in_prompt"
+  | "red_gate"
+  | "fixed_in_round_2";
 export interface JudgeLineOptions {
   candidate?: JudgeLineCandidate;
+  /** The scenarios the stub author prints. Default `ROUND2`; a rework round needs at least five train behaviours. */
+  sealSpecs?: readonly ScenarioSpec[];
   /** The harness double also scores the contradiction canary a pass. */
   acceptsContradiction?: boolean;
   /** The stamp the stub author puts on its seal. */
@@ -130,8 +139,10 @@ export function setupJudgeLine(options: JudgeLineOptions = {}): JudgeLineFixture
     }
     if (call.name.startsWith("omf-sut-")) {
       const step = startsWith(call.argv, CONTRACT_RUN) ? call.argv.slice(CONTRACT_RUN.length) : [];
-      const stdout =
-        candidate !== "null_impl" && step[0] === "cache" && step[1] === "get" ? "ok-distinct-output\n" : "";
+      // The name is omf-<role>-<run_id>-<round>-<serial>: the round is the second to last segment.
+      const round = call.name.split("-").at(-2) ?? "?";
+      const works = candidate !== "null_impl" && !(candidate === "fixed_in_round_2" && round === "1");
+      const stdout = works && step[0] === "cache" && step[1] === "get" ? "ok-distinct-output\n" : "";
       recording.push(JSON.stringify({ argv: call.argv, stdin, stdout }));
       return reply(0, stdout);
     }
@@ -160,7 +171,7 @@ export function setupJudgeLine(options: JudgeLineOptions = {}): JudgeLineFixture
   const impl = options.implementer?.({ location: fx.location, runtime, feedback, workId });
   const js = judgeStations({ location: fx.location, runtime, candidates: impl?.candidates ?? candidates, feedback });
   const session = {
-    ...sealDeps(l, writeYaml(l, "round2.yaml", ROUND2)).session,
+    ...sealDeps(l, writeYaml(l, "round2.yaml", options.sealSpecs ?? ROUND2)).session,
     isolation: options.authorIsolation ?? "host_command",
   };
   const stations: Record<StationId, Station> = {

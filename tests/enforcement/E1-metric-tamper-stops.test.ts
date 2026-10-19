@@ -1,3 +1,5 @@
+// covers: F2.metric-lock-before-measure
+// covers: S11.5.governance-unreadable-stops
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";

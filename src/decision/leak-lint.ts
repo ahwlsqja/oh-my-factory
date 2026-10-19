@@ -19,7 +19,7 @@ export interface LeakContext {
   measuredNumbers: readonly number[];
   /**
    * The same readings with the ledger seq each was recorded at, set by `loadLeakContext` and absent otherwise.
-   * `leakContextAt` uses it to ask what a record could have seen when it was written (A22).
+   * `leakContextAt` uses it to ask what a record could have seen when it was written.
    */
   readings?: readonly { seq: number; value: number }[];
 }
@@ -35,7 +35,7 @@ export interface LeakFinding {
 /**
  * Keys OMF fills in or that have a fixed shape, so a person's text cannot be in them. `percentile` is a 0..100
  * shape number (p95), not a measurement. `id` is deliberately not here: an id is free text a person chooses
- * and it reaches `spec.md` (A16b).
+ * and it reaches `spec.md`.
  */
 const OMF_SET_KEYS: ReadonlySet<string> = new Set([
   "class",
@@ -75,7 +75,7 @@ export function leakContextFor(semantic: GoalSemantic, measured: readonly number
  * Reads the goal lock and the `metric.measured` readings of the verified ledger (payload field `value`, see
  * `measureGoal`). A missing lock throws `goal_not_locked`: with no lock there is nothing to compare against, and a
  * lint that cannot run must not wave text through (fail closed). A lock file that is present but unreadable or
- * schema-invalid throws its `GoalLockError` unchanged: that is damaged host state, so the CLI exits 2 (A20).
+ * schema-invalid throws its `GoalLockError` unchanged: that is damaged host state, so the CLI exits 2.
  */
 export function loadLeakContext(projectDir: string, goalId: string, events: readonly LedgerEvent[]): LeakContext {
   const lock = readGoalLock(projectDir, goalId);
@@ -100,7 +100,7 @@ function distinctSorted(readings: readonly { value: number }[]): number[] {
 /**
  * The context as it stood at ledger `seq`: the same terms and target (the current lock), but only the readings
  * recorded at or before `seq`. Readings keep arriving with every tick, so a record that was clean when it was
- * written must not turn invalid because a later reading happens to share a number with it (A22). A context built
+ * written must not turn invalid because a later reading happens to share a number with it. A context built
  * without per-reading seqs is returned unchanged.
  */
 export function leakContextAt(ctx: LeakContext, seq: number): LeakContext {
@@ -118,7 +118,7 @@ function hasLiteral(text: string, value: string): boolean {
   return pattern.test(text);
 }
 
-/** An integer below 10 in magnitude (0 included): one digit cannot carry a target, and seed lint lets it through (A16a). */
+/** An integer below 10 in magnitude (0 included): one digit cannot carry a target, and seed lint lets it through. */
 function isLoneDigit(value: number): boolean {
   return Number.isInteger(value) && Math.abs(value) < 10;
 }
@@ -186,7 +186,7 @@ function walk(node: unknown, path: string, ctx: LeakContext, add: (rule: LeakRul
  * Keys are visited in sorted order and each (rule, field) is reported once, so the result does not depend on
  * how the caller built the object.
  *
- * Documented limit (A18): near values (3700 for 3719.25), paraphrases ("about a dozen"), single stems of a
+ * Documented limit: near values (3700 for 3719.25), paraphrases ("about a dozen"), single stems of a
  * multi-stem metric id and watched-path stems are not detected. Seed lint's phrase set is kept on purpose:
  * forbidding every stem ("search", "cost") would make ordinary decision text unwritable.
  */

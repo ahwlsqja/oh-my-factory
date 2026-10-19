@@ -10,12 +10,17 @@
 //                                               for a suite that calls a real model (OMF_GATED=docker+model): the
 //                                               key is passed to the test process only, under that name only (never
 //                                               ANTHROPIC_API_KEY), and its output goes through a redactor
+//   OMF_AUTHOR_API_KEY=<dedicated, spend-limited key> npm run test:gated -- --model --only G-author-canary
+//                                               a model suite gets only the keys it reads, each under its own name:
+//                                               G-skeleton-real reads OMF_AUTHOR_API_KEY and OMF_IMPLEMENTER_API_KEY,
+//                                               G-author-canary the first, the older model suites the second
 //   npm run test:gated -- --record              also append one record per fully passed suite to
-//                                               docs/evidence/gated-runs.json (clean working tree only)
+//                                               docs/evidence/gated-runs.json (clean working tree only; the evidence file
+//                                               itself may differ, so runs can follow one another before it is committed)
 //
 // Exit codes: 0 every selected gated test passed; 1 a gated test failed or nothing could be recorded;
 // 2 refused (colima or docker missing, another OMF_GATED value, a context that is not the omf-m3f socket,
-// --record on a dirty tree, --model without a usable OMF_IMPLEMENTER_API_KEY, an unknown argument);
+// --record on a tree with changes other than the evidence file, --model without a usable key for every selected model suite, an unknown argument);
 // 3 colima could not start the profile.
 //
 // The run never changes the user's current Docker context (`--activate=false`, and it is restored if it changed anyway).
@@ -37,6 +42,37 @@ export const PROFILE = "omf-m3f";
 export const CONTEXT = "colima-omf-m3f";
 export const EXIT = { ok: 0, failed: 1, refused: 2, colima: 3 };
 
+/** The host variable of each vendor key. Deliberately not the vendors' own names: a code path that holds the key can read it. */
+export const KEY_ENV = { author: "OMF_AUTHOR_API_KEY", implementer: "OMF_IMPLEMENTER_API_KEY" };
+
+/** The keys each model suite reads. A suite that calls no model is absent: `--model` is refused for a selection with none. */
+export const MODEL_SUITES = {
+  "G-author-canary": [KEY_ENV.author],
+  "G-e6-l2-leak-redteam": [KEY_ENV.implementer],
+  "G-implementer-real-run": [KEY_ENV.implementer],
+  "G-skeleton-real": [KEY_ENV.author, KEY_ENV.implementer],
+};
+
+/**
+ * The key names a `--model` run needs: those of the model suites that `only` selects (vitest's `-t` is a pattern), all of them
+ * when `only` is null. The result is sorted, so the order of redaction and of refusals is stable.
+ */
+export function keysFor(only) {
+  let pattern = null;
+  if (only !== null) {
+    try {
+      pattern = new RegExp(only);
+    } catch {
+      return { error: "--only is not a valid pattern" };
+    }
+  }
+  const selected = Object.entries(MODEL_SUITES).filter(([suite]) => pattern === null || pattern.test(suite));
+  if (selected.length === 0) return { error: "--model with --only selects no suite that calls a model" };
+  return { keys: [...new Set(selected.flatMap(([, keys]) => keys))].sort() };
+}
+
+/** The one path a `--record` run leaves modified, relative to the repository root as `git status --porcelain` prints it. */
+const EVIDENCE_PATH = "docs/evidence/gated-runs.json";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SCHEMA = new URL("../schemas/gated-runs.schema.json", import.meta.url);
 /** colima's socket for the profile; a context that points anywhere else is refused. */
@@ -90,9 +126,10 @@ export function dockerConfigFor(dir, host) {
 
 /**
  * The whole environment of the test process. No HOME. The only caller variables passed are TMPDIR, the fixture switch
- * and the three gated image names; in model mode also the dedicated implementer key `OMF_IMPLEMENTER_API_KEY`
- * (never `ANTHROPIC_API_KEY`, the reconciler's host key) and the path where the real-run suite may write its report.
- * Without model mode the key is dropped, not refused: a key left in the shell must not reach a suite that never needed it.
+ * and the gated image names; in model mode also the keys named in `options.keys` (default: the implementer's), each under
+ * its own `OMF_*_API_KEY` name and never a vendor name such as `ANTHROPIC_API_KEY`, and the path where the real-run suite
+ * may write its report. Without model mode every key is dropped, not refused: a key left in the shell must not reach a
+ * suite that never needed it. A name in `options.keys` that is not one of `KEY_ENV` is ignored.
  */
 export function gatedEnv(env, dockerConfig, omfHome, options = {}) {
   const model = options.model === true;
@@ -104,17 +141,19 @@ export function gatedEnv(env, dockerConfig, omfHome, options = {}) {
     OMF_HOME: omfHome,
   };
   const passed = ["TMPDIR", "OMF_CAPTURE_FIXTURES", "OMF_GATED_BASE_IMAGE", "OMF_GATED_HARNESS_IMAGE"];
-  for (const name of [...passed, "OMF_GATED_IMPLEMENTER_IMAGE"]) {
+  for (const name of [...passed, "OMF_GATED_IMPLEMENTER_IMAGE", "OMF_GATED_AUTHOR_IMAGE"]) {
     if (env[name] !== undefined) out[name] = env[name];
   }
-  const key = env.OMF_IMPLEMENTER_API_KEY;
-  if (model && typeof key === "string" && key !== "") out.OMF_IMPLEMENTER_API_KEY = key;
+  for (const name of model ? (options.keys ?? [KEY_ENV.implementer]) : []) {
+    const key = env[name];
+    if (Object.values(KEY_ENV).includes(name) && typeof key === "string" && key !== "") out[name] = key;
+  }
   if (model && options.report !== undefined) out.OMF_GATED_MODEL_REPORT = options.report;
   return out;
 }
 
 /** Names only the test process may hold: every other child of the driver (colima, docker, git) gets an environment without them. */
-export const SECRET_ENV = ["OMF_IMPLEMENTER_API_KEY", "ANTHROPIC_API_KEY"];
+export const SECRET_ENV = [...Object.values(KEY_ENV), "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY"];
 
 export function childEnv(env) {
   return Object.fromEntries(Object.entries(env).filter(([name]) => !SECRET_ENV.includes(name)));
@@ -289,7 +328,8 @@ function record(deps, testEnv, reportFile, head) {
       return EXIT.failed;
     }
     appendGatedRuns(deps.evidenceFile, records);
-    deps.log(`recorded ${records.map((r) => r.test).join(", ")}`);
+    deps.log(`recorded ${records.map((r) => r.test).join(", ")} at commit ${head}`);
+    deps.log("records pending: docs/evidence/gated-runs.json is changed but not committed; commit it before merging");
     return EXIT.ok;
   } catch (err) {
     deps.log(`nothing recorded: ${err instanceof Error ? err.message : String(err)}`);
@@ -306,11 +346,17 @@ export function main(argv, env, deps) {
   if ("error" in args) return refuse(deps, args.error);
   if (env.OMF_GATED !== undefined && env.OMF_GATED !== "docker")
     return refuse(deps, 'OMF_GATED must be unset or "docker"');
-  if (args.model && !KEY_SHAPE.test(env.OMF_IMPLEMENTER_API_KEY ?? "")) {
-    return refuse(
-      deps,
-      "--model needs OMF_IMPLEMENTER_API_KEY in the environment (1 to 512 printable characters, no space)",
-    );
+  // The names of the keys this run hands to the test process. A refusal names a key, never a value.
+  let keys = [];
+  if (args.model) {
+    const wanted = keysFor(args.only);
+    if ("error" in wanted) return refuse(deps, wanted.error);
+    keys = wanted.keys;
+    for (const name of keys) {
+      if (!KEY_SHAPE.test(env[name] ?? "")) {
+        return refuse(deps, `--model needs ${name} in the environment (1 to 512 printable characters, no space)`);
+      }
+    }
   }
   for (const [tool, probe] of [
     ["colima", ["version"]],
@@ -322,7 +368,10 @@ export function main(argv, env, deps) {
   let head = "";
   if (args.record) {
     const tree = deps.run("git", ["status", "--porcelain"], { cwd: deps.root });
-    if (tree.status !== 0 || tree.stdout.trim() !== "") return refuse(deps, "--record needs a clean working tree");
+    // Records of earlier runs are not committed yet, so the evidence file alone may differ; anything else would make the record name the wrong code.
+    const changed = tree.stdout.split("\n").filter((line) => line.trim() !== "");
+    if (tree.status !== 0 || changed.some((line) => line.slice(3) !== EVIDENCE_PATH))
+      return refuse(deps, "--record needs a clean working tree (only docs/evidence/gated-runs.json may differ)");
     const read = deps.run("git", ["rev-parse", "HEAD"], { cwd: deps.root });
     head = read.stdout.trim();
     if (read.status !== 0 || head === "") return refuse(deps, "--record could not read the current commit");
@@ -347,6 +396,7 @@ export function main(argv, env, deps) {
     const modelDir = args.model ? deps.makeTempDir("omf-gated-model-") : null;
     const testEnv = gatedEnv(env, dockerConfig, deps.makeTempDir("omf-gated-home-"), {
       model: args.model,
+      keys,
       ...(modelDir === null ? {} : { report: join(modelDir, "model-report.json") }),
     });
     const reportFile = join(deps.makeTempDir("omf-gated-report-"), "vitest.json");
@@ -361,7 +411,7 @@ export function main(argv, env, deps) {
         `--outputFile.json=${reportFile}`,
         ...(args.only === null ? [] : ["-t", args.only]),
       ],
-      { cwd: deps.root, env: testEnv, ...(args.model ? { redact: [env.OMF_IMPLEMENTER_API_KEY] } : { inherit: true }) },
+      { cwd: deps.root, env: testEnv, ...(args.model ? { redact: keys.map((name) => env[name]) } : { inherit: true }) },
     );
     if (vitest.status !== 0) return EXIT.failed;
     return args.record ? record(deps, testEnv, reportFile, head) : EXIT.ok;

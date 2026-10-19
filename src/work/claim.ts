@@ -63,7 +63,7 @@ export function claimStatus(itemDir: string): ClaimStatus {
   return { held: !stale, owner, stale };
 }
 
-/** Takes the claim for this process. Throws LockHeldError while another live process owns it. Used by M3's W only. */
+/** Takes the claim for this process. Throws LockHeldError while another live process owns it. Used by the W line only. */
 export function claimItem(itemDir: string): LockOwner {
   return acquireLock(claimFile(itemDir));
 }

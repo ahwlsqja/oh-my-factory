@@ -140,7 +140,7 @@ export function measuredFrom(parts: Gate3Parts): Measured {
   };
 }
 
-/** What the judge reports for the `contradiction_canary` scenarios (counts only; M3f supplies it). */
+/** What the judge reports for the `contradiction_canary` scenarios (counts only; the container judge supplies it). */
 export interface ContradictionVerdict {
   judged_sha: string;
   contradiction_scenarios: number;

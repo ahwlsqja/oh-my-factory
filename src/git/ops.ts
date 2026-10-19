@@ -5,7 +5,7 @@ import { assertOutsideAgentHomes, assertOutsideRepo } from "../core/paths.js";
 import { HostGitError, runHostGit, type GitTarget, type HostGitOptions } from "./hardened.js";
 
 /**
- * Git operations on a quarantine repository, all through `runHostGit` (spec §5.4, §7; M3-D15).
+ * Git operations on a quarantine repository, all through `runHostGit` (spec §5.4, §7).
  *
  * Revisions are 40-hex shas only: a branch or tag name resolves through refs, and an argument that starts with `-`
  * could be read as an option. The repository is always named with `--git-dir`; a tree a container wrote is only ever
@@ -429,7 +429,7 @@ export async function exportTree(target: GitTarget, sha: string, destDir: string
 
 /**
  * `git archive --format=tar` of `sha` into a new file (0600, created exclusively so a planted symlink or an existing
- * file is refused). For a Docker build context (M3f); an archive from a hostile source is never extracted on the host.
+ * file is refused). For a Docker build context; an archive from a hostile source is never extracted on the host.
  */
 export async function archiveTar(target: GitTarget, sha: string, outFile: string): Promise<void> {
   requireSha("sha", sha);

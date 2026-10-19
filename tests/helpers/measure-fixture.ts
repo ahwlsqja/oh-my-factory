@@ -187,6 +187,7 @@ export function goldenInspectDoc(role: ContainerRole): InspectDoc {
     harness: ["/tmp", "/state"],
     workcopy: ["/tmp", "/work"],
     implementer: ["/tmp", "/work", "/agent"],
+    author: ["/tmp", "/in", "/out", "/agent"],
   }[role];
   return {
     Id: "c0ffee".padEnd(64, "0"),
@@ -203,7 +204,7 @@ export function goldenInspectDoc(role: ContainerRole): InspectDoc {
       Privileged: false,
       CapAdd: null,
       CapDrop: ["ALL"],
-      NetworkMode: role === "implementer" ? "bridge" : "none",
+      NetworkMode: role === "implementer" || role === "author" ? "bridge" : "none",
       PidMode: "",
       ReadonlyRootfs: true,
       SecurityOpt: ["no-new-privileges"],

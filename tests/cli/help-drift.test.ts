@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { omf } from "../helpers/cli.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
+// covers: S13.cli-usage-drift
 // Spec §13 asks for a CLI usage drift test: every command the built CLI registers must be documented.
 // The command list comes from the CLI's own --help, so a new command cannot be added without a README row.
 const ROOT = new URL("../../", import.meta.url);
@@ -56,6 +57,9 @@ describe("documentation drift", () => {
       "decide add",
       "decide lint",
       "decide show",
+      "seal",
+      "run",
+      "report",
       "ui",
     ]) {
       expect(paths).toContain(path);
@@ -71,6 +75,13 @@ describe("documentation drift", () => {
       return rows.some((row) => row.startsWith(prefix) && /^[ `]/.test(row.slice(prefix.length)));
     };
     expect(paths.filter((path) => !documented(path))).toEqual([]);
+  });
+
+  it.each(["README.md", "README.ko.md"])("%s documents seal, run and report with their exact heads", (file) => {
+    const text = readRepoFile(file);
+    for (const head of ["omf seal <work-id> [--json]", "omf run <work-id> [--json]", "omf report <work-id> [--json]"]) {
+      expect(text, file).toContain(`| \`${head}\` |`);
+    }
   });
 
   it("goal tick --help works on the built CLI", () => {

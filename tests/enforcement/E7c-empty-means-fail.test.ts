@@ -1,3 +1,4 @@
+// covers: S5.0.empty-means-fail
 import { describe, expect, it } from "vitest";
 import { auditSignals } from "../../src/audit/work-audit.js";
 import { GATE_NAMES, type GateName } from "../../src/decision/types.js";

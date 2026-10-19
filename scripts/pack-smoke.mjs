@@ -18,6 +18,9 @@ const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const rootPkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const REQUIRED_TOP = [...rootPkg.files, "package.json"];
 const ALLOWED_TOP = new Set([...REQUIRED_TOP, "README.ko.md"]);
+// The verbs of the verification line must be in the installed binary. The pack allowlist above is unchanged: outer/,
+// docs/, scripts/ and tests/ are not shipped, and the new schemas live under the shipped schemas/.
+const REQUIRED_VERBS = ["seal", "run", "report"];
 
 const tmp = mkdtempSync(join(tmpdir(), "omf-pack-smoke-"));
 const failures = [];
@@ -76,6 +79,9 @@ try {
   if (version !== pkg.version) fail(`omf --version printed "${version}", expected "${pkg.version}"`);
   const help = run(bin, ["--help"], { cwd: tmp });
   if (!/omf/i.test(help) || !/Usage:/i.test(help)) fail("omf --help output looks wrong");
+  for (const verb of REQUIRED_VERBS) {
+    if (!new RegExp(`^\\s+${verb}\\b`, "m").test(help)) fail(`omf --help does not list the ${verb} command`);
+  }
 
   // 5. Schema lookup from the installed location: init + ledger verify in a
   // throwaway git repo with an isolated HOME.

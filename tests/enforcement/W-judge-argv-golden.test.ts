@@ -1,3 +1,4 @@
+// covers: S5.5.judge-two-container
 import { describe, expect, it } from "vitest";
 import {
   buildArgv,

@@ -78,7 +78,7 @@ const detach = <T>(value: T): T => structuredClone(value);
  * is validated: the schema types `by` / `signed_by` as human ids, so an event written by `omf` or an
  * agent would otherwise fail validation and be reported as `malformed_event` instead.
  * The first valid closing event wins; a later one is `already_closed`, except that a deferred decision
- * can be closed again by a person (resolve, defer anew, n/a; A21), because an expired deferral counts
+ * can be closed again by a person (resolve, defer anew, n/a), because an expired deferral counts
  * as open at GATE-1. `decision.rejected` is an audit record and never changes state.
  *
  * Not detected: a `human:*` event appended directly by someone who can write to ~/.omf and recompute the
@@ -152,7 +152,7 @@ export function foldDecisions(events: readonly LedgerEvent[], scope: DecisionSco
       flag("unknown_decision");
       continue;
     }
-    // resolved and na are final. A deferred record can be closed again (A21): its deferral may have expired.
+    // resolved and na are final. A deferred record can be closed again: its deferral may have expired.
     if (record.status === "resolved" || record.status === "na") {
       flag("already_closed");
       continue;

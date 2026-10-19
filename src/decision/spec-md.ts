@@ -86,12 +86,12 @@ function section(title: string, body: string[], empty: string): string[] {
 }
 
 /**
- * Renders the decisions of one work item as Markdown (spec §5.0, M3a A9, A16b, A17). Pure and byte-stable:
+ * Renders the decisions of one work item as Markdown (spec §5.0). Pure and byte-stable:
  * the same state, header and leak context give the same string. There is no clock (a deferral prints its
  * stored `expires_at`, never "expired"), no randomness and no file read.
  *
  * Only content fields are printed. The goal id, the work id, `by`, `at`, `signed_by`, `added_by` and a
- * deferral's `owner` are not, so no e-mail address and no goal id can reach the file, which M3g copies
+ * deferral's `owner` are not, so no e-mail address and no goal id can reach the file, which the implementer container copies
  * into a worktree that a model can read. A record that fails `recordProblems` under `leak` (a leak after
  * a re-lock, a quantitative decision without a measure, a leaking id) is withheld: it appears under Open
  * as `record withheld (<problem code>) #<added_seq>`, with no id and no text.

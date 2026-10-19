@@ -8,7 +8,8 @@ import { CONTAINER_PROBE_ARGV } from "../../src/container/measure.js";
 import { CONFIG_DEFAULTS } from "../../src/core/config.js";
 import { commitChain } from "../../src/git/ops.js";
 import { combineLineEnd } from "../../src/implementer/station.js";
-import { MUTATING_VERBS } from "../helpers/fake-docker.js";
+import { sweepItemOrphans } from "../../src/container/item-sweep.js";
+import { MUTATING_VERBS, verbOf } from "../helpers/fake-docker.js";
 import { goodScript, IMPLEMENTER_IMAGE, implementerRig, MODEL, SENTINEL_KEY } from "../helpers/implementer-fixture.js";
 import type { ImplementerFailureCode, ImplementerSession, SessionRequest } from "../../src/implementer/session.js";
 import { RUN } from "../helpers/judge-seed.js";
@@ -276,5 +277,52 @@ describe("line end", () => {
     );
     await expect(end()).resolves.toBeUndefined();
     expect(order).toEqual(["first", "second"]);
+  });
+});
+
+describe("S3 run marker before the first container", () => {
+  it("has created runs/<run id> (mode 0700) when the implementer container is created", async () => {
+    const rig = implementerRig();
+    const ctx = rig.ctx();
+    const marker = join(rig.itemDir, "runs", ctx.runId);
+    expect(existsSync(marker)).toBe(false);
+    const seen: boolean[] = [];
+    rig.fake.intercept = (argv) => {
+      if (verbOf(argv) === "create") seen.push(existsSync(marker));
+      return null;
+    };
+    await rig.stations.S3.run(ctx);
+    expect(seen).toEqual([true]);
+    expect(statSync(marker).mode & 0o777).toBe(0o700);
+  });
+
+  it("a run killed during the isolation probe leaves a container that the next sweep of the item removes", async () => {
+    const rig = implementerRig();
+    const ctx = rig.ctx();
+    const marker = join(rig.itemDir, "runs", ctx.runId);
+    let release = (): void => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let reachedProbe = (): void => {};
+    const reached = new Promise<void>((resolve) => {
+      reachedProbe = resolve;
+    });
+    rig.fake.gate = (argv) => {
+      if (verbOf(argv) !== "exec") return null;
+      reachedProbe();
+      return held;
+    };
+    const running = Promise.resolve(rig.stations.S3.run(ctx)).catch(() => undefined);
+    await reached;
+    const left = Object.keys(rig.fake.state.containers);
+    expect(left).toHaveLength(1);
+    expect(left[0]).toMatch(/^omf-implementer-/);
+    expect(existsSync(marker)).toBe(true);
+    expect(await sweepItemOrphans({ runtime: rig.spy.runtime, itemDir: rig.itemDir, workId: rig.workId })).toBe(1);
+    expect(Object.keys(rig.fake.state.containers)).toEqual([]);
+    rig.fake.gate = null;
+    release();
+    await running;
   });
 });

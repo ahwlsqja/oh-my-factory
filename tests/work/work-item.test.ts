@@ -1,3 +1,4 @@
+// covers: F1.goal-is-top-unit
 import { describe, expect, it } from "vitest";
 import { validate } from "../../src/core/schema.js";
 import type { WorkItemFront } from "../../src/work/types.js";

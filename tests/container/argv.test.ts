@@ -62,7 +62,7 @@ describe("a bad spec or argument throws before any argv exists", () => {
     ["a fractional round", () => createArgv({ ...sut, labels: { ...sut.labels, round: 1.5 } }, null), "invalid_label"],
     [
       "a role that is not a role",
-      () => createArgv({ ...sut, labels: { ...sut.labels, role: "author" as ContainerRole } }, null),
+      () => createArgv({ ...sut, labels: { ...sut.labels, role: "judge" as ContainerRole } }, null),
       "invalid_label",
     ],
     [
@@ -197,7 +197,7 @@ describe("listing and image removal", () => {
       "--filter",
       "label=omf.owner=omf",
       "--format",
-      '{{.Names}}\t{{.Label "omf.run"}}',
+      '{{.Names}}\t{{.Label "omf.run"}}\t{{.Label "omf.work"}}',
     ]);
     expect(listOwnedArgv("container", "run-1", null)).toEqual([
       "ps",
@@ -207,7 +207,7 @@ describe("listing and image removal", () => {
       "--filter",
       "label=omf.run=run-1",
       "--format",
-      '{{.Names}}\t{{.Label "omf.run"}}',
+      '{{.Names}}\t{{.Label "omf.run"}}\t{{.Label "omf.work"}}',
     ]);
     expect(listOwnedArgv("image", null, "ctx")).toEqual([
       "--context",

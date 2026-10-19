@@ -190,7 +190,7 @@ function watchedChanges(
 
 /**
  * Metrics whose bands file is not what J1 locked: edited, created or deleted. An unreadable file counts as
- * changed (measureGoal will stop on it with the parse error). An approval from before M2b locked no bands, so
+ * changed (measureGoal will stop on it with the parse error). An approval from before bands and wall time were recorded locked no bands, so
  * there is nothing to compare and nothing is flagged.
  */
 function bandsChanges(dir: string, goalId: string, approval: GoalApproval, lock: GoalLock): string[] {
@@ -300,7 +300,7 @@ export function auditGoal(location: ProjectLocation, goalId: string, now: Date =
   report.watched_paths_changed = watched.paths;
 
   if (goalLock !== null) report.regime_changes.push(...bandsChanges(location.dir, goalId, approval, goalLock));
-  // D21: a goal that refresh marked stale needs J1 again; the new approval is what clears the mark.
+  // A goal that refresh marked stale needs J1 again; the new approval is what clears the mark.
   const stale = staleReason(events, goalId);
   if (stale !== null) report.regime_changes.push(stale);
 

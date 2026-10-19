@@ -1,0 +1,82 @@
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import type { ContainerRuntime } from "./runtime.js";
+import { assertName } from "./spec.js";
+import { UNREADABLE_GRACE_MS, isLockHeld, sealLockFile } from "../core/lock.js";
+import { claimFile, claimStatus } from "../work/claim.js";
+
+interface ItemSweepInput {
+  runtime: Pick<ContainerRuntime, "listOwned" | "remove">;
+  itemDir: string;
+  /** The item's id: a run id is only unique to the second, so a container counts only when its `omf.work` label is this item. */
+  workId: string;
+  /** The pass of the calling `omf seal`, whose marker may already exist; never selected. */
+  currentPassId?: string;
+}
+
+/**
+ * One item-level sweep for a command that holds neither `seal.lock` nor the item claim. It removes this item's author orphans
+ * while `seal.lock` is free and this item's implementer orphans while the claim is not held by a live run, so a live
+ * container is never removed. Race-free order, the same as `sweepOrphans` (src/judge/state.ts): the directories under `runs/`
+ * are read first, then each lock is probed, then the daemon is listed once. A pass or run that starts after the read has
+ * a marker this sweep never saw, so its container is not selected whatever the probes say. Nothing is listed when both
+ * roles are held. Best effort: any failure (an unreadable claim, a daemon that cannot answer) removes nothing more, leaves
+ * the orphan for the next command and never changes what the command reports.
+ */
+export async function sweepItemOrphans(
+  input: ItemSweepInput & { roles?: readonly ("author" | "implementer")[] },
+): Promise<number> {
+  const roles = input.roles ?? ["author", "implementer"];
+  try {
+    const runsDir = join(input.itemDir, "runs");
+    const earlier = new Set(existsSync(runsDir) ? readdirSync(runsDir) : []);
+    earlier.delete(input.currentPassId ?? "");
+    const free = {
+      author: roles.includes("author") && !isLockHeld(sealLockFile(input.itemDir)),
+      implementer: roles.includes("implementer") && !claimHeld(input.itemDir),
+    };
+    if (!free.author && !free.implementer) return 0;
+    let removed = 0;
+    for (const resource of await input.runtime.listOwned({ run_id: null })) {
+      if (resource.kind !== "container" || resource.work_id !== input.workId || !earlier.has(resource.run_id)) continue;
+      const role = resource.name.startsWith("omf-author-")
+        ? "author"
+        : resource.name.startsWith("omf-implementer-")
+          ? "implementer"
+          : null;
+      if (role === null || !free[role]) continue;
+      try {
+        assertName(resource.name);
+      } catch {
+        continue;
+      }
+      await input.runtime.remove({ name: resource.name, id: resource.name, role });
+      removed += 1;
+    }
+    return removed;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Whether the sweep must treat the claim as held. A claim whose owner is readable is held while that process lives. A claim with
+ * no readable owner counts as held only for the grace `isLockHeld` gives a lock file mid-write; an older one is not held for
+ * the sweep. `claimStatus` itself is unchanged: such a claim still keeps the item unrunnable until it is removed by hand.
+ * Any other failure to read it counts as held: the sweep keeps what it cannot prove orphaned.
+ */
+function claimHeld(itemDir: string): boolean {
+  try {
+    const status = claimStatus(itemDir);
+    if (!status.held) return false;
+    if (status.owner !== null) return true;
+    try {
+      return Date.now() - statSync(claimFile(itemDir)).mtimeMs <= UNREADABLE_GRACE_MS;
+    } catch (err) {
+      // Only a claim that vanished is not held; any other failure to read it keeps the orphan.
+      return (err as NodeJS.ErrnoException).code !== "ENOENT";
+    }
+  } catch {
+    return true;
+  }
+}

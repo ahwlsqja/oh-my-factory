@@ -122,7 +122,7 @@ export type GuardrailsAggregate = "pass" | "breach" | "unevaluated" | "none";
 /**
  * Precedence breach > unevaluated > pass > none. `none` is only a goal that declares no guardrails. A guardrail
  * whose metric has no bands file is permanently `unevaluated`, so it can never be read as `pass`: not having
- * been judged is not the same as having passed (D9a).
+ * been judged is not the same as having passed .
  */
 export function aggregateGuardrails(guardrails: readonly { status: GuardrailStatus }[]): GuardrailsAggregate {
   if (guardrails.length === 0) return "none";

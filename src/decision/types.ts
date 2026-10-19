@@ -22,8 +22,7 @@ export const DECISION_CLASSES = [
 export type DecisionClass = (typeof DECISION_CLASSES)[number];
 
 /**
- * Classes that need a numeric response_measure when resolved (spec §5.2). Not linkable to CLI scenarios in v0.1
- * (M3-D17). The spec does not list the set: this list is an M3a choice, and `durability` is the contestable member.
+ * Classes that need a numeric response_measure when resolved (spec §5.2). Not linkable to CLI scenarios in v0.1. The spec does not list the set: this list is a choice made here, and `durability` is the contestable member.
  */
 export const QUANTITATIVE_CLASSES: readonly DecisionClass[] = [
   "latency",
@@ -72,16 +71,16 @@ export type GateName = (typeof GATE_NAMES)[number];
  * run as declared; never read from package.json or a Makefile, which a candidate can edit.
  */
 export interface InterfaceContract {
-  kind: "cli" | "http"; // http is parsed; scenarios for it are refused in M3c (M3-D5)
+  kind: "cli" | "http"; // http is parsed; scenarios for it are refused for now
   build: string[];
   run: string[];
   io_contract: string;
   gates: { fast: string[] | null; full: string[] | null; deep: string[] | null; required: GateName[] };
-  test_command: string[]; // what prove-test (M3e) runs
+  test_command: string[]; // what prove-test runs
 }
 
 /**
- * "Judge config" as M3a defines it: the gate definitions and test_command. M3e adds the files these resolve to at the
+ * "Judge config" as defined here: the gate definitions and test_command. The audit adds the files these resolve to at the
  * base sha (src/audit/judge-files.ts); the harness image digest is not part of this value: the judge events pin it per run (src/judge/events.ts).
  */
 export interface JudgeConfigDecl {

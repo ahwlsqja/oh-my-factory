@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OMF author events (spec §5.3, §7)",
+  "description": "Validates { type, payload } of the author.session_completed ledger event. Every string is an id, a digest, a model name from a closed pattern, a violation code or a member of a closed list, and every number is a count, so no prompt, answer, log or path text can enter. The cross-field rule (violation_codes is non-empty exactly when the outcome is not_golden) is checked by src/author/events.ts in the writer. The secret is named, never carried.",
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "count": { "type": "integer", "minimum": 0 },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goal_id",
+        "work_id",
+        "pass_id",
+        "round",
+        "vendor",
+        "model",
+        "outcome",
+        "duration_ms",
+        "image_id",
+        "input_sha256",
+        "violation_codes",
+        "answer_sha256",
+        "answer_bytes",
+        "credential_hits",
+        "output_bytes",
+        "limit_timeout_ms",
+        "limit_output_bytes",
+        "limit_calls",
+        "calls_before",
+        "injected_secret_names"
+      ],
+      "properties": {
+        "goal_id": { "type": "string", "pattern": "^g-[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },
+        "work_id": { "type": "string", "pattern": "^w-[0-9a-f]{12}$" },
+        "pass_id": { "type": "string", "pattern": "^r-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}$" },
+        "round": { "type": "integer", "minimum": 1 },
+        "vendor": { "const": "codex" },
+        "model": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,80}$" },
+        "outcome": {
+          "enum": [
+            "completed",
+            "timeout",
+            "spawn_failed",
+            "nonzero_exit",
+            "no_output",
+            "output_limit",
+            "misconfigured",
+            "not_golden",
+            "container_failed",
+            "credential_in_output"
+          ]
+        },
+        "duration_ms": { "$ref": "#/$defs/count" },
+        "image_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "input_sha256": { "$ref": "#/$defs/digest" },
+        "violation_codes": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,39}$" }
+        },
+        "answer_sha256": { "anyOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "answer_bytes": { "$ref": "#/$defs/count" },
+        "credential_hits": { "$ref": "#/$defs/count" },
+        "output_bytes": { "$ref": "#/$defs/count" },
+        "limit_timeout_ms": { "$ref": "#/$defs/count" },
+        "limit_output_bytes": { "$ref": "#/$defs/count" },
+        "limit_calls": { "$ref": "#/$defs/count" },
+        "calls_before": { "$ref": "#/$defs/count" },
+        "injected_secret_names": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": { "enum": ["CODEX_API_KEY"] }
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "payload"],
+  "properties": {
+    "type": { "const": "author.session_completed" },
+    "payload": { "$ref": "#/$defs/payload" }
+  }
+}

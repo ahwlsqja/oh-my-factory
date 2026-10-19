@@ -1,3 +1,4 @@
+// covers: S5.4.implementer-container
 import { describe, expect, it } from "vitest";
 import { createArgv, execArgv } from "../../src/container/argv.js";
 import { containerSpecFor } from "../../src/container/golden.js";
@@ -26,7 +27,7 @@ const NAME = `omf-implementer-${FIXTURE_RUN_ID}-1-1`;
 const OWNED = "nosuid,nodev,uid=65532,gid=65532";
 const FIXED_ENV =
   "--env HOME=/agent --env CLAUDE_CONFIG_DIR=/agent/claude --env DISABLE_AUTOUPDATER=1 --env DISABLE_TELEMETRY=1 --env CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 --env NO_COLOR=1 --env OMF_TMP=/tmp --env GIT_AUTHOR_NAME=omf-implementer --env GIT_AUTHOR_EMAIL=omf-implementer@invalid --env GIT_COMMITTER_NAME=omf-implementer --env GIT_COMMITTER_EMAIL=omf-implementer@invalid";
-const GOLDEN_CREATE = `--context colima-omf-m3f create --name ${NAME} --pull never --label omf.owner=omf --label omf.work=${FIXTURE_WORK_ID} --label omf.run=${FIXTURE_RUN_ID} --label omf.round=1 --label omf.role=implementer --network bridge --cap-drop ALL --security-opt no-new-privileges --read-only --user 65532:65532 --pids-limit 512 --memory 2048m --cpus 2 --stop-timeout 1 --env LC_ALL=C ${FIXED_ENV} --tmpfs /tmp:rw,size=256m,${OWNED} --tmpfs /work:rw,size=1024m,nosuid,nodev,exec,uid=65532,gid=65532 --tmpfs /agent:rw,size=256m,${OWNED} --entrypoint sleep ${IMPLEMENTER_BASE} 2147483647`;
+const GOLDEN_CREATE = `--context colima-omf-m3f create --name ${NAME} --pull never --label omf.owner=omf --label omf.work=${FIXTURE_WORK_ID} --label omf.run=${FIXTURE_RUN_ID} --label omf.round=1 --label omf.role=implementer --network bridge --cap-drop ALL --security-opt no-new-privileges --read-only --user 65532:65532 --pids-limit 512 --memory 2048m --cpus 2 --stop-timeout 1 --env LC_ALL=C ${FIXED_ENV} --tmpfs /tmp:rw,size=256m,${OWNED} --tmpfs /work:rw,size=1024m,nosuid,nodev,exec,uid=65532,gid=65532 --tmpfs /agent:rw,size=256m,${OWNED} --entrypoint sleep ${IMPLEMENTER_BASE} 2865`;
 
 const CLOSED_FLAGS = [
   "--cap-drop",

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runDecideResolve } from "../../src/cli/decide.js";
 import type { Ids } from "../../src/scenario/intake.js";
+import type { SealInputs } from "../../src/seal/prompt.js";
 import { type SealDeps, type SealStageResult, runSealStage } from "../../src/seal/seal.js";
 import {
   type AgentSession,
@@ -183,3 +184,12 @@ export async function probeSealRefusal(kind: "canary_in_repo" | "symlink_in_stat
     vaultEntries: readdirSync(s.vault.dir),
   };
 }
+
+/** A valid, closed `SealInputs` for tests that call a session directly (the command author ignores it). */
+export const SESSION_INPUTS: SealInputs = {
+  intent: "# Intent\n\nA cache that survives a restart.\n",
+  spec: "# Specification\n\nThe interface decision is resolved.\n",
+  contract: CONTRACT,
+  linkable_decision_ids: ["d-interface"],
+  quantitative_decision_ids: [],
+};

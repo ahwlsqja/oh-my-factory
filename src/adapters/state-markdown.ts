@@ -33,7 +33,7 @@ export interface NewWorkItem {
 export type CreateResult = { created: true; item: WorkItem } | { created: false; reason: "exists"; work_id: string };
 
 /**
- * What a progress marker may say (M3b1-D10): a station S1 to S7, one space, one lowercase step word. The
+ * What a progress marker may say: a station S1 to S7, one space, one lowercase step word. The
  * grammar is closed on purpose: it has no digit and no free text, so neither a metric name, a target nor a
  * measured value can be written into the item, and it cannot contain the progress region's own comment markers
  * (spec §8 keeps metric values out of trackers). The caller renders the text from closed lists; the store checks.
@@ -42,7 +42,7 @@ export const PROGRESS_MARKER_PATTERN = /^S[1-7] [a-z_]{1,40}$/;
 
 /**
  * `RepairTarget` (the only states `repairWorkItem` can produce: the three W edges a ledger-ahead crash can leave a
- * file behind; `done`, `vetoed` and `cancelled` are not there) was declared in `src/work/types.ts` by Task 2. The
+ * file behind; `done`, `vetoed` and `cancelled` are not there) was declared in `src/work/types.ts` earlier. The
  * store re-exports it so callers can import it from here.
  */
 export type { RepairTarget };
@@ -78,15 +78,15 @@ export interface StateStore {
   /** human:* or "omf"; any open state -> cancelled. Takes item.lock only. */
   cancelWorkItem(workId: string, actor: string, now: Date): WorkItem;
   /**
-   * The W verbs (M3b1-D1). OMF's own, so they take no actor: the ledger event the caller appended first is the
+   * The W verbs. OMF's own, so they take no actor: the ledger event the caller appended first is the
    * authority, and the file only catches up to it. All take item.lock only and stamp updated_at = now.
-   * No verb can produce `done` (M4 owns completion).
+   * No verb can produce `done` (only a person completes an item).
    */
   /** ready -> in_progress. */
   startWorkItem(workId: string, now: Date): WorkItem;
   /** in_progress -> awaiting_review. */
   submitWorkItemForReview(workId: string, now: Date): WorkItem;
-  /** in_progress -> failed. Stricter than TRANSITIONS, which also lists awaiting_review -> failed for a person at M4. */
+  /** in_progress -> failed. Stricter than TRANSITIONS, which also lists awaiting_review -> failed for a person. */
   failWorkItem(workId: string, now: Date): WorkItem;
   /** Only ready -> in_progress, in_progress -> awaiting_review and in_progress -> failed: the file catching up to a ledger that is one W edge ahead. */
   repairWorkItem(workId: string, to: RepairTarget, now: Date): WorkItem;

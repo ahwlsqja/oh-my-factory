@@ -89,7 +89,7 @@ export function s4Station(deps: ResolvedDeps, holder: RoundHolder): Station {
         const info = await runtime.info();
         if (!info.ok || !(await runtime.endpoint()).local) return blocked("infra_failure");
         await releaseHeld(runtime, engine, holder);
-        await sweepOrphans({ runtime, itemDir: ctx.item.dir, currentRunId: ctx.runId });
+        await sweepOrphans({ runtime, itemDir: ctx.item.dir, currentRunId: ctx.runId, workId: ctx.workId });
         mkdirSync(contextRoot, { recursive: true, mode: 0o700 });
         const lease = await engine.buildRoundImages({
           runtime,

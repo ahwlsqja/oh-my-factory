@@ -42,7 +42,7 @@ export class MetricError extends Error {
 
 /**
  * The one sentence for "this metric's image is not pinned by digest", or null when it is pinned or absent. Proposing
- * and locking both use it, so a metric that cannot be proposed cannot be locked either (M3-D13). The image is
+ * and locking both use it, so a metric that cannot be proposed cannot be locked either. The image is
  * untrusted text and is printed through `safeText`.
  */
 export function unpinnedImageProblem(metric: Pick<MetricDefinition, "metric_id" | "image">): string | null {

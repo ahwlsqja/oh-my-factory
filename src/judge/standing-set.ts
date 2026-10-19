@@ -9,7 +9,7 @@ import type { Vault } from "../vault/vault.js";
 
 /**
  * The sealed set the judge reads: the latest seal, the vault files proven to be that seal's by digest, the scenarios
- * whose ledger status is active, and the split digests M3d keys its ladder and its single test run on. The failures are
+ * whose ledger status is active, and the split digests the feedback layer keys its ladder and its single test run on. The failures are
  * the ones GATE-2 reports (J3 or back to S2); a station that meets one judges nothing.
  */
 export type StandingSet =

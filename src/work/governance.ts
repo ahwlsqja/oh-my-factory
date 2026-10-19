@@ -10,7 +10,7 @@ import { runStateFromEvents } from "../goal/run-state.js";
 /**
  * Why governance could not be read as a running, approved goal (spec §11, rule 5). A closed list: the
  * texts built from it can reach a `WRun`, a `WError` and the ledger stream, so no audit text (metric ids,
- * watched paths, lock messages) is ever copied into it (M3b1-D3).
+ * watched paths, lock messages) is ever copied into it.
  */
 export type GovernanceCode =
   | "config_unreadable"

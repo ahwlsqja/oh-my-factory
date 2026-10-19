@@ -128,13 +128,13 @@ describe("parseConfig rejections", () => {
 
   it("says why codex and login_file are refused", () => {
     expect(() => parseConfig('[reconciler]\nkind = "codex"\n')).toThrow(
-      /reconciler\.kind "codex" needs a container; M3/,
+      /reconciler\.kind "codex" is not available: it needs a credential decision that is not made yet/,
     );
     expect(() => parseConfig('[roles]\nreconciler = { vendor = "codex" }\n')).toThrow(
-      /roles\.reconciler\.vendor "codex" needs a container; M3/,
+      /roles\.reconciler\.vendor "codex" is not available: it needs a credential decision that is not made yet/,
     );
     expect(() => parseConfig('[reconciler]\nauth = "login_file"\n')).toThrow(
-      /reconciler\.auth "login_file" needs a container; M3/,
+      /reconciler\.auth "login_file" is not available: it needs a credential decision that is not made yet/,
     );
   });
 
@@ -434,5 +434,149 @@ describe("[implementer]", () => {
     );
     for (const name of Object.keys(properties)) expect(name).not.toMatch(/key|token|secret|credential|password|env/i);
     expect(Object.keys(CONFIG_DEFAULTS.implementer).sort()).toEqual(Object.keys(properties).sort());
+  });
+});
+
+describe("[author]", () => {
+  const D = "c".repeat(64);
+
+  it("defaults to no image, a ten minute call and tmpfs sizes that fit in 1 GiB", () => {
+    expect(parseConfig("").author).toEqual({
+      image: null,
+      timeout_ms: 600_000,
+      max_output_bytes: 1_048_576,
+      max_calls: 10,
+      memory_mb: 1024,
+      cpus: 1,
+      pids_limit: 256,
+      tmp_tmpfs_mb: 64,
+      in_tmpfs_mb: 16,
+      out_tmpfs_mb: 16,
+      agent_tmpfs_mb: 128,
+    });
+  });
+
+  it("merges a partial section over the defaults and accepts a digest and a local image id", () => {
+    const pinned = parseConfig(`[author]\nimage = "factory-author@sha256:${D}"\ntimeout_ms = 120000\n`).author;
+    expect(pinned).toMatchObject({ image: `factory-author@sha256:${D}`, timeout_ms: 120_000, memory_mb: 1024 });
+    expect(parseConfig(`[author]\nimage = "sha256:${D}"\n`).author.image).toBe(`sha256:${D}`);
+  });
+
+  it("does not hand out the defaults' own object", () => {
+    parseConfig("").author.memory_mb = 1;
+    expect(CONFIG_DEFAULTS.author.memory_mb).toBe(1024);
+  });
+
+  it("keeps the [author] example in the shipped config commented out and never configures a key", () => {
+    expect(DEFAULT_CONFIG).toMatch(/^# \[author\]$/m);
+    expect(DEFAULT_CONFIG).not.toMatch(/^\[author\]/m);
+    expect(DEFAULT_CONFIG).not.toMatch(/(api_key|token|secret|password)\s*=/i);
+  });
+
+  it.each([
+    ["a timeout below one minute", "timeout_ms = 59999"],
+    ["a timeout above one hour", "timeout_ms = 3600001"],
+    ["a memory limit below 256", "memory_mb = 255"],
+    ["cpus above 8", "cpus = 8.5"],
+    ["a pids limit below 16", "pids_limit = 15"],
+    ["a zero tmp size", "tmp_tmpfs_mb = 0"],
+    ["an input size of zero", "in_tmpfs_mb = 0"],
+    ["an output size above 256", "out_tmpfs_mb = 257"],
+    ["an agent size below 16", "agent_tmpfs_mb = 15"],
+    ["a docker context of its own", 'docker_context = "x"'],
+    ["a key field", 'api_key = "x"'],
+  ])("refuses %s", (_name, line) => {
+    expect(() => parseConfig(`[author]\n${line}\n`)).toThrow(/config\.toml is invalid/);
+  });
+
+  it.each([
+    ["the shortest timeout", "timeout_ms = 60000"],
+    ["the longest timeout", "timeout_ms = 3600000"],
+    ["the cpus floor", "cpus = 0.1"],
+    ["the cpus ceiling", "cpus = 8"],
+  ])("accepts %s", (_name, line) => {
+    expect(() => parseConfig(`[author]\n${line}\n`)).not.toThrow();
+  });
+
+  it.each([
+    ["a tag", "codex-author:1"],
+    ["an empty string", ""],
+    ["an upper case image id", `sha256:${D.toUpperCase()}`],
+    ["a digest of 63 characters", `codex-author@sha256:${"d".repeat(63)}`],
+  ])("refuses an image that is %s, naming the key, before the schema runs", (_name, image) => {
+    expect(() => parseConfig(`[author]\nimage = "${image}"\n`)).toThrow(
+      "author.image must be pinned by digest or be a local image id",
+    );
+  });
+
+  it("refuses tmpfs sizes that do not fit in memory_mb, because tmpfs is charged to the container", () => {
+    // tmp (64) + in (16) + out (16) + agent (200) = 296 MiB.
+    expect(() => parseConfig("[author]\nmemory_mb = 256\nagent_tmpfs_mb = 200\n")).toThrow(
+      /author tmpfs sizes \(296 MiB\) exceed author\.memory_mb \(256\)/,
+    );
+    expect(parseConfig("[author]\nmemory_mb = 296\nagent_tmpfs_mb = 200\n").author.memory_mb).toBe(296);
+  });
+
+  it("has exactly the closed key set, none of which can carry a credential", () => {
+    const schema = JSON.parse(readFileSync(schemaUrl("config.schema.json"), "utf8")) as {
+      properties: { author: { additionalProperties: boolean; properties: Record<string, unknown> } };
+    };
+    const { additionalProperties, properties } = schema.properties.author;
+    expect(additionalProperties).toBe(false);
+    expect(Object.keys(properties).sort()).toEqual(
+      [
+        "agent_tmpfs_mb",
+        "cpus",
+        "image",
+        "in_tmpfs_mb",
+        "max_calls",
+        "max_output_bytes",
+        "memory_mb",
+        "out_tmpfs_mb",
+        "pids_limit",
+        "timeout_ms",
+        "tmp_tmpfs_mb",
+      ].sort(),
+    );
+    for (const name of Object.keys(properties)) expect(name).not.toMatch(/key|token|secret|credential|password|env/i);
+    expect(Object.keys(CONFIG_DEFAULTS.author).sort()).toEqual(Object.keys(properties).sort());
+  });
+});
+
+describe("[seal] same_vendor", () => {
+  it.each(["true", "false", '"acknowledged"'])(
+    "refuses same_vendor = %s with the reason, and never reads it",
+    (value) => {
+      expect(() => parseConfig(`[seal]\nsame_vendor = ${value}\n`)).toThrow(
+        /\[seal\] same_vendor is not available: no same-vendor pairing is runnable in v0\.1/,
+      );
+    },
+  );
+
+  it("refuses any other [seal] key and an empty [seal] table as unknown configuration", () => {
+    expect(() => parseConfig("[seal]\nrounds = 2\n")).toThrow(/config\.toml is invalid/);
+    expect(() => parseConfig("[seal]\n")).toThrow(/config\.toml is invalid/);
+  });
+});
+
+describe("[author] caps", () => {
+  it("defaults to ten calls per work item and a 1 MiB cap on the Codex output", () => {
+    expect(parseConfig("").author).toMatchObject({ max_calls: 10, max_output_bytes: 1_048_576, timeout_ms: 600_000 });
+  });
+
+  it.each([
+    ["max_calls = 0"],
+    ["max_calls = 101"],
+    ["max_calls = 1.5"],
+    ["max_output_bytes = 65535"],
+    ["max_output_bytes = 16777217"],
+  ])("refuses %s", (line) => {
+    expect(() => parseConfig(`[author]\n${line}\n`)).toThrow(/max_/);
+  });
+
+  it("accepts the edges", () => {
+    const author = parseConfig("[author]\nmax_calls = 1\nmax_output_bytes = 65536\n").author;
+    expect(author).toMatchObject({ max_calls: 1, max_output_bytes: 65_536 });
+    expect(parseConfig("[author]\nmax_calls = 100\nmax_output_bytes = 16777216\n").author.max_calls).toBe(100);
   });
 });

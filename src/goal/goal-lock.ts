@@ -31,7 +31,7 @@ export interface GoalLock {
   approved_by: string;
   approved_at: string;
   semantic: GoalSemantic;
-  /** metric id to the sha256 of its bands config, or null when it had no bands file; absent on locks written before M2b. */
+  /** metric id to the sha256 of its bands config, or null when it had no bands file; absent on locks written before bands and wall time were recorded. */
   bands?: Record<string, string | null>;
 }
 
@@ -45,9 +45,9 @@ export interface GoalApproval {
   approved_at: string;
   /** When the goal was first approved; wall time is counted from here (spec §4.4). */
   first_approved_at: string;
-  /** Hash of the bands map J1 locked; null for an approval written before M2b, whose bands were never locked. */
+  /** Hash of the bands map J1 locked; null for an approval written before bands and wall time were recorded, whose bands were never locked. */
   bands_sha256: string | null;
-  /** The wall time J1 approved, for example `72h`; null for an approval written before M2b. */
+  /** The wall time J1 approved, for example `72h`; null for an approval written before bands and wall time were recorded. */
   wall_time: string | null;
 }
 
@@ -181,7 +181,7 @@ function requireWallTimeUnchanged(
   budget: { wall_time: string },
   previous: GoalApproval,
 ): void {
-  // The ledger records the approved wall time (D26); only a pre-M2b approval falls back to the lock file.
+  // The ledger records the approved wall time; only an approval from before the wall time was recorded falls back to the lock file.
   const approved = previous.wall_time ?? lockedWallTime(location, goalId, previous);
   if (approved !== null && parseDuration(budget.wall_time) !== parseDuration(approved)) {
     throw new ApprovalError(
@@ -191,7 +191,7 @@ function requireWallTimeUnchanged(
   }
 }
 
-/** The wall time in a pre-M2b goal lock, or null when the lock is missing, unreadable or does not match the ledger (it is being repaired). */
+/** The wall time in an older goal lock, or null when the lock is missing, unreadable or does not match the ledger (it is being repaired). */
 function lockedWallTime(location: ProjectLocation, goalId: string, previous: GoalApproval): string | null {
   let locked: GoalLock | null = null;
   try {
@@ -274,7 +274,7 @@ function lockGoalSerialized(
     if (proposal === null) throw new ApprovalError(`metric ${id} has no proposal; run omf metric propose ${id}`);
     return proposal;
   });
-  // A proposal made before the digest rule may still hold a tag. No new lock is created from it (M3-D13); a lock that
+  // A proposal made before the digest rule may still hold a tag. No new lock is created from it; a lock that
   // already exists with a tag is not touched here and keeps measuring.
   for (const proposal of proposals) {
     const unpinned = unpinnedImageProblem(proposal);

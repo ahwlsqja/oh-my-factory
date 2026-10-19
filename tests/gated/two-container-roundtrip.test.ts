@@ -1,3 +1,4 @@
+// covers: S5.5.judge-two-container
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { Ledger } from "../../src/core/ledger.js";

@@ -12,7 +12,7 @@ import { lintCandidate } from "../work/seed-lint.js";
 import type { WorkItem } from "../work/types.js";
 
 /**
- * What the implementer container is given besides the base tree (spec §5.1, §5.4; M3-D15): `spec.md` and `intent.md` under a
+ * What the implementer container is given besides the base tree (spec §5.1, §5.4): `spec.md` and `intent.md` under a
  * per-item directory. People commit files with those names at the repository root (spec §11 rule 3) and a merged candidate leaves
  * them tracked, so a shared root path would collide with a repository's own files and with every later item.
  */

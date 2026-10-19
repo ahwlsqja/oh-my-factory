@@ -62,7 +62,7 @@ export interface ContainerFacts {
   runtime: string;
 }
 
-/** What an in-container probe found (M3f, M3g, M3h). */
+/** What an in-container probe found. */
 export interface ContainerChecks {
   vendor_binaries: string[];
   credential_paths: string[];

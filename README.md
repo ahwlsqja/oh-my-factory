@@ -24,12 +24,13 @@
 > budgets that never reset), defining, approving and measuring goals (J1 locks, the gap to the
 > target, control bands), the J8 budget commands, the work-item store with its `work` and `veto`
 > commands, and the goal loop: `omf goal tick` turns the gap into work items with a model that
-> never sees the numbers. The verification line exists only as library code with offline tests:
-> sealed scenarios and GATE-2, the implementer container, the judge, audit and test-split stations
-> (S4 to S6) and GATE-3. The command that runs the line (`omf run`, with `omf seal` and `omf report`)
-> and the real-model gated runs are not built yet. Gated container runs are recorded for the `docker
-> inspect` parser, the work copy, the two-container round trip and the real isolation probe; none is
-> recorded for the implementer container or for any suite that calls a model.
+> never sees the numbers. The verification line runs through three commands: `omf seal` (the sealing author in a container),
+> `omf run` and `omf report`. The offline tests of them use a fake Docker. Five real-daemon suites in `tests/gated` are recorded
+> in `docs/evidence/gated-runs.json`: `G-inspect-parser-real` (the `docker inspect` parser), `G-work-copy-real`,
+> `G-two-container-roundtrip`, `G-real-isolation-probe` and `G-implementer-boundary-real` (a real implementer container
+> measures L2, a real bundle imports, and the repository changes only by one branch). Not yet recorded: `G-author-boundary-real`,
+> `G-author-canary`, `G-skeleton-real`, `G-implementer-real-run` and `G-e6-l2-leak-redteam`, so no gated run of the author container or of the whole line is recorded, and no run has yet shown that a
+> real model is isolated.
 > See [What works today](#what-works-today).
 
 ---
@@ -119,8 +120,8 @@ or **designed** and not built yet.
   loaded over stdin, and the SUT never sees an expectation) and measures each with
   `docker inspect` before candidate code runs in it. GATE-3 reads those measurements from the ledger. Only the offline
   form against a fake Docker is tested, and what a real container does is not enforced beyond the gated runs recorded in
-  `docs/evidence/gated-runs.json` (the real isolation probe and the two-container round trip); the implementer container has no recorded run. The implementer container exists as library code that no command runs yet
-  ([`docs/implementer.md`](docs/implementer.md)) and the author container does not exist, so a real line still stops at GATE-3 as `isolation_unmeasured` ([`docs/container-judge.md`](docs/container-judge.md)).
+  `docs/evidence/gated-runs.json` (the `docker inspect` parser, the work copy, the real isolation probe, the two-container round trip and the implementer boundary run, which measures a real implementer container at L2 without a model); no gated run with a real model or of the author container is recorded. `omf run` otherwise runs the implementer container offline against a fake Docker only
+  ([`docs/implementer.md`](docs/implementer.md)) and the author container is started only by `omf seal`, which has not been run against a real daemon or model, so a real line stops at GATE-3 as `isolation_unmeasured` when the author stage was not measured in that run ([`docs/container-judge.md`](docs/container-judge.md)).
 - **Empty means fail.** *Partly built.* The line skeleton (`E7a`), GATE-2 (`E7b`) and the gate line, the
   audit and GATE-3 (`E7c`) read a missing measurement as a failure, never as a pass. The judge's verdict
   (`E7d`) is the same: a missing, malformed or foreign verdict ends the round and is never a pass.
@@ -147,7 +148,7 @@ or **designed** and not built yet.
 | `omf budget show <id> [--json]` | Prints the rounds, disclosure and wall-time budgets: declared, raised, consumed and remaining. |
 | `omf budget declare <id> <kind> <amount>` | J8: declares a `rounds` or `disclosure` budget, in an interactive terminal. |
 | `omf budget raise <id> <kind> <amount>` | J8: raises a `rounds`, `disclosure` or `wall_time` cap, in an interactive terminal. Wall time can only be raised, never declared. |
-| `omf budget raise <work_id> --rounds <n>` or `--usd <amount>` | J8: raises the round limit or the model spend limit of one work item, in an interactive terminal. The limits are copied from `[w]` in `config.toml` when the item's first run starts. It changes no state: run the item again afterwards. Usable once an item has had a line run (`omf run`, M3h); until then it refuses with exit 2 (no recorded limits). |
+| `omf budget raise <work_id> --rounds <n>` or `--usd <amount>` | J8: raises the round limit or the model spend limit of one work item, in an interactive terminal. The limits are copied from `[w]` in `config.toml` when the item's first run starts. It changes no state: run the item again afterwards. Usable once an item has had a line run (`omf run`); until then it refuses with exit 2 (no recorded limits). |
 | `omf work list <goal-id> [--state <s>] [--json]` | Lists a goal's work items. Items the ledger does not account for are reported as malformed (exit 1). |
 | `omf work show <work-id>` | Prints a work item's `item.md`, claim and `intent.md`. |
 | `omf work approve <work-id>` | Approves a high-risk work item so it can be dispatched, in an interactive terminal. |
@@ -157,14 +158,17 @@ or **designed** and not built yet.
 | `omf decide defer <work-id> <decision-id> --file <deferral.json>` | Defers a decision with a signed default and an expiry date, in an interactive terminal. |
 | `omf decide lint <work-id> [--json] [--render]` | Checks the decisions and evaluates GATE-1. Exit 0 clean, 1 problems, 3 blocked on a person (J2), which also writes `needs-human.json`. `--render` rewrites `spec.md`. |
 | `omf decide show <work-id> [--json]` | Prints the decisions by status, the GATE-1 verdict and whether `spec.md` matches the ledger. Writes nothing. |
+| `omf seal <work-id> [--json]` | Runs the sealing author (Codex) for a work item in a container whose isolation OMF measures first. The author gets the item's intent, spec and interface contract and nothing else. The scenarios go to the vault and GATE-2 is evaluated. Needs `[judge] docker_context`, `[author] image` and, for that one command, `OMF_AUTHOR_API_KEY` (see `docs/author.md`). Idempotent: a seal that is current for the decisions, with a measured author stage, exits 0 as `already_sealed` without a key or a model call. Exit 0 sealed or already sealed (the author stage is measured), 1 stored with the author stage unmeasured, the author's answer failed or GATE-2 sent it back, 2 refused, could not run or stopped for the environment (J7), 3 blocked on a person. The author container and any real-model run are not yet recorded, and this is not enforced until the gated author suites are recorded; the judge containers' real-daemon runs (`G-two-container-roundtrip`, `G-real-isolation-probe`) are recorded (see [`docs/author.md`](docs/author.md)). |
+| `omf run <work-id> [--json]` | Runs the verification line for a work item that has a current seal: implement in a container, judge in two disposable containers, audit, spend the test split once, write the evidence. Refuses out of order and names the missing gate (GATE-1: `omf decide lint`, GATE-2: `omf seal`). Exit 0 success, 1 flawed, 2 aborted, refused or stopped for the environment (J7), 3 blocked on a person. An item that already ran prints `already ran` and exits 0. The author container and any real-model run are not yet recorded, and this is not enforced until the gated author suites are recorded; the judge containers' real-daemon runs (`G-two-container-roundtrip`, `G-real-isolation-probe`) are recorded (see [`docs/author.md`](docs/author.md)). |
+| `omf report <work-id> [--json]` | Prints the evidence of a finished run, rendered again from the validated `evidence.json` (the bytes of `evidence.md` are never printed), with the judge line (deterministic checks only) and the run's isolation level. Read-only. Exit 0 trusted evidence shown, 2 none or untrusted (run `omf run` first). |
 
 Exit codes: `0` ok, `1` needs attention (problems found, a declined confirmation, a tick that stopped or is waiting for your approval), `2` the command could not run, `3` blocked on a person (`omf decide lint`: open design decisions).
 
-Sealed scenarios and GATE-2 exist as library code only, with no command yet. After GATE-1 passes, an author session writes scenarios, OMF stamps them and stores them in a vault outside the repository (`vault/scenarios/<work-id>/<seal-id>/`), and GATE-2 refuses a set that is empty, lacks a split, passes against a program that does nothing, has no contradiction canary (`canary_missing`), or leaves a resolved decision unlinked. Today the author is a stub process on the host, so the author stage is reported as unmeasured and sealing is not enforced. See [`docs/m3c-spec-deviations.md`](docs/m3c-spec-deviations.md).
+Sealed scenarios and GATE-2 run through `omf seal`, which has not been run against a real daemon or model. After GATE-1 passes, an author session writes scenarios, OMF stamps them and stores them in a vault outside the repository (`vault/scenarios/<work-id>/<seal-id>/`), and GATE-2 refuses a set that is empty, lacks a split, passes against a program that does nothing, has no contradiction canary (`canary_missing`), or leaves a resolved decision unlinked. `omf seal` runs the author in a measured container; that is not enforced until the `G-author-*` gated runs are recorded. See [`docs/m3c-spec-deviations.md`](docs/m3c-spec-deviations.md).
 
-The judge stations exist as library code only, with no command yet. S4 judges the stored train split and the contradiction canaries in two disposable containers, k times; S5 runs the gates and prove-test in a container work copy and audits; S6 spends the test split once. Everything is tested offline against a fake Docker, and a real-container run is gated and not enforced until it is recorded. See [`docs/container-judge.md`](docs/container-judge.md).
+The judge stations run inside `omf run`. S4 judges the stored train split and the contradiction canaries in two disposable containers, k times; S5 runs the gates and prove-test in a container work copy and audits; S6 spends the test split once. Everything is tested offline against a fake Docker, and a real-container run is gated and not enforced until it is recorded. See [`docs/container-judge.md`](docs/container-judge.md).
 
-Not built yet: the author container, the command that runs the line (`omf run`; the implementer container it will use exists as library code, see [`docs/implementer.md`](docs/implementer.md)), evidence reports, `omf ship`, goal sign-off (`omf goal sign`) and asking people for input in the middle of a run. The
+Not built yet: `omf ship`, goal sign-off (`omf goal sign`) and asking people for input in the middle of a run. The
 [design](docs/design/2026-10-12-omf-v0-design.md) describes all of them.
 
 ## Quick start
@@ -446,8 +450,8 @@ kind = "claude"          # or "command": a program that reads the prompt on stdi
 `kind = "claude"` runs the `claude` CLI on the host with every tool disabled, no saved session, an empty
 temporary directory as its working directory and only `ANTHROPIC_API_KEY` in its environment, so export that
 variable before a tick. Keychain and login-file logins are not used. `kind = "command"` runs the argv you list
-under `command`; the tests and the example use it. `kind = "codex"` and `auth = "login_file"` are refused until
-the container runner exists.
+under `command`; the tests and the example use it. `kind = "codex"` and `auth = "login_file"` are refused: they
+need a credential decision that is not made yet.
 
 The `claude` kind is unverified against a real model; `scripts/smoke-reconciler.sh` is the manual check. It does
 not pass `--json-schema` (Claude Code implements that with an extra tool-call turn, which the one-turn check
@@ -513,8 +517,8 @@ Known limits of the goal loop:
   words gets through.
 - Duplicate detection compares the title words and the declared paths. A reworded title for the same change is a
   new item.
-- With no disclosure budget declared, the number of times the model is asked is bounded by the rounds only. Masked feedback to the implementer exists as library code with tests, with no command or station calling it yet; once it is wired into the line it will never be released until a `disclosure` budget is declared.
-- A declared `disclosure` budget is one pool per goal. Goal re-seeds draw from it today; masked-feedback releases will draw from the same pool once they are wired into the line, so either can use it up and block the other. Only a person raises it (`omf budget raise <id> disclosure <amount>`).
+- With no disclosure budget declared, the number of times the model is asked is bounded by the rounds only. Masked feedback to the implementer is released by S6 to the next S3 round inside `omf run`, and is never released until a `disclosure` budget is declared.
+- A declared `disclosure` budget is one pool per goal. Goal re-seeds draw from it today; masked-feedback releases draw from the same pool, so either can use it up and block the other. Only a person raises it (`omf budget raise <id> disclosure <amount>`).
 - Subscription and keychain logins are not supported for the reconciler yet; use an API key.
 - A re-approval resets the wall-time limit to the value in `goal.md`: raises made earlier with `omf budget raise <id> wall_time` do not carry over, and the approval screen does not show them. After re-approving a stale goal that should keep running, raise the wall time again.
 
@@ -556,6 +560,9 @@ To uninstall, run `npm unlink -g oh-my-factory` and delete `~/.omf`.
 - [Design specification](docs/design/2026-10-12-omf-v0-design.md) ([한국어](docs/ko/design/2026-10-12-omf-v0-design.md))
 - [Sources and reading status](docs/design/references.md)
 - [Enforcement tests and the claims they cover](tests/enforcement/README.md)
+- [Command usage](docs/cli-usage.md): the exact `--help` text of every command, checked against the built CLI
+- [The sealing author container](docs/author.md): the author's image, key, boundary and limits
+- [Conformance matrix](docs/conformance-matrix.md): every requirement as covered, unproven or missing
 - [Goal-loop decisions and open questions (M2b addendum)](docs/design/2026-10-12-omf-m2b-addendum.md)
 - [`examples/hello-goal`](examples/hello-goal/README.md): the goal loop end to end, offline
 

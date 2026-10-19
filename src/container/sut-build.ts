@@ -12,7 +12,7 @@ export function sutImageTag(labels: Pick<OwnedLabels, "run_id" | "round">): stri
 }
 
 /**
- * Closed template (M3-D2b): five fixed lines, or four when the contract declares no build. The build argv is the only
+ * Closed template: five fixed lines, or four when the contract declares no build. The build argv is the only
  * data in it and enters as a JSON array in exec form, so no shell ever reads it and quotes, newlines, `$()` and
  * backticks are plain array elements. The base is a `PinnedImage`: no whitespace, so it cannot add a line.
  */
@@ -29,7 +29,7 @@ export function renderSutDockerfile(input: { base: PinnedImage; build: readonly 
  * container wrote is never read, and the archive is never extracted on the host. `<contextRoot>/ctx-sut` must not
  * exist: a stale context is refused, not reused and not wiped. The context is removed in `finally`.
  *
- * The build step itself runs the candidate's declared build as root inside BuildKit and is not measured (M3f-D23).
+ * The build step itself runs the candidate's declared build as root inside BuildKit and is not measured.
  */
 export async function buildSutImage(input: {
   runtime: Pick<ContainerRuntime, "build">;

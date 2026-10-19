@@ -1,0 +1,58 @@
+name: kernel-paths
+
+# Advisory report: which kernel paths (docs/maintainers/kernel-paths.txt) this pull request touches. It posts no
+# comment, adds no label and blocks nothing; it is deliberately not part of the aggregate "ci" job in ci.yml. A pull
+# request that touches kernel paths is merged by the owner after reading the diff, never by an agent.
+#
+# Limit: under pull_request this workflow file is the PR's own, so a PR can edit this check. The script and the list are
+# read from the BASE commit, which stops a PR from rewriting what judges it, but a PR that touches .github/** must be
+# read by the owner whatever this report says.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kernel-paths-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kernel-paths:
+    name: kernel paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: pr
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out the base commit report
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/kernel-paths.mjs
+            docs/maintainers/kernel-paths.txt
+          sparse-checkout-cone-mode: false
+      - name: Report kernel paths
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [ ! -f base/scripts/kernel-paths.mjs ]; then
+            echo "The base commit has no scripts/kernel-paths.mjs (this pull request adds it); the kernel path report is skipped." >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=kernel paths::report skipped; the base commit has no report script"
+            exit 0
+          fi
+          node base/scripts/kernel-paths.mjs --repo pr --base "$BASE_SHA" --head "$HEAD_SHA" --list base/docs/maintainers/kernel-paths.txt > kernel-paths.md
+          cat kernel-paths.md >> "$GITHUB_STEP_SUMMARY"
+          if grep -q '^kernel paths touched:' kernel-paths.md; then
+            echo "::notice title=kernel paths::this pull request touches kernel paths; the owner merges it after reading the diff"
+          fi

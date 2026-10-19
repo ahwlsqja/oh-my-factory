@@ -301,7 +301,7 @@ export function handle(state, argv, stdin = null, hooks = {}, clientEnv = {}) {
         .map((f) => f.slice(6));
       const lines = Object.values(state.containers)
         .filter((c) => wanted.every((w) => c.labels[w.split("=")[0]] === w.split("=")[1]))
-        .map((c) => `${c.name}\t${c.labels["omf.run"] ?? ""}`);
+        .map((c) => `${c.name}\t${c.labels["omf.run"] ?? ""}\t${c.labels["omf.work"] ?? ""}`);
       return out(lines.length === 0 ? "" : `${lines.join("\n")}\n`);
     }
     case "image": {

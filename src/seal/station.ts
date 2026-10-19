@@ -29,6 +29,9 @@ const ENVIRONMENT_FAILURES: ReadonlySet<SealFailureCode> = new Set([
   "timeout",
   "spawn_failed",
   "misconfigured",
+  "not_golden",
+  "container_failed",
+  "credential_in_output",
   "write_failed",
 ]);
 
@@ -80,7 +83,7 @@ export interface LinePassDeps extends S2StationDeps {
 
 /**
  * The result of one pass. `back_to_S2` carries the feedback for the next S2 (decision ids and counts only);
- * `retry_s2` is an author failure; `stop` ends the line at the named route. M3b2's sequencer repeats this
+ * `retry_s2` is an author failure; `stop` ends the line at the named route. the line sequencer repeats this
  * unit, owns the visit caps and persists the stops (it is the only caller that loops).
  */
 export type LinePass =
@@ -92,7 +95,7 @@ export type LinePass =
 /**
  * One S2 then GATE-2 pass, guarded at entry and again before each stage (the stage functions run the guard
  * themselves, so a hostile file that appears between S2 and GATE-2 is caught). Nothing here loops and nothing
- * here knows M3b2: it takes a location, a runner and an author, and returns what to do next.
+ * here knows the sequencer: it takes a location, a runner and an author, and returns what to do next.
  */
 export async function runS2ThenGate2(deps: LinePassDeps): Promise<LinePass> {
   const env = deps.env ?? locationEnv(deps.location);

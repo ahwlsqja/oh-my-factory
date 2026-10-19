@@ -7,7 +7,7 @@ import { CANARY_SEARCH } from "../scenario/types.js";
 /**
  * Poka-yoke (spec §11 rule 4, §8): OMF refuses to run while sealed material sits where the implementer can
  * read it, in the repository or in an OMF worktree. The scan is a plain recursive lstat walk. It runs no git
- * command (a worktree may be hostile, and M3e's hardened git does not exist yet) and never follows a symlink.
+ * command (a worktree may be hostile, and the hardened git for the audit does not exist yet) and never follows a symlink.
  *
  * Known limit: this is a name and canary scan, not a proof. A renamed copy of a scenario with its canary
  * edited out is not found.
@@ -304,7 +304,7 @@ export function assertNoSealedInRepo(location: ProjectLocation, env: NodeJS.Proc
 
 /**
  * Canary-shaped strings in the project's worktrees, with `known` set from `knownCanaries` (the verified vault
- * canaries, `listVaultCanaries`). For M3e's S5 audit and GATE-3. A scan that could not see everything throws:
+ * canaries, `listVaultCanaries`). For the S5 audit and GATE-3. A scan that could not see everything throws:
  * a canary audit that silently skips a path would fail open.
  */
 export function scanWorktreeCanaries(

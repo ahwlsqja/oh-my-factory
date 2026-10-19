@@ -25,7 +25,7 @@ export const LINE_ORDER: readonly NodeId[] = [
 ];
 
 /**
- * Round-scoped state is reset in the same step that opens a round (M3b2-D5), so a round-1 result can never satisfy
+ * Round-scoped state is reset in the same step that opens a round, so a round-1 result can never satisfy
  * round 2. GATE-1 and GATE-2 are line-wide; `isolation_level` is run-wide.
  */
 export const ROUND_SCOPED_GATES: readonly GateId[] = ["GATE-3", "GATE-4"];
@@ -49,11 +49,11 @@ export type StationStatus = "ok" | "rework" | "skipped" | "blocked" | "manual" |
 
 /** What automated verification did not cover. Every code is a closed identifier, never text. */
 export type UnverifiedCode =
-  | "decision_unmeasured" // a quantitative decision has measured: not run (M3-D17); decision_id set
+  | "decision_unmeasured" // a quantitative decision has measured: not run; decision_id set
   | "model_spend_unverifiable" // some work.spend event is unknown
-  | "noise_check_not_run" // M3d produces it
-  | "noise_check_not_evaluated" // M3-D10: the check ran but could not decide
-  | "high_risk_paths_not_run" // M3e produces it
+  | "noise_check_not_run" // the test run produces it
+  | "noise_check_not_evaluated" // the check ran but could not decide
+  | "high_risk_paths_not_run" // the audit produces it
   | "high_risk_paths_touched" // diff review required at J4
   | "decisions_masked" // a decision id or threshold failed the leak check, or the leak context could not be loaded (decision_id null)
   | "injected_gate"; // a gate came from outside defaultGates() (decision_id null)

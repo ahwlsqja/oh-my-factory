@@ -1,3 +1,4 @@
+// covers: S5.4.implementer-container
 import { describe, expect, it } from "vitest";
 import { goldenFor } from "../../src/container/golden.js";
 import { createMeasured } from "../../src/container/measure.js";

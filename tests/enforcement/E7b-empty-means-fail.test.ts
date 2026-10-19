@@ -1,3 +1,4 @@
+// covers: S5.0.empty-means-fail
 import { appendFileSync, cpSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";

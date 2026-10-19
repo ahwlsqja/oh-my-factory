@@ -43,14 +43,14 @@ const isWType = (type: string): boolean => (W_EVENT_TYPES as readonly string[]).
  *   rewrites item.md, and a crash between the two must leave an item the person can approve again.
  * - every other state needs a created state of `ready` or a human `work.approved`, and no recorded veto or
  *   cancel (a vetoed item cannot be hand-edited open).
- * - the W clauses (M3b1-D4): the item's `omf` W events are folded in ledger order from the created state
+ * - the W clauses: the item's `omf` W events are folded in ledger order from the created state
  *   (`awaiting_approval` moves to `ready` at the human approval). Each step must be legal: started from
  *   ready, submitted and failed from in_progress, parked from ready or in_progress, resumed from
  *   in_progress, repaired and claim_reclaimed change nothing (claim_reclaimed is skipped before the approval check and is not counted in the trail length). Anything else is `w_trail_invalid`.
  *   The ledger state L is the last started/submitted/failed target, else `ready`. The file must equal L.
  *   A file exactly one W edge behind (the predecessor the fold recorded for the last target event) is
  *   `w_repairable`: the event was appended and the crash came before the file write. Every other mismatch,
- *   a file ahead included, is `w_event_missing`, and so is any `done` (no writer exists before M4). The
+ *   a file ahead included, is `w_event_missing`, and so is any `done` (no writer exists yet). The
  *   predecessor comes from the fold, never from TRANSITIONS, so a hand edit is never healed.
  *
  * Events with a non-human actor where a human is required do not count, and W events by anyone but `omf`
@@ -151,7 +151,7 @@ export interface VerifiedItems {
   /**
    * The subset of `malformed` whose file is exactly one W edge behind the ledger (reason `w_repairable`). They
    * stay in `malformed` so every existing consumer still excludes them; the tick, reconcile and `goal status`
-   * read this list to count them (M3b1-D5): by `repair_to` for STOP_IF, by `file_state` for the WIP cap.
+   * read this list to count them: by `repair_to` for STOP_IF, by `file_state` for the WIP cap.
    */
   repairable: {
     work_id: string;
@@ -164,8 +164,8 @@ export interface VerifiedItems {
 /**
  * The goal's items that the ledger accounts for, plus every item that is not: unreadable files from the
  * store and ledger mismatches from verifyItemAgainstLedger. The tick, reconcile (open and WIP counts),
- * M3 dispatch and `omf work list` read items through this, so a malformed item is never ready and never
- * counted as open work (D27).
+ * Dispatch and `omf work list` read items through this, so a malformed item is never ready and never
+ * counted as open work.
  */
 export function verifiedItems(store: StateStore, events: readonly LedgerEvent[], goalId: string): VerifiedItems {
   const items: WorkItem[] = [];

@@ -1,14 +1,14 @@
 # The implementer container
 
-How OMF runs the implementer (Claude Code) in a measured container, what crosses the boundary in each direction, what the credential exposes, and what none of it proves. The implementer exists as library code (`src/implementer/`): no command runs it yet. Every claim below about a real container or a real model is not enforced until the gated suites in the table are recorded in `docs/evidence/gated-runs.json`.
+How OMF runs the implementer (Claude Code) in a measured container, what crosses the boundary in each direction, what the credential exposes, and what none of it proves. `omf run` runs the implementer as the S3 station of the line (`src/implementer/`). Every claim below about a real container or a real model is not enforced until the gated suites in the table are recorded in `docs/evidence/gated-runs.json`.
 
 ## Status
 
-| Claim | Gated suite | Status |
-|---|---|---|
-| A real implementer container measures L2, a real bundle imports, and the user's repository changes only by one branch | `G-implementer-boundary-real` | recorded in `docs/evidence/gated-runs.json` |
-| Claude Code in the container follows the plan-first rule, publishes a candidate, reports its cost, and the key is found nowhere OMF scans | `G-implementer-real-run` | not enforced until recorded |
-| A model told to find hidden scenarios finds no canary on any implementer-side surface and no path to the vault | `G-e6-l2-leak-redteam` | not enforced until recorded |
+| Claim                                                                                                                                     | Gated suite                   | Status                                      |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------- |
+| A real implementer container measures L2, a real bundle imports, and the user's repository changes only by one branch                     | `G-implementer-boundary-real` | recorded in `docs/evidence/gated-runs.json` |
+| Claude Code in the container follows the plan-first rule, publishes a candidate, reports its cost, and the key is found nowhere OMF scans | `G-implementer-real-run`      | not enforced until recorded                 |
+| A model told to find hidden scenarios finds no canary on any implementer-side surface and no path to the vault                            | `G-e6-l2-leak-redteam`        | not enforced until recorded                 |
 
 A first docker-only run of `G-implementer-boundary-real` failed because `kill -9 -1` exits 1 with "No such process" in a real container when the session left no process behind. The kill-all command now ignores that status and succeeds only when no process but PID 1 and its own shell remains (a zombie does not count); the suite then passed and is recorded.
 
@@ -16,7 +16,7 @@ Offline tests cover the code paths against a fake Docker and a real git; they ca
 
 ## The image
 
-You build the image; OMF never pulls or builds it. It needs `sh`, `tar`, `git`, `base64`, `tr`, `sleep` and `claude`, and a passwd entry for uid 65532 with home `/agent` (the container runs as 65532, and both `git commit` and the Claude client need a name and a home):
+You build the image. OMF never builds the image and never pulls by tag. A digest reference (`name@sha256:...`) that is not present locally is pulled by that digest, and a local image id (`sha256:...`) is never pulled. It needs `sh`, `tar`, `git`, `base64`, `tr`, `sleep` and `claude`, and a passwd entry for uid 65532 with home `/agent` (the container runs as 65532, and both `git commit` and the Claude client need a name and a home):
 
 ```dockerfile
 ARG BASE
@@ -74,10 +74,10 @@ The last command prints the image id (`sha256:...`). With it, the docker-only su
 OMF_GATED_IMPLEMENTER_IMAGE=sha256:<64 hex> npm run test:gated -- --only G-implementer-boundary-real --record
 ```
 
-The model suites need the key for that one command. Type this yourself (the leading `!` runs it in your shell; the key is read from the keychain, so its literal appears nowhere), with your image id in place:
+The model suites need the key for that one command. Type this yourself, as shown in bash or zsh, without a leading `!` (in those shells `!` negates the exit status; it is only a Claude Code prompt shortcut). The key is read from the keychain, so its literal appears nowhere. Put your image id in place:
 
 ```console
-! OMF_IMPLEMENTER_API_KEY="$(security find-generic-password -a "$USER" -s omf-gated-anthropic -w)" OMF_GATED_IMPLEMENTER_IMAGE=sha256:<64 hex> npm run test:gated -- --model --only G-implementer-real-run --record
+OMF_IMPLEMENTER_API_KEY="$(security find-generic-password -a "$USER" -s omf-gated-anthropic -w)" OMF_GATED_IMPLEMENTER_IMAGE=sha256:<64 hex> npm run test:gated -- --model --only G-implementer-real-run --record
 ```
 
 `--model` sets `OMF_GATED=docker+model`, passes that one variable to the test process only, and sends the process's output through a redactor, so a key a failing test prints becomes `[redacted]`. Without `--model` a key in your environment is dropped. Run `G-e6-l2-leak-redteam` the same way. The output of a model run appears when it ends, not live.
@@ -88,4 +88,7 @@ The model suites need the key for that one command. Type this yourself (the lead
 - Three behaviours rest on the pinned claude version and the docker client and are shown only by the gated runs: `docker exec --env NAME` inheriting the value from the client environment, `--setting-sources user` leaving out the repository's settings, and deny rules for test files under permission bypass.
 - `max_log_bytes` defaults to 64 MiB; the real run records the observed log size in `docs/evidence/gated-runs.json` before that default is fixed.
 - The tmpfs mounts are charged to the container's memory; the defaults are a starting point to measure.
+- If the host dies, the implementer container stops itself: its entrypoint is `sleep` for `ceil(implementer.timeout_ms / 1000)` seconds plus the caps of the other commands one container serves (the isolation probe, the settings write, the workspace preparation, the process kill, the capture and the finalize, 1005 seconds in all) plus a 60 second margin, 2865 seconds with the default `timeout_ms`, counted from the container start in the daemon's clock. The image needs `sleep` and nothing else for this; OMF does not assume `timeout`. A stopped container is removed only by a sweep.
+- Signals: SIGINT, SIGTERM, SIGHUP (a closed terminal) and SIGQUIT make OMF remove the containers it created before it exits with that signal. SIGKILL and a power cut run nothing, so the lifetime above is the only bound then.
+- What sweeps an implementer container: `omf run` removes the implementer, judge and author containers of the item's earlier runs at the start of the line (an author container only while no `omf seal` holds the item's `seal.lock`), again at the next judging station and the next implementer station, and removes any implementer container of the item still there when the line ends, whether it finished, was vetoed, stopped at a goal or wall-time limit, or aborted. These commands also remove the item implementer containers, only while no live process holds the item claim (`claim.lock`): `omf seal` and `omf run` (on the outcomes listed), `omf veto`, and `omf goal cancel` for the items it cancels. No other command sweeps; `omf report` only reads. `omf seal` and `omf run` sweep on every outcome, a repository guard refusal (sealed material in the repository), the GATE-4 entry stop (the same park reason or a kill three times, rounds or spend used up, limits missing, a ledger anomaly) and an abort before the first station included, and before the refusal is printed; `omf veto` and `omf goal cancel` print their result first and sweep afterwards. Containers are selected by the item (the `omf.work` label) and the run directories under the item's `runs/`, so another item that happens to share a run id is never touched; round images (`omf-sut:`) are selected by run id only. A claim file with no readable owner (empty or garbled) counts as held for one second after it was last written, so a stale one no longer shields an orphan; it still keeps the item unrunnable until it is removed by hand. The sweep reads the item's `runs/` first, then checks the claim, then lists the daemon, so a run that starts in between is not touched, and a live run's container is never removed. An unreadable `item.md`, a corrupt ledger, a symlink in the state tree, an invalid `config.toml` or an unset `docker_context` sweeps nothing until repaired. The sweeps are best effort: when the daemon does not answer, the next command repeats them. The sweeps are proven offline with a docker double only; against a real daemon they are not proven.
 - A rerun starts again from the base commit with the released feedback in the prompt; continuing from the previous head does not exist yet.

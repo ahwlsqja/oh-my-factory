@@ -6,16 +6,19 @@ import type { StageGolden } from "../isolation/evaluate.js";
 import type { PinnedImage } from "./image-ref.js";
 import type { ImageInfo } from "./runtime.js";
 import {
+  AUTHOR_ENV_NAMES,
   CREDENTIAL_SHAPED_ENV_NAMES,
   type ContainerRole,
   type ContainerSpec,
   IMPLEMENTER_ENV_NAMES,
   type ImageId,
   type OwnedLabels,
+  ROLE_NETWORK,
   type RoleLimits,
   SECRET_ENV_NAMES,
   type TmpfsSpec,
   containerName,
+  agentLifetimeSeconds,
   roleLimits,
   roleTmpfs,
 } from "./spec.js";
@@ -28,6 +31,7 @@ const ROLE_DESTINATIONS = {
   harness: ["/tmp", "/state"],
   workcopy: ["/tmp", "/work"],
   implementer: ["/tmp", "/work", "/agent"],
+  author: ["/tmp", "/in", "/out", "/agent"],
 } as const satisfies Record<ContainerRole, readonly TmpfsSpec["destination"][]>;
 
 /** Names the daemon adds itself (names only, values are never read); `PATH` because the daemon defaults it when the image sets none. */
@@ -42,12 +46,14 @@ export function containerSpecFor(input: {
   limits: RoleLimits;
 }): ContainerSpec {
   const labels: OwnedLabels = { ...input.labels, role: input.role };
+  const lifetime = agentLifetimeSeconds(input.role, input.limits);
   return {
     name: containerName(labels, input.serial),
     image: input.image,
     labels,
     tmpfs: roleTmpfs(input.role, input.limits),
     limits: roleLimits(input.role, input.limits),
+    ...(lifetime === null ? {} : { lifetime_s: lifetime }),
   };
 }
 
@@ -87,28 +93,38 @@ export function forbiddenPaths(location: ProjectLocation, env: NodeJS.ProcessEnv
   return [...new Set(candidates.map(realOrResolved))].sort();
 }
 
+/** What the two agent roles add to the generic golden: the fixed names OMF sets at create and the one vendor CLI the role runs. */
+const AGENT_ROLES = {
+  implementer: { env_names: IMPLEMENTER_ENV_NAMES, binaries: ["claude"] },
+  author: { env_names: AUTHOR_ENV_NAMES, binaries: ["codex"] },
+} as const;
+
 /**
  * The golden a role is judged against: a read-only root, only the role's tmpfs mounts, the digest-pinned base image's own
  * environment names (trusted data), no credential file, and no vendor CLI except the one the role runs.
  *
- * Judge roles run on no network and no vendor CLI. The implementer is the one role on a network (`bridge`) and the one with a
- * vendor CLI (`claude`); a `codex` binary or a `~/.codex` is a violation. Its env names are the image's own names MINUS the
- * secret and every credential-shaped name, plus the daemon's, plus the fixed implementer names: an image that bakes in a key
- * therefore measures `unexpected_env_name`, and the secret name is never allowed at create time (it appears only at exec).
+ * Judge roles run on no network and no vendor CLI. The two agent roles are the only ones on a network (`bridge`) and each has
+ * one vendor CLI: `claude` for the implementer, `codex` for the author; the other one's binary, and a `~/.claude` or `~/.codex`,
+ * are violations. An agent role's env names are the image's own names MINUS the secrets and every credential-shaped name, plus
+ * the daemon's, plus the role's fixed names: an image that bakes in a key therefore measures `unexpected_env_name`, and a secret
+ * name is never allowed at create time (it appears only at exec). `CODEX_HOME` is credential-shaped yet in the author's fixed
+ * names; it is allowed because OMF sets it at create and that value replaces the image's own.
  */
 export function goldenFor(input: { role: ContainerRole; image: ImageInfo; forbidden: readonly string[] }): StageGolden {
-  const implementer = input.role === "implementer";
+  const { role } = input;
+  const agent = role === "implementer" || role === "author" ? AGENT_ROLES[role] : null;
   const refused = new Set<string>([...SECRET_ENV_NAMES, ...CREDENTIAL_SHAPED_ENV_NAMES]);
-  const imageNames = implementer ? input.image.env_names.filter((name) => !refused.has(name)) : input.image.env_names;
+  const imageNames =
+    agent === null ? input.image.env_names : input.image.env_names.filter((name) => !refused.has(name));
   return {
-    allowed_mounts: ROLE_DESTINATIONS[input.role].map((destination) => ({ source: "", destination, read_only: false })),
+    allowed_mounts: ROLE_DESTINATIONS[role].map((destination) => ({ source: "", destination, read_only: false })),
     forbidden_paths: [...input.forbidden],
     allowed_env_names: [
-      ...new Set([...imageNames, ...DAEMON_ENV_NAMES, ...(implementer ? IMPLEMENTER_ENV_NAMES : [])]),
+      ...new Set([...imageNames, ...DAEMON_ENV_NAMES, ...(agent === null ? [] : agent.env_names)]),
     ].sort(),
-    network: implementer ? "bridge" : "none",
+    network: ROLE_NETWORK[role],
     require_read_only_rootfs: true,
-    allowed_vendor_binaries: implementer ? ["claude"] : [],
+    allowed_vendor_binaries: agent === null ? [] : [...agent.binaries],
     allowed_credential_paths: [],
   };
 }

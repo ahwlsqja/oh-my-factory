@@ -1,0 +1,101 @@
+name: outer-suite
+
+# Advisory check: the outer contract suite of the stage0 release (the tag in docs/maintainers/stage0.txt on the BASE
+# commit, installed separately) runs against the executable built from this pull request. The suite is the previous
+# release's promises checked on the new build; it is never the pull request's own copy. It is deliberately not part of
+# the aggregate "ci" job in ci.yml, so it cannot block a merge. Making it required is a repository setting, an owner act.
+#
+# Stage0 v0.0.3 predates outer/, so until the owner pins a release that carries it the job reports a skip. Limit: under
+# pull_request this workflow file is the PR's own; a PR that touches .github/** must be read by the owner.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: outer-suite-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stage0:
+    name: stage0 outer suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Same rule as ci.yml: nothing here may reach a real model, and no secret is mapped into this job.
+      ANTHROPIC_API_KEY: ""
+      OPENAI_API_KEY: ""
+      CLAUDE_CODE_OAUTH_TOKEN: ""
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: pr
+          persist-credentials: false
+      - name: Check out the base commit pin
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          persist-credentials: false
+          sparse-checkout: docs/maintainers/stage0.txt
+          sparse-checkout-cone-mode: false
+      # The pin is read from the base commit so a pull request cannot repoint the tag it is judged against.
+      - name: Read the stage0 tag
+        id: tag
+        run: |
+          set -euo pipefail
+          pin=base/docs/maintainers/stage0.txt
+          if [ ! -f "$pin" ]; then
+            echo "The base commit has no docs/maintainers/stage0.txt; the stage0 comparison is skipped." >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=outer suite::no stage0 pin on the base commit; skipped"
+            exit 0
+          fi
+          tag=$(tr -d '[:space:]' < "$pin")
+          if ! printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error title=outer suite::docs/maintainers/stage0.txt must hold one release tag such as v0.0.3"
+            exit 1
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+      - name: Check out the stage0 release
+        if: steps.tag.outputs.tag != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+          path: stage0
+          persist-credentials: false
+      - name: Set up Node
+        if: steps.tag.outputs.tag != ''
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: pr/package-lock.json
+      - name: Build the pull request
+        if: steps.tag.outputs.tag != ''
+        working-directory: pr
+        run: |
+          npm ci
+          npm run build
+      - name: Run the stage0 outer suite
+        if: steps.tag.outputs.tag != ''
+        env:
+          STAGE0_TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ ! -f stage0/outer/run.mjs ]; then
+            echo "Stage0 ${STAGE0_TAG} has no outer suite (outer/run.mjs), so there is nothing to compare yet. The owner pins a release that carries it in docs/maintainers/stage0.txt." >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=outer suite::stage0 predates the outer suite; skipped"
+            exit 0
+          fi
+          status=0
+          node stage0/outer/run.mjs --omf "$PWD/pr/dist/cli/main.js" --require-tty > outer-suite.out 2>&1 || status=$?
+          {
+            echo "### Stage0 outer suite (${STAGE0_TAG}) against this pull request"
+            echo '```'
+            cat outer-suite.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"

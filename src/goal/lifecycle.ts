@@ -11,7 +11,7 @@ import {
 } from "./run-state.js";
 
 /**
- * What each stop asks of a person (spec §6, D10). The default is always `stay stopped`: a stopped goal
+ * What each stop asks of a person (spec §6). The default is always `stay stopped`: a stopped goal
  * refuses ticks until a person acts (J6). Questions are fixed text so nothing from a model or a metric
  * can reach the ledger through them.
  */
@@ -161,8 +161,8 @@ export function resumeGoal(ledger: Ledger, goalId: string, actor: string): RunSt
 /**
  * J6 stop: a person ends the goal. Every open work item is cancelled, also one a W run has claimed or that is in
  * progress (the store takes the short item lock, not the claim). For each item the work.cancelled event is
- * appended BEFORE the file changes, so no item is ever cancelled on disk without its event (D27, D30); the
- * goal.terminated(cancelled) event comes last. Callers hold the tick lock (D23).
+ * appended BEFORE the file changes, so no item is ever cancelled on disk without its event; the
+ * goal.terminated(cancelled) event comes last. Callers hold the tick lock.
  */
 export function cancelGoal(
   ledger: Ledger,
@@ -190,7 +190,7 @@ export function cancelGoal(
 }
 
 /**
- * The exact CLI commands that lead out of an escalation (D10, §5.1). A step that starts with `omf ` is a
+ * The exact CLI commands that lead out of an escalation (§5.1). A step that starts with `omf ` is a
  * command (tests run its `--help`); other steps are prose.
  */
 export function nextSteps(e: Escalation, goalId: string): string[] {

@@ -1,3 +1,4 @@
+// covers: S5.3.seal-inputs-closed
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";

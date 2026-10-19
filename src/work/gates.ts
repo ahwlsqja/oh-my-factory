@@ -76,7 +76,7 @@ export class GateBoard {
     this.#history.push(stored);
   }
 
-  /** Opens a round: GATE-3 and GATE-4 go back to "not_visited" so a round-1 pass cannot satisfy round 2 (M3b2-D5). */
+  /** Opens a round: GATE-3 and GATE-4 go back to "not_visited" so a round-1 pass cannot satisfy round 2. */
   startRound(): void {
     for (const gate of ROUND_SCOPED_GATES) this.#last.delete(gate);
   }
@@ -125,9 +125,9 @@ export interface Gate {
 
 /**
  * GATE-1: evaluates `evaluateGate1` over the events in the context and syncs `needs-human.json` the way
- * `omf decide lint` does (persist-and-exit, M3-D7). pass -> pass; blocked_on_user -> fail ["j2_open"]; a throw (missing
+ * `omf decide lint` does (persist-and-exit). pass -> pass; blocked_on_user -> fail ["j2_open"]; a throw (missing
  * goal lock, unreadable record) -> not_run ["gate_error"], never a pass. The sequencer calls it only for an item that
- * is still `ready` and records pass ["already_started"] itself for a resumed one (M3b2-D12).
+ * is still `ready` and records pass ["already_started"] itself for a resumed one.
  */
 export function gate1(): Gate {
   return {
@@ -156,7 +156,7 @@ export function defaultGates(): Record<Exclude<GateId, "GATE-4">, Gate> {
   return { "GATE-1": gate1(), "GATE-2": gate2Gate(), "GATE-3": gate3Gate() };
 }
 
-/** The gates that did not come from `defaults`, in line order; evidence lists them and a success is capped at human_needed (M3b2-D20). */
+/** The gates that did not come from `defaults`, in line order; evidence lists them and a success is capped at human_needed. */
 export function injectedGateIds(merged: Record<string, Gate>, defaults: Record<string, Gate>): GateId[] {
   return GATE_IDS.filter((id) => merged[id] !== defaults[id]);
 }

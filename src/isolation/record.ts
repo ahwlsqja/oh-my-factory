@@ -64,7 +64,7 @@ function readView(path: string, runId: string): StageMeasurement[] {
 }
 
 /**
- * Ledger event first, then the file (the M2b order): a crash between the two leaves an event and a file that is one
+ * Ledger event first, then the file (the order the goal budget uses): a crash between the two leaves an event and a file that is one
  * entry behind, and the event is what counts. The measurement is checked against the schema before the event is appended, so a
  * malformed one fails here and never reaches the ledger. The file is written best effort after the event and appends; it never replaces an earlier entry.
  */
@@ -92,7 +92,7 @@ export function recordStageMeasurement(
 }
 
 /**
- * The item's latest valid `seal.completed`, folded by M3c's `foldSeals` (the same reading GATE-2 uses): bound to the goal and
+ * The item's latest valid `seal.completed`, folded by `foldSeals` (the same reading GATE-2 uses): bound to the goal and
  * work item, schema-checked, one record per seal id. A fold anomaly (an invalid omf seal event, a repeated seal id) means the
  * seal cannot be trusted, so there is none. A seal stamped `host_command` also leaves the author stage unmeasured: no
  * container measured it, whatever a container-mode event claims.

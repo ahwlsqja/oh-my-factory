@@ -1,23 +1,68 @@
-import type { ImplementerConfig, JudgeConfig } from "../core/config.js";
+import type { AuthorConfig, ImplementerConfig, JudgeConfig } from "../core/config.js";
 import { type PinnedImage, isDigestPinned } from "./image-ref.js";
 
-/** The containers OMF starts: three judge roles and the implementer. The author joins this same type later. */
-export const CONTAINER_ROLES = ["sut", "harness", "workcopy", "implementer"] as const;
+/** The containers OMF starts: three judge roles, the implementer and the sealing author. */
+export const CONTAINER_ROLES = ["sut", "harness", "workcopy", "implementer", "author"] as const;
 export type ContainerRole = (typeof CONTAINER_ROLES)[number];
 
-/** The isolation stage a role is measured under. A work copy runs candidate code from the SUT base, so it is `sut` (M3f-D11). */
-export const ROLE_STAGE: Readonly<Record<ContainerRole, "sut" | "harness" | "implementer">> = {
+/** The isolation stage a role is measured under. A work copy runs candidate code from the SUT base, so it is `sut` (spec §7). */
+export const ROLE_STAGE: Readonly<Record<ContainerRole, "sut" | "harness" | "implementer" | "author">> = {
   sut: "sut",
   harness: "harness",
   workcopy: "sut",
   implementer: "implementer",
+  author: "author",
+};
+
+/** The two agent roles are the only ones on a network (`bridge`, so the vendor CLI can reach its API; spec §7 L2). */
+export const ROLE_NETWORK: Readonly<Record<ContainerRole, "none" | "bridge">> = {
+  sut: "none",
+  harness: "none",
+  workcopy: "none",
+  implementer: "bridge",
+  author: "bridge",
 };
 
 /** An unprivileged user that owns nothing on the host; the golden facts pin this value. */
 export const SANDBOX_USER = "65532:65532";
 /** Containers idle until `docker exec` gives them work. The base image must ship `sleep` (a stated limit). */
 export const IDLE_ENTRYPOINT = "sleep";
+/** What a judge container sleeps for: it is removed by the run, and a killed run's leftovers by the next sweep. */
 export const IDLE_ARGS: readonly string[] = ["2147483647"];
+
+/**
+ * Seconds of slack on top of an agent container's own bounds: the daemon's start-up, the time between the host's
+ * calls and the cap of each. The container stops itself this long after the last bound it can legitimately need.
+ */
+export const AGENT_LIFETIME_MARGIN_S = 60;
+/**
+ * The caps of the execs one author container serves besides the model call, in seconds: the isolation probe (15), the two
+ * `tar -x` uploads (30 each) and the answer read (30).
+ */
+export const AUTHOR_STEPS_S = 15 + 30 + 30 + 30;
+/**
+ * The caps of the execs one implementer container serves besides the session, in seconds: the isolation probe (15), the
+ * settings write (30), the workspace preparation (a 30 s tool check and four 120 s steps), the process kill (30), the
+ * capture (300) and the finalize (120).
+ */
+export const IMPLEMENTER_STEPS_S = 15 + 30 + (30 + 4 * 120) + 30 + 300 + 120;
+
+/**
+ * How long an agent container sleeps before it stops itself, so a host killed by SIGKILL cannot leave a container with a
+ * network and a vendor CLI running past its cap. The configured wall-time bound of the one model call, the caps of the other
+ * execs the container serves, and a margin. A judge role has no such bound (null).
+ */
+export function agentLifetimeSeconds(role: ContainerRole, limits: RoleLimits): number | null {
+  if (role === "author") {
+    if (limits.kind !== "author") throw new ContainerSpecError("invalid_limits");
+    return Math.ceil(limits.author.timeout_ms / 1000) + AUTHOR_STEPS_S + AGENT_LIFETIME_MARGIN_S;
+  }
+  if (role === "implementer") {
+    if (limits.kind !== "implementer") throw new ContainerSpecError("invalid_limits");
+    return Math.ceil(limits.implementer.timeout_ms / 1000) + IMPLEMENTER_STEPS_S + AGENT_LIFETIME_MARGIN_S;
+  }
+  return null;
+}
 
 /**
  * The create-time environment of the implementer: names and values are constants of this module, never caller input
@@ -42,20 +87,47 @@ export const IMPLEMENTER_FIXED_ENV: readonly (readonly [name: string, value: str
 export const IMPLEMENTER_ENV_NAMES: readonly string[] = IMPLEMENTER_FIXED_ENV.map(([name]) => name).sort();
 
 /**
+ * The create-time environment of the sealing author. Same rule as the implementer's: names and values are constants of this
+ * module, never caller input. `HOME` and `CODEX_HOME` point into the owned `/agent` tmpfs, so the vendor CLI finds no login to
+ * read and writes its own state nowhere else. A name given at create overrides the image's own value, so an image cannot
+ * choose where the CLI keeps its home. The key is not here: it appears only as a name at `docker exec` time.
+ */
+export const AUTHOR_FIXED_ENV: readonly (readonly [name: string, value: string])[] = [
+  ["HOME", "/agent"],
+  ["CODEX_HOME", "/agent/codex"],
+  ["NO_COLOR", "1"],
+  ["OMF_TMP", "/tmp"],
+];
+/** The names of `AUTHOR_FIXED_ENV`, sorted: what the author golden adds to the image's own names. */
+export const AUTHOR_ENV_NAMES: readonly string[] = AUTHOR_FIXED_ENV.map(([name]) => name).sort();
+
+/**
  * The only environment variable names an exec may inherit from the OMF process, and only through a `SecretHandle`:
  * the value is read by the docker client from its own environment and never appears in an argv or a create-time
- * setting. A name outside this set can never be passed on.
+ * setting. A name outside this set can never be passed on. Each name belongs to one role (ROLE_SECRET).
  */
-export const SECRET_ENV_NAMES = ["ANTHROPIC_API_KEY"] as const;
+export const SECRET_ENV_NAMES = ["ANTHROPIC_API_KEY", "CODEX_API_KEY"] as const;
 export type SecretEnvName = (typeof SECRET_ENV_NAMES)[number];
 
 /**
- * Closed set of credential-shaped variable names. An implementer image that declares any of them (or any name of
+ * Which secret a role's exec may carry, and so which roles may carry one at all. Candidate code runs in the judge roles and can
+ * read whatever its container is given; only the two agent roles, each measured for that before the key is handed over, ever
+ * receive a key, and each only its own vendor's. Any other pairing is refused by the runtime before a process starts, and so
+ * is a handle that `createMeasured` did not return (`measured-handles.ts`).
+ */
+export const ROLE_SECRET: Readonly<Partial<Record<ContainerRole, SecretEnvName>>> = {
+  implementer: "ANTHROPIC_API_KEY",
+  author: "CODEX_API_KEY",
+};
+
+/**
+ * Closed set of credential-shaped variable names. An implementer or author image that declares any of them (or any name of
  * `SECRET_ENV_NAMES`) is never allowed by the golden: the owner builds the image, and a key baked into it would
  * reach every container made from it. A credential under a name outside this set is not recognised by name.
  */
 export const CREDENTIAL_SHAPED_ENV_NAMES: readonly string[] = [
   "ANTHROPIC_API_KEY",
+  "CODEX_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
   "CLAUDE_CODE_OAUTH_TOKEN",
   "OPENAI_API_KEY",
@@ -100,7 +172,7 @@ export interface OwnedLabels {
 }
 
 export interface TmpfsSpec {
-  destination: "/tmp" | "/scratch" | "/state" | "/work" | "/agent";
+  destination: "/tmp" | "/scratch" | "/state" | "/work" | "/agent" | "/in" | "/out";
   size_mb: number;
   exec: boolean;
   /** Owned by the sandbox user (uid and gid 65532); otherwise root-owned. */
@@ -110,7 +182,7 @@ export interface TmpfsSpec {
 /**
  * Everything `docker create` may be told. There is deliberately no field for a mount, a volume, a privilege, a
  * capability, a device, a PID or IPC share, a network, a published port or an environment value: the argv builder
- * cannot emit what this type cannot express (M3f-D2).
+ * cannot emit what this type cannot express.
  */
 export interface ContainerSpec {
   name: string;
@@ -118,19 +190,24 @@ export interface ContainerSpec {
   labels: OwnedLabels;
   tmpfs: readonly TmpfsSpec[];
   limits: { memory_mb: number; cpus: number; pids: number };
+  /**
+   * Seconds the container sleeps before it stops itself (`agentLifetimeSeconds`). Required for the two agent roles, refused
+   * for the judge roles, which keep the idle sleep.
+   */
+  lifetime_s?: number;
 }
 
 // The run id pattern of the W events and the work id pattern of the W verbs, repeated here so the container layer imports
 // nothing from `work/`; tests/container/argv.test.ts pins the run id copy to `RUN_ID_PATTERN` in `src/work/w-events.ts`.
 export const RUN_ID_RE = /^r-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}$/;
 export const WORK_ID_RE = /^w-[0-9a-f]{12}$/;
-const NAME_RE = /^omf-(sut|harness|workcopy|implementer)-r-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}-[0-9]+-[0-9]+$/;
+const NAME_RE = /^omf-(sut|harness|workcopy|implementer|author)-r-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}-[0-9]+-[0-9]+$/;
 const IMAGE_ID_RE = /^sha256:[0-9a-f]{64}$/;
 const CONTEXT_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 /** A reference that is safe to hand to `docker image inspect`: no leading "-", no whitespace. */
 const IMAGE_REF_RE = /^[A-Za-z0-9][A-Za-z0-9_.:/@-]{0,254}$/;
 const CPUS_RE = /^[0-9]+(\.[0-9]{1,2})?$/;
-const TMPFS_DESTINATIONS: readonly string[] = ["/tmp", "/scratch", "/state", "/work", "/agent"];
+const TMPFS_DESTINATIONS: readonly string[] = ["/tmp", "/scratch", "/state", "/work", "/agent", "/in", "/out"];
 
 export function isImageId(value: string): value is ImageId {
   return IMAGE_ID_RE.test(value);
@@ -197,14 +274,33 @@ export function assertSpec(spec: ContainerSpec): void {
     cpus > 0 &&
     cpus <= 64;
   if (!limitsOk) throw new ContainerSpecError("invalid_limits");
+  const agent = spec.labels.role === "implementer" || spec.labels.role === "author";
+  const { lifetime_s: lifetime } = spec;
+  if (agent !== (lifetime !== undefined)) throw new ContainerSpecError("invalid_limits");
+  if (lifetime !== undefined && !(Number.isInteger(lifetime) && lifetime >= 1 && lifetime <= 2147483647)) {
+    throw new ContainerSpecError("invalid_limits");
+  }
 }
 
 /**
  * The scratch filesystems of a role, all tmpfs and all owned by the sandbox user. Nothing persists past the container,
- * and no role has a bind mount: the harness receives its scenarios over stdin and a work copy its tree through `tar -x`
- * on stdin (M3f-D22). Only `/work` is executable (a work copy runs the declared gates there).
+ * and no role has a bind mount: the harness receives its scenarios over stdin, a work copy its tree through `tar -x` on
+ * stdin (spec §7), and the author its three inputs the same way into `/in`. Only `/work` is executable (a work copy runs the
+ * declared gates there, the implementer builds and runs its tree there).
  */
 export function roleTmpfs(role: ContainerRole, limits: RoleLimits): TmpfsSpec[] {
+  if (role === "author") {
+    // /in holds the item's intent, spec and interface contract; /out holds the answer; /agent is the vendor CLI's own home.
+    // Nothing the author is given or writes can execute.
+    if (limits.kind !== "author") throw new ContainerSpecError("invalid_limits");
+    const sizes = limits.author;
+    return [
+      { destination: "/tmp", size_mb: sizes.tmp_tmpfs_mb, exec: false, owned: true },
+      { destination: "/in", size_mb: sizes.in_tmpfs_mb, exec: false, owned: true },
+      { destination: "/out", size_mb: sizes.out_tmpfs_mb, exec: false, owned: true },
+      { destination: "/agent", size_mb: sizes.agent_tmpfs_mb, exec: false, owned: true },
+    ];
+  }
   if (role === "implementer") {
     // Executable /work holds the tree the implementer builds and runs; /agent holds the vendor CLI's own state.
     if (limits.kind !== "implementer") throw new ContainerSpecError("invalid_limits");
@@ -230,17 +326,24 @@ export function roleTmpfs(role: ContainerRole, limits: RoleLimits): TmpfsSpec[] 
 
 /**
  * Typed discriminant for what a role reads its sizes and limits from: the judge roles read `[judge]`, the implementer reads
- * `[implementer]`. A mismatch is a bug in the caller and is refused (`invalid_limits`) before any spec exists.
+ * `[implementer]`, the author reads `[author]`. A mismatch is a bug in the caller and is refused (`invalid_limits`) before
+ * any spec exists.
  */
 export type RoleLimits =
   | { kind: "judge"; judge: JudgeConfig }
-  | { kind: "implementer"; implementer: ImplementerConfig };
+  | { kind: "implementer"; implementer: ImplementerConfig }
+  | { kind: "author"; author: AuthorConfig };
 
 /** The memory, cpu and pid limits of a role, from the config table that role reads. */
 export function roleLimits(role: ContainerRole, limits: RoleLimits): ContainerSpec["limits"] {
   if (role === "implementer") {
     if (limits.kind !== "implementer") throw new ContainerSpecError("invalid_limits");
     const { memory_mb, cpus, pids_limit } = limits.implementer;
+    return { memory_mb, cpus, pids: pids_limit };
+  }
+  if (role === "author") {
+    if (limits.kind !== "author") throw new ContainerSpecError("invalid_limits");
+    const { memory_mb, cpus, pids_limit } = limits.author;
     return { memory_mb, cpus, pids: pids_limit };
   }
   if (limits.kind !== "judge") throw new ContainerSpecError("invalid_limits");

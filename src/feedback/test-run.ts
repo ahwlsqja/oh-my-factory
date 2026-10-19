@@ -118,7 +118,7 @@ export type TestRunPlan =
 
 /**
  * What the run may do with this test digest. A recorded result is reusable only for the commit it was measured on:
- * M3b1 lets a killed run restart from S1 with changed code, and attaching the old commit's result to new code would
+ * A killed run may restart from S1 with changed code, and attaching the old commit's result to new code would
  * fail open toward `merge_recommended`. `candidateSha` null (unknown) never matches, so it fails closed.
  */
 export function planTestRun(state: TestRunState, testDigest: string, candidateSha: string | null): TestRunPlan {
@@ -138,7 +138,7 @@ export function planTestRun(state: TestRunState, testDigest: string, candidateSh
 }
 
 /**
- * Input for the M3b2 classifier. Both are `blocked`, not `manual`: a manual park refuses re-entry until a later
+ * Input for the outcome classifier. Both are `blocked`, not `manual`: a manual park refuses re-entry until a later
  * milestone adds its clearing event, which would strand the item after the person has acted.
  */
 export function testRunBlock(
@@ -265,7 +265,7 @@ export function completeTestRun(
 /**
  * The human act (J3 or J6) that lets ONE fresh test digest run after a consumed one. It names the latest consumed digest and
  * never reopens it. With no run consumed yet only J3 is allowed: it names no digest and only restarts the exposure count for
- * fresh scenarios. The M3h verb wraps this in requireTerminal and confirmByTyping; until then the actor check is the guard.
+ * fresh scenarios. The test-run verb wraps this in requireTerminal and confirmByTyping; until then the actor check is the guard.
  */
 export function authorizeTestReseal(
   ledger: Ledger,
@@ -298,7 +298,7 @@ export function authorizeTestReseal(
 }
 
 /**
- * What M3b2's evidence calls `sealed.test`: { pass, total } or the word "not run", never anything else.
+ * What the evidence calls `sealed.test`: { pass, total } or the word "not run", never anything else.
  * `consumed_incomplete` and `consumed_other_candidate` are real states on the host (the handoff and the
  * `blocked` outcomes use them), but they are not a result for this code, so the evidence reads them as not run.
  * A total of 0 is not a pass either (E7). `flaky` is dropped here and nothing else carries test-split flakiness into the classifier: it reads

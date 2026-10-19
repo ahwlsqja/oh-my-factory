@@ -6,7 +6,7 @@ export type { RefusalCode, StepObservation } from "./types.js";
 
 /** The OMF-shipped fixtures a host adapter may execute (see `fixtures.ts`). */
 export type FixtureId = "null-error" | "null-empty" | "echo-everything";
-/** `handle` is opaque; the M3f container adapter resolves it. The host adapter never does. */
+/** `handle` is opaque; the container adapter resolves it. The host adapter never does. */
 export type RunTarget = { kind: "fixture"; id: FixtureId } | { kind: "candidate"; handle: string };
 
 /** Data for the target, never a program: no element of a scenario is ever executed as a command. */
@@ -23,7 +23,7 @@ export const DEFAULT_STEP_LIMITS: StepLimits = { timeoutMs: 5000, maxOutputBytes
 
 /**
  * Port between the judge and whatever runs the thing under test. It returns an observation for one
- * step and never sees an expectation, so the host fixture adapter, the M3f container judge and a laptop run
+ * step and never sees an expectation, so the host fixture adapter, the container judge and a laptop run
  * are all judged by the same `evaluateExpect`.
  *
  * Step-state model, identical for every adapter: the steps of ONE scenario share one scratch

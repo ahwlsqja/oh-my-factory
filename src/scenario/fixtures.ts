@@ -105,7 +105,7 @@ function refusedSession(code: RefusalCode): ScenarioSession {
  * scenario, env = { LC_ALL: "C", HOME: scratch, TMPDIR: scratch } only, stdin = step.stdin and the
  * step limits. The program is always the node binary and the verified bytes; no element of a scenario is ever
  * the program, and the source is passed rather than re-read, so there is no gap between the hash check and the
- * execution. A candidate target is refused without a spawn: running candidate code is the M3f container's job.
+ * execution. A candidate target is refused without a spawn: running candidate code is the container judge's job.
  * The fixture is verified once per session, before the scratch directory is made.
  */
 export function createHostFixtureRunner(options: HostFixtureRunnerOptions = {}): ScenarioRunner {

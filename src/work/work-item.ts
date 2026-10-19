@@ -60,8 +60,8 @@ const PROGRESS_OPEN = "<!-- omf:progress -->";
 const PROGRESS_CLOSE = "<!-- /omf:progress -->";
 
 /**
- * `item.md`: the validated front matter, then the region that the worker (M3) writes progress into.
- * The file is a projection: the ledger stays authoritative for approval, veto and cancel (D27).
+ * `item.md`: the validated front matter, then the region that the worker writes progress into.
+ * The file is a projection: the ledger stays authoritative for approval, veto and cancel.
  * `progress` is stored with a trailing newline unless it is empty.
  */
 export function renderWorkItem(front: WorkItemFront, progress: string): string {

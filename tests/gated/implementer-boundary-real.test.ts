@@ -1,3 +1,5 @@
+// covers: F6.vault-host-only
+// covers: S5.4.implementer-container
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";

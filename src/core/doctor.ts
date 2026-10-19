@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { CREDENTIAL_SOURCE_ENV, readCredential } from "../implementer/credential.js";
 import type { IsolationLevel, MeasuredLevel } from "../isolation/types.js";
+import { SECRET_ENV_NAMES } from "../container/spec.js";
 import { sealedReport } from "../vault/pokayoke.js";
 import { ConfigError, type OmfConfig, readConfig } from "./config.js";
 import { TORN_TAIL_WARNING, type VerifyResult } from "./ledger.js";
@@ -67,6 +68,49 @@ export function implementerAdvisory(env: NodeJS.ProcessEnv, project: ProbeProjec
 }
 
 /**
+ * Whether the sealing author could start, by name and by presence only, like `ImplementerAdvisory`: the image is configured or
+ * not, the key variable is set and usable or not, no value is ever copied into the report. Advisory: it never changes `ok`, and
+ * the level of the author container is measured per seal pass from the ledger, never here.
+ */
+export interface AuthorAdvisory {
+  advisory: true;
+  declared: "L2";
+  image_configured: boolean;
+  key_variable: string;
+  key_present: boolean;
+  note: string;
+}
+
+export const AUTHOR_NOTE =
+  "advisory, not enforced: the author container is measured per seal pass from the ledger, never here. Code running in it can read and use the key and the container has open network access, so use a dedicated key with a provider-side spend limit, and a dedicated docker context or colima profile, because the default bridge reaches other containers and the host gateway of the context in use";
+
+export const AUTHOR_EGRESS_WARNING = "author network egress is not restricted";
+const AUTHOR_EGRESS_FIX =
+  "use a dedicated, spend-limited key; the author container can reach any address its docker context can, and an egress allowlist does not exist yet";
+const AUTHOR_CONTEXT_FIX =
+  "create a dedicated docker context or colima profile (for example: colima start --profile omf) and set judge.docker_context to it";
+/** Contexts the default installs create; they are shared with everything else the person runs. */
+const SHARED_DOCKER_CONTEXTS: ReadonlySet<string> = new Set([
+  "default",
+  "desktop-linux",
+  "desktop-windows",
+  "colima",
+  "orbstack",
+  "rancher-desktop",
+]);
+
+export function authorAdvisory(env: NodeJS.ProcessEnv, project: ProbeProject | null): AuthorAdvisory {
+  return {
+    advisory: true,
+    declared: "L2",
+    image_configured: project !== null && project.config.author.image !== null,
+    key_variable: CREDENTIAL_SOURCE_ENV.codex,
+    key_present: readCredential("codex", env) !== null,
+    note: AUTHOR_NOTE,
+  };
+}
+
+/**
  * What a probe may look at: the initialized project and its config. `null` when the repository has no initialized project or
  * its config.toml cannot be read (the probe then says it cannot measure; doctor adds no problem for it).
  */
@@ -103,6 +147,7 @@ export interface PreflightReport {
   project: { initialized: boolean; dir: string | null; ledger: VerifyResult | null };
   isolation: AdvisoryIsolation;
   implementer: ImplementerAdvisory;
+  author: AuthorAdvisory;
   ok: boolean;
   problems: string[];
   warnings: string[];
@@ -146,6 +191,31 @@ const NEEDED_BY = {
   codex: ["the implementer", "the sealing author"],
 } as const;
 
+/** Names every probe child may inherit: where to find the binary, locale and temp location. Nothing else of the caller's environment. */
+const PROBE_ENV_ALLOW = /^(PATH|LANG|LANGUAGE|LC_[A-Z_]+|TZ|TERM|TMPDIR|SYSTEMROOT)$/;
+/** The extra names the docker client needs to find its context and daemon. */
+const DOCKER_ENV_ALLOW = /^(HOME|DOCKER_[A-Z_]+|SSH_AUTH_SOCK)$/;
+/** A name that looks like a credential never reaches a probe child, even under an allowed prefix (DOCKER_AUTH_CONFIG). */
+const CREDENTIAL_LIKE = /(KEY|TOKEN|SECRET|PASSW|CREDENTIAL|AUTH_CONFIG)/i;
+const NEVER_PROBE_ENV = new Set<string>([
+  ...Object.values(CREDENTIAL_SOURCE_ENV),
+  ...SECRET_ENV_NAMES,
+  "OPENAI_API_KEY",
+]);
+
+/**
+ * The environment of a probe child: an allowlist of the caller's `env`, plus the docker client names for the docker probe only.
+ * A key variable (the implementer and author keys, the vendor names) never passes, whatever the allowlist says.
+ */
+export function probeBaseEnv(env: NodeJS.ProcessEnv, kind: "plain" | "docker"): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const [name, value] of Object.entries(env)) {
+    if (value === undefined || NEVER_PROBE_ENV.has(name) || CREDENTIAL_LIKE.test(name)) continue;
+    if (PROBE_ENV_ALLOW.test(name) || (kind === "docker" && DOCKER_ENV_ALLOW.test(name))) out[name] = value;
+  }
+  return out;
+}
+
 /** Runs `cmd args` with PATH taken from `env`; any failure means "not usable". */
 function probe(cmd: string, args: string[], env: NodeJS.ProcessEnv): ToolProbe {
   const result = spawnSync(cmd, args, { encoding: "utf8", timeout: PROBE_TIMEOUT_MS, killSignal: "SIGKILL", env });
@@ -156,8 +226,8 @@ function probe(cmd: string, args: string[], env: NodeJS.ProcessEnv): ToolProbe {
 
 /**
  * Agent CLIs write caches under their home even for `--version`, so they are probed with a throwaway
- * home that is removed afterwards (spec §11 rule 1). Docker keeps the caller's environment so its
- * context and daemon settings still apply. The scratch dir goes under the caller's TMPDIR when that is
+ * home that is removed afterwards (spec §11 rule 1). Every probe gets an allowlisted environment; docker
+ * additionally keeps its own DOCKER_* names and HOME so its context and daemon settings still apply. The scratch dir goes under the caller's TMPDIR when that is
  * an absolute path, so a caller can keep it private; `os.tmpdir()` reads process.env, not `env`.
  */
 function probeAgentCli(cmd: string, env: NodeJS.ProcessEnv): ToolProbe {
@@ -179,7 +249,7 @@ function makeProbeHome(env: NodeJS.ProcessEnv): string {
 
 function probeHomeEnv(env: NodeJS.ProcessEnv, scratch: string): NodeJS.ProcessEnv {
   return {
-    ...env,
+    ...probeBaseEnv(env, "plain"),
     HOME: scratch,
     CODEX_HOME: join(scratch, "codex"),
     CLAUDE_CONFIG_DIR: join(scratch, "claude"),
@@ -224,18 +294,20 @@ interface Probes {
 }
 
 function probeAllSequentially(env: NodeJS.ProcessEnv): Probes {
-  const git = probe("git", ["--version"], env);
-  const docker = probe("docker", ["--version"], env);
-  const daemon = docker.found ? probe("docker", ["info", "--format", "{{.ServerVersion}}"], env).found : false;
+  const plain = probeBaseEnv(env, "plain");
+  const dockerEnv = probeBaseEnv(env, "docker");
+  const git = probe("git", ["--version"], plain);
+  const docker = probe("docker", ["--version"], dockerEnv);
+  const daemon = docker.found ? probe("docker", ["info", "--format", "{{.ServerVersion}}"], dockerEnv).found : false;
   return { git, docker, daemon, claude: probeAgentCli("claude", env), codex: probeAgentCli("codex", env) };
 }
 
 /** All five probes at once, so the slowest one decides how long doctor takes. */
 async function probeAllInParallel(env: NodeJS.ProcessEnv): Promise<Probes> {
   const [git, docker, daemonProbe, claude, codex] = await Promise.all([
-    probeAsync("git", ["--version"], env),
-    probeAsync("docker", ["--version"], env),
-    probeAsync("docker", ["info", "--format", "{{.ServerVersion}}"], env),
+    probeAsync("git", ["--version"], probeBaseEnv(env, "plain")),
+    probeAsync("docker", ["--version"], probeBaseEnv(env, "docker")),
+    probeAsync("docker", ["info", "--format", "{{.ServerVersion}}"], probeBaseEnv(env, "docker")),
     probeAgentCliAsync("claude", env),
     probeAgentCliAsync("codex", env),
   ]);
@@ -380,6 +452,18 @@ function buildReport(
             if (!(err instanceof ConfigError)) throw err;
           }
         }
+        if (project !== null && project.config.author.image !== null) {
+          warn(AUTHOR_EGRESS_WARNING, AUTHOR_EGRESS_FIX, [], "notice");
+          const context = project.config.judge.docker_context;
+          if (context !== null && SHARED_DOCKER_CONTEXTS.has(context)) {
+            warn(
+              `docker context "${context}" is a shared context, not a dedicated profile; the author container can reach other containers and the host gateway on it`,
+              AUTHOR_CONTEXT_FIX,
+              [],
+              "notice",
+            );
+          }
+        }
         // Poka-yoke (spec §11 rule 4): vault material in the repository or a worktree is a problem to fix before any run.
         if (status.initialized) {
           const vault = sealedReport(location, env);
@@ -403,6 +487,7 @@ function buildReport(
     project: { initialized, dir, ledger: ledgerResult },
     isolation: safeIsolation(probeIsolation, env, reported, project),
     implementer: implementerAdvisory(env, project),
+    author: authorAdvisory(env, project),
     ok: problemList.length === 0,
     problems: problemList.map((finding) => finding.message),
     warnings: warningList.map((finding) => finding.message),

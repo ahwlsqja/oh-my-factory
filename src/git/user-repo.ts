@@ -6,7 +6,7 @@ import { type GitTarget, HostGitError, runHostGit } from "./hardened.js";
 import { type TreeEntryInfo, bundleVerify, readBlobs, treeEntries, treeSha, unbundle } from "./ops.js";
 
 /**
- * The user's own repository, reached only through the hardened host git (spec §5.4, §7; M3-D15). Everything here is read-only: it
+ * The user's own repository, reached only through the hardened host git (spec §5.4, §7). Everything here is read-only: it
  * lists and reads objects, never the work tree, the index, a hook or an attribute file, and it runs no filter. The codes are
  * closed and the message is the code, so no path of the user's tree reaches a log through an error.
  */

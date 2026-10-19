@@ -9,10 +9,10 @@ import { LINE_ORDER, type NodeId, type UnverifiedCode } from "./line-types.js";
 import { classifyWEvent, lastStateEvent, type ReasonCode, RUN_ID_PATTERN } from "./w-events.js";
 
 /**
- * The minimal handoff record (spec §6.3, M3b2-D10, D21): what a person needs when a run stops without a
+ * The minimal handoff record (spec §6.3): what a person needs when a run stops without a
  * result they can merge, or when a run died. Everything in it is an id, a closed code or a fixed sentence
  * written in this file, so no model text and no metric id can reach it (the same rule as the ledger events).
- * The full packet and `omf answer` are M4; `resume` is the placeholder for them.
+ * The full packet and `omf answer` come later; `resume` is the placeholder for them.
  */
 
 export type JCode = "J2" | "J3" | "J4" | "J6" | "J7" | "J8";
@@ -35,7 +35,7 @@ export interface HandoffRecord {
   remaining: NodeId[];
   risks: UnverifiedCode[];
   decision_required: { j: JCode; question: string; options: string[] };
-  /** Placeholder for `omf answer <request-id>` (M4). */
+  /** Placeholder for `omf answer <request-id>`. */
   resume: "not_available_until_m4";
   created_at: string;
 }
@@ -47,16 +47,18 @@ interface Route {
   options: (workId: string, goalId: string) => string[];
 }
 
-// The only commands an option may name. Each exists today; a command that needs the line to run again
-// carries "after M3h:" because `omf run` arrives with M3h. `omf cancel` is absent on purpose: no such
-// command exists for a work item, and `omf veto` ends an open item from any state.
+// The only commands an option may name. Each exists today. `omf run` runs the line again on a sealed item and
+// `omf seal` seals or reseals it, so an option names `omf seal` only where the seal is what is missing.
+// `omf cancel` is absent on purpose: no such command exists for a work item, and `omf veto` ends an open item
+// from any state.
 const show = (id: string): string => `omf work show ${id}`;
 const decideShow = (id: string): string => `omf decide show ${id}`;
 const decideResolve = (id: string): string => `omf decide resolve ${id} <decision_id> --file <resolution.json>`;
 const veto = (id: string): string => `omf veto ${id}`;
 const raiseRounds = (id: string): string => `omf budget raise ${id} --rounds <n>`;
 const raiseUsd = (id: string): string => `omf budget raise ${id} --usd <amount>`;
-const rerun = (id: string): string => `after M3h: omf run ${id}`;
+const rerun = (id: string): string => `omf run ${id}`;
+const reseal = (id: string): string => `omf seal ${id}`;
 // The disclosure budget belongs to the goal, so these two name the goal id and not the work id.
 const declareDisclosure = (goalId: string): string => `omf budget declare ${goalId} disclosure <n>`;
 const raiseDisclosure = (goalId: string): string => `omf budget raise ${goalId} disclosure <n>`;
@@ -67,7 +69,7 @@ const review = (id: string): string[] => [show(id), veto(id)];
 const retry = (id: string): string[] => [show(id), veto(id), rerun(id)];
 
 /**
- * Reason code -> the J act that answers it (breakdown M3b2, spec §6.3). `Record<ReasonCode, ...>` makes a
+ * Reason code -> the J act that answers it (spec §6.3). `Record<ReasonCode, ...>` makes a
  * new reason code a compile error until it has a route. J6 is "the line cannot go on by itself", J7 "a gate
  * or a step needs a person", J8 "a limit a person can raise".
  */
@@ -76,13 +78,13 @@ export const HANDOFF_ROUTES: Readonly<Record<ReasonCode, Route>> = {
     j: "J2",
     state: "A design question of this item is still open, so the line stopped before any work started.",
     question: "Which answer do you give to the open design question?",
-    options: (id) => [decideShow(id), decideResolve(id), veto(id), rerun(id)],
+    options: (id) => [decideShow(id), decideResolve(id), veto(id), reseal(id)],
   },
   gate2_exhausted: {
     j: "J3",
     state: "The sealed-scenario loop used all its visits before any implementation started.",
     question: "Should the scenarios be reworked, or should the item be dropped?",
-    options: retry,
+    options: (id) => [show(id), veto(id), reseal(id)],
   },
   scenarios_need_review: {
     j: "J3",
@@ -246,7 +248,7 @@ export const HANDOFF_ROUTES: Readonly<Record<ReasonCode, Route>> = {
 /**
  * The `ran` list of a run that left a progress marker (`S3 working`). The marker grammar is closed
  * (PROGRESS_MARKER_PATTERN), so a match is two closed words; anything else, including null, yields none.
- * Task 9 passes the marker only for a resumed item: a marker left by an earlier parked run is not this run's.
+ * The caller passes the marker only for a resumed item: a marker left by an earlier parked run is not this run's.
  */
 export function markerToRan(marker: string | null): HandoffRecord["ran"] {
   const text = (marker ?? "").trim();
@@ -361,7 +363,7 @@ function coveredUpTo(itemDir: string): number {
 }
 
 /**
- * Which killed run still owes a handoff (M3b2-D21), read from the ledger and not from `run.reclaimed`: a reclaim
+ * Which killed run still owes a handoff, read from the ledger and not from `run.reclaimed`: a reclaim
  * done by `repairGoal` during another item's entry leaves `run.reclaimed` null for the run that finds it later.
  * A `work.claim_reclaimed` after the item's last state event is owed until a predecessor file with a
  * `predecessor_seq` at or above its seq exists. The payload names the run that reclaimed, not the killed one, so

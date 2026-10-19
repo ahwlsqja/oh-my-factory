@@ -68,7 +68,7 @@ export interface TickResult {
   reason_code: string | null;
   escalation: Escalation | null;
   next_steps: string[];
-  /** Work ids of open items in awaiting_approval; the CLI exits 1 while this is non-empty (D18). */
+  /** Work ids of open items in awaiting_approval; the CLI exits 1 while this is non-empty. */
   awaiting_approval: string[];
   /** The model answered with a usable envelope; the basis of the stall comparison. */
   reconciled: boolean;
@@ -137,7 +137,7 @@ function blankResult(goalId: string, tickId: string): TickResult {
   };
 }
 
-/** A goal run that already ended or is waiting for a person: nothing is measured or written (D3). */
+/** A goal run that already ended or is waiting for a person: nothing is measured or written. */
 function standing(goalId: string, tickId: string, run: RunState): TickResult {
   const final = run.status === "finish" || run.status === "cancelled";
   const steps =
@@ -158,7 +158,7 @@ function standing(goalId: string, tickId: string, run: RunState): TickResult {
 
 /**
  * The human tick report. It is host state only and may hold the target line and the gap; the CLI output of
- * the tick never does (D29). Every dispatched item gets its veto command (spec §4.4 step 5).
+ * the tick never does. Every dispatched item gets its veto command (spec §4.4 step 5).
  */
 export function renderTickReport(result: TickResult, human: HumanLines): string {
   const lines = [
@@ -192,7 +192,7 @@ export function renderTickReport(result: TickResult, human: HumanLines): string 
 }
 
 /**
- * The stall test (spec §4.4 "no progress", D2). The state a tick sees is the same as the state the
+ * The stall test (spec §4.4 "no progress"). The state a tick sees is the same as the state the
  * previous model ANSWER saw, so asking again cannot help; a live claim means a W run is working on an open
  * item, which is progress the signature cannot see. `previous` is null when no tick since the last resume
  * or approval got an answer, and a failed model call sets no baseline, so a failure is retried.
@@ -250,7 +250,7 @@ function unfinishedTick(events: readonly LedgerEvent[], goalId: string): string 
 }
 
 /**
- * A machine fault after the tick mutated state must not be retried silently (D24): the goal is terminated
+ * A machine fault after the tick mutated state must not be retried silently: the goal is terminated
  * `failed` and only a person's resume clears it. A final termination (finish, cancelled) is left alone.
  * Failing to write this record (a corrupt ledger, say) is swallowed: the original error is the one to report.
  */
@@ -273,7 +273,7 @@ function recordInternalError(location: ProjectLocation, goalId: string, seenBefo
 
 /**
  * One pass of the goal loop (spec §4.4), design §10. A tick uses a round only when it calls the reconciler
- * (D18): waiting ticks, gate stops and failed audits use none. One tick per goal at a time (D23).
+ *: waiting ticks, gate stops and failed audits use none. One tick per goal at a time.
  */
 export function tickGoal(location: ProjectLocation, goalId: string, options: TickOptions): Promise<TickResult> {
   return withTickLock(location, goalId, async () => {
@@ -281,7 +281,7 @@ export function tickGoal(location: ProjectLocation, goalId: string, options: Tic
     try {
       return await runTick(location, goalId, options);
     } catch (err) {
-      // An exception after goal.tick_started terminates the goal `failed` (D24) and still reaches the caller (exit 2).
+      // An exception after goal.tick_started terminates the goal `failed` and still reaches the caller (exit 2).
       recordInternalError(location, goalId, seenBefore);
       throw err;
     }
@@ -342,7 +342,7 @@ async function runTick(location: ProjectLocation, goalId: string, options: TickO
     const signatures = st.outcomes
       .map((outcome) => signatureOf(outcome, st.progressSig))
       .filter((signature): signature is string => signature !== null);
-    // Signature breaker (D2): three hits of one signature since the last resume or approval stop the goal for a
+    // Signature breaker: three hits of one signature since the last resume or approval stop the goal for a
     // person. A termination this tick already made (finish, or an escalation) is not overridden.
     if (st.status === "continue" && st.escalation === null) {
       const hit = tripped(signatureCounts(prior, goalId), signatures);
@@ -414,7 +414,7 @@ async function runTick(location: ProjectLocation, goalId: string, options: TickO
   }
   const { locked, approval } = audit;
   if (audit.regime_changes.length > 0) {
-    // A stale mark is the only regime change the tick itself causes (D21); it gets its own question.
+    // A stale mark is the only regime change the tick itself causes; it gets its own question.
     const stale = audit.regime_changes.every((reason) => reason.startsWith("goal marked stale"));
     escalateTick(stale ? "stale_goal" : "reapproval_required", null);
     return finishTick();
@@ -470,7 +470,7 @@ async function runTick(location: ProjectLocation, goalId: string, options: TickO
 
   const { summary, none } = summarizeGap(report, locked.goal.semantic.mode);
   if (summary === null) {
-    // No trigger: no model call, no work item and no round (D17, D18).
+    // No trigger: no model call, no work item and no round.
     if (none?.reason === "target_met") {
       const minObservationMs = parseDuration(locked.goal.semantic.prereg.min_observation);
       const verdict = evaluateSuccess({ events, goalId, regime: approval.regime, minObservationMs, now: now() });
@@ -503,7 +503,7 @@ async function runTick(location: ProjectLocation, goalId: string, options: TickO
       st.reason = "no_breach";
     }
   } else {
-    // A repairable item is one W edge behind the ledger (a crash between the event and the file, M3b1-D5).
+    // A repairable item is one W edge behind the ledger (a crash between the event and the file).
     // STOP_IF reads it by its ledger target and the WIP cap by its file state (always open, see reconcile.ts),
     // so a crash can neither hide unreviewed evidence nor free a slot that is taken.
     const openCount =
@@ -525,7 +525,7 @@ async function runTick(location: ProjectLocation, goalId: string, options: TickO
         liveClaim: hasLiveClaim(verified.items),
       })
     ) {
-      // Only right before a model call, after back_pressure and wip_full: a tick that waits is never a stall (D2).
+      // Only right before a model call, after back_pressure and wip_full: a tick that waits is never a stall.
       escalateTick("no_progress", null);
     } else {
       const doc = readGoal(location.dir, goalId);

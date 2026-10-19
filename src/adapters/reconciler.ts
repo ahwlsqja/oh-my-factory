@@ -1,7 +1,8 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { ConfigError, type ReconcilerConfig, type ReconcilerKind } from "../core/config.js";
+import { ConfigError, type ReconcilerConfig, type ReconcilerKind, passthroughRefusal } from "../core/config.js";
+import { vendorEnvName } from "../core/env-deny.js";
 import { type ProcessResult, runProcessGroup } from "./process-group.js";
 
 /** Why a reconciler run produced no usable output. Fixed set: the ledger stores the code, never model or stderr text (spec §4.6). */
@@ -79,7 +80,7 @@ export function buildClaudeArgs(config: ReconcilerConfig): string[] {
  * The whole environment of the child. Nothing is inherited: a GITHUB_TOKEN, AWS_* or INFISICAL_* variable
  * in the caller's environment must not reach a process that talks to a model (F6). HOME and the claude
  * config dir sit inside the per-run scratch dir, so the user's `~/.claude` is neither read nor written.
- * Names in `env_passthrough` (command kind only) are copied first so they can never replace HOME or PATH.
+ * Names in `env_passthrough` (command kind only; a vendor key or vendor-home name is refused) are copied first so they can never replace HOME or PATH.
  */
 export function reconcilerEnv(
   config: ReconcilerConfig,
@@ -89,6 +90,8 @@ export function reconcilerEnv(
   const env: NodeJS.ProcessEnv = {};
   if (config.kind === "command") {
     for (const name of config.env_passthrough) {
+      // Checked again here: a config object built in code never went through the loader.
+      if (vendorEnvName(name)) throw new ConfigError(passthroughRefusal(name));
       const value = realEnv[name];
       if (value !== undefined) env[name] = value;
     }
@@ -134,7 +137,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /**
  * Pulls the model's JSON out of stdout. `claude --output-format json` prints one envelope object; the
  * answer is in `result` as bare or fenced JSON (`structured_output` is read if present). A
- * `command` prints the JSON itself. The value is returned as unvalidated data: Task 9 validates it
+ * `command` prints the JSON itself. The value is returned as unvalidated data: the caller validates it
  * against `reconcile-output.schema.json` (spec §4.4 step 4: the model's output is parsed, never trusted).
  */
 export function extractModelJson(kind: ReconcilerKind, stdout: string): unknown {

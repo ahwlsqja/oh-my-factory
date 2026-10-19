@@ -101,6 +101,13 @@ error fails the pull request. Run `npx biome format --write .` before committing
 - Format: the whole repository was formatted in one commit, which is listed in `.git-blame-ignore-revs`. Run
   `git config blame.ignoreRevsFile .git-blame-ignore-revs` once so `git blame` skips it.
 
+## Command usage file
+
+`docs/cli-usage.md` holds the exact `--help` text of every leaf command and is generated. After changing a command (an
+option, a description or a new verb), run `npm run build && node scripts/cli-usage.mjs --write` and commit the result.
+`tests/enforcement/W-cli-usage-drift.test.ts` fails when the file and the built CLI disagree and names the verb. A new
+command also needs a README row, which `tests/cli/help-drift.test.ts` checks.
+
 ## Docker-gated tests
 
 Suites under `tests/gated` need a real Docker daemon and are skipped unless `OMF_GATED=docker`; a skipped suite is not
@@ -113,17 +120,25 @@ current Docker context is left alone (and put back if it changed anyway).
 ```sh
 npm run test:gated                                  # every gated suite
 npm run test:gated -- --only G-inspect-parser-real  # one suite
-npm run test:gated -- --record                      # also append a record per passed G- suite (clean tree only)
+npm run test:gated -- --record                      # also append a record per passed G- suite (clean tree; only the evidence file may differ)
 ```
 
-A gated suite that calls a real model needs the implementer key, and only that key. Create a dedicated Anthropic
-workspace key with a spend limit and pass it as `OMF_IMPLEMENTER_API_KEY` for that one command, for example
-`OMF_IMPLEMENTER_API_KEY=... npm run test:gated -- --model --only G-<suite>`. With `--model` the driver passes that variable to the
-test process only, sends its output through a redactor and passes nothing else secret; without `--model` the key is dropped; it never forwards `ANTHROPIC_API_KEY`, which is the reconciler's host key, and
-the implementer never falls back to it. Do not reuse a key that has no spend limit.
+A gated suite that calls a real model reads its own keys. `G-implementer-real-run` and `G-e6-l2-leak-redteam` read
+`OMF_IMPLEMENTER_API_KEY`, `G-author-canary` reads `OMF_AUTHOR_API_KEY`, and `G-skeleton-real` reads both. Create dedicated
+Anthropic workspace keys with a spend limit and pass them for that one command, for example
+`OMF_IMPLEMENTER_API_KEY=... npm run test:gated -- --model --only G-<suite>`. With `--model` the driver passes the test process
+only the keys that the suites matched by `--only` read (all of them when there is no `--only`), each under its own name and never
+under a vendor name such as `ANTHROPIC_API_KEY`, which is the reconciler's host key; the implementer and the author never fall
+back to it. It sends the output through a redactor and refuses, naming the variable, when a key is missing. Without `--model`
+the keys are dropped. The author suites are described in [docs/author.md](../author.md) under "Gated runs". Do not reuse a key
+that has no spend limit.
 
 Records live in `docs/evidence/gated-runs.json` and are written only by `--record`, never from inside a test. Until a
-suite has a record, the docs say the behaviour it covers is not enforced. Gated suites are never part of CI.
+suite has a record, the docs say the behaviour it covers is not enforced. Gated suites are never part of CI. A gated suite that calls the implementer directly (`G-implementer-real-run`, `G-e6-l2-leak-redteam`) passes its own
+session timeout in the request instead of the `[implementer] timeout_ms` default (30 minutes): 20 minutes for the
+session, 25 for the vitest test. Suites driven through the CLI or the author (`G-skeleton-real`, `G-author-canary`) take
+their session limit from config (`implementer.timeout_ms`, and `author.timeout_ms`, 10 minutes by default; the schema allows up to 1 hour), and their vitest
+timeout (90 and 30 minutes) is set above it.
 
 One older test predates this: the Docker case in `tests/adapters/measure-cmd.test.ts` runs only when
 `OMF_TEST_DOCKER=1` and uses the client's current Docker context, not the `omf-m3f` profile. It is not a gated suite,

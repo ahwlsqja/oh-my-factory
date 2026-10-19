@@ -26,7 +26,8 @@ import {
   RuntimeError,
   type SecretHandle,
 } from "./runtime.js";
-import { ContainerSpecError, isImageId } from "./spec.js";
+import { isMeasured } from "./measured-handles.js";
+import { ContainerSpecError, ROLE_SECRET, isImageId } from "./spec.js";
 
 export type DockerRunner = (
   argv: readonly string[],
@@ -284,9 +285,11 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
     async exec(handle, spec) {
       const name = await requireLocal();
       const { secret } = spec;
-      // Candidate code runs in every other role, and it can read whatever its container is given: only the
-      // implementer, which is measured for that, ever receives a key.
-      if (secret !== undefined && handle.role !== "implementer") throw new ContainerSpecError("invalid_exec");
+      // Candidate code runs in every judge role, and it can read whatever its container is given: only an agent role, which is
+      // measured for that, ever receives a key, and only the key of its own vendor. "Measured" is checked here: the handle must
+      // be one `createMeasured` returned, so a container that was never judged golden cannot be given a key.
+      if (secret !== undefined && (ROLE_SECRET[handle.role] !== secret.name || !isMeasured(handle)))
+        throw new ContainerSpecError("invalid_exec");
       // The argv is built (and `spec.env` and the secret name validated) before the value is read.
       const argv = execArgv(
         handle.name,
@@ -296,6 +299,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
           ...(spec.workdir === undefined ? {} : { workdir: spec.workdir }),
           ...(spec.env === undefined ? {} : { env: spec.env }),
           ...(secret === undefined ? {} : { secret: secret.name }),
+          role: handle.role,
         },
         name,
       );
@@ -315,14 +319,15 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
       const name = await requireLocal();
       const resources: OwnedResource[] = [];
       for (const line of (await succeed(listOwnedArgv("container", filter.run_id, name), META_MS)).split("\n")) {
-        const [containerName, runId = ""] = line.trim().split("\t");
-        if (containerName) resources.push({ kind: "container", name: containerName, run_id: runId });
+        const [containerName, runId = "", workId = ""] = line.trim().split("\t");
+        if (containerName) resources.push({ kind: "container", name: containerName, run_id: runId, work_id: workId });
       }
       for (const line of (await succeed(listOwnedArgv("image", null, name), META_MS)).split("\n")) {
         const tag = line.trim();
         if (!tag || tag.startsWith("<none>")) continue;
         const run = /^omf-sut:(.+)-\d+$/.exec(tag)?.[1] ?? "";
-        if (filter.run_id === null || run === filter.run_id) resources.push({ kind: "image", name: tag, run_id: run });
+        if (filter.run_id === null || run === filter.run_id)
+          resources.push({ kind: "image", name: tag, run_id: run, work_id: "" });
       }
       return resources;
     },

@@ -1,0 +1,699 @@
+{
+  "schema_version": 1,
+  "requirements": [
+    {
+      "id": "F1.goal-is-top-unit",
+      "source": "spec §2 F1",
+      "claim": "Work items belong to a goal: a work item carries its goal id, and the goal file is the entry point of the loop.",
+      "tests": [
+        {
+          "path": "tests/work/work-item.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "F2.metric-lock-before-measure",
+      "source": "spec §2 F2, §4.1",
+      "claim": "A metric nobody approved is never measured, and a tampered metric or goal lock stops measurement. Editing goal.md, a bands file or a metric is a regime change: measurements carry needs_reapproval until J1 approves again, and the locked target stays.",
+      "tests": [
+        {
+          "path": "tests/enforcement/E1-metric-tamper-stops.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "F3.code-controls-loop",
+      "source": "spec §2 F3",
+      "claim": "Budgets and visit caps live in the host ledger and in code, not in a session, and nothing extends them on its own.",
+      "tests": [
+        {
+          "path": "tests/enforcement/E3-budget-no-reset.test.ts"
+        },
+        {
+          "path": "tests/enforcement/W-visit-cap.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "F4.goal-closes-by-signature",
+      "source": "spec §2 F4",
+      "claim": "Agents produce at most a candidate; a goal closes only by a person's signature (J5).",
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "deferred_to": "M4"
+    },
+    {
+      "id": "F5.bands-detect-regression",
+      "source": "spec §2 F5, §4.3",
+      "claim": "Control bands detect a drift after launch and record a breach event.",
+      "tests": [
+        {
+          "path": "tests/goal/bands.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "F6.vault-host-only",
+      "source": "spec §2 F6",
+      "claim": "No implementer session or container can read the vault; only the harness container reads it, during S4.",
+      "real_world": true,
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "tests": [
+        {
+          "path": "tests/enforcement/E2-g-canary-no-leak.test.ts"
+        },
+        {
+          "path": "tests/enforcement/E2-w-seal-canary-no-leak.test.ts"
+        },
+        {
+          "path": "tests/enforcement/W-vault-symlink-refused.test.ts"
+        },
+        {
+          "path": "tests/enforcement/E6-station-smoke.test.ts",
+          "proves": "wiring_only"
+        },
+        {
+          "path": "tests/gated/e6-l2-leak-redteam.test.ts",
+          "gated": "G-e6-l2-leak-redteam"
+        },
+        {
+          "path": "tests/gated/implementer-boundary-real.test.ts",
+          "gated": "G-implementer-boundary-real"
+        }
+      ]
+    },
+    {
+      "id": "F6.author-vault-host-only",
+      "source": "spec §2 F6",
+      "claim": "No author container can read the vault: it has no bind mount and receives only the item's intent, spec and interface contract. Unproven until a real author run is recorded.",
+      "real_world": true,
+      "surfaces": ["docs/author.md"],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-author-argv-golden.test.ts"
+        },
+        {
+          "path": "tests/gated/author-canary.test.ts",
+          "gated": "G-author-canary",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "F7.unevaluated-undetermined",
+      "source": "spec §2 F7",
+      "claim": "A guardrail that was not evaluated is undetermined, never passing.",
+      "tests": [
+        {
+          "path": "tests/enforcement/E4-unevaluated-is-undetermined.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "F8.open-decision-blocks",
+      "source": "spec §2 F8, §5.0",
+      "claim": "Work does not run while a required decision is open.",
+      "tests": [
+        {
+          "path": "tests/enforcement/W-gate1-open-blocks.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "F9.unverified-areas-first",
+      "source": "spec §2 F9, §5.8",
+      "claim": "The evidence report lists the unverified areas, and nothing that nobody produced reads as passed.",
+      "tests": [
+        {
+          "path": "tests/enforcement/W-evidence-no-pass-by-default.test.ts"
+        },
+        {
+          "path": "tests/enforcement/W-noise-unverified-stays.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "F10.wip-and-stop-if",
+      "source": "spec §2 F10, §6.1",
+      "claim": "New production stops when unreviewed evidence piles up; the work-in-progress cap and STOP_IF are reachable through real commands.",
+      "tests": [
+        {
+          "path": "tests/enforcement/W-stop-if-reachable.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "F11.autonomy-dial",
+      "source": "spec §2 F11",
+      "claim": "Autonomy is a dial by risk tier and widens only on recorded evidence.",
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "deferred_to": "after v0.1"
+    },
+    {
+      "id": "S5.0.empty-means-fail",
+      "source": "spec §5.0",
+      "claim": "Empty means fail: zero scenarios, a missing gate, a missing verdict or outcome file and a gate never visited all count as not passed.",
+      "tests": [
+        {
+          "path": "tests/enforcement/E7a-empty-means-fail.test.ts"
+        },
+        {
+          "path": "tests/enforcement/E7b-empty-means-fail.test.ts"
+        },
+        {
+          "path": "tests/enforcement/E7c-empty-means-fail.test.ts"
+        },
+        {
+          "path": "tests/enforcement/E7d-verdict-missing-means-fail.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "S5.1.spec-is-projection",
+      "source": "spec §5.1",
+      "claim": "spec.md is a projection of the decision ledger, byte for byte.",
+      "tests": [
+        {
+          "path": "tests/enforcement/W-spec-projection.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "S5.2.decisions-human-only",
+      "source": "spec §5.2",
+      "claim": "Only a person closes a decision; the writers refuse an agent actor.",
+      "tests": [
+        {
+          "path": "tests/enforcement/W-decision-human-only.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "S5.3.seal-inputs-closed",
+      "source": "spec §5.3",
+      "claim": "What the sealing author receives is a closed set: intent, spec and the interface contract, never a plan or code.",
+      "tests": [
+        {
+          "path": "tests/enforcement/W-seal-inputs-closed.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "S5.4.implementer-container",
+      "source": "spec §5.4, §7",
+      "claim": "The implementer runs in a measured container with one vendor key, no vault and no other credential.",
+      "real_world": true,
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-implementer-argv-golden.test.ts"
+        },
+        {
+          "path": "tests/enforcement/W-implementer-env-allowlist.test.ts"
+        },
+        {
+          "path": "tests/enforcement/W-implementer-measure-before-key.test.ts"
+        },
+        {
+          "path": "tests/gated/implementer-boundary-real.test.ts",
+          "gated": "G-implementer-boundary-real"
+        },
+        {
+          "path": "tests/gated/implementer-real-run.test.ts",
+          "gated": "G-implementer-real-run"
+        }
+      ]
+    },
+    {
+      "id": "S5.5.judge-two-container",
+      "source": "spec §5.5",
+      "claim": "The judge runs the candidate and the harness in two measured containers, and the harness is the only reader of the vault.",
+      "real_world": true,
+      "tests": [
+        {
+          "path": "tests/enforcement/W-judge-argv-golden.test.ts"
+        },
+        {
+          "path": "tests/enforcement/W-judge-measure-before-start.test.ts"
+        },
+        {
+          "path": "tests/gated/two-container-roundtrip.test.ts",
+          "gated": "G-two-container-roundtrip"
+        }
+      ]
+    },
+    {
+      "id": "S5.5.null-implementation-fails",
+      "source": "spec §5.5, §12",
+      "claim": "A null implementation never reaches success: the judge fails it.",
+      "tests": [
+        {
+          "path": "tests/enforcement/W-null-impl-fails.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "S5.7.masked-feedback",
+      "source": "spec §5.7",
+      "claim": "Feedback released to the implementer is masked, and releases are counted per goal in the host ledger.",
+      "tests": [
+        {
+          "path": "tests/enforcement/E2-w-b-canary-no-leak-feedback.test.ts"
+        },
+        {
+          "path": "tests/enforcement/W-ladder-no-reset.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "S5.8.evidence-no-pass-by-default",
+      "source": "spec §5.8",
+      "claim": "A clean line ends success with human_needed and lists noise_check_not_evaluated as unverified, so merge_recommended is unreachable in v0.1.",
+      "tests": [
+        {
+          "path": "tests/enforcement/W-evidence-no-pass-by-default.test.ts"
+        },
+        {
+          "path": "tests/enforcement/W-noise-unverified-stays.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "S7.isolation-measured",
+      "source": "spec §7",
+      "claim": "The isolation level comes from measurements in the ledger, and a daemon-reported deviation lowers it.",
+      "real_world": true,
+      "tests": [
+        {
+          "path": "tests/enforcement/W-gate3-isolation.test.ts"
+        },
+        {
+          "path": "tests/enforcement/W-inspect-deviation-lowers-level.test.ts"
+        },
+        {
+          "path": "tests/gated/isolation-probe.test.ts",
+          "gated": "G-real-isolation-probe"
+        }
+      ]
+    },
+    {
+      "id": "S7.l2-label",
+      "source": "spec §7",
+      "claim": "The label \"sealed (container)\" appears only when every stage of a run measured L2.",
+      "real_world": true,
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-gate3-isolation.test.ts"
+        },
+        {
+          "path": "tests/gated/e6-l2-leak-redteam.test.ts",
+          "gated": "G-e6-l2-leak-redteam"
+        }
+      ]
+    },
+    {
+      "id": "S7.docker-client-trusted",
+      "source": "spec §7",
+      "claim": "The measurement trusts the docker client on PATH and the configured context; a substituted client or a lying daemon can make a stage measure L2.",
+      "real_world": true,
+      "surfaces": ["docs/isolation-and-gates.md", "docs/author.md"],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-inspect-deviation-lowers-level.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "S7.l3-label",
+      "source": "spec §7",
+      "claim": "L3 adds an egress allowlist and a leak red-team on every run, and earns its own label.",
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "deferred_to": "v0.3"
+    },
+    {
+      "id": "S11.1.non-pollution",
+      "source": "spec §11 rule 1",
+      "claim": "OMF only reads the user's agent configuration, keeps its state out of the repository and the agent config homes, and writes nothing there.",
+      "tests": [
+        {
+          "path": "tests/enforcement/E5-init-non-pollution.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "S11.1.plugin-dir-shells",
+      "source": "spec §11 rule 1",
+      "claim": "Shells prefer --plugin-dir injection, and marketplace installation is opt-in and labeled.",
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "deferred_to": "after v0.1"
+    },
+    {
+      "id": "S11.2.never-merges",
+      "source": "spec §11 rule 2",
+      "claim": "OMF never commits to a user branch and never merges; a candidate adds exactly one ref and nothing writes done.",
+      "tests": [
+        {
+          "path": "tests/enforcement/W-user-git-untouched.test.ts"
+        },
+        {
+          "path": "tests/enforcement/W-no-complete-in-m3.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "S11.2.ship-only-pushes",
+      "source": "spec §11 rule 2",
+      "claim": "Push and pull request creation happen only through omf ship.",
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "deferred_to": "M4"
+    },
+    {
+      "id": "S11.3.public-artifacts-in-worktree",
+      "source": "spec §11 rule 3",
+      "claim": "Public artifacts are written into the OMF worktree and committed by people through the normal pull request flow.",
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "deferred_to": "M4"
+    },
+    {
+      "id": "S11.4.sealed-not-in-repo",
+      "source": "spec §11 rule 4",
+      "claim": "OMF refuses to run when sealed material appears inside the repository.",
+      "tests": [
+        {
+          "path": "tests/enforcement/W-pokayoke-sealed-in-repo.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "S11.5.governance-unreadable-stops",
+      "source": "spec §11 rule 5",
+      "claim": "When a governance file cannot be read or fails verification, OMF stops instead of falling back to defaults.",
+      "tests": [
+        {
+          "path": "tests/enforcement/ledger-tamper-stops.test.ts"
+        },
+        {
+          "path": "tests/enforcement/E1-metric-tamper-stops.test.ts"
+        }
+      ]
+    },
+    {
+      "id": "S11.6.break-glass-events",
+      "source": "spec §11 rule 6",
+      "claim": "A break-glass exception is a J7 ledger event with a reason and an expiry.",
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "deferred_to": "M4"
+    },
+    {
+      "id": "S5.3.same-vendor-refused",
+      "source": "spec §5.3, §14 item 2",
+      "claim": "Author and implementer on the same vendor are refused with a reason that names both roles, and the [seal] same_vendor key is refused whatever its value, so no acknowledgement path exists.",
+      "real_world": false,
+      "surfaces": [],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-same-vendor-refused.test.ts",
+          "proves": "behavior"
+        },
+        {
+          "path": "tests/core/roles.test.ts",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.3.author-container-argv",
+      "source": "spec §5.3, §7",
+      "claim": "The sealing author's container is made by the one reviewed argv builder: tmpfs-only /tmp, /in, /out and /agent, no bind mount or volume, a fixed environment, no secret at create time; a container that deviates from its golden is measured below L2 before it starts.",
+      "real_world": false,
+      "surfaces": [],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-author-argv-golden.test.ts",
+          "proves": "behavior"
+        },
+        {
+          "path": "tests/enforcement/W-seal-no-forbidden-mounts.test.ts",
+          "proves": "behavior"
+        },
+        {
+          "path": "tests/container/author-role.test.ts",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.3.role-bound-secrets",
+      "source": "spec §7",
+      "claim": "A vendor key reaches a container only as a name-only environment flag on an exec, and only the role it belongs to may carry it: the implementer the Anthropic key, the author the Codex key. Every other pairing is refused before a process starts or the value is read.",
+      "real_world": false,
+      "surfaces": [],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-secret-role-bound.test.ts",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.3.author-one-shot-ephemeral",
+      "source": "spec §5.3, §7",
+      "claim": "The Codex author runs as one ephemeral exec whose prompt arrives on a pipe; nothing about the invocation is interactive.",
+      "real_world": false,
+      "surfaces": [],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-codex-argv-golden.test.ts",
+          "proves": "behavior"
+        },
+        {
+          "path": "tests/enforcement/W-author-no-interactive.test.ts",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.3.author-measured-before-key",
+      "source": "spec §5.3, §7",
+      "claim": "The author key reaches a container only after that container measured golden; a container that does not measure golden never receives it.",
+      "real_world": true,
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-author-measure-before-key.test.ts",
+          "proves": "behavior"
+        },
+        {
+          "path": "tests/gated/author-boundary-real.test.ts",
+          "gated": "G-author-boundary-real",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S4.6.author-answer-closed",
+      "source": "spec §4.6, §5.3",
+      "claim": "Only one string field of a closed answer envelope leaves the author container; a malformed answer is dropped, and so is one that holds the key in one of the searched spellings (a key in a spelling the scan does not search is not caught); a failed run leaves a closed code.",
+      "real_world": false,
+      "surfaces": [],
+      "tests": [
+        {
+          "path": "tests/author/codex-session.test.ts",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.3.author-measurement-bound",
+      "source": "spec §5.3",
+      "claim": "The author container measurement counts only for the seal it was made for; a later or superseded seal is never attested by it.",
+      "real_world": false,
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-author-measurement-bound-to-seal.test.ts",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.3.standing-seal-rule",
+      "source": "spec §5.3",
+      "claim": "A seal stands only while its vault set matches its digest, the decisions are unchanged and the latest GATE-2 passed it; its author counts as measured only when an L2 author measurement is bound to exactly that seal.",
+      "real_world": false,
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "tests": [
+        {
+          "path": "tests/author/standing.test.ts",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.3.seal-refuses-out-of-order",
+      "source": "spec §5.3",
+      "real_world": false,
+      "surfaces": ["README.md"],
+      "claim": "omf seal refuses before it spends anything when GATE-1 is not passing, the item is unknown, claimed by a run or started without an author-measured seal, and names the missing gate.",
+      "tests": [
+        {
+          "path": "tests/cli/w-assembly.test.ts",
+          "proves": "behavior"
+        },
+        {
+          "path": "tests/cli/seal-run-report.test.ts",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.3.seal-idempotent-when-measured",
+      "source": "spec §5.3",
+      "real_world": false,
+      "surfaces": ["README.md"],
+      "claim": "omf seal on a seal that is current and author-measured does nothing: exit 0, no key, no docker call, no ledger event.",
+      "tests": [
+        {
+          "path": "tests/cli/seal-run-report.test.ts",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.0.verbs-thin-adapters",
+      "source": "spec §5.0",
+      "real_world": false,
+      "surfaces": ["README.md"],
+      "claim": "The W verbs are thin adapters registered through one function; main.ts holds one import and one call.",
+      "tests": [
+        {
+          "path": "tests/enforcement/W-main-ts-minimal.test.ts",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.0.run-refuses-out-of-order",
+      "source": "spec §5.0",
+      "claim": "omf run refuses an item whose GATE-1 is open (exit 3) or that has no passing seal (exit 2) and names the missing gate; omf report names S7 when there is no trusted evidence; a refusal writes nothing.",
+      "real_world": false,
+      "surfaces": ["README.md"],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-cli-order.test.ts",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.0.run-report-idempotent",
+      "source": "spec §5.0",
+      "claim": "omf run on an item that already ran, and omf report, change nothing. omf report refuses a recommendation, outcome or isolation level the ledger does not vouch for; its other fields are shown as recorded in the run's evidence file.",
+      "real_world": false,
+      "surfaces": ["README.md"],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-cli-idempotent-run-report.test.ts",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S13.cli-usage-drift",
+      "source": "spec §13",
+      "claim": "Every leaf command's --help text is reproduced byte for byte in docs/cli-usage.md and has a README row; a command without a block, or a block that differs, fails npm test and names the verb.",
+      "real_world": false,
+      "surfaces": ["docs/cli-usage.md", "README.md"],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-cli-usage-drift.test.ts",
+          "proves": "behavior"
+        },
+        {
+          "path": "tests/cli/help-drift.test.ts",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S7.unmeasured-stage-no-claim",
+      "source": "spec §7",
+      "claim": "A stage no container measured leaves the run's isolation label unmeasured. omf report refuses an isolation level above the ledger's measured one; its other fields are shown as recorded in the run's evidence file.",
+      "real_world": false,
+      "surfaces": ["docs/isolation-and-gates.md"],
+      "tests": [
+        {
+          "path": "tests/enforcement/W-cli-fake-docker-unmeasured.test.ts",
+          "proves": "behavior"
+        },
+        {
+          "path": "tests/enforcement/W-no-fake-switch.test.ts",
+          "proves": "wiring_only"
+        },
+        {
+          "path": "tests/acceptance/cli-fake-docker.test.ts",
+          "proves": "wiring_only"
+        }
+      ]
+    },
+    {
+      "id": "S11.5.outer-contracts-hold",
+      "source": "spec §11.5; owner decision 2026-10-19",
+      "claim": "The kernel promises checked from outside (ledger tamper stop, no approval without a terminal, exit codes, state outside the repository, out-of-order refusals, no sealing without a runtime) hold for the built executable, checked by a suite that imports none of the code it checks.",
+      "real_world": false,
+      "surfaces": ["docs/maintainers/outer-suite.md"],
+      "tests": [
+        {
+          "path": "tests/outer/outer-suite.test.ts",
+          "proves": "behavior"
+        },
+        {
+          "path": "tests/enforcement/W-outer-no-src-import.test.ts",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.3.author-boundary-real",
+      "source": "spec §5.3",
+      "claim": "A real author container measures L2, mounts only tmpfs, holds one scoped secret that docker inspect never shows, has no Claude binary and no credential directory, and has a writable answer path.",
+      "real_world": true,
+      "surfaces": ["docs/author.md"],
+      "tests": [
+        {
+          "path": "tests/gated/author-boundary-real.test.ts",
+          "gated": "G-author-boundary-real",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.3.author-answer-no-leak",
+      "source": "spec §5.3 and F6",
+      "claim": "The real Codex author's answer holds no goal canary, no marker from the worktree or the vault and not the key, and nothing OMF writes holds the key.",
+      "real_world": true,
+      "surfaces": ["docs/author.md"],
+      "tests": [
+        {
+          "path": "tests/gated/author-canary.test.ts",
+          "gated": "G-author-canary",
+          "proves": "behavior"
+        }
+      ]
+    },
+    {
+      "id": "S5.0.skeleton-real-line",
+      "source": "spec §5.0",
+      "claim": "The line runs through omf seal, omf run and omf report with a real author and implementer, one rework round, outcome success, recommendation human_needed and run isolation level L2.",
+      "real_world": true,
+      "surfaces": ["docs/author.md"],
+      "tests": [
+        {
+          "path": "tests/gated/skeleton-real.test.ts",
+          "gated": "G-skeleton-real",
+          "proves": "behavior"
+        }
+      ]
+    }
+  ]
+}

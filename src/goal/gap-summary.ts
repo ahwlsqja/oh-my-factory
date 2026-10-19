@@ -33,7 +33,7 @@ function gapOf(report: GapReport, mode: "build" | "watch"): GapDisclosure | null
 
 /**
  * A breach reaches the reconciler only when the band's tier action is `propose`; `diagnose` and `log` are
- * recorded elsewhere (D15). Beyond 3 sigma is severe. Anything weaker is elevated, and the worst tier wins.
+ * recorded elsewhere. Beyond 3 sigma is severe. Anything weaker is elevated, and the worst tier wins.
  */
 function breachOf(report: GapReport): BreachDisclosure | null {
   let found = false;
@@ -48,7 +48,7 @@ function breachOf(report: GapReport): BreachDisclosure | null {
 }
 
 /**
- * The gap summary (spec §4.4 step 4, D6, D16). `summary` is null when nothing triggers a work item, and
+ * The gap summary (spec §4.4 step 4). `summary` is null when nothing triggers a work item, and
  * `none` then says why: the target is met, or there is simply nothing to do. A breach is a trigger even
  * when the target is met. A report measured under a pending regime change is never a trigger, because it
  * is not a verdict on the approved goal (the tick stops for re-approval before it gets here).

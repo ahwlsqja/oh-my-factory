@@ -3,7 +3,7 @@ import { observationOf } from "../scenario/observe.js";
 import type { ScenarioRunner, ScenarioSession } from "../scenario/runner.js";
 import type { StepObservation } from "../scenario/types.js";
 
-/** The scratch tmpfs of a SUT container: cwd, HOME and TMPDIR of every step of one scenario (M3c step-state model). */
+/** The scratch tmpfs of a SUT container: cwd, HOME and TMPDIR of every step of one scenario (step-state model). */
 export const SCRATCH = "/scratch";
 const STEP_ENV = { HOME: SCRATCH, TMPDIR: SCRATCH, LC_ALL: "C" } as const;
 /** docker itself reports 125 (daemon error), 126 and 127 (exec failed) and 128+n (signal) in the same channel as the program. */
@@ -18,7 +18,7 @@ export interface RelayInput {
 }
 
 /**
- * The SUT half of the M3c port and the only adapter allowed to run candidate code (spec 5.5). A step becomes one
+ * The SUT half of the scenario port and the only adapter allowed to run candidate code (spec 5.5). A step becomes one
  * `docker exec` whose argv are `[...run, ...step.argv]` and whose stdin is `step.stdin`: data, never a shell string,
  * so no element of a scenario is ever the program. The runner returns an observation and never sees an expectation.
  *

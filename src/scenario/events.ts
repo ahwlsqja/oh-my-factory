@@ -5,7 +5,7 @@ import { scenarioRef } from "./types.js";
 import type { AuthorFailureCode, AuthorStamp, ScenarioStatus, SealFeedback, StoredScenario } from "./types.js";
 
 /**
- * Ledger events of the Scenario Vault (M3c): `seal.*`, `scenario.status_changed` and `gate2.evaluated`. Every payload is
+ * Ledger events of the Scenario Vault: `seal.*`, `scenario.status_changed` and `gate2.evaluated`. Every payload is
  * codes, counts, digests, decision ids and 16-hex `scenario_ref`s, closed by `additionalProperties: false` in
  * `scenario.schema.json`. A scenario's text, id, canary, argv and stdin can never reach the ledger through here.
  */
@@ -13,8 +13,7 @@ import type { AuthorFailureCode, AuthorStamp, ScenarioStatus, SealFeedback, Stor
 const SCHEMA = "scenario.schema.json";
 
 /**
- * The event M3b1 writes when the implementation starts. Referenced by its string, so this module builds on nothing M3b adds
- *; a test in the line integration task checks that it is a member of M3b1's `W_EVENT_TYPES` (src/work/w-events.ts); M3b1 exports no separate constant for it.
+ * The event written when the implementation starts. Referenced by its string, so this module builds on nothing the work layer adds later; a test in the line integration task checks that it is a member of `W_EVENT_TYPES` (src/work/w-events.ts); the work layer exports no separate constant for it.
  */
 export const WORK_STARTED_EVENT = "work.started";
 
@@ -339,7 +338,7 @@ export class ScenarioStatusError extends Error {
 /**
  * Moves a scenario from `active` to `retired` or `contaminated` by appending `scenario.status_changed`. The seal must have a
  * valid `seal.completed` and the scenario must not have moved yet; both are checked under the ledger lock, so two callers
- * cannot both move it. Writes nothing to the vault. M3e's audit calls this on a known canary hit. Messages never name the scenario.
+ * cannot both move it. Writes nothing to the vault. The audit calls this on a known canary hit. Messages never name the scenario.
  */
 export function markScenarioStatus(
   ledger: Ledger,

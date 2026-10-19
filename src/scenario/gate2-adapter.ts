@@ -16,12 +16,12 @@ import type { SealFeedback } from "./types.js";
 /** The routes that end the line; `back_to_S2` is the only one that loops. */
 export type StopRoute = Exclude<Gate2Route, "back_to_S2">;
 export type Gate2Verdict = "pass" | "fail" | "not_run";
-/** The reason a throw that is not a guard refusal leaves behind. Matches `^[a-z0-9_]+$`, the shape M3b2 requires of gate reasons. */
+/** The reason a throw that is not a guard refusal leaves behind. Matches `^[a-z0-9_]+$`, the shape the sequencer requires of gate reasons. */
 export const GATE_ERROR_REASON = "gate_error";
 
 /**
- * What the line needs from one GATE-2 evaluation, without M3b2's types: `verdict` is its tri-state, `next` says
- * whether to continue, loop to S2 or stop, and `stop_route` names J2, J3 or J7 when it stops. M3b2's `Gate`
+ * What the line needs from one GATE-2 evaluation, without the sequencer's types: `verdict` is its tri-state, `next` says
+ * whether to continue, loop to S2 or stop, and `stop_route` names J2, J3 or J7 when it stops. the sequencer's `Gate`
  * adapter is a rename of these fields (see docs/m3c-spec-deviations.md).
  */
 export interface Gate2Outcome {
@@ -32,7 +32,7 @@ export interface Gate2Outcome {
   stop_route: StopRoute | null;
   /** Decision ids and plain counts only; null unless the route is back_to_S2. */
   feedback: SealFeedback | null;
-  /** Resolved quantitative decision ids: never run, never success (M3-D17). */
+  /** Resolved quantitative decision ids: never run, never success. */
   not_run: string[];
   /** null when the gate threw. */
   result: Gate2Result | null;

@@ -1,3 +1,4 @@
+// covers: S11.4.sealed-not-in-repo
 import { randomBytes } from "node:crypto";
 import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";

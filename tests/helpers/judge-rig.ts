@@ -130,9 +130,14 @@ export interface RuntimeOptions {
   context?: string | null;
   info?: Awaited<ReturnType<ContainerRuntime["info"]>>;
   local?: boolean;
-  /** What `listOwned` reports per run id. */
+  /** What `listOwned` reports per run id. A container whose `work_id` is `THIS_ITEM` carries the id of the rig's own item. */
   owned?: Readonly<Record<string, OwnedResource[]>>;
+  /** The id `THIS_ITEM` stands for; `s4Rig` sets it from its sealed item. */
+  workId?: string;
 }
+/** The `work_id` a planted container has when it belongs to the rig's own work item, whose id the rig generates. */
+export const THIS_ITEM = "this-item";
+
 export interface RuntimeDouble {
   runtime: ContainerRuntime;
   /** `container:<name>` and `image:<name>`, in removal order. */
@@ -146,9 +151,14 @@ export function runtimeDouble(options: RuntimeOptions = {}): RuntimeDouble {
     endpoint: async () => ({ kind: options.local === false ? "tcp" : "unix", local: options.local !== false }),
     info: async () => options.info ?? { ok: true, server_version: "29.0.0" },
     listOwned: async (filter) =>
-      filter.run_id === null
+      (filter.run_id === null
         ? Object.values(options.owned ?? {}).flatMap((list) => [...list])
-        : [...(options.owned?.[filter.run_id] ?? [])],
+        : [...(options.owned?.[filter.run_id] ?? [])]
+      ).map((resource) =>
+        resource.work_id === THIS_ITEM && options.workId !== undefined
+          ? { ...resource, work_id: options.workId }
+          : resource,
+      ),
     remove: async (handle) => {
       removed.push(`container:${handle.name}`);
     },
@@ -184,7 +194,7 @@ export function s4Rig(options: RigOptions = {}): Rig {
     writeFileSync(join(s.f.fx.location.dir, "config.toml"), `${s.f.fx.baseConfig}\n${options.judge ?? JUDGE_TABLE}`);
   }
   const engine = engineDouble(options);
-  const runtime = runtimeDouble(options);
+  const runtime = runtimeDouble({ ...options, workId: s.f.workId });
   const candidates = candidateDouble(options.candidate === undefined ? candidateRef(SHA_A) : options.candidate);
   const holder = new RoundHolder();
   const deps = {

@@ -1,3 +1,4 @@
+// covers: S5.7.masked-feedback
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";

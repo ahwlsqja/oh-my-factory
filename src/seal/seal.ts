@@ -1,7 +1,6 @@
-import { join } from "node:path";
 import { sha256Hex } from "../core/canonical-json.js";
 import type { Ledger } from "../core/ledger.js";
-import { LockHeldError, acquireLock, releaseLock } from "../core/lock.js";
+import { LockHeldError, acquireLock, releaseLock, sealLockFile } from "../core/lock.js";
 import type { ProjectLocation } from "../core/paths.js";
 import { assertStateTreeClean } from "../core/safe-fs.js";
 import { type Gate1Reason, evaluateGate1, intentQuestionIds } from "../decision/gate1.js";
@@ -25,8 +24,16 @@ import { locationEnv } from "../vault/line-guard.js";
 import { assertNoSealedInRepo } from "../vault/pokayoke.js";
 import { type Vault, writeScenarioSet } from "../vault/vault.js";
 import type { WorkItem } from "../work/types.js";
-import { SealInputError, type SealInputErrorCode, buildSealPrompt, sealInputsFor } from "./prompt.js";
+import { SealInputError, type SealInputErrorCode, type SealInputs, buildSealPrompt, sealInputsFor } from "./prompt.js";
 import { type AgentSession, DEFAULT_AUTHOR_TIMEOUT_MS } from "./session.js";
+
+/** What `afterSealCompleted` is told: the seal this pass just pinned and the ledger seq of its `seal.completed`. */
+export interface SealedPass {
+  seal_id: string;
+  set_sha256: string;
+  round: number;
+  seq: number;
+}
 
 export interface SealDeps {
   location: ProjectLocation;
@@ -42,7 +49,26 @@ export interface SealDeps {
   env?: NodeJS.ProcessEnv;
   /** Default: `assertStateTreeClean` then `assertNoSealedInRepo`. A throw ends the stage before anything else happens. */
   preflight?: () => void;
+  /**
+   * Called once, synchronously, right after `seal.completed` is appended and while `seal.lock` is still held, so no
+   * other seal of the item can slip in before the container author binds its measurement to this one. A throw ends the
+   * stage with that error; the seal stays completed and the lock is released, so the caller fails closed. Not called
+   * when the stage fails, is blocked or reuses a seal.
+   */
+  afterSealCompleted?: (sealed: SealedPass) => void;
+  /**
+   * Called once, under `seal.lock`, after GATE-1 passed, the inputs were built and `seal.requested` was appended, and right
+   * before the author runs: the one place a pass may take an author call, because only a pass that gets here runs the model.
+   * `{ ok: false }` ends the stage as `refused` with that reason and the author is not called. A throw ends the stage with
+   * that error.
+   */
+  beforeAuthorRun?: (info: { round: number }) => Promise<BeforeAuthorRun>;
 }
+
+export type BeforeAuthorRun = { ok: true } | { ok: false; reason: AuthorRunRefusal };
+
+/** Why a pass that reached the author was stopped just before the model ran. */
+export type AuthorRunRefusal = "author_call_cap" | "author_pass_setup_failed";
 
 export type SealStageResult =
   // "stored", not "sealed": a host stub author is unmeasured.
@@ -51,16 +77,10 @@ export type SealStageResult =
   | { status: "reused"; seal: SealRecord }
   | { status: "blocked_gate1"; reasons: Gate1Reason[] }
   | { status: "blocked_input"; code: SealInputErrorCode }
-  | { status: "refused"; reason: "implementation_started" | "seal_in_progress" }
+  | { status: "refused"; reason: "implementation_started" | "seal_in_progress" | AuthorRunRefusal }
   | { status: "failed"; code: SealFailureCode };
 
-/**
- * `<item dir>/seal.lock`. Not `item.lock`: that one is a millisecond mutex with a 2 s wait, and an author runs for
- * minutes, so holding it would make a person's veto fail with a lock timeout.
- */
-export function sealLockFile(itemDir: string): string {
-  return join(itemDir, "seal.lock");
-}
+export { sealLockFile };
 
 /**
  * S2 (spec §5.3). In order:
@@ -72,13 +92,14 @@ export function sealLockFile(itemDir: string): string {
  * 4. fold, GATE-1 under `now`: not pass is `blocked_gate1`, nothing appended, author uncalled;
  * 5. `sealInputsFor` and `buildSealPrompt` (`blocked_input` on a `SealInputError`);
  * 6. append `seal.requested`, with `round` = completed seals + 1;
- * 7. run the author. A failure appends `seal.failed` and consumes no round;
+ * 7. `beforeAuthorRun`, if any, may stop the pass (`refused`) with the author uncalled; then run the author. A failure appends `seal.failed` and consumes no round;
  * 8. intake. The author's identity is the session's own `vendor`, `model` and `isolation` plus the injected clock; whatever
  *    the YAML says about itself is ignored and counted. Zero stored is `seal.failed no_valid_scenarios`;
  * 9. write the set into `<work_id>/<seal_id>/`, files first. The name is unique per seal, so concurrent or crashed seals
  *    never collide and nothing is swept or deleted (orphans wait for a later `vault gc`);
- * 10. inside one `appendWith`, recount completed seals and append `seal.completed`.
- * The lock is held from step 2 to step 10.
+ * 10. inside one `appendWith`, recount completed seals and append `seal.completed`;
+ * 11. call `afterSealCompleted`, if any.
+ * The lock is held from step 2 to step 11.
  */
 export async function runSealStage(deps: SealDeps): Promise<SealStageResult> {
   const { location, item } = deps;
@@ -133,9 +154,11 @@ async function sealLocked(deps: SealDeps): Promise<SealStageResult> {
   });
   if (gate1.status !== "pass") return { status: "blocked_gate1", reasons: gate1.reasons };
 
+  let inputs: SealInputs;
   let prompt: string;
   try {
-    prompt = buildSealPrompt(sealInputsFor(item, state, leak, deps.feedback));
+    inputs = sealInputsFor(item, state, leak, deps.feedback);
+    prompt = buildSealPrompt(inputs);
   } catch (err) {
     if (err instanceof SealInputError) return { status: "blocked_input", code: err.code };
     throw err;
@@ -154,7 +177,11 @@ async function sealLocked(deps: SealDeps): Promise<SealStageResult> {
     }),
   );
 
-  const outcome = await session.run({ prompt, timeoutMs: deps.timeoutMs ?? DEFAULT_AUTHOR_TIMEOUT_MS });
+  if (deps.beforeAuthorRun !== undefined) {
+    const taken = await deps.beforeAuthorRun({ round });
+    if (!taken.ok) return { status: "refused", reason: taken.reason };
+  }
+  const outcome = await session.run({ prompt, inputs, timeoutMs: deps.timeoutMs ?? DEFAULT_AUTHOR_TIMEOUT_MS });
   const fail = (code: SealFailureCode, durationMs: number): SealStageResult => {
     ledger.append(sealFailedEvent(scope, { round, code, duration_ms: Math.round(durationMs) }));
     return { status: "failed", code };
@@ -203,9 +230,11 @@ async function sealLocked(deps: SealDeps): Promise<SealStageResult> {
       rejected_by_code: intake.rejected,
     }),
   );
+  const completedRound = Number(written.payload.round);
+  deps.afterSealCompleted?.({ seal_id: sealId, set_sha256: setSha256, round: completedRound, seq: written.seq });
   return {
     status: "stored",
-    round: Number(written.payload.round),
+    round: completedRound,
     seal_id: sealId,
     set_sha256: setSha256,
     counts,

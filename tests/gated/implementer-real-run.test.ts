@@ -1,3 +1,4 @@
+// covers: S5.4.implementer-container
 import { readFileSync } from "node:fs";
 import { it } from "vitest";
 import { blobId } from "../../src/git/ops.js";

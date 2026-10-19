@@ -112,7 +112,7 @@ function sessionArgv(model: string | null, request: SessionRequest): string[] | 
 /**
  * Claude Code inside the implementer container (spec §7). Its only execution path is `ContainerRuntime.exec`: the settings
  * are written into the tmpfs, then `claude` runs with the prompt on stdin and the key as a `SecretHandle`, so the value
- * reaches the docker client's environment for that one exec and never an argv (M3-D3).
+ * reaches the docker client's environment for that one exec and never an argv.
  */
 export function createClaudeSession(deps: {
   runtime: ContainerRuntime;

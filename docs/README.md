@@ -32,11 +32,16 @@ Start with the top-level [README](../README.md) for what OMF is and the command 
 
 - [Enforcement tests](../tests/enforcement/README.md): which test backs each control claim in the spec. A claim
   without a test is labelled "not enforced" in the spec.
+- [Conformance matrix](conformance-matrix.md): every control claim by id, with its state (covered, unproven, deferred,
+  missing) and the date of the gated run behind it. Generated from `docs/requirements.json`.
 
 ## Verification line
 
 - [The container judge](container-judge.md): the two-container judge, how its containers are measured, and its limits.
 - [The implementer container](implementer.md): how the implementer runs in a measured container with one vendor key, what crosses the boundary, the exposure of the key, and the gated suites that are not enforced until recorded.
+- [The sealing author container](author.md): how the sealing author runs in a measured container with one key, what crosses
+  the boundary, what the measurement trusts, and the gated suites that are not enforced until recorded.
+- [Command usage](cli-usage.md): the exact `--help` text of every command, generated and checked against the built CLI.
 - [Gates, audit and isolation](isolation-and-gates.md): what the integrity line is, what it proves and what is not
   enforced yet.
 - [Where the contract differs from the spec](m3c-spec-deviations.md): where the scenario and seal contract is more exact

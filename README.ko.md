@@ -24,11 +24,12 @@
 > 목표를 정의하고 승인하고 측정하는 부분(J1 잠금, 목표값까지의 차이, 관리 한계), J8 예산 명령,
 > 작업 항목 저장소와 `work`, `veto` 명령, 그리고 목표 루프가 들어 있습니다. `omf goal tick` 은
 > 모델이 숫자를 보지 못하게 한 채 격차를 작업 항목으로 바꿉니다.
-> 검증 라인은 오프라인 시험이 붙은 라이브러리 코드로만 있습니다: 봉인된 시나리오와 GATE-2,
-> 구현자 컨테이너, 판정·감사·test 분할 스테이션(S4~S6), GATE-3. 라인을 돌리는 명령(`omf run`,
-> 그리고 `omf seal`, `omf report`)과 실제 모델을 쓰는 게이트 실행은 아직 만들지 않았습니다.
-> 컨테이너 게이트 실행은 `docker inspect` 파서, 작업 사본, 컨테이너 두 개 왕복, 실제 격리 탐침에 대해
-> 기록되어 있고, 구현자 컨테이너와 모델을 부르는 시험은 기록된 것이 없습니다.
+> 검증 라인은 `omf seal`(컨테이너 안의 봉인 작성자), `omf run`, `omf report` 세 명령으로 돕니다. 이를 확인하는 오프라인 시험은
+> 가짜 Docker 를 씁니다. 진짜 데몬을 쓰는 `tests/gated` 시험 다섯 개는 `docs/evidence/gated-runs.json` 에 기록되어 있습니다:
+> `G-inspect-parser-real`(`docker inspect` 파서), `G-work-copy-real`, `G-two-container-roundtrip`, `G-real-isolation-probe`,
+> `G-implementer-boundary-real`(진짜 구현자 컨테이너가 L2 로 측정되고, 진짜 번들이 import 되며, 저장소는 브랜치 하나로만 바뀝니다).
+> 아직 기록되지 않은 것은 `G-author-boundary-real`, `G-author-canary`, `G-skeleton-real`, `G-implementer-real-run`,
+> `G-e6-l2-leak-redteam` 이므로 작성자 컨테이너와 전체 라인의 게이트 실행은 기록된 것이 없으며, 진짜 모델이 격리된다는 것을 보인 실행도 아직 없습니다.
 > [지금 되는 것](#지금-되는-것)을 보세요.
 
 ---
@@ -113,8 +114,8 @@ OMF 는 루프 두 개를 돌립니다.
 - **격리는 선언이 아니라 측정.** *일부 구현됨.* 판정기는 후보를 SUT 와 하네스 두 일회용 컨테이너(네트워크 없음,
   `docker.sock` 없음, 마운트된 경로 없음; 하네스만 시나리오를 stdin 으로 받아
   들고 있고 SUT 는 기대값을 보지 못합니다)에서 돌리고, 후보 코드가 돌기 전에 컨테이너마다 `docker inspect` 로 측정합니다. GATE-3 는 그 측정을 원장에서 읽습니다. 지금 시험되는 것은 가짜 Docker 를 쓴 오프라인 형태뿐입니다.
-  실제 컨테이너 실행은 `docs/evidence/gated-runs.json` 에 기록된 것(실제 격리 탐침, 컨테이너 두 개 왕복) 밖에서는 강제되지 않으며,
-  구현자 컨테이너는 아직 어떤 명령도 돌리지 않는 라이브러리 코드로만 있고([`docs/implementer.md`](docs/implementer.md)) 작성자 컨테이너는 없어서 실제 라인은 GATE-3 에서 `isolation_unmeasured` 로 멈춥니다
+  실제 컨테이너 실행은 `docs/evidence/gated-runs.json` 에 기록된 것(`docker inspect` 파서, 작업 사본, 실제 격리 탐침, 컨테이너 두 개 왕복, 모델 없이 진짜 구현자 컨테이너를 L2 로 측정한 구현자 경계 실행) 밖에서는 강제되지 않으며, 모델을 쓰는 게이트 실행과 작성자 컨테이너의 게이트 실행은 기록된 것이 없습니다.
+  `omf run` 이 띄우는 구현자 컨테이너는 그 밖에는 가짜 Docker 로만 시험되었고([`docs/implementer.md`](docs/implementer.md)) 작성자 컨테이너는 `omf seal` 만 띄우고 그것도 실제 데몬이나 모델로 돌려 본 적이 없어서, 그 실행에서 작성자 단계가 측정되지 않았으면 라인은 GATE-3 에서 `isolation_unmeasured` 로 멈춥니다
   ([`docs/container-judge.md`](docs/container-judge.md)).
 - **비어 있으면 실패.** *일부 구현됨.* 라인 뼈대 (`E7a`), GATE-2 (`E7b`), 게이트 줄·감사·GATE-3 (`E7c`) 는
   없는 측정을 통과가 아니라 실패로 읽습니다. 심판의 판정(`E7d`)도 같습니다. 판정이 없거나 형식이 틀리거나 다른 라운드의 것이면 라운드가 끝나며 통과로 읽지 않습니다.
@@ -141,7 +142,7 @@ OMF 는 루프 두 개를 돌립니다.
 | `omf budget show <id> [--json]` | 라운드, 공개, 벽시계 시간 예산의 선언값, 상향값, 사용량, 남은 양을 출력합니다. |
 | `omf budget declare <id> <kind> <amount>` | J8: `rounds` 또는 `disclosure` 예산을 선언합니다. 대화형 터미널이 필요합니다. |
 | `omf budget raise <id> <kind> <amount>` | J8: `rounds`, `disclosure`, `wall_time` 상한을 올립니다. 대화형 터미널이 필요하고, 벽시계 시간은 올리기만 되고 선언은 안 됩니다. |
-| `omf budget raise <work_id> --rounds <n>` 또는 `--usd <amount>` | J8: 작업 항목 하나의 라운드 한도 또는 모델 비용 한도를 올립니다. 대화형 터미널이 필요합니다. 한도는 항목의 첫 실행이 시작될 때 `config.toml` 의 `[w]` 에서 복사됩니다. 항목의 상태는 바꾸지 않으니, 올린 뒤 항목을 다시 실행하세요. 항목에서 라인이 한 번 실행된 뒤(`omf run`, M3h)에야 쓸 수 있고, 그 전에는 기록된 한도가 없다며 종료 코드 2 로 거절합니다. |
+| `omf budget raise <work_id> --rounds <n>` 또는 `--usd <amount>` | J8: 작업 항목 하나의 라운드 한도 또는 모델 비용 한도를 올립니다. 대화형 터미널이 필요합니다. 한도는 항목의 첫 실행이 시작될 때 `config.toml` 의 `[w]` 에서 복사됩니다. 항목의 상태는 바꾸지 않으니, 올린 뒤 항목을 다시 실행하세요. 항목에서 라인이 한 번 실행된 뒤(`omf run`)에야 쓸 수 있고, 그 전에는 기록된 한도가 없다며 종료 코드 2 로 거절합니다. |
 | `omf work list <goal-id> [--state <s>] [--json]` | 목표의 작업 항목을 나열합니다. 원장에 기록이 없는 항목은 손상으로 보고합니다(종료 코드 1). |
 | `omf work show <work-id>` | 작업 항목의 `item.md`, 클레임, `intent.md` 를 출력합니다. |
 | `omf work approve <work-id>` | 위험도가 높은 작업 항목을 승인해 디스패치할 수 있게 합니다. 대화형 터미널이 필요합니다. |
@@ -151,14 +152,17 @@ OMF 는 루프 두 개를 돌립니다.
 | `omf decide defer <work-id> <decision-id> --file <deferral.json>` | 서명된 기본값과 만료일을 두고 결정을 미룹니다. 대화형 터미널이 필요합니다. |
 | `omf decide lint <work-id> [--json] [--render]` | 결정을 검사하고 GATE-1 을 계산합니다. 종료 코드 0 정상, 1 문제, 3 사람을 기다림(J2, `needs-human.json` 도 기록). `--render` 는 `spec.md` 를 다시 씁니다. |
 | `omf decide show <work-id> [--json]` | 상태별 결정, GATE-1 판정, `spec.md` 가 원장과 같은지 출력합니다. 아무것도 쓰지 않습니다. |
+| `omf seal <work-id> [--json]` | 작업 항목의 봉인 작성자(Codex)를, 격리를 먼저 측정한 컨테이너 안에서 돌립니다. 작성자는 항목의 의도, 명세, 인터페이스 계약만 받습니다. 시나리오는 금고에 저장하고 GATE-2 를 계산합니다. `[judge] docker_context`, `[author] image` 와, 이 명령 하나를 위한 `OMF_AUTHOR_API_KEY` 가 필요합니다(`docs/author.md` 참고). 멱등입니다. 결정에 맞는 봉인이 있고 작성자 단계가 측정돼 있으면 키도 모델 호출도 없이 `already_sealed` 로 0 을 냅니다. 종료 코드 0 봉인됨 또는 이미 봉인됨(작성자 단계 측정됨), 1 작성자 단계가 측정되지 않은 채 저장됨, 작성자 답이 실패함 또는 GATE-2 가 되돌림, 2 거절되었거나 실행할 수 없거나 환경 때문에 멈춤(J7), 3 사람을 기다림. 작성자 컨테이너와 진짜 모델을 쓴 실행은 아직 기록되지 않았고, 작성자 게이트 실행이 기록되기 전까지는 강제되지 않습니다. 심판 컨테이너를 진짜 데몬으로 돌린 실행(`G-two-container-roundtrip`, `G-real-isolation-probe`)은 기록되어 있습니다([`docs/author.md`](docs/author.md) 참고). |
+| `omf run <work-id> [--json]` | 현재 봉인이 있는 작업 항목의 검증 라인을 돌립니다. 컨테이너에서 구현하고, 일회용 컨테이너 둘에서 심판하고, 감사하고, 테스트 분할을 한 번 쓰고, 증거를 씁니다. 순서가 어긋나면 거절하고 빠진 게이트를 말합니다(GATE-1: `omf decide lint`, GATE-2: `omf seal`). 종료 코드 0 성공, 1 결함, 2 중단·거절·환경 때문에 멈춤(J7), 3 사람을 기다림. 이미 끝난 항목은 `already ran` 을 출력하고 0 을 냅니다. 작성자 컨테이너와 진짜 모델을 쓴 실행은 아직 기록되지 않았고, 작성자 게이트 실행이 기록되기 전까지는 강제되지 않습니다. 심판 컨테이너를 진짜 데몬으로 돌린 실행(`G-two-container-roundtrip`, `G-real-isolation-probe`)은 기록되어 있습니다([`docs/author.md`](docs/author.md) 참고). |
+| `omf report <work-id> [--json]` | 끝난 실행의 증거를 출력합니다. 검증된 `evidence.json` 에서 다시 만든 글이고(`evidence.md` 의 바이트는 출력하지 않습니다), 심판은 결정적 검사뿐이라는 줄과 실행의 격리 수준을 함께 보여 줍니다. 읽기 전용입니다. 종료 코드 0 믿을 수 있는 증거를 보여 줌, 2 증거가 없거나 믿을 수 없음(먼저 `omf run`). |
 
 종료 코드: `0` 정상, `1` 확인이 필요함(문제 발견, 거절된 확인, 멈췄거나 승인을 기다리는 틱), `2` 명령을 실행할 수 없음, `3` 사람을 기다림(`omf decide lint`: 열린 설계 결정).
 
-시나리오 보관소와 GATE-2 는 라이브러리 코드로만 있고 아직 명령은 없습니다. GATE-1 을 통과하면 작성 세션이 시나리오를 쓰고, OMF 가 도장을 찍어 저장소 밖 보관소(`vault/scenarios/<work-id>/<seal-id>/`)에 두며, GATE-2 는 비었거나, 한쪽 분할이 없거나, 아무것도 하지 않는 프로그램을 통과시키거나, 모순 카나리가 하나도 없거나(`canary_missing`), 닫힌 결정이 연결되지 않은 세트를 거부합니다. 지금 작성자는 호스트의 스텁 프로세스라서 작성 단계는 측정되지 않은 것으로 보고하고, 봉인은 강제되지 않습니다. [`docs/m3c-spec-deviations.md`](docs/m3c-spec-deviations.md) 를 보십시오.
+시나리오 보관소와 GATE-2 는 `omf seal` 로 돌지만, 실제 데몬이나 모델로는 아직 돌려 보지 않았습니다. GATE-1 을 통과하면 작성 세션이 시나리오를 쓰고, OMF 가 도장을 찍어 저장소 밖 보관소(`vault/scenarios/<work-id>/<seal-id>/`)에 두며, GATE-2 는 비었거나, 한쪽 분할이 없거나, 아무것도 하지 않는 프로그램을 통과시키거나, 모순 카나리가 하나도 없거나(`canary_missing`), 닫힌 결정이 연결되지 않은 세트를 거부합니다. `omf seal` 은 작성자를 측정된 컨테이너에서 돌리며, `G-author-*` 게이트 실행이 기록되기 전까지는 강제되지 않습니다. [`docs/m3c-spec-deviations.md`](docs/m3c-spec-deviations.md) 를 보십시오.
 
-판정 스테이션은 아직 명령 없이 라이브러리 코드로만 있습니다. S4 는 저장된 train 분할과 모순 카나리를 일회용 컨테이너 두 개에서 k 번 판정하고, S5 는 게이트와 prove-test 를 컨테이너 작업 사본에서 돌려 감사하며, S6 은 test 분할을 한 번만 씁니다. 모두 가짜 Docker 로 오프라인 시험되고, 실제 컨테이너 실행은 따로 두며 기록되기 전까지 강제되지 않습니다. [`docs/container-judge.md`](docs/container-judge.md) 를 보십시오.
+판정 스테이션은 `omf run` 안에서 돕니다. S4 는 저장된 train 분할과 모순 카나리를 일회용 컨테이너 두 개에서 k 번 판정하고, S5 는 게이트와 prove-test 를 컨테이너 작업 사본에서 돌려 감사하며, S6 은 test 분할을 한 번만 씁니다. 모두 가짜 Docker 로 오프라인 시험되고, 실제 컨테이너 실행은 따로 두며 기록되기 전까지 강제되지 않습니다. [`docs/container-judge.md`](docs/container-judge.md) 를 보십시오.
 
-아직 만들지 않은 것: 작성자 컨테이너, 라인을 돌리는 명령(`omf run`, 쓰게 될 구현자 컨테이너는 라이브러리 코드로만 있습니다: [`docs/implementer.md`](docs/implementer.md)), 증거 보고서, `omf ship`, 목표 달성 확인(`omf goal sign`), 실행 도중 사람에게 입력을 요청하는 흐름. 모두 [설계 문서](docs/ko/design/2026-10-12-omf-v0-design.md)에
+아직 만들지 않은 것: `omf ship`, 목표 달성 확인(`omf goal sign`), 실행 도중 사람에게 입력을 요청하는 흐름. 모두 [설계 문서](docs/ko/design/2026-10-12-omf-v0-design.md)에
 적혀 있습니다.
 
 ## 빠른 시작
@@ -431,7 +435,7 @@ kind = "claude"          # 또는 "command": 프롬프트를 stdin 으로 읽고
 `kind = "claude"` 는 호스트에서 `claude` CLI 를 도구를 모두 끈 채, 세션을 저장하지 않고, 빈 임시 폴더를 작업
 폴더로 삼아, 환경 변수는 `ANTHROPIC_API_KEY` 하나만 넘겨 실행합니다. 틱을 돌리기 전에 그 변수를 지정하세요.
 키체인이나 로그인 파일 로그인은 쓰지 않습니다. `kind = "command"` 는 `command` 에 적은 argv 를 실행하며,
-시험과 예제가 씁니다. `kind = "codex"` 와 `auth = "login_file"` 은 컨테이너 실행기가 생길 때까지 거부됩니다.
+시험과 예제가 씁니다. `kind = "codex"` 와 `auth = "login_file"` 은 아직 내리지 않은 자격 증명 결정이 필요해 거부됩니다.
 
 구현자 컨테이너는 일부러 다르게 다룹니다. 구현자가 컨테이너 안에서 쓰고 실행하는 코드는 받은 키를 읽을 수 있으므로,
 그 키는 조정 모델용 `ANTHROPIC_API_KEY` 가 아닙니다. 사용 한도를 건 별도의 Anthropic 워크스페이스 키를 만들어,
@@ -489,8 +493,8 @@ kind = "claude"          # 또는 "command": 프롬프트를 stdin 으로 읽고
 
 - 시드 린트는 숫자와 지표 이름을 잡을 뿐, 말 바꾸기는 잡지 못합니다. 임계값을 다른 말로 다시 쓰면 통과합니다.
 - 중복 검사는 제목의 낱말과 선언한 경로를 비교합니다. 같은 변경을 제목만 바꿔 내면 새 항목입니다.
-- 공개량 예산을 선언하지 않으면 모델을 부르는 횟수는 라운드로만 제한됩니다. 구현자에게 주는 가려진 피드백은 라이브러리 코드와 시험으로만 있고 아직 이를 부르는 명령이나 스테이션이 없습니다. 라인에 연결되면 `disclosure` 예산을 선언하기 전에는 한 번도 나가지 않습니다.
-- 선언한 `disclosure` 예산은 목표당 하나입니다. 지금은 목표 재시드가 이 예산을 쓰고, 가려진 피드백 공개도 라인에 연결되면 같은 예산을 나눠 쓰므로 어느 쪽이든 다 쓰면 다른 쪽이 막힙니다. 늘리는 것은 사람만 합니다(`omf budget raise <id> disclosure <amount>`).
+- 공개량 예산을 선언하지 않으면 모델을 부르는 횟수는 라운드로만 제한됩니다. 구현자에게 주는 가려진 피드백은 `omf run` 안에서 S6 이 다음 S3 라운드에 풀어 주며, `disclosure` 예산을 선언하기 전에는 한 번도 나가지 않습니다.
+- 선언한 `disclosure` 예산은 목표당 하나입니다. 지금은 목표 재시드가 이 예산을 쓰고, 가려진 피드백 공개도 같은 예산을 나눠 쓰므로 어느 쪽이든 다 쓰면 다른 쪽이 막힙니다. 늘리는 것은 사람만 합니다(`omf budget raise <id> disclosure <amount>`).
 - 조정 모델에는 아직 구독이나 키체인 로그인을 쓸 수 없습니다. API 키를 쓰세요.
 - 재승인하면 벽시계 시간 한도가 `goal.md` 의 값으로 돌아갑니다. 그 전에 `omf budget raise <id> wall_time` 으로 늘린 만큼은 이어지지 않고 승인 화면에도 나오지 않습니다. 낡은(stale) 목표를 다시 승인한 뒤에도 계속 돌려야 하면 다시 늘리세요.
 
@@ -531,6 +535,9 @@ ledger, 지표 제안, J1 잠금 파일에도 제안하거나 승인한 사람�
 - [설계 명세](docs/ko/design/2026-10-12-omf-v0-design.md) ([English](docs/design/2026-10-12-omf-v0-design.md))
 - [출처와 읽은 상태](docs/design/references.md)
 - [강제 시험과 그 시험이 확인하는 주장](tests/enforcement/README.md)
+- [명령 사용법](docs/cli-usage.md): 모든 명령의 `--help` 출력 그대로. 빌드된 CLI 와 대조해 시험합니다 (영어)
+- [봉인 작성자 컨테이너](docs/author.md): 작성자의 이미지, 키, 경계, 한계 (영어)
+- [적합성 표](docs/conformance-matrix.md): 요구사항마다 covered, unproven, missing 상태 (영어)
 - [목표 루프의 결정과 열린 질문 (M2b 부록, 영어)](docs/design/2026-10-12-omf-m2b-addendum.md)
 - [`examples/hello-goal`](examples/hello-goal/README.md): 목표 루프를 오프라인으로 끝까지 돌려 보는 예제 (영어)
 

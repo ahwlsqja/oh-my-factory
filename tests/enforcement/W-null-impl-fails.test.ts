@@ -1,3 +1,4 @@
+// covers: S5.5.null-implementation-fails
 import { describe, expect, it } from "vitest";
 import { createHostFixtureRunner } from "../../src/scenario/fixtures.js";
 import { runGate2 } from "../../src/scenario/gate2.js";

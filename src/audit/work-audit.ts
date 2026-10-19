@@ -28,14 +28,14 @@ export interface AuditInput {
   judge: JudgeConfigDecl;
   /** The same array `proveTest` received. */
   explicitTestPaths: readonly string[];
-  /** Default `["spec.md", "intent.md"]`; M3g passes the real locations. */
+  /** Default `["spec.md", "intent.md"]`; the implementer container passes the real locations. */
   projectionPaths: readonly string[];
   canaries: readonly string[];
   surfaces: readonly AuditSurface[];
   proveTest: ProveTestResult | null;
 }
 
-/** Named `WorkAudit`: `AuditReport` already exists in `src/goal/audit.ts` (the goal audit M3b1 governance reads). */
+/** Named `WorkAudit`: `AuditReport` already exists in `src/goal/audit.ts` (the goal audit the governance step reads). */
 export interface WorkAudit {
   schema_version: 1;
   diff: { files: number; empty: boolean; special_entries: number };
@@ -300,7 +300,7 @@ export async function repairAudit(
   return report;
 }
 
-/** The `AuditInputs` of the M3b2 classifier (structurally; `"not run"` is its `NOT_RUN`). */
+/** The `AuditInputs` of the outcome classifier (structurally; `"not run"` is its `NOT_RUN`). */
 export interface AuditClassifierInputs {
   canary_hits: number | "not run";
   tests_edited: boolean | "not run";
