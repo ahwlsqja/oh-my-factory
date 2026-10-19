@@ -186,6 +186,11 @@ describe("judge container lifetime", () => {
   });
 
   it("accepts the lifetime of every judge role at the default and at the maximum caps", () => {
+    // negative guard first: assertSpec does refuse an unbounded or missing lifetime, so accepting the bounds below means something
+    for (const role of JUDGE) {
+      expect(() => assertSpec({ ...specFor(role), lifetime_s: 2147483648 })).toThrow(ContainerSpecError);
+      expect(() => assertSpec({ ...specFor(role), lifetime_s: 0 })).toThrow(ContainerSpecError);
+    }
     for (const role of JUDGE) {
       for (const config of [CONFIG_DEFAULTS.judge, { ...CONFIG_DEFAULTS.judge, k: 10, step_timeout_ms: 120_000 }]) {
         const lifetime_s = roleLifetimeSeconds(role, { kind: "judge", judge: config });

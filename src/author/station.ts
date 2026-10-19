@@ -1,9 +1,9 @@
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { findWorkItem } from "../adapters/state-markdown.js";
 import type { RecordSink, RunScope } from "../audit/work-audit.js";
 import { type ContainerRuntime, RuntimeError } from "../container/runtime.js";
-import { sweepItemOrphans } from "../container/item-sweep.js";
+import { readRunIds, sweepItemOrphans } from "../container/item-sweep.js";
 import { assertName } from "../container/spec.js";
 import { type OmfConfig, readConfig } from "../core/config.js";
 import { Ledger } from "../core/ledger.js";
@@ -113,7 +113,9 @@ export async function sweepAuthorOrphans(input: {
   workId: string;
 }): Promise<number> {
   const runsDir = join(input.itemDir, "runs");
-  const earlier = new Set(existsSync(runsDir) ? readdirSync(runsDir) : []);
+  const runIds = readRunIds(runsDir);
+  if (runIds === null) return 0;
+  const earlier = new Set(runIds);
   earlier.delete(input.currentPassId);
   let removed = 0;
   for (const resource of await input.runtime.listOwned({ run_id: null })) {

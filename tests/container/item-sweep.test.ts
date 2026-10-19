@@ -354,6 +354,14 @@ describe("an unset docker_context still lets the sweep remove host staging", () 
 
   it("removes the staging of earlier runs while no live process holds the claim, and keeps the run logs", async () => {
     const item = stage();
+    // negative guard first: the same sweep with the claim held removes nothing, so the removal below is the sweep's doing
+    claimItem(item);
+    try {
+      await sweepItemOrphans({ runtime: noContext(), itemDir: item, workId: X });
+    } finally {
+      releaseItem(item);
+    }
+    expect(existsSync(join(item, "runs", EARLIER, "judge", "file"))).toBe(true);
     await sweepItemOrphans({ runtime: noContext(), itemDir: item, workId: X });
     expect(existsSync(join(item, "runs", EARLIER, "judge"))).toBe(false);
     expect(existsSync(join(item, "runs", EARLIER, "implementer-stage"))).toBe(false);
