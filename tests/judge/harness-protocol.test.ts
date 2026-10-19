@@ -61,7 +61,8 @@ const verdictOf = (nonce: string) => ({
 });
 
 describe("the harness set is a projection", () => {
-  const CANARY = "omf-canary-0123456789abcdef0123456789abcdef";
+  // Built at run time: a full canary literal in this file would trip OMF run on OMF.
+  const CANARY = `omf-canary-${"0123456789abcdef".repeat(2)}`;
   const stored: StoredScenario = {
     schema_version: 1,
     scenario_id: `s-${"a1".repeat(16)}`,

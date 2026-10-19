@@ -12,18 +12,11 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
-// npm always bundles README.* files, so README.ko.md ships even though package.json
-// "files" does not list it. It is allowed, but not required.
-const REQUIRED_TOP = [
-  "dist",
-  "schemas",
-  "fixtures",
-  "harness",
-  "LICENSE",
-  "THIRD_PARTY_NOTICES.md",
-  "README.md",
-  "package.json",
-];
+// The required top-level entries come from package.json "files" (the one source) plus package.json itself, which
+// npm always packs. npm also bundles README.* files, so README.ko.md ships even though "files" does not list it.
+// It is allowed, but not required.
+const rootPkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const REQUIRED_TOP = [...rootPkg.files, "package.json"];
 const ALLOWED_TOP = new Set([...REQUIRED_TOP, "README.ko.md"]);
 
 const tmp = mkdtempSync(join(tmpdir(), "omf-pack-smoke-"));

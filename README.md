@@ -132,15 +132,16 @@ or **designed** and not built yet.
 | Command | What it does |
 |---|---|
 | `omf init` | Creates host state for the current repository under `~/.omf`. Writes nothing to the repository or to the agent CLIs' configuration. |
+| `omf ui [--port <port>] [--no-open]` | Opens an optional, local read-only operations dashboard. Shows verified snapshot state, goal IDs, disclosed gap buckets, work, human-attention codes, recorded evidence recommendations and recent events. No approvals or execution. Port `0` (the default) chooses an available loopback port; `--no-open` prints the session URL. See [the UI guide](docs/ui.md). |
 | `omf doctor [--json] [--strict]` | Checks git, Docker, Claude Code and Codex, the repository and the ledger, and writes `preflight.json`. Runs the agent CLIs with a throwaway home. A missing or unreachable Docker, or a missing agent CLI, is a warning that names the stage that needs it; every problem and warning has a one-line fix. `--strict` turns the missing-tool warnings into problems; a torn ledger tail stays a warning. It also reports an advisory isolation probe (a throwaway container) when `[judge]` names an image and a Docker context, otherwise `unmeasurable` with the reason. The JSON report also carries an advisory `implementer` row: whether an implementer image is configured and whether `OMF_IMPLEMENTER_API_KEY` is set, by name only, never the value. |
 | `omf ledger verify [--json]` | Checks the ledger's hash chain. On a corrupt ledger, stderr line 2 gives the path, the line and the next step; `--json` gives the same as fields. With `--json` every error is `{ "ok": false, "error": { "code": "...", "message": "..." } }` (codes: `not_initialized`, `ledger_corrupt`, `not_a_git_repository`, `git_not_found`, `unsupported_repository`, `symlink_refused`, `cannot_run`); keys are snake_case. Exit 2 before `omf init`. |
 | `omf goal new <id>` | Creates `goal.md` in host state from a template. |
 | `omf metric propose <id> --unit <u> -- <command>` | Proposes a metric: the command that prints its value, the unit, and the paths whose change is a regime change. |
-| `omf goal audit <id>` | Checks the goal, its locks and the ledger, and reports regime changes. Writes nothing. |
+| `omf goal audit <id>` | Checks the goal, its locks and the ledger, reports regime changes, and lists template text you have not replaced yet (`placeholders` in `--json`). Writes nothing. |
 | `omf goal approve <id>` | J1: shows what will be locked (metrics and their bands) and approves it after you type the goal id in a terminal. |
 | `omf goal measure <id>` | Runs the locked metrics (in Docker, or on the host with `--runner host`), computes the gap to target and the control bands, and writes a gap report to host state. |
 | `omf goal tick <id>` | One pass of the goal loop (spec §4.4): audit, measure, ask a model for work, filter its candidates with code, dispatch work items, check staleness and the loop guards. Needs a reconciler (see "Run the goal loop"). |
-| `omf goal status <id>` | Shows the run state (`running`, `blocked_on_user`, `failed`, `finish`, `cancelled`), the open escalation with the commands that unblock it, the rounds left and the open work items. |
+| `omf goal status <id>` | Shows the run state (`running`, `blocked_on_user`, `failed`, `finish`, `cancelled`; a goal that is still a draft or needs re-approval says so instead of `running`, and an approved goal with no tick yet says that), the open escalation with the commands that unblock it, the rounds left and the open work items. |
 | `omf goal resume <id>` | J6 continue: after you fixed what stopped the goal, a typed confirmation in a terminal lets ticks run again. |
 | `omf goal cancel <id>` | J6 stop: a typed confirmation in a terminal cancels the goal and every open work item. |
 | `omf budget show <id> [--json]` | Prints the rounds, disclosure and wall-time budgets: declared, raised, consumed and remaining. |
@@ -218,7 +219,7 @@ initialized ~/.omf/projects/3186047891f1f0a0
 
 $ omf goal new g-demo
 created ~/.omf/projects/3186047891f1f0a0/goals/g-demo/goal.md
-edit it, propose its metrics with omf metric propose, then run omf goal audit g-demo
+edit it (the comments in the file explain each field), propose its metrics with omf metric propose, then run omf goal audit g-demo
 
 $ # edit goal.md: target m-demo <= 5 ms, lagging: [m-demo]
 $ omf metric propose m-demo --unit ms -- sh -c 'echo 7'
@@ -233,7 +234,7 @@ goal g-demo: Say what this goal is in a few words
 objective: The outcome you want, in plain words
 target: m-demo <= 5 ms
 leading: none; lagging: m-demo; guardrails: none
-budget: 10 rounds, 72h wall time, at most 2 open work items
+budget: 10 rounds, 14d wall time, at most 2 open work items
 decision rule: target met for 2 consecutive measurements and no guardrail breach (minimum observation 7d)
 metric m-demo: ["sh","-c","echo 7"] -> ms; watches none
 bands m-demo: none (not monitored)
@@ -244,14 +245,43 @@ $ omf goal measure g-demo --runner host
 goal g-demo (regime 1), runner host
 target m-demo: 7 ms; target <= 5 ms; gap 2 (decrease, medium)
   m-demo [target, lagging]: 7 ms
+measured at revision 4f1c9a0e7b2d (clean), observed 2026-10-12T06:27:24.995Z
+working directory: repository root (host, no isolation)
+fingerprint: 9be03c51a7d2 (recorded in the ledger as input_sha256)
+limit: The tree was observed once, before the first metric ran; it was not watched while the metrics ran.
+limit: The fingerprint covers HEAD and the list of changed paths, not file contents: an edit to a file that was already modified keeps the same fingerprint.
+limit: An edit made while a metric runs can change its value without changing this record.
+limit: Gitignored files are not part of the observation.
 report: ~/.omf/projects/3186047891f1f0a0/goals/g-demo/reports/2026-10-12T06-27-24-995Z-gap.json
 warning: measured on the host without isolation (--runner host)
 ```
+
+The provenance lines (also stored in the gap report as `provenance`) say which commit was measured, whether
+the tree was clean or dirty with a count of changed paths, and where the metric ran: the repository root on the
+host, or `/work`, a read-only mount of it, in Docker. They are host-only, like the rest of the report. The
+fingerprint is the `input_sha256` the ledger already records, taken once before the first metric ran. It does not
+prove that files stayed unchanged while the metrics ran, and it cannot tell two edits of an already modified file
+apart, so a value measured while you or an agent edit the checkout may not match the revision shown.
+
+The generated `goal.md` explains each field in `#` notes inside the front matter. Under `## Approach` it has three
+subsections to fill in: `### Why`, `### Constraints` and `### Done when`. That section and `objective` are the only
+text a model sees (see "Run the goal loop"), so write them in words, without numbers or metric ids.
+`omf goal audit` also lists any template text you have not replaced yet (for example the placeholder metric id
+`m-replace-me`); this list is advice and does not change the audit result.
+The same list is the `placeholders` field of `omf goal audit --json`.
+In the template, `#` notes also mark which values are OMF defaults you may keep (the budget) and which are your decisions (the target value and operator, `min_observation`, `decision_rule`).
 
 Re-approval first shows why it is needed: lock problems, the regime changes, and the diff of any changed
 watched path. If the goal or a metric changes while you read it, nothing is approved. Re-approval never changes
 the budgets: if `goal.md` differs from the rounds or wall time already in force, `omf goal approve` refuses, and
 raising either is a separate decision (J8).
+
+Wall time is calendar time from the first approval, and success needs readings that span the minimum observation,
+so the generated `goal.md` pairs a 7d minimum observation with a 14d wall time. If you set a wall time that is not
+longer than the minimum observation, `omf goal audit` and the approval screen warn that the goal cannot reach
+success before the budget ends. It is a warning, not a refusal: approve anyway, then when the budget runs out raise
+it with `omf budget raise <id> wall_time <duration>` and continue with `omf goal resume <id>`. Nothing raises the
+budget or resets elapsed time for you.
 
 Known limits of "metric code cannot change quietly":
 

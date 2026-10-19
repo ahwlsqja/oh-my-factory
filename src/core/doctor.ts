@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { CREDENTIAL_SOURCE_ENV, readCredential } from "../implementer/credential.js";
 import type { IsolationLevel, MeasuredLevel } from "../isolation/types.js";
-import { sealedProblem } from "../vault/pokayoke.js";
+import { sealedReport } from "../vault/pokayoke.js";
 import { ConfigError, type OmfConfig, readConfig } from "./config.js";
 import { TORN_TAIL_WARNING, type VerifyResult } from "./ledger.js";
 import {
@@ -382,13 +382,8 @@ function buildReport(
         }
         // Poka-yoke (spec §11 rule 4): vault material in the repository or a worktree is a problem to fix before any run.
         if (status.initialized) {
-          const vaultProblem = sealedProblem(location, env);
-          if (vaultProblem !== null) {
-            problem(
-              vaultProblem,
-              "move the listed vault files out of the repository and the OMF worktrees, then run omf doctor again",
-            );
-          }
+          const vault = sealedReport(location, env);
+          if (vault !== null) problem(vault.problem, vault.fix);
         }
       }
     }
