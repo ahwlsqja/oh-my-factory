@@ -7,7 +7,7 @@ Generated from `docs/requirements.json` by `node scripts/conformance-matrix.mjs 
 - **deferred**: the design states it and v0.1 does not implement it. It has no test, and the documents say `not implemented`.
 - **missing**: no test counts, or a mapped file is absent. CI fails.
 
-Totals: 36 covered, 8 unproven, 7 deferred, 0 missing.
+Totals: 38 covered, 6 unproven, 7 deferred, 0 missing.
 
 | Id | State | Last recorded | Tests | Claim |
 |---|---|---|---|---|
@@ -16,7 +16,7 @@ Totals: 36 covered, 8 unproven, 7 deferred, 0 missing.
 | `F3.code-controls-loop` | covered | - | 2 offline | Budgets and visit caps live in the host ledger and in code, not in a session, and nothing extends them on its own. |
 | `F4.goal-closes-by-signature` | deferred (M4) | - | none | Agents produce at most a candidate; a goal closes only by a person's signature (J5). |
 | `F5.bands-detect-regression` | covered | - | 1 offline | Control bands detect a drift after launch and record a breach event. |
-| `F6.vault-host-only` | unproven | - | 3 offline, 2 gated, 1 wiring only | No agent session or container can read the vault; only the harness container reads it, during S4. |
+| `F6.vault-host-only` | covered | 2026-10-18 | 3 offline, 2 gated, 1 wiring only | No agent session or container can read the vault; only the harness container reads it, during S4. |
 | `F7.unevaluated-undetermined` | covered | - | 1 offline | A guardrail that was not evaluated is undetermined, never passing. |
 | `F8.open-decision-blocks` | covered | - | 1 offline | Work does not run while a required decision is open. |
 | `F9.unverified-areas-first` | covered | - | 2 offline | The evidence report lists the unverified areas, and nothing that nobody produced reads as passed. |
@@ -26,7 +26,7 @@ Totals: 36 covered, 8 unproven, 7 deferred, 0 missing.
 | `S5.1.spec-is-projection` | covered | - | 1 offline | spec.md is a projection of the decision ledger, byte for byte. |
 | `S5.2.decisions-human-only` | covered | - | 1 offline | Only a person closes a decision; the writers refuse an agent actor. |
 | `S5.3.seal-inputs-closed` | covered | - | 1 offline | What the sealing author receives is a closed set: intent, spec and the interface contract, never a plan or code. |
-| `S5.4.implementer-container` | unproven | - | 3 offline, 2 gated | The implementer runs in a measured container with one vendor key, no vault and no other credential. |
+| `S5.4.implementer-container` | covered | 2026-10-18 | 3 offline, 2 gated | The implementer runs in a measured container with one vendor key, no vault and no other credential. |
 | `S5.5.judge-two-container` | covered | 2026-10-15 | 2 offline, 1 gated | The judge runs the candidate and the harness in two measured containers, and the harness is the only reader of the vault. |
 | `S5.5.null-implementation-fails` | covered | - | 1 offline | A null implementation never reaches success: the judge fails it. |
 | `S5.7.masked-feedback` | covered | - | 2 offline | Feedback released to the implementer is masked, and releases are counted per goal in the host ledger. |

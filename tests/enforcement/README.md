@@ -6,9 +6,9 @@ without a test is labeled "not enforced" in the spec.
 ## Requirement states
 
 <!-- requirements:start -->
-Requirement states, generated from `docs/requirements.json` (36 covered, 8 unproven, 7 deferred, 0 missing). The full table is [the conformance matrix](../../docs/conformance-matrix.md).
+Requirement states, generated from `docs/requirements.json` (38 covered, 6 unproven, 7 deferred, 0 missing). The full table is [the conformance matrix](../../docs/conformance-matrix.md).
 
-- unproven: `F6.vault-host-only`, `S5.4.implementer-container`, `S7.l2-label`, `S7.docker-client-trusted`, `S5.3.author-measured-before-key`, `S5.3.author-boundary-real`, `S5.3.author-answer-no-leak`, `S5.0.skeleton-real-line`
+- unproven: `S7.l2-label`, `S7.docker-client-trusted`, `S5.3.author-measured-before-key`, `S5.3.author-boundary-real`, `S5.3.author-answer-no-leak`, `S5.0.skeleton-real-line`
 - deferred: `F4.goal-closes-by-signature`, `F11.autonomy-dial`, `S7.l3-label`, `S11.1.plugin-dir-shells`, `S11.2.ship-only-pushes`, `S11.3.public-artifacts-in-worktree`, `S11.6.break-glass-events`
 - missing: none
 <!-- requirements:end -->
