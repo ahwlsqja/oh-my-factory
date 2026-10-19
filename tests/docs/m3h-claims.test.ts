@@ -78,6 +78,16 @@ describe("the other pages", () => {
     expect(read("docs/implementer.md")).toContain("`omf run` runs the implementer");
   });
 
+  it("the READMEs do not say the line has no command", () => {
+    for (const file of ["README.md", "README.ko.md"]) {
+      const text = read(file);
+      expect(text, file).not.toMatch(/not built yet[^\n]*`omf run`|`omf run`[^\n]*not built yet/i);
+      expect(text, file).not.toMatch(/library code (only|that no command)|no command yet|no command or station/i);
+      expect(text, file).not.toMatch(/아직 만들지 않았습니다[^\n]*`omf run`|`omf run`[^\n]*아직 만들지 않/);
+      expect(text, file).not.toMatch(/라이브러리 코드로만|아직 어떤 명령도|명령 없이/);
+    }
+  });
+
   it("the READMEs and the documentation index link the new pages", () => {
     for (const file of ["README.md", "README.ko.md"]) {
       const text = read(file);

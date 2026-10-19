@@ -24,10 +24,9 @@
 > budgets that never reset), defining, approving and measuring goals (J1 locks, the gap to the
 > target, control bands), the J8 budget commands, the work-item store with its `work` and `veto`
 > commands, and the goal loop: `omf goal tick` turns the gap into work items with a model that
-> never sees the numbers. The verification line exists only as library code with offline tests:
-> sealed scenarios and GATE-2, the implementer container, the judge, audit and test-split stations
-> (S4 to S6) and GATE-3. The command that runs the line (`omf run`, with `omf report`)
-> and the real-model gated runs are not built yet. `omf seal` exists and runs the Codex author in a measured container, but it has not been run against a real daemon or model. Gated container runs are recorded for the `docker
+> never sees the numbers. `omf run` runs the verification line (S1 to S7: sealed scenarios and GATE-2, the implementer
+> container, the judge, audit and test-split stations and GATE-3) and `omf report` prints its evidence; both are tested offline against a fake Docker.
+> The real-model gated runs are not recorded yet. `omf seal` exists and runs the Codex author in a measured container, but it has not been run against a real daemon or model. Gated container runs are recorded for the `docker
 > inspect` parser, the work copy, the two-container round trip and the real isolation probe; none is
 > recorded for the implementer container or for any suite that calls a model.
 > See [What works today](#what-works-today).
@@ -119,8 +118,8 @@ or **designed** and not built yet.
   loaded over stdin, and the SUT never sees an expectation) and measures each with
   `docker inspect` before candidate code runs in it. GATE-3 reads those measurements from the ledger. Only the offline
   form against a fake Docker is tested, and what a real container does is not enforced beyond the gated runs recorded in
-  `docs/evidence/gated-runs.json` (the real isolation probe and the two-container round trip); the implementer container has no recorded run. The implementer container exists as library code that no command runs yet
-  ([`docs/implementer.md`](docs/implementer.md)) and the author container is started only by `omf seal`, which has not been run against a real daemon or model, so a real line still stops at GATE-3 as `isolation_unmeasured` until `omf run` exists and the gated author runs are recorded ([`docs/container-judge.md`](docs/container-judge.md)).
+  `docs/evidence/gated-runs.json` (the real isolation probe and the two-container round trip); the implementer container has no recorded run. The implementer container is run by `omf run`, offline against a fake Docker only
+  ([`docs/implementer.md`](docs/implementer.md)) and the author container is started only by `omf seal`, which has not been run against a real daemon or model, so a real line still stops at GATE-3 as `isolation_unmeasured` until the gated author runs are recorded ([`docs/container-judge.md`](docs/container-judge.md)).
 - **Empty means fail.** *Partly built.* The line skeleton (`E7a`), GATE-2 (`E7b`) and the gate line, the
   audit and GATE-3 (`E7c`) read a missing measurement as a failure, never as a pass. The judge's verdict
   (`E7d`) is the same: a missing, malformed or foreign verdict ends the round and is never a pass.
@@ -164,9 +163,9 @@ Exit codes: `0` ok, `1` needs attention (problems found, a declined confirmation
 
 Sealed scenarios and GATE-2 run through `omf seal`, which has not been run against a real daemon or model. After GATE-1 passes, an author session writes scenarios, OMF stamps them and stores them in a vault outside the repository (`vault/scenarios/<work-id>/<seal-id>/`), and GATE-2 refuses a set that is empty, lacks a split, passes against a program that does nothing, has no contradiction canary (`canary_missing`), or leaves a resolved decision unlinked. `omf seal` runs the author in a measured container; that is not enforced until the `G-author-*` gated runs are recorded. See [`docs/m3c-spec-deviations.md`](docs/m3c-spec-deviations.md).
 
-The judge stations exist as library code only, with no command yet. S4 judges the stored train split and the contradiction canaries in two disposable containers, k times; S5 runs the gates and prove-test in a container work copy and audits; S6 spends the test split once. Everything is tested offline against a fake Docker, and a real-container run is gated and not enforced until it is recorded. See [`docs/container-judge.md`](docs/container-judge.md).
+The judge stations run inside `omf run`. S4 judges the stored train split and the contradiction canaries in two disposable containers, k times; S5 runs the gates and prove-test in a container work copy and audits; S6 spends the test split once. Everything is tested offline against a fake Docker, and a real-container run is gated and not enforced until it is recorded. See [`docs/container-judge.md`](docs/container-judge.md).
 
-Not built yet: the command that runs the line (`omf run`; the implementer container it will use exists as library code, see [`docs/implementer.md`](docs/implementer.md)), evidence reports, `omf ship`, goal sign-off (`omf goal sign`) and asking people for input in the middle of a run. The
+Not built yet: `omf ship`, goal sign-off (`omf goal sign`) and asking people for input in the middle of a run. The
 [design](docs/design/2026-10-12-omf-v0-design.md) describes all of them.
 
 ## Quick start
@@ -468,8 +467,8 @@ Known limits of the goal loop:
   words gets through.
 - Duplicate detection compares the title words and the declared paths. A reworded title for the same change is a
   new item.
-- With no disclosure budget declared, the number of times the model is asked is bounded by the rounds only. Masked feedback to the implementer exists as library code with tests, with no command or station calling it yet; once it is wired into the line it will never be released until a `disclosure` budget is declared.
-- A declared `disclosure` budget is one pool per goal. Goal re-seeds draw from it today; masked-feedback releases will draw from the same pool once they are wired into the line, so either can use it up and block the other. Only a person raises it (`omf budget raise <id> disclosure <amount>`).
+- With no disclosure budget declared, the number of times the model is asked is bounded by the rounds only. Masked feedback to the implementer is released by S6 to the next S3 round inside `omf run`, and is never released until a `disclosure` budget is declared.
+- A declared `disclosure` budget is one pool per goal. Goal re-seeds draw from it today; masked-feedback releases draw from the same pool, so either can use it up and block the other. Only a person raises it (`omf budget raise <id> disclosure <amount>`).
 - Subscription and keychain logins are not supported for the reconciler yet; use an API key.
 - A re-approval resets the wall-time limit to the value in `goal.md`: raises made earlier with `omf budget raise <id> wall_time` do not carry over, and the approval screen does not show them. After re-approving a stale goal that should keep running, raise the wall time again.
 
