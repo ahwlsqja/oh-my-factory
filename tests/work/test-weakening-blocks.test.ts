@@ -104,6 +104,13 @@ const weakening: Case[] = [
   ],
   ["codecov target 90 -> 0100", "codecov.yml", "coverage:\n  target: 90\n", "coverage:\n  target: 0100\n"],
   [".nycrc.yml lines 70 -> 070", ".nycrc.yml", "lines: 70\n", "lines: 070\n"],
+  [
+    "jest.config.js lines 70 -> 070 (octal in sloppy mode)",
+    "tests/jest.config.js",
+    "  lines: 70,\n",
+    "  lines: 070,\n",
+  ],
+  ["jest.config.js lines 070 -> 080", "jest.config.js", "  lines: 070,\n", "  lines: 080,\n"],
 ];
 
 const controls: Case[] = [
@@ -116,6 +123,8 @@ const controls: Case[] = [
   ],
   ["codecov target raise", "codecov.yml", "coverage:\n  target: 80%\n", "coverage:\n  target: 90%\n"],
   ["decimal raise 0.5 -> 0.75", ".coveragerc", "[report]\nfail_under = 0.5\n", "[report]\nfail_under = 0.75\n"],
+  ["jest.config.js lines 70 -> 80", "jest.config.js", "  lines: 70,\n", "  lines: 80,\n"],
+  ["jest.config.js branches 0.5 -> 0.75", "jest.config.js", "  branches: 0.5,\n", "  branches: 0.75,\n"],
   ["decimal raise 90 -> 90.5", ".coveragerc", "[report]\nfail_under = 90\n", "[report]\nfail_under = 90.5\n"],
 ];
 

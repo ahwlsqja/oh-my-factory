@@ -21,6 +21,8 @@ import { isTestPath } from "./risk.js";
  * even with zero lines, and any change to a key where a higher number means a looser gate (the codecov `threshold`). Any
  * other added, removed or changed line there is weakening, even a harmless one. JS/TS and
  * JSON configs keep the masked-remainder rule: threshold values are masked and the rest of each line must be equal text.
+ * Their changed lines are paired by position across the whole file section. A leading-zero number (`070`, octal in sloppy
+ * mode) is not treated as a threshold value, so a line that carries one counts as changed and is weakening.
  * On an added line of other files, markers are searched in the code part, plus any code after a closed block comment; a
  * pure comment line is not a marker. Touching a test file, or adding one, is not weakening by itself.
  *
@@ -308,7 +310,7 @@ function markersGained(removed: readonly string[], added: readonly string[]): bo
   return countAddedMarkers(added) > count(removed, MARKER);
 }
 
-const PAIR = /([A-Za-z_][\w-]*)["']?\s*[:=]\s*(\d+(?:\.\d+)?)\b/g;
+const PAIR = /([A-Za-z_][\w-]*)["']?\s*[:=]\s*((?:0|[1-9]\d*)(?:\.\d+)?)\b/g;
 const THRESHOLD_KEYS =
   /^(threshold|thresholds|lines|branches|functions|statements|min|minimum|min_coverage|coverage|fail[_-]under|cov-fail-under|target|percent|\w*threshold\w*)$/i;
 
@@ -387,6 +389,14 @@ function onlyRaisesThresholds(removed: readonly string[], added: readonly string
   });
 }
 
+const LEADING_ZERO_PAIR = /([A-Za-z_][\w-]*)["']?\s*[:=]\s*0\d+\b/g;
+
+function hasLeadingZeroThreshold(line: string): boolean {
+  return [...(configCodeOf(line).text ?? "").matchAll(LEADING_ZERO_PAIR)].some((match) =>
+    THRESHOLD_KEYS.test(match[1] ?? ""),
+  );
+}
+
 function thresholdLowered(removed: readonly string[], added: readonly string[]): boolean {
   if (
     [...removed, ...added].some(
@@ -395,6 +405,8 @@ function thresholdLowered(removed: readonly string[], added: readonly string[]):
   ) {
     return true;
   }
+  // A leading-zero integer is no canonical number (octal in sloppy mode), so no pair is read from it: the line is undecidable.
+  if ([...removed, ...added].some(hasLeadingZeroThreshold)) return true;
   const after = thresholds(added);
   // A threshold key that disappears (the line or the whole config file is removed) counts as lowered.
   return thresholds(removed).some(([key, before]) => {
