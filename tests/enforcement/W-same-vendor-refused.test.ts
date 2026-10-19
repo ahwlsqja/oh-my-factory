@@ -46,12 +46,21 @@ describe("W-same-vendor-refused", () => {
 
   it("the waiver detector catches a planted word (positive control)", () => {
     expect(WAIVER.test("const label = 'same-vendor acknowledgement';")).toBe(true);
+    expect(WAIVER.test("const LABEL = 'SAME-VENDOR ACKNOWLEDGEMENT';")).toBe(true);
     expect(WAIVER.test("roles.author.vendor and roles.implementer.vendor name the same vendor")).toBe(false);
   });
 
   it("no source file and no schema carries a same-vendor waiver", () => {
     const shipped = [...filesUnder("src"), ...filesUnder("schemas")];
     expect(shipped.length).toBeGreaterThan(50);
+    expect(
+      shipped.some(({ file }) => file.startsWith("schemas/")),
+      "the schemas were scanned",
+    ).toBe(true);
+    expect(
+      shipped.some(({ file }) => file.startsWith("src/")),
+      "the sources were scanned",
+    ).toBe(true);
     expect(shipped.filter(({ text }) => WAIVER.test(text)).map(({ file }) => file)).toEqual([]);
   });
 });

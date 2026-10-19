@@ -92,6 +92,8 @@ export function parseList(text) {
   return patterns;
 }
 
+// `.` does not match a newline, and git names files byte-exact, so `**` is spelled [\s\S] to keep a newline in a name from
+// escaping a directory pattern.
 function toRegExp(pattern) {
   const glob = pattern.endsWith("/") ? `${pattern}**` : pattern;
   let source = "";
@@ -99,10 +101,10 @@ function toRegExp(pattern) {
     const ch = glob[i];
     if (ch === "*" && glob[i + 1] === "*") {
       if (glob[i + 2] === "/") {
-        source += "(?:.*/)?";
+        source += "(?:[\\s\\S]*/)?";
         i += 2;
       } else {
-        source += ".*";
+        source += "[\\s\\S]*";
         i += 1;
       }
     } else if (ch === "*") {

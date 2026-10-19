@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -19,14 +19,17 @@ const usage = (await import(SCRIPT)) as {
   discoverLeaves: (runHelp: (prefix: string[]) => string) => Block[];
   builtHelpRunner: (cli: string, home: string, cwd: string) => (prefix: string[]) => string;
   compareUsage: (expected: Block[], text: string) => string[];
+  renderUsage: (blocks: Block[]) => string;
+  cleanEnv: (home: string, base?: Record<string, string | undefined>) => Record<string, string>;
 };
 const doc = (): string => readFileSync(join(ROOT, "docs/cli-usage.md"), "utf8");
-const check = (args: string[]) =>
-  spawnSync(process.execPath, [SCRIPT, "--check", ...args], {
+const run = (args: string[], tmp?: string) =>
+  spawnSync(process.execPath, [SCRIPT, ...args], {
     cwd: ROOT,
     encoding: "utf8",
-    env: { PATH: process.env.PATH ?? "" },
+    env: { PATH: process.env.PATH ?? "", ...(tmp === undefined ? {} : { TMPDIR: tmp }) },
   });
+const check = (args: string[]) => run(["--check", ...args]);
 
 describe("docs/cli-usage.md", () => {
   let blocks: Block[] = [];
@@ -65,4 +68,65 @@ describe("docs/cli-usage.md", () => {
     expect(bad.status).toBe(1);
     expect(bad.stderr).toContain("omf run: the block differs from --help");
   }, 60_000);
+
+  it("--check prints the success line and the regenerate hint, and removes its scratch directory either way", () => {
+    const tmp = makeTempDir("omf-usage-tmp-");
+    const good = run(["--check"], tmp);
+    expect(good.status, good.stderr).toBe(0);
+    expect(good.stdout).toContain("docs/cli-usage.md matches the built CLI");
+    expect(readdirSync(tmp)).toEqual([]);
+    const copy = join(makeTempDir("omf-usage-"), "cli-usage.md");
+    writeFileSync(copy, doc().replace("## omf run\n\n```text\nUsage:", "## omf run\n\n```text\nUsagf:"));
+    const bad = run(["--check", "--file", copy], tmp);
+    expect(bad.status).toBe(1);
+    expect(bad.stderr).toContain("regenerate it with: npm run build && node scripts/cli-usage.mjs --write");
+    expect(readdirSync(tmp)).toEqual([]);
+  }, 60_000);
+
+  it("--check on a missing file exits 1 naming it, and on a missing build or bad arguments exits 2", () => {
+    const missing = join(makeTempDir("omf-usage-"), "absent.md");
+    const gone = check(["--file", missing]);
+    expect(gone.status).toBe(1);
+    expect(gone.stderr).toContain("is missing");
+    const noBuild = check(["--cli", join(makeTempDir("omf-usage-"), "no-such-main.js")]);
+    expect(noBuild.status).toBe(2);
+    expect(noBuild.stderr).toContain("build first: npm run build");
+    for (const args of [[], ["--check", "--write"], ["--bogus"], ["--check", "--file"]]) {
+      const bad = run(args);
+      expect(bad.status, args.join(" ")).toBe(2);
+      expect(bad.stderr, args.join(" ")).toContain("usage: node scripts/cli-usage.mjs");
+    }
+  }, 60_000);
+
+  it("--write regenerates exactly what the built CLI prints", () => {
+    const target = join(makeTempDir("omf-usage-"), "cli-usage.md");
+    const written = run(["--write", "--file", target]);
+    expect(written.status, written.stderr).toBe(0);
+    expect(written.stdout).toContain("commands");
+    expect(existsSync(target)).toBe(true);
+    expect(readFileSync(target, "utf8")).toBe(usage.renderUsage(blocks));
+    expect(readFileSync(target, "utf8")).toBe(doc());
+  }, 60_000);
+
+  it("runs help in a cleaned environment: no inherited location or credential, a throwaway HOME, no colour", () => {
+    const base = {
+      OMF_X: "1",
+      OMF_HOME: "/real",
+      ANTHROPIC_API_KEY: "k",
+      ANTHROPIC_BASE_URL: "u",
+      OPENAI_ORG: "o",
+      FOO_API_KEY: "k",
+      GIT_DIR: "/g",
+      XDG_CONFIG_HOME: "/x",
+      CODEX_HOME: "/c",
+      CLAUDE_CONFIG_DIR: "/c2",
+      COLUMNS: "300",
+      FORCE_COLOR: "3",
+      NO_COLOR: "0",
+      HOME: "/real-home",
+      PATH: "/bin",
+      LANG: "C",
+    };
+    expect(usage.cleanEnv("/scratch", base)).toEqual({ PATH: "/bin", LANG: "C", HOME: "/scratch", NO_COLOR: "1" });
+  });
 });

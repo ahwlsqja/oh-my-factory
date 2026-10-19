@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { commitAll, gitIn, makeGitRepo, makeTempDir } from "../helpers/tmp.js";
 
-// M3h-D14, M3h-D15, owner decisions 2 and 3 of 2026-10-19: the stage0 outer-suite job and the kernel-path report are
+// The stage0 outer-suite job and the kernel-path report are
 // advisory. They run with a read-only token, sit outside the `ci` aggregate, use the stage0 release's suite (never the
 // pull request's copy) and the base commit's report script. Each workflow step's shell is executed here, not grepped.
 
@@ -94,6 +94,37 @@ describe("W-ci-advisory: shape", () => {
     }
   });
 
+  it("maps no secret anywhere and keeps every job env value empty", () => {
+    for (const { text, wf } of [OUTER, KERNEL]) {
+      expect(text).not.toContain("secrets.");
+      expect(text).not.toMatch(/\bsecrets\s*\[/);
+      for (const job of Object.values(wf.jobs) as Array<Job & { env?: Record<string, unknown> }>) {
+        for (const [name, value] of Object.entries(job.env ?? {})) expect(value, name).toBe("");
+      }
+    }
+    const env = (OUTER.wf.jobs.stage0 as Job & { env?: Record<string, unknown> }).env ?? {};
+    expect(Object.keys(env).sort()).toEqual(["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "OPENAI_API_KEY"]);
+  });
+
+  it("builds the pull request before the stage0 run, and gates every stage0 step on the tag", () => {
+    const steps = stepsOf(OUTER.wf);
+    const names = steps.map((s) => s.name);
+    const build = steps.find((s) => s.name === "Build the pull request");
+    expect(build?.["working-directory" as keyof Step]).toBe("pr");
+    expect(build?.run).toContain("npm ci");
+    expect(build?.run).toContain("npm run build");
+    expect(names.indexOf("Build the pull request")).toBeGreaterThan(-1);
+    expect(names.indexOf("Build the pull request")).toBeLessThan(names.indexOf("Run the stage0 outer suite"));
+    for (const name of [
+      "Check out the stage0 release",
+      "Set up Node",
+      "Build the pull request",
+      "Run the stage0 outer suite",
+    ]) {
+      expect(steps.find((s) => s.name === name)?.if, name).toBe("steps.tag.outputs.tag != ''");
+    }
+  });
+
   it("uses the action commits ci.yml pins, keeps no checkout credentials and puts no expression in a run step", () => {
     const pins = new Map<string, string>();
     for (const m of CI.text.matchAll(/uses:\s+([\w.-]+\/[\w.-]+)@([0-9a-f]{40})/g)) pins.set(m[1] ?? "", m[2] ?? "");
@@ -152,6 +183,7 @@ describe("W-ci-advisory: the stage0 tag step", () => {
     expect(out.status).toBe(0);
     expect(readFileSync(ws.output, "utf8")).toBe("");
     expect(readFileSync(ws.summary, "utf8")).toContain("skipped");
+    expect(out.stdout).toContain("::notice title=outer suite::no stage0 pin");
   });
 });
 
@@ -163,6 +195,7 @@ describe("W-ci-advisory: the stage0 run step", () => {
     const out = runStep(OUTER.wf, "Run the stage0 outer suite", ws, env);
     expect(out.status).toBe(0);
     expect(readFileSync(ws.summary, "utf8")).toContain("has no outer suite");
+    expect(out.stdout).toContain("::notice title=outer suite::stage0 predates the outer suite");
   });
 
   it("runs stage0's suite, never the pull request's, against the pull request's built executable, and keeps its exit code", () => {
@@ -221,5 +254,60 @@ describe("W-ci-advisory: the kernel-path step", () => {
     expect(summary).toContain("`src/decision/a.ts`");
     expect(summary).toContain(NOTICE);
     expect(summary).not.toContain("docs/z.md");
+  });
+
+  it("diffs from the merge base (base...head) and reads names byte-exact (-z), so a moved base or an odd name cannot hide a kernel edit", () => {
+    const repo = makeGitRepo();
+    put(repo, "src/decision/a.ts", "export const a = 1;\n");
+    commitAll(repo, "fork point");
+    const fork = gitIn(repo, "rev-parse", "HEAD").trim();
+    gitIn(repo, "checkout", "-q", "-b", "side");
+    put(repo, "docs/side.md", "# side\n");
+    put(repo, 'src/decision/caf\u00e9 "q".ts', "export const odd = 1;\n");
+    commitAll(repo, "side work");
+    const head = gitIn(repo, "rev-parse", "HEAD").trim();
+    gitIn(repo, "checkout", "-q", fork);
+    gitIn(repo, "checkout", "-q", "-b", "trunk");
+    put(repo, "src/decision/a.ts", "export const a = 99;\n");
+    commitAll(repo, "trunk moved on with a kernel edit");
+    const movedBase = gitIn(repo, "rev-parse", "HEAD").trim();
+
+    const ws = space();
+    symlinkSync(repo, join(ws.dir, "pr"));
+    mkdirSync(join(ws.dir, "base/scripts"), { recursive: true });
+    copyFileSync(KERNEL_SCRIPT, join(ws.dir, "base/scripts/kernel-paths.mjs"));
+    put(ws.dir, "base/docs/maintainers/kernel-paths.txt", "src/decision/**\n");
+
+    const out = runStep(KERNEL.wf, "Report kernel paths", ws, { BASE_SHA: movedBase, HEAD_SHA: head });
+    expect(out.status).toBe(0);
+    const summary = readFileSync(ws.summary, "utf8");
+    // base...head: only the side branch's own files count; the trunk's edit to a.ts is not this pull request's.
+    expect(summary).not.toContain("`src/decision/a.ts`");
+    expect(summary).toContain('src/decision/caf\u00e9 "q".ts');
+    expect(summary).not.toContain("\\303");
+  });
+
+  it("takes the pattern list from the base commit's copy, not from the pull request's", () => {
+    const repo = makeGitRepo();
+    put(repo, "src/decision/a.ts", "export const a = 1;\n");
+    put(repo, "docs/maintainers/kernel-paths.txt", "nothing/**\n");
+    commitAll(repo, "base");
+    const base = gitIn(repo, "rev-parse", "HEAD").trim();
+    put(repo, "src/decision/a.ts", "export const a = 2;\n");
+    commitAll(repo, "kernel edit");
+    const head = gitIn(repo, "rev-parse", "HEAD").trim();
+
+    const ws = space();
+    symlinkSync(repo, join(ws.dir, "pr"));
+    mkdirSync(join(ws.dir, "base/scripts"), { recursive: true });
+    copyFileSync(KERNEL_SCRIPT, join(ws.dir, "base/scripts/kernel-paths.mjs"));
+    put(ws.dir, "base/docs/maintainers/kernel-paths.txt", "src/decision/**\n");
+
+    const out = runStep(KERNEL.wf, "Report kernel paths", ws, { BASE_SHA: base, HEAD_SHA: head });
+    expect(out.status).toBe(0);
+    expect(readFileSync(ws.summary, "utf8")).toContain("`src/decision/a.ts`");
+    const text = KERNEL.text;
+    expect(runOf(KERNEL.wf, "Report kernel paths")).toContain("--list base/docs/maintainers/kernel-paths.txt");
+    expect(text).not.toContain("pr/docs/maintainers");
   });
 });

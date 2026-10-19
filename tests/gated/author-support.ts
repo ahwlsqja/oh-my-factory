@@ -1,5 +1,3 @@
-import { lstatSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { ContainerAuthorSession } from "../../src/author/codex-session.js";
 import { containerSpecFor, goldenFor } from "../../src/container/golden.js";
 import { pinnedImage } from "../../src/container/image-ref.js";
@@ -7,9 +5,16 @@ import { createMeasured } from "../../src/container/measure.js";
 import type { ContainerHandle, ContainerRuntime, ImageInfo } from "../../src/container/runtime.js";
 import { CONFIG_DEFAULTS } from "../../src/core/config.js";
 import type { LedgerEvent } from "../../src/core/ledger.js";
-import { type Credential, containsCredential, readCredential } from "../../src/implementer/credential.js";
+import { type Credential, readCredential } from "../../src/implementer/credential.js";
 import type { AuthorOutcome, AuthorRequest } from "../../src/seal/session.js";
-import { listFiles } from "../helpers/ops-fixture.js";
+
+export {
+  documentHoldsCredential,
+  filesHoldingCredential,
+  holdsCredentialText,
+  tempFilesHoldingCredential,
+} from "../helpers/credential-scan.js";
+
 import { GatedRefusal } from "./helpers.js";
 import { GATED_LABELS } from "./lifecycle-support.js";
 
@@ -98,14 +103,6 @@ export function recordingSession(inner: ContainerAuthorSession, answers: string[
       return outcome;
     },
   };
-}
-
-/** Paths under `root` whose bytes hold the key. A symlink is skipped, never followed. */
-export function filesHoldingCredential(root: string, credential: Credential): string[] {
-  return listFiles(root).filter((path) => {
-    const full = join(root, path);
-    return !lstatSync(full).isSymbolicLink() && containsCredential(readFileSync(full), credential);
-  });
 }
 
 /** True when the ledger holds an author measurement at L2 bound to a seal. */

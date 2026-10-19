@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { makeTempDir } from "../helpers/tmp.js";
 
-// M3h-D8: a model suite gets only the keys it reads, each under its own name. G-author-canary reads the author key,
+// A model suite gets only the keys it reads, each under its own name. G-author-canary reads the author key,
 // G-skeleton-real reads both, the two older model suites read the implementer key. No vendor key name ever passes.
 const SCRIPT = fileURLToPath(new URL("../../scripts/gated-docker.mjs", import.meta.url));
 
@@ -54,6 +54,25 @@ describe("keysFor", () => {
   });
 });
 
+describe("keysFor selection", () => {
+  it("treats --only as an unanchored pattern, so a fragment of a suite name selects it", () => {
+    expect(script.keysFor("canary")).toEqual({ keys: [AUTHOR] });
+    expect(script.keysFor("real-run")).toEqual({ keys: [IMPL] });
+    expect(script.keysFor("G-author-canary|G-e6")).toEqual({ keys: [AUTHOR, IMPL] });
+  });
+
+  it("returns the keys sorted for every selection of suites, however they are chosen", () => {
+    const suites = ["G-author-canary", "G-e6-l2-leak-redteam", "G-implementer-real-run", "G-skeleton-real"];
+    for (let mask = 1; mask < 2 ** suites.length; mask += 1) {
+      const pattern = suites.filter((_, at) => mask & (1 << at)).join("|");
+      const result = script.keysFor(pattern);
+      if (!("keys" in result)) throw new Error(`no keys for ${pattern}`);
+      expect(result.keys, pattern).toEqual([...result.keys].sort());
+      expect(new Set(result.keys).size, pattern).toBe(result.keys.length);
+    }
+  });
+});
+
 describe("gatedEnv and childEnv", () => {
   const BASE = {
     PATH: "/bin",
@@ -63,6 +82,9 @@ describe("gatedEnv and childEnv", () => {
     OPENAI_API_KEY: "o",
     CODEX_API_KEY: "c",
     OMF_GATED_AUTHOR_IMAGE: "sha256:a",
+    OMF_CAPTURE_FIXTURES: "1",
+    OMF_GATED_IMPLEMENTER_IMAGE: "sha256:i",
+    OMF_UNLISTED: "no",
   };
 
   it("passes exactly the named keys under their own names and never a vendor key name", () => {
@@ -85,11 +107,21 @@ describe("gatedEnv and childEnv", () => {
     expect(defaulted[AUTHOR]).toBeUndefined();
   });
 
+  it("passes the fixture switch and both image names, and no other OMF variable", () => {
+    const env = script.gatedEnv(BASE, "/tmp/cfg", "/tmp/omf-home");
+    expect(env.OMF_CAPTURE_FIXTURES).toBe("1");
+    expect(env.OMF_GATED_IMPLEMENTER_IMAGE).toBe("sha256:i");
+    expect(env.OMF_UNLISTED).toBeUndefined();
+  });
+
   it("childEnv removes every key a model suite may hold and the vendor key names", () => {
     expect(script.childEnv({ HOME: "/h", ...BASE })).toEqual({
       PATH: "/bin",
       HOME: "/h",
       OMF_GATED_AUTHOR_IMAGE: "sha256:a",
+      OMF_CAPTURE_FIXTURES: "1",
+      OMF_GATED_IMPLEMENTER_IMAGE: "sha256:i",
+      OMF_UNLISTED: "no",
     });
   });
 });
@@ -131,6 +163,12 @@ describe("main with --model", () => {
       IMPL,
     ],
     ["an author key with a space", ["--model", "--only", "G-author-canary"], { [AUTHOR]: "has space" }, AUTHOR],
+    [
+      "an author key of 513 characters",
+      ["--model", "--only", "G-author-canary"],
+      { [AUTHOR]: `key-value-${"k".repeat(503)}` },
+      AUTHOR,
+    ],
   ])("refuses %s, names only the key and starts nothing", (_label, argv, env, missing) => {
     const { deps, logs, calls } = harness();
     expect(script.main(argv, { PATH: "/bin", ...env }, deps)).toBe(script.EXIT.refused);
@@ -152,5 +190,15 @@ describe("main with --model", () => {
       expect(options.env?.[AUTHOR]).toBeUndefined();
       expect(options.env?.[IMPL]).toBeUndefined();
     }
+  });
+
+  it("accepts an author key of exactly 512 characters", () => {
+    const { deps, seen } = harness();
+    const key = `key-value-${"k".repeat(502)}`;
+    expect(key).toHaveLength(512);
+    expect(script.main(["--model", "--only", "G-author-canary"], { PATH: "/bin", [AUTHOR]: key }, deps)).toBe(
+      script.EXIT.ok,
+    );
+    expect(seen.vitest?.env?.[AUTHOR]).toBe(key);
   });
 });
