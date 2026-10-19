@@ -1,9 +1,15 @@
+import { timingSafeEqual } from "node:crypto";
 import { request, Server } from "node:http";
 import { connect } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readUiSnapshot } from "../../src/ui/read-model.js";
 import { startUiServer, type UiServer } from "../../src/ui/server.js";
 import { makeGitRepo, makeTempDir } from "../helpers/tmp.js";
+
+vi.mock("node:crypto", async (importOriginal) => {
+  const original = await importOriginal<typeof import("node:crypto")>();
+  return { ...original, timingSafeEqual: vi.fn(original.timingSafeEqual) };
+});
 
 const servers: UiServer[] = [];
 
@@ -119,6 +125,109 @@ describe("read-only UI HTTP boundary", () => {
       expect((await get(server, `${server.basePath}api/snapshot`, headers)).status).toBe(200);
     }
     expect(readSnapshot).toHaveBeenCalledTimes(3);
+  });
+
+  it("allows only authenticated top-level cross-site GET page navigation without reading state", async () => {
+    const { server, readSnapshot } = await fixture();
+    const navigation = {
+      "Sec-Fetch-Site": "cross-site",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-Dest": "document",
+    };
+    for (const page of ["", "index.html"]) {
+      for (const origin of [{}, { Origin: server.origin }]) {
+        const response = await get(server, server.basePath + page, { ...navigation, ...origin });
+        expect(response.status).toBe(200);
+        expect(response.headers["content-type"]).toBe("text/html; charset=utf-8");
+        expect(response.headers["access-control-allow-origin"]).toBeUndefined();
+        expect(response.headers["referrer-policy"]).toBe("no-referrer");
+      }
+    }
+    expect(readSnapshot).not.toHaveBeenCalled();
+    expect((await get(server, `${server.basePath}api/snapshot`, { "Sec-Fetch-Site": "same-origin" })).status).toBe(200);
+    expect(readSnapshot).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the cross-site navigation exception closed to APIs, assets, malformed paths and methods", async () => {
+    const { server, readSnapshot } = await fixture();
+    const navigation = {
+      "Sec-Fetch-Site": "cross-site",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-Dest": "document",
+    };
+    const token = server.basePath.slice(1, -1);
+    const wrong = `${token.slice(0, -1)}${token.endsWith("0") ? "1" : "0"}`;
+    for (const path of [
+      `${server.basePath}api/snapshot`,
+      `${server.basePath}app.js`,
+      `${server.basePath}style.css`,
+      `${server.basePath}?q=1`,
+      `${server.basePath}index.html?q=1`,
+      `${server.basePath}#fragment`,
+      `${server.basePath}../index.html`,
+      `${server.basePath}%2e%2e/index.html`,
+      `/${wrong}/`,
+      `/${token.slice(1)}/`,
+      `/${token.toUpperCase()}/`,
+    ]) {
+      expect((await get(server, path, navigation)).status, path).toBeGreaterThanOrEqual(400);
+    }
+    for (const method of ["HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]) {
+      expect((await get(server, server.basePath, navigation, method)).status, method).toBeGreaterThanOrEqual(400);
+    }
+    expect(readSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("requires exact, single navigation metadata and preserves Host and Origin restrictions", async () => {
+    const { server, readSnapshot } = await fixture();
+    const navigation = {
+      "Sec-Fetch-Site": "cross-site",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-Dest": "document",
+    };
+    for (const headers of [
+      { "Sec-Fetch-Site": "cross-site" },
+      { "Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "navigate" },
+      { "Sec-Fetch-Site": "cross-site", "Sec-Fetch-Dest": "document" },
+      { ...navigation, "Sec-Fetch-Dest": "iframe" },
+      { ...navigation, "Sec-Fetch-Dest": "script" },
+      { ...navigation, "Sec-Fetch-Dest": "empty" },
+      { ...navigation, "Sec-Fetch-Mode": "no-cors" },
+      { ...navigation, "Sec-Fetch-Mode": "Navigate" },
+      { ...navigation, "Sec-Fetch-Site": "same-site" },
+      { ...navigation, "Sec-Fetch-Site": ["cross-site", "cross-site"] },
+      { ...navigation, "Sec-Fetch-Mode": ["navigate", "navigate"] },
+      { ...navigation, "Sec-Fetch-Dest": ["document", "document"] },
+      { ...navigation, "Sec-Fetch-Mode": "navigate, navigate" },
+      { ...navigation, Host: "attacker.invalid" },
+      { ...navigation, Origin: "null" },
+      { ...navigation, Origin: "https://attacker.invalid" },
+      { ...navigation, Origin: `${server.origin}/` },
+      { ...navigation, Origin: [server.origin, server.origin] },
+    ]) {
+      expect((await get(server, server.basePath, headers)).status, JSON.stringify(headers)).toBe(403);
+    }
+    expect(readSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("constant-time compares both matching and wrong well-formed navigation capabilities", async () => {
+    const { server, readSnapshot } = await fixture();
+    const compare = vi.mocked(timingSafeEqual);
+    compare.mockClear();
+    const navigation = {
+      "Sec-Fetch-Site": "cross-site",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-Dest": "document",
+    };
+    const token = server.basePath.slice(1, -1);
+    const wrong = `${token.slice(0, -1)}${token.endsWith("0") ? "1" : "0"}`;
+    expect((await get(server, server.basePath, navigation)).status).toBe(200);
+    expect(compare).toHaveBeenCalledOnce();
+    expect((await get(server, `/${wrong}/`, navigation)).status).toBe(404);
+    expect(compare).toHaveBeenCalledTimes(2);
+    expect(compare.mock.calls[1]?.[0]).toEqual(Buffer.from(wrong, "hex"));
+    expect(compare.mock.calls[1]?.[1]).toEqual(Buffer.from(token, "hex"));
+    expect(readSnapshot).not.toHaveBeenCalled();
   });
 
   it("verifies the actual listening socket is IPv4 loopback", async () => {

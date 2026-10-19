@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { existsSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseUiPort } from "../../src/cli/ui.js";
 import { CLI, harnessEnv, omf } from "../helpers/cli.js";
@@ -9,9 +9,10 @@ import { gitIn, makeGitRepo, makeTempDir } from "../helpers/tmp.js";
 const children: Array<{ child: ChildProcess; closed: Promise<number | null> }> = [];
 
 function launch(args: string[], cwd: string, home: string, extraEnv: NodeJS.ProcessEnv = {}) {
+  const tmp = extraEnv.TMPDIR ?? makeTempDir("omf-ui-cli-tmp-");
   const child = spawn(process.execPath, [CLI, "ui", ...args], {
     cwd,
-    env: harnessEnv(home, extraEnv),
+    env: harnessEnv(home, { TMPDIR: tmp, ...extraEnv }),
     stdio: ["ignore", "pipe", "pipe"],
   });
   const closed = new Promise<number | null>((resolve) => child.once("close", resolve));
@@ -40,7 +41,7 @@ function launch(args: string[], cwd: string, home: string, extraEnv: NodeJS.Proc
       reject(new Error(`UI exited before ready: ${stderr}`));
     });
   });
-  return { child, closed, ready, output: () => ({ stdout, stderr }) };
+  return { child, closed, ready, tmp, output: () => ({ stdout, stderr }) };
 }
 
 afterEach(async () => {
@@ -61,6 +62,7 @@ describe("omf ui", () => {
       const before = gitIn(repo, "status", "--porcelain");
       const ui = launch(["--no-open", "--port", "0"], repo, home);
       const url = await ui.ready;
+      expect(readdirSync(ui.tmp)).toEqual([]);
       const html = await fetch(url);
       expect(html.status).toBe(200);
       const api = await fetch(new URL("api/snapshot", url));
@@ -90,11 +92,122 @@ describe("omf ui", () => {
       OMF_UI_OPEN_ARGS: argsFile,
     });
     const url = await ui.ready;
-    await expect.poll(() => ui.output().stderr).toContain("could not open a browser");
+    await expect.poll(() => ui.output().stderr, { timeout: 10_000 }).toContain("could not open a browser");
     expect((await fetch(url)).status).toBe(200);
     expect(ui.output().stdout).toContain(url);
-    expect(readFileSync(argsFile, "utf8")).toBe(`${url}\n`);
+    const file = readFileSync(argsFile, "utf8").trim();
+    expect(isAbsolute(file)).toBe(true);
+    expect(file).not.toContain(new URL(url).pathname.slice(1, -1));
+    expect(existsSync(dirname(file))).toBe(false);
+    expect(readdirSync(ui.tmp)).toEqual([]);
     expect(ui.output().stderr).not.toContain("\x1b");
+    expect(ui.output().stderr).not.toContain(file);
+    expect(ui.output().stderr).not.toContain(url);
+  });
+
+  it("creates no launch artifact and never calls the opener with --no-open", async () => {
+    const bin = makeTempDir("omf-ui-browser-");
+    const argsFile = join(bin, "unexpected-opener-args");
+    for (const name of ["open", "xdg-open"]) {
+      writeFileSync(join(bin, name), '#!/bin/sh\nprintf "%s\\n" "$@" > "$OMF_UI_OPEN_ARGS"\nexit 0\n', { mode: 0o755 });
+    }
+    const ui = launch(["--no-open"], makeGitRepo(), makeTempDir("omf-ui-home-"), {
+      PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
+      OMF_UI_OPEN_ARGS: argsFile,
+    });
+    const url = await ui.ready;
+    expect((await fetch(url)).status).toBe(200);
+    ui.child.kill("SIGTERM");
+    expect(await ui.closed).toBe(0);
+    expect(existsSync(argsFile)).toBe(false);
+    expect(readdirSync(ui.tmp)).toEqual([]);
+  });
+
+  it.each(["SIGINT", "SIGTERM"] as const)(
+    "removes the launch file and exits on %s while an opener is still blocked",
+    async (signal) => {
+      const repo = makeGitRepo();
+      const home = makeTempDir("omf-ui-home-");
+      const bin = makeTempDir("omf-ui-browser-");
+      const argsFile = join(bin, "opener-args");
+      const release = join(bin, "release");
+      for (const name of ["open", "xdg-open"]) {
+        writeFileSync(
+          join(bin, name),
+          `#!/bin/sh\nexec "$OMF_TEST_NODE" -e 'const fs = require("node:fs"); fs.writeFileSync(process.env.OMF_UI_OPEN_ARGS, process.argv[1] + "\\n"); const timer = setInterval(() => { if (fs.existsSync(process.env.OMF_UI_RELEASE)) clearInterval(timer); }, 20); setTimeout(() => process.exit(0), 5000).unref();' "$@"\n`,
+          { mode: 0o755 },
+        );
+      }
+      const ui = launch([], repo, home, {
+        PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
+        OMF_TEST_NODE: process.execPath,
+        OMF_UI_OPEN_ARGS: argsFile,
+        OMF_UI_RELEASE: release,
+      });
+      try {
+        const url = await ui.ready;
+        await expect.poll(() => existsSync(argsFile), { timeout: 10_000 }).toBe(true);
+        const file = readFileSync(argsFile, "utf8").trim();
+        expect(readFileSync(file, "utf8")).toContain(url);
+        expect((await fetch(url)).status).toBe(200);
+        ui.child.kill(signal);
+        expect(await ui.closed).toBe(0);
+        expect(existsSync(dirname(file))).toBe(false);
+        expect(readdirSync(ui.tmp)).toEqual([]);
+        expect(ui.output().stderr).toBe("");
+      } finally {
+        writeFileSync(release, "release");
+      }
+    },
+  );
+
+  it("retains a launch file after a successful opener until the UI closes", async () => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-ui-home-");
+    const bin = makeTempDir("omf-ui-browser-");
+    const argsFile = join(bin, "opener-args");
+    for (const name of ["open", "xdg-open"]) {
+      writeFileSync(join(bin, name), '#!/bin/sh\nprintf "%s\\n" "$@" > "$OMF_UI_OPEN_ARGS"\nexit 0\n', { mode: 0o755 });
+    }
+    const ui = launch([], repo, home, {
+      PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
+      OMF_UI_OPEN_ARGS: argsFile,
+    });
+    const url = await ui.ready;
+    await expect.poll(() => existsSync(argsFile), { timeout: 10_000 }).toBe(true);
+    const file = readFileSync(argsFile, "utf8").trim();
+    expect(readFileSync(file, "utf8")).toContain(url);
+    expect((await fetch(url)).status).toBe(200);
+    ui.child.kill("SIGTERM");
+    expect(await ui.closed).toBe(0);
+    expect(existsSync(dirname(file))).toBe(false);
+    expect(ui.output().stderr).toBe("");
+  });
+
+  it.each(["missing opener", "unwritable temp location"])("keeps the printed URL usable after %s", async (failure) => {
+    const repo = makeGitRepo();
+    const home = makeTempDir("omf-ui-home-");
+    const bin = makeTempDir("omf-ui-browser-");
+    const git = (process.env.PATH ?? "")
+      .split(delimiter)
+      .map((entry) => join(entry, "git"))
+      .find(existsSync);
+    expect(git).toBeDefined();
+    symlinkSync(git as string, join(bin, "git"));
+    const extraEnv: NodeJS.ProcessEnv = { PATH: bin };
+    if (failure === "unwritable temp location") {
+      const file = join(bin, "not-a-directory");
+      writeFileSync(file, "fixture");
+      extraEnv.TMPDIR = file;
+    }
+    const ui = launch([], repo, home, extraEnv);
+    const url = await ui.ready;
+    await expect.poll(() => ui.output().stderr, { timeout: 10_000 }).toContain("could not open a browser");
+    expect((await fetch(url)).status).toBe(200);
+    expect(ui.output().stdout).toContain(url);
+    expect(ui.output().stderr).not.toContain(url);
+    expect(ui.output().stderr).not.toContain(ui.tmp);
+    if (failure === "missing opener") expect(readdirSync(ui.tmp)).toEqual([]);
   });
 
   it("documents its options and retains the normal outside-repository failure", () => {
