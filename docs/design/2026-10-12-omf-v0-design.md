@@ -558,7 +558,10 @@ untrusted_fields: [plan_summary, implementer_notes]  # written by the implemente
 
 **Risk class is mechanical.** It is computed from the diff and paths, never chosen by an agent. The
 default high-risk paths are CI and workflow files, authentication, migrations, watched
-(instrumentation) paths, test files, goal and factory files, and lockfiles. People extend the list
+(instrumentation) paths, goal and factory files, and lockfiles. A test file is not high risk by itself:
+a deterministic test-weakening check raises the class to high when a change deletes a test file, removes
+assertion lines, adds a skip, only, todo or x-prefixed marker, or lowers a numeric threshold in a test or
+coverage config. When the diff text is not available, any test change stays high. People extend the list
 at J3.
 
 ### 6.1 Back-pressure

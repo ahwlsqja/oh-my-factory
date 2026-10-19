@@ -12,6 +12,66 @@ import { TempWorkCopyFactory } from "../helpers/temp-work-copy.js";
 
 const cleanFixture = (): AuditFixture => auditFixture({ "src/a.ts": "1\n" }, { "src/a.ts": "2\n" });
 
+describe("runAudit test-weakening risk", () => {
+  const effective = async (base: Record<string, string>, head: Record<string, string | null>) =>
+    (await runAudit(auditInput(auditFixture(base, head)))).risk.effective;
+
+  it("an added test file alone is not high", async () => {
+    expect(
+      await effective({ "src/a.ts": "1\n" }, { "src/a.ts": "2\n", "tests/new.test.ts": "expect(1).toBe(1);\n" }),
+    ).toEqual({
+      class: "normal",
+      rules: [],
+      paths: [],
+    });
+  });
+
+  it("an edit that keeps every assertion is not high", async () => {
+    expect(
+      (await effective({ "tests/a.test.ts": "expect(a).toBe(1);\n" }, { "tests/a.test.ts": "expect(a).toBe(2);\n" }))
+        .class,
+    ).toBe("normal");
+  });
+
+  it.each([
+    [
+      "a deleted test file",
+      { "tests/a.test.ts": "expect(a).toBe(1);\n" },
+      { "tests/a.test.ts": null, "src/a.ts": "x\n" },
+    ],
+    [
+      "a removed assertion",
+      { "tests/a.test.ts": "expect(a).toBe(1);\nexpect(b).toBe(2);\n" },
+      { "tests/a.test.ts": "expect(a).toBe(1);\n" },
+    ],
+    [
+      "an added skip marker",
+      { "tests/a.test.ts": "it('a', () => {});\n" },
+      { "tests/a.test.ts": "it.skip('a', () => {});\n" },
+    ],
+    [
+      "an added only marker",
+      { "tests/a.test.ts": "it('a', () => {});\n" },
+      { "tests/a.test.ts": "it.only('a', () => {});\n" },
+    ],
+    ["an added todo marker", { "tests/a.test.ts": "it('a', () => {});\n" }, { "tests/a.test.ts": "it.todo('a');\n" }],
+    [
+      "an x-prefixed marker",
+      { "tests/a.test.ts": "it('a', () => {});\n" },
+      { "tests/a.test.ts": "xit('a', () => {});\n" },
+    ],
+    [
+      "a lowered coverage threshold",
+      { "vitest.config.ts": "  lines: 90,\n" },
+      { "vitest.config.ts": "  lines: 70,\n" },
+    ],
+  ])("%s is high by the rule test-weakening", async (_name, base, head) => {
+    const risk = await effective({ "src/a.ts": "1\n", ...base }, head);
+    expect(risk.class).toBe("high");
+    expect(risk.rules).toEqual(["test-weakening"]);
+  });
+});
+
 describe("runAudit", () => {
   it("reports a clean source change with every measurement present", async () => {
     const report = await runAudit(auditInput(cleanFixture()));
@@ -124,8 +184,8 @@ describe("runAudit", () => {
 
   it("caps the listed paths at 200 and keeps the true counts", async () => {
     const names = Array.from({ length: 250 }, (_, i) => `tests/t${String(i).padStart(3, "0")}.test.ts`);
-    const base = Object.fromEntries([["src/a.ts", "1\n"], ...names.map((n) => [n, "a\n"])]);
-    const head = Object.fromEntries(names.map((n) => [n, "b\n"]));
+    const base = Object.fromEntries([["src/a.ts", "1\n"], ...names.map((n) => [n, "it('a', () => {});\n"])]);
+    const head = Object.fromEntries(names.map((n) => [n, "it.skip('a', () => {});\n"]));
     const report = await runAudit(auditInput(auditFixture(base, head)));
     expect(report.tests_edited).toHaveLength(200);
     expect(report.tests_edited_count).toBe(250);
@@ -268,6 +328,7 @@ describe("work-audit.schema.json", () => {
       "auth",
       "migration",
       "test",
+      "test-weakening",
       "goal-factory",
       "lockfile",
       "watched-path",

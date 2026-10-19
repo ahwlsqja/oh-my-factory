@@ -158,3 +158,39 @@ describe("assessDiffRisk", () => {
     });
   });
 });
+
+describe("assessDiffRisk with the test-weakening check", () => {
+  const declaredNormal: RiskAssessment = { class: "normal", rules: [], paths: [] };
+  const none = { watchedGlobs: [], extraGlobs: [] };
+  const facts = (...paths: string[]) => ({
+    files: paths.length,
+    empty: false,
+    paths,
+    tests_edited: [],
+    tests_added: 0,
+    special_entries: 0,
+    projections_touched: [],
+  });
+
+  it("an added test file alone is not high when the check ran", () => {
+    const outcome = assessDiffRisk(facts("src/a.ts", "tests/new.test.ts"), declaredNormal, none, []);
+    expect(outcome.effective).toEqual({ class: "normal", rules: [], paths: [] });
+    expect(outcome.raised).toBe(false);
+  });
+
+  it("a weakened test is high by the rule test-weakening, listing the path", () => {
+    const outcome = assessDiffRisk(facts("src/a.ts", "tests/a.test.ts"), declaredNormal, none, ["tests/a.test.ts"]);
+    expect(outcome.effective).toEqual({ class: "high", rules: ["test-weakening"], paths: ["tests/a.test.ts"] });
+    expect(outcome.raised).toBe(true);
+  });
+
+  it.each([undefined, null])("a missing diff (%s) keeps a test change high by the rule test", (weakening) => {
+    const outcome = assessDiffRisk(facts("tests/a.test.ts"), declaredNormal, none, weakening);
+    expect(outcome.effective).toEqual({ class: "high", rules: ["test"], paths: ["tests/a.test.ts"] });
+  });
+
+  it("other rules still apply when the check ran", () => {
+    const outcome = assessDiffRisk(facts(".github/workflows/ci.yml", "tests/a.test.ts"), declaredNormal, none, []);
+    expect(outcome.effective.rules).toEqual(["ci"]);
+  });
+});

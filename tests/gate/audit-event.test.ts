@@ -16,6 +16,7 @@ const RULES: Record<RiskRule, true> = {
   auth: true,
   migration: true,
   test: true,
+  "test-weakening": true,
   "goal-factory": true,
   lockfile: true,
   "watched-path": true,
@@ -38,8 +39,8 @@ const PROVE_REASONS: Record<ProveReason, true> = {
 
 async function editedTestReport() {
   const fx = auditFixture(
-    { "src/a.ts": "1\n", "tests/a.test.ts": "a\n" },
-    { "src/a.ts": "2\n", "tests/a.test.ts": "b\n" },
+    { "src/a.ts": "1\n", "tests/a.test.ts": "it('a', () => {});\n" },
+    { "src/a.ts": "2\n", "tests/a.test.ts": "it.skip('a', () => {});\n" },
   );
   return runAudit(auditInput(fx));
 }
@@ -61,7 +62,7 @@ describe("audit.completed event", () => {
       special_entries: 0,
       risk_declared: "normal",
       risk_effective: "high",
-      risk_rules: ["test"],
+      risk_rules: ["test-weakening"],
       risk_raised: true,
       prove_status: "PROVEN",
       prove_reason: null,

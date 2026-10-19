@@ -453,8 +453,10 @@ those stay in the report under host state.
 ### Work items
 
 Dispatched items live in `goals/<id>/work/<work-id>/`. Risk is classified by code from the paths a candidate
-declares. CI, auth, migrations, tests, lockfiles, goal and factory files and your watched paths are high risk: a
-high-risk item waits in `awaiting_approval` for `omf work approve`, any other item starts `ready`. You can
+declares. CI, auth, migrations, lockfiles, goal and factory files and your watched paths are high risk. A test file is not
+high risk by itself: when the audit reads the real diff, only a change that weakens tests is (a deleted test file,
+removed assertions, an added skip, only or todo marker, or a lowered threshold). A declared test path has no diff yet,
+so it stays high at declaration, and so does a test change whose diff cannot be read. A high-risk item waits in `awaiting_approval` for `omf work approve`, any other item starts `ready`. You can
 `omf veto <work-id>` anything that is open. The ledger, not the item file, decides whether an item was approved,
 vetoed or cancelled: an `item.md` edited by hand to look approved is listed by `omf work list` as malformed and
 is never dispatched.
