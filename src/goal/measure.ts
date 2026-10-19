@@ -1,5 +1,11 @@
 import { join, relative } from "node:path";
-import { type Isolation, type RunnerKind, isolationOf, runMeasurement } from "../adapters/measure-cmd.js";
+import {
+  type Isolation,
+  type RunnerKind,
+  type UnmeasuredCode,
+  isolationOf,
+  runMeasurement,
+} from "../adapters/measure-cmd.js";
 import type { BudgetState } from "../core/budget.js";
 import { canonicalize } from "../core/canonical-json.js";
 import { Ledger, type LedgerEvent } from "../core/ledger.js";
@@ -18,7 +24,8 @@ import {
 } from "./bands.js";
 import { type TargetResult, evaluateTarget } from "./evaluate.js";
 import { type GoalSemantic, type GoalTarget, goalDir } from "./goal-file.js";
-import { workingTreeFingerprint } from "./git.js";
+import { observeWorkingTree } from "./git.js";
+import { type MeasurementProvenance, provenanceOf } from "./provenance.js";
 
 export type MetricRole = "target" | "leading" | "lagging" | "guardrail";
 export type GuardrailStatus = "pass" | "breach" | "unevaluated";
@@ -29,6 +36,8 @@ export interface MetricMeasurement {
   unit: string;
   value: number | null;
   failure: string | null;
+  /** Why the metric is unmeasured; null when it has a value. An unmeasured metric has no value, never 0. */
+  failure_code: UnmeasuredCode | null;
   band: BandResult | null;
   band_action: BandAction | null;
 }
@@ -41,6 +50,8 @@ export interface GapReport {
   measured_at: string;
   runner: RunnerKind;
   isolation: Isolation;
+  /** Host-only context for a human: revision, dirty state, directory contract and limits. Not a model input. */
+  provenance: MeasurementProvenance;
   /** The locked target, not the one currently in goal.md. */
   target: GoalTarget & { measured: number | null; result: TargetResult | null };
   metrics: MetricMeasurement[];
@@ -189,7 +200,8 @@ export async function measureGoal(
   // Measurements taken while a regime change is pending carry the mark, so nothing downstream reads them as approved.
   const pending = audit.regime_changes.length > 0;
   const history = ledger.readVerified();
-  const inputSha = workingTreeFingerprint(location.repo);
+  const observed = observeWorkingTree(location.repo);
+  const inputSha = observed.fingerprint;
   const measuredAt = now();
   const metrics: MetricMeasurement[] = [];
   for (const lock of metricLocks) {
@@ -199,16 +211,25 @@ export async function measureGoal(
       unit: lock.unit,
       value: null,
       failure: null,
+      failure_code: null,
       band: null,
       band_action: null,
     };
     const outcome = await runMeasurement(lock, location.repo, options.runner, options.env);
     if (!outcome.ok) {
       entry.failure = outcome.reason;
+      entry.failure_code = outcome.code;
       ledger.append({
         actor: "omf",
         type: "metric.measure_failed",
-        payload: { goal_id: goalId, metric_id: lock.metric_id, regime, runner: options.runner, reason: outcome.reason },
+        payload: {
+          goal_id: goalId,
+          metric_id: lock.metric_id,
+          regime,
+          runner: options.runner,
+          reason_code: outcome.code,
+          reason: outcome.reason,
+        },
       });
     } else {
       entry.value = outcome.value;
@@ -264,6 +285,7 @@ export async function measureGoal(
     measured_at: measuredAt.toISOString(),
     runner: options.runner,
     isolation: isolationOf(options.runner),
+    provenance: provenanceOf(observed, measuredAt, options.runner),
     target: { ...target, measured, result: measured === null ? null : evaluateTarget(target, measured) },
     metrics,
     guardrails: goalLock.semantic.guardrails.map((id) => ({

@@ -131,11 +131,11 @@ OMF 는 루프 두 개를 돌립니다.
 | `omf ledger verify [--json]` | 원장의 해시 체인을 확인합니다. 원장이 손상됐으면 stderr 둘째 줄에 경로, 줄 번호, 다음 행동이 나오고 `--json` 은 같은 내용을 필드로 냅니다. `--json` 의 오류는 모두 `{ "ok": false, "error": { "code": "...", "message": "..." } }` 형태입니다(code: `not_initialized`, `ledger_corrupt`, `not_a_git_repository`, `git_not_found`, `unsupported_repository`, `symlink_refused`, `cannot_run`). 키는 snake_case 입니다. `omf init` 전에는 종료 코드 2 입니다. |
 | `omf goal new <id>` | 템플릿으로 호스트 상태에 `goal.md` 를 만듭니다. |
 | `omf metric propose <id> --unit <u> -- <command>` | 지표를 제안합니다. 값을 출력하는 명령, 단위, 바뀌면 체제 변경(regime change)이 되는 경로를 적습니다. |
-| `omf goal audit <id>` | 목표, 잠금, 원장을 점검하고 체제 변경을 알려 줍니다. 아무것도 쓰지 않습니다. |
+| `omf goal audit <id>` | 목표, 잠금, 원장을 점검하고 체제 변경을 알려 주며, 아직 바꾸지 않은 템플릿 문구도 나열합니다(`--json` 의 `placeholders`). 아무것도 쓰지 않습니다. |
 | `omf goal approve <id>` | J1: 잠글 내용(지표와 그 관리 한계)을 보여 주고, 터미널에서 목표 id 를 직접 입력하면 승인합니다. |
 | `omf goal measure <id>` | 잠긴 지표를 실행하고(Docker, 또는 `--runner host` 로 호스트에서), 목표값까지의 차이와 관리 한계(control band)를 계산해 격차 보고서를 호스트 상태에 씁니다. |
 | `omf goal tick <id>` | 목표 루프를 한 바퀴 돕니다(명세 §4.4). 점검, 측정, 모델에게 작업 요청, 후보를 코드로 걸러 내기, 작업 항목 내보내기, 낡음과 루프 보호 장치 확인. 조정 모델이 필요합니다("목표 루프 돌리기" 참고). |
-| `omf goal status <id>` | 실행 상태(`running`, `blocked_on_user`, `failed`, `finish`, `cancelled`), 열린 에스컬레이션과 풀 수 있는 명령, 남은 라운드, 열린 작업 항목을 보여 줍니다. |
+| `omf goal status <id>` | 실행 상태(`running`, `blocked_on_user`, `failed`, `finish`, `cancelled`. 아직 초안이거나 재승인이 필요한 목표는 `running` 대신 그렇게 표시하고, 승인됐지만 아직 틱이 없는 목표도 그렇게 표시합니다), 열린 에스컬레이션과 풀 수 있는 명령, 남은 라운드, 열린 작업 항목을 보여 줍니다. |
 | `omf goal resume <id>` | J6 계속: 멈추게 한 원인을 고친 뒤, 터미널에서 확인을 입력하면 틱이 다시 돕니다. |
 | `omf goal cancel <id>` | J6 중지: 터미널에서 확인을 입력하면 목표와 열린 작업 항목을 모두 취소합니다. |
 | `omf budget show <id> [--json]` | 라운드, 공개, 벽시계 시간 예산의 선언값, 상향값, 사용량, 남은 양을 출력합니다. |
@@ -212,7 +212,7 @@ initialized ~/.omf/projects/3186047891f1f0a0
 
 $ omf goal new g-demo
 created ~/.omf/projects/3186047891f1f0a0/goals/g-demo/goal.md
-edit it, propose its metrics with omf metric propose, then run omf goal audit g-demo
+edit it (the comments in the file explain each field), propose its metrics with omf metric propose, then run omf goal audit g-demo
 
 $ # goal.md 를 고칩니다: 목표 m-demo <= 5 ms, lagging: [m-demo]
 $ omf metric propose m-demo --unit ms -- sh -c 'echo 7'
@@ -227,7 +227,7 @@ goal g-demo: Say what this goal is in a few words
 objective: The outcome you want, in plain words
 target: m-demo <= 5 ms
 leading: none; lagging: m-demo; guardrails: none
-budget: 10 rounds, 72h wall time, at most 2 open work items
+budget: 10 rounds, 14d wall time, at most 2 open work items
 decision rule: target met for 2 consecutive measurements and no guardrail breach (minimum observation 7d)
 metric m-demo: ["sh","-c","echo 7"] -> ms; watches none
 bands m-demo: none (not monitored)
@@ -238,13 +238,40 @@ $ omf goal measure g-demo --runner host
 goal g-demo (regime 1), runner host
 target m-demo: 7 ms; target <= 5 ms; gap 2 (decrease, medium)
   m-demo [target, lagging]: 7 ms
+measured at revision 4f1c9a0e7b2d (clean), observed 2026-10-12T06:27:24.995Z
+working directory: repository root (host, no isolation)
+fingerprint: 9be03c51a7d2 (recorded in the ledger as input_sha256)
+limit: The tree was observed once, before the first metric ran; it was not watched while the metrics ran.
+limit: The fingerprint covers HEAD and the list of changed paths, not file contents: an edit to a file that was already modified keeps the same fingerprint.
+limit: An edit made while a metric runs can change its value without changing this record.
+limit: Gitignored files are not part of the observation.
 report: ~/.omf/projects/3186047891f1f0a0/goals/g-demo/reports/2026-10-12T06-27-24-995Z-gap.json
 warning: measured on the host without isolation (--runner host)
 ```
 
+출처(provenance) 줄은 보고서에도 `provenance` 로 저장되며, 어느 커밋을 측정했는지, 작업 트리가 깨끗했는지 아니면
+바뀐 경로가 몇 개인지, 지표가 어디서 돌았는지(호스트에서는 저장소 루트, Docker 에서는 읽기 전용으로 마운트한
+`/work`)를 알려 줍니다. 보고서의 나머지와 같이 호스트 전용입니다. 지문(fingerprint)은 원장이 이미 기록하는
+`input_sha256` 과 같은 값이고 첫 지표를 돌리기 전에 한 번 잡습니다. 지표가 도는 동안 파일이 그대로였다는 증명은
+아니며, 이미 수정된 파일을 다시 수정해도 구별하지 못합니다. 그러므로 체크아웃을 편집하는 동안 측정한 값은 표시된
+리비전과 다를 수 있습니다.
+
+생성된 `goal.md` 는 front matter 안의 `#` 메모로 각 필드를 설명합니다. `## Approach` 아래에는 채울 소제목 셋
+(`### Why`, `### Constraints`, `### Done when`)이 있습니다. 이 섹션과 `objective` 만 모델에 보이므로("목표 루프 돌리기" 참고), 숫자나 지표 id 없이
+말로 쓰세요. `omf goal audit` 은 아직 바꾸지 않은 템플릿 문구(예: 자리표시자 지표 id `m-replace-me`)도 나열합니다.
+이 목록은 안내일 뿐 감사 결과를 바꾸지 않습니다.
+같은 목록이 `omf goal audit --json` 의 `placeholders` 필드입니다.
+템플릿의 `#` 메모는 OMF 기본값이라 그대로 둬도 되는 값(예산)과 직접 정해야 하는 값(목표값과 연산자, `min_observation`, `decision_rule`)도 구분해 둡니다.
+
 재승인 화면은 먼저 왜 필요한지 보여 줍니다. 잠금 문제, 체제 변경, 바뀐 감시 경로의 diff 입니다. 읽는 동안
 목표나 지표가 바뀌면 아무것도 승인되지 않습니다. 재승인은 예산을 바꾸지 않습니다. `goal.md` 의 라운드 수나
 벽시계 시간이 이미 적용된 값과 다르면 `omf goal approve` 가 거부하고, 늘리는 것은 별도 결정(J8)입니다.
+
+벽시계 시간은 첫 승인부터 흐르는 달력 시간이고, 성공 판정에는 최소 관찰 기간에 걸친 측정이 필요합니다. 그래서
+생성되는 `goal.md` 는 최소 관찰 7d 에 벽시계 시간 14d 를 짝지어 둡니다. 벽시계 시간을 최소 관찰 기간보다 길지
+않게 정하면 `omf goal audit` 과 승인 화면이 "예산이 끝나기 전에는 성공에 닿을 수 없다"고 경고합니다. 거부가
+아니라 경고입니다. 그대로 승인할 수 있고, 예산이 다 되면 `omf budget raise <id> wall_time <기간>` 으로 늘린 뒤
+`omf goal resume <id>` 로 이어 갑니다. 예산을 대신 늘리거나 경과 시간을 되돌리는 일은 없습니다.
 
 "지표 코드는 조용히 바뀌지 않습니다" 의 한계:
 

@@ -10,7 +10,35 @@ import { type ProcessResult, runProcessGroup } from "./process-group.js";
 
 export type RunnerKind = "docker" | "host";
 export type Isolation = "container" | "none";
-export type MeasureOutcome = { ok: true; value: number } | { ok: false; reason: string };
+/**
+ * Why a metric has no number. A closed set: a failed, timed-out, denied, empty or unreadable measurement is
+ * "unmeasured" with one of these codes. It is never a value and never counts as met.
+ */
+export const UNMEASURED_CODES = [
+  "empty_command",
+  "no_image",
+  "could_not_run",
+  "permission_denied",
+  "timeout",
+  "output_limit",
+  "nonzero_exit",
+  "killed_by_signal",
+  "empty_output",
+  "unparsable_output",
+  "not_finite",
+] as const;
+export type UnmeasuredCode = (typeof UNMEASURED_CODES)[number];
+export type MeasureOutcome = { ok: true; value: number } | { ok: false; code: UnmeasuredCode; reason: string };
+
+/**
+ * The exit status a shell gives a command it found but may not execute.
+ *
+ * How the same failure is labelled depends on who runs the program: a shell that cannot find a command exits 127,
+ * which is labelled nonzero_exit, while a direct spawn of a missing program fails with ENOENT and is labelled
+ * could_not_run. A script that exits 126 on purpose is labelled permission_denied. All of these are unmeasured and
+ * none counts as met; only the label differs.
+ */
+const EXIT_NOT_EXECUTABLE = 126;
 
 export const MEASURE_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_BYTES = 1024 * 1024;
@@ -59,26 +87,35 @@ export function parseMeasurement(stdout: string): MeasureOutcome {
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .at(-1);
-  if (last === undefined) return { ok: false, reason: "the command printed nothing" };
-  if (!NUMBER.test(last)) return { ok: false, reason: "the last line of stdout is not a number" };
+  if (last === undefined) return { ok: false, code: "empty_output", reason: "the command printed nothing" };
+  if (!NUMBER.test(last))
+    return { ok: false, code: "unparsable_output", reason: "the last line of stdout is not a number" };
   const value = Number(last);
-  if (!Number.isFinite(value)) return { ok: false, reason: "the value is not a finite number" };
+  if (!Number.isFinite(value)) return { ok: false, code: "not_finite", reason: "the value is not a finite number" };
   return { ok: true, value };
 }
 
 function outcomeOf(result: ProcessResult): MeasureOutcome {
   switch (result.kind) {
     case "error":
-      return { ok: false, reason: `could not run: ${result.message}` };
+      return {
+        ok: false,
+        code: result.code === "EACCES" || result.code === "EPERM" ? "permission_denied" : "could_not_run",
+        reason: `could not run: ${result.message}`,
+      };
     case "timeout":
-      return { ok: false, reason: "timed out" };
+      return { ok: false, code: "timeout", reason: "timed out" };
     case "output_limit":
-      return { ok: false, reason: `output exceeded ${MAX_OUTPUT_BYTES} bytes` };
+      return { ok: false, code: "output_limit", reason: `output exceeded ${MAX_OUTPUT_BYTES} bytes` };
     case "exited":
+      if (result.status === null) {
+        return { ok: false, code: "killed_by_signal", reason: `killed by ${result.signal ?? "a signal"}` };
+      }
       if (result.status !== 0) {
         return {
           ok: false,
-          reason: result.status === null ? `killed by ${result.signal ?? "a signal"}` : `exit code ${result.status}`,
+          code: result.status === EXIT_NOT_EXECUTABLE ? "permission_denied" : "nonzero_exit",
+          reason: `exit code ${result.status}`,
         };
       }
       return parseMeasurement(result.stdout);
@@ -97,7 +134,7 @@ export async function runOnHost(
   env: NodeJS.ProcessEnv = process.env,
   timeoutMs = MEASURE_TIMEOUT_MS,
 ): Promise<MeasureOutcome> {
-  if (command.length === 0) return { ok: false, reason: "empty command" };
+  if (command.length === 0) return { ok: false, code: "empty_command", reason: "empty command" };
   const scratch = mkdtempSync(join(tmpdir(), "omf-measure-"));
   try {
     const result = await runProcessGroup(command, {
@@ -189,6 +226,7 @@ export async function runMeasurement(
   if (metric.image === null) {
     return {
       ok: false,
+      code: "no_image",
       reason: `metric ${metric.metric_id} has no image; propose it with --image or measure with --runner host`,
     };
   }

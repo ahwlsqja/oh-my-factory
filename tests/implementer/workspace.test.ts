@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProcessResult } from "../../src/adapters/process-group.js";
@@ -81,7 +82,8 @@ describe("the container scripts", () => {
     expect(sha256(PREPARE_SCRIPT)).toBe("e3444c599fec5941a126cf6924bb31e191260ef66140f39857121f92c368f18f");
     expect(sha256(FINALIZE_SCRIPT)).toBe("92a2d4bc1706ba5744e3289a7087eb1bc767f4b614cc3a2b7d58985ec17c1b3e");
     expect(sha256(CAPTURE_SCRIPT)).toBe("2fa11e9145d8800aeefe3c60c5ef7602aaaec247c859f8c7a5a1ef5378df9874");
-    expect(KILL_ALL_ARGV).toEqual(["sh", "-c", "kill -9 -1"]);
+    expect(KILL_ALL_ARGV.slice(0, 2)).toEqual(["sh", "-c"]);
+    expect(KILL_ALL_ARGV[2]).toContain("kill -9 -1");
     expect(TOOLCHECK_ARGV.slice(0, 2)).toEqual(["sh", "-c"]);
   });
 });
@@ -234,6 +236,35 @@ describe("killAllProcesses", () => {
       expect(tree.local.execs.at(-1)).toMatchObject({ ran: false });
     },
   );
+
+  // The container has /proc; the test host may not. The script runs against a fake process table, with the real kill replaced
+  // by a command that fails the way `kill -9 -1` does when nothing is left ("No such process", exit 1).
+  function runKillScript(foreign: readonly { pid: string; state: string }[]): { status: number | null } {
+    const root = mkdtempSync(join(tmpdir(), "omf-proc-"));
+    try {
+      const body = (KILL_ALL_ARGV[2] ?? "").replaceAll("kill -9 -1", "false").replaceAll("/proc", root);
+      const rows = [{ pid: "1", state: "S" }, ...foreign];
+      const setup = [
+        `mkdir -p "${root}/1" "${root}/$$"`,
+        `printf 'State:\tS (sleeping)\n' > "${root}/$$/status"`,
+        ...rows.map(
+          (r) => `mkdir -p "${root}/${r.pid}"; printf 'State:\t${r.state} (x)\n' > "${root}/${r.pid}/status"`,
+        ),
+      ].join("\n");
+      return { status: spawnSync("sh", ["-c", `${setup}\n${body}`], { encoding: "utf8", timeout: 10_000 }).status };
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+
+  it("counts a kill that finds no process ('No such process', exit 1) as a clean stop", () => {
+    expect(runKillScript([]).status).toBe(0);
+    expect(runKillScript([{ pid: "77777", state: "Z" }]).status).toBe(0);
+  });
+
+  it("fails closed when a foreign process survives the kill", () => {
+    expect(runKillScript([{ pid: "77777", state: "S" }]).status).toBe(1);
+  });
 
   it("reports a failed exec as not ok", async () => {
     const tree = await open();

@@ -6,6 +6,7 @@ import {
   commitsSince,
   headCommit,
   matchWatched,
+  observeWorkingTree,
   trackedFiles,
   workingTreeFingerprint,
 } from "../../src/goal/git.js";
@@ -62,6 +63,26 @@ describe("git helpers", () => {
     expect(workingTreeFingerprint(repo)).not.toBe(clean);
     writeFileSync(join(repo, "README.md"), "# fixture\n");
     expect(workingTreeFingerprint(repo)).toBe(clean);
+  });
+});
+
+describe("observeWorkingTree", () => {
+  it("reports the commit, a changed-path count and the same fingerprint as workingTreeFingerprint", () => {
+    const repo = makeGitRepo();
+    const clean = observeWorkingTree(repo);
+    expect(clean).toEqual({ head: headCommit(repo), changedPaths: 0, fingerprint: workingTreeFingerprint(repo) });
+    writeFileSync(join(repo, "README.md"), "# dirty\n");
+    writeFileSync(join(repo, "new.txt"), "untracked\n");
+    const dirty = observeWorkingTree(repo);
+    expect(dirty.changedPaths).toBe(2);
+    expect(dirty.head).toBe(clean.head);
+    expect(dirty.fingerprint).not.toBe(clean.fingerprint);
+  });
+
+  it("counts a staged rename once", () => {
+    const repo = makeGitRepo();
+    gitIn(repo, "mv", "README.md", "MOVED.md");
+    expect(observeWorkingTree(repo).changedPaths).toBe(1);
   });
 });
 
