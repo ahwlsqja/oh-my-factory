@@ -2,7 +2,7 @@ import { chmodSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { makeTempDir } from "../helpers/tmp.js";
-import { ownedLeftovers } from "./lifecycle-support.js";
+import { ownedLeftovers } from "../gated/lifecycle-support.js";
 
 // Positive controls for the leftover scan the gated suites end on: it must list a labelled container, network, volume and image,
 // exempt only the cached harness image, and refuse to pass when the daemon cannot be asked. Run offline against a `docker` stub.
