@@ -58,3 +58,25 @@ export function authorSessionCompletedEvent(scope: DecisionScope, facts: AuthorS
   }
   return { actor: "omf", type: AUTHOR_SESSION_EVENT, payload };
 }
+
+export const AUTHOR_STARTED_EVENT = "author.session_started";
+
+/** What is known when a pass takes its call, before any container exists. */
+export interface AuthorSessionStart {
+  pass_id: string;
+  round: number;
+  /** Calls this work item had counted before this one. */
+  calls_before: number;
+  limit_calls: number;
+}
+
+/**
+ * Appended under `seal.lock` before the first `docker create` of a pass. It is the record the call cap counts, so a host
+ * killed during the call, or a throw before the completed event, still spends the call.
+ */
+export function authorSessionStartedEvent(scope: DecisionScope, start: AuthorSessionStart): NewEvent {
+  const payload = { goal_id: scope.goal_id, work_id: scope.work_id, ...start };
+  const shape = validate("author-start-event.schema.json", { type: AUTHOR_STARTED_EVENT, payload });
+  if (!shape.ok) throw new Error(`invalid ${AUTHOR_STARTED_EVENT} event: payload fails the schema (${shape.errors})`);
+  return { actor: "omf", type: AUTHOR_STARTED_EVENT, payload };
+}

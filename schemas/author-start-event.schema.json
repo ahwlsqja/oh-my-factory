@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OMF author start event (spec §5.3, §7)",
+  "description": "Validates { type, payload } of the author.session_started ledger event, appended under seal.lock before any container exists, so a call the host never finished is still counted against roles.author calls per work item. Ids and counts only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "payload"],
+  "properties": {
+    "type": { "const": "author.session_started" },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "work_id", "pass_id", "round", "calls_before", "limit_calls"],
+      "properties": {
+        "goal_id": { "type": "string", "pattern": "^g-[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 80 },
+        "work_id": { "type": "string", "pattern": "^w-[0-9a-f]{12}$" },
+        "pass_id": { "type": "string", "pattern": "^r-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{4}$" },
+        "round": { "type": "integer", "minimum": 1 },
+        "calls_before": { "type": "integer", "minimum": 0 },
+        "limit_calls": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

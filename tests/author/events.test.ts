@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { type AuthorSessionFacts, authorSessionCompletedEvent } from "../../src/author/events.js";
+import {
+  type AuthorSessionFacts,
+  authorSessionCompletedEvent,
+  authorSessionStartedEvent,
+} from "../../src/author/events.js";
 import { AUTHOR_FACTS, AUTHOR_SCOPE } from "../helpers/author-events.js";
 
 const bad = (change: object): AuthorSessionFacts => ({ ...AUTHOR_FACTS, ...change }) as unknown as AuthorSessionFacts;
@@ -56,4 +60,25 @@ describe("authorSessionCompletedEvent: the caps", () => {
       expect(() => authorSessionCompletedEvent(AUTHOR_SCOPE, bad({ [field]: 1.5 }))).toThrow(/schema/);
     }
   });
+});
+
+describe("authorSessionStartedEvent", () => {
+  const started = { pass_id: AUTHOR_FACTS.pass_id, round: 1, calls_before: 0, limit_calls: 10 };
+
+  it("builds an omf event with the scope and the pass id", () => {
+    expect(authorSessionStartedEvent(AUTHOR_SCOPE, started)).toEqual({
+      actor: "omf",
+      type: "author.session_started",
+      payload: { ...AUTHOR_SCOPE, ...started },
+    });
+  });
+
+  it.each([{ pass_id: "not-a-pass" }, { round: 0 }, { calls_before: -1 }, { extra: "x" }])(
+    "rejects a malformed payload %j",
+    (change) => {
+      expect(() => authorSessionStartedEvent(AUTHOR_SCOPE, { ...started, ...change })).toThrow(
+        /author.session_started/,
+      );
+    },
+  );
 });

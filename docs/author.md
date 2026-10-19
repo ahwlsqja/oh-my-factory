@@ -66,16 +66,16 @@ OMF neither records nor bounds the spend of an author call: money is not metered
 
 - `timeout_ms`: wall time of one call (default 10 minutes).
 - `max_output_bytes`: bytes Codex may print on stdout plus stderr in one call (default 1 MiB, 65536 to 16777216); past it the call stops as `output_limit`.
-- `max_calls`: author calls one work item may use over its life (default 10, 1 to 100), counted from the ledger. When the count is reached `omf seal` is refused with `author_call_cap` before any container is made; raise the value to allow more.
+- `max_calls`: author calls one work item may use over its life (default 10, 1 to 100), counted from the ledger, one call per seal pass. A pass takes its call under `seal.lock`, by appending `author.session_started` before any container is made, and the cap is checked again under that lock, so two passes racing for the last call let exactly one start. A pass killed mid-call, or one that throws before it records its end, is counted. When the count is reached `omf seal` is refused with `author_call_cap` before any container is made; raise the value to allow more.
 
-Each `author.session_completed` event records the caps in force (`limit_timeout_ms`, `limit_output_bytes`, `limit_calls`), the call's `output_bytes` and `calls_before`. The only bound on money remains the spend limit you set on the provider key.
+Each `author.session_started` event records the pass, the round and `calls_before`. Each `author.session_completed` event records the caps in force (`limit_timeout_ms`, `limit_output_bytes`, `limit_calls`), the call's `output_bytes` and `calls_before`. The only bound on money remains the spend limit you set on the provider key.
 
 ## Limits
 
 - The container runs on Docker's default bridge network: open egress to the model API and to everything else, since an egress allowlist does not exist yet. The default bridge also reaches other containers on that bridge and services on the host gateway of the docker context in use. Use a dedicated docker context or colima profile.
 - A seal whose author stage is unmeasured is stored and reported as `stored`, and the run's isolation level reads `unmeasured`. For a work item that already started, `omf seal` cannot replace it yet and exits 2 saying so.
 - `omf seal` on a seal that is current for the decisions and whose author stage is measured exits 0 as `already_sealed` and needs no key, no daemon and no model.
-- A killed `omf seal` can leave an author container behind. The next `omf seal` on the same work item removes the author containers that its earlier seal passes left behind, and never the container of the current pass.
+- A killed `omf seal` can leave an author container running (a dead host cannot stop it) until the next `omf seal` on the same work item sweeps it. The next `omf seal` on the same work item removes the author containers that its earlier seal passes left behind, and never the container of the current pass.
 
 ## Gated runs
 

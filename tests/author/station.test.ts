@@ -127,6 +127,65 @@ describe("sealItem", () => {
     expect(ledgerEvents(l.f.fx, "author.session_completed")).toHaveLength(1);
   });
 
+  it("counts a pass that was abandoned after its start record: the next pass is refused at the cap", async () => {
+    const { l, deps } = rig({ authorLines: ["max_calls = 1"] });
+    await expect(
+      sealItem(
+        deps({
+          session: () => {
+            throw new Error("host killed before the call finished");
+          },
+        }),
+      ),
+    ).rejects.toThrow(/host killed/);
+    expect(ledgerEvents(l.f.fx, "author.session_completed")).toHaveLength(0);
+    expect(ledgerEvents(l.f.fx, "author.session_started")).toHaveLength(1);
+    let sessions = 0;
+    const second = await sealItem(
+      deps({
+        session: () => {
+          sessions += 1;
+          throw new Error("no session may start");
+        },
+      }),
+    );
+    expect(second).toEqual({ status: "refused", code: "author_call_cap" });
+    expect(sessions).toBe(0);
+  });
+
+  it("lets exactly one of two racing passes start when one call is left", async () => {
+    const { l, yaml, deps } = rig({ authorLines: ["max_calls = 1"] });
+    let sessions = 0;
+    const racing = (): Promise<unknown> =>
+      sealItem(
+        deps({
+          session: (_credential, passId) => {
+            sessions += 1;
+            return scriptedAuthor(l, yaml, passId, { failure: "no_output" });
+          },
+        }),
+      );
+    const results = (await Promise.all([racing(), racing()])) as Array<{ status: string }>;
+    expect(sessions).toBe(1);
+    expect(ledgerEvents(l.f.fx, "author.session_started")).toHaveLength(1);
+    expect(results.map((result) => result.status).sort()).not.toContain("sealed");
+  });
+
+  it("counts one call per pass, however many events the pass left", async () => {
+    const { l, deps } = rig({ authorLines: ["max_calls = 1"] });
+    const first = await sealItem(
+      deps({
+        session: (_credential, passId) =>
+          scriptedAuthor(l, writeYaml(l, "x.yaml", ROUND2), passId, { failure: "no_output" }),
+      }),
+    );
+    expect(first).toEqual({ status: "retry", code: "no_output" });
+    // One started and one completed event share the pass id: still one call.
+    expect(ledgerEvents(l.f.fx, "author.session_started")).toHaveLength(1);
+    expect(ledgerEvents(l.f.fx, "author.session_completed")).toHaveLength(1);
+    expect(await sealItem(deps())).toEqual({ status: "refused", code: "author_call_cap" });
+  });
+
   it("answers retry for an author-quality failure and for a GATE-2 back_to_S2", async () => {
     const { l, deps } = rig();
     const failed = await sealItem(
