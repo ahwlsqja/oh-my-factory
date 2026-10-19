@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createArgv } from "../../src/container/argv.js";
 import { NotGoldenError } from "../../src/container/measure.js";
-import { roleTmpfs } from "../../src/container/spec.js";
+import { JUDGE_MAX_SCENARIOS, JUDGE_MAX_STEPS, roleTmpfs } from "../../src/container/spec.js";
 import { FAULTS, scenarioVerdict } from "../../src/judge/round.js";
 import { judgeConfig, lease, ref, runRound, scenarioOf, stepOf } from "../helpers/judge-fixture.js";
 import { measureHook, resetMeasureHook } from "../helpers/measure-mock.js";
@@ -72,6 +72,29 @@ describe("a SUT container that stops mid-round", () => {
     const double = new RuntimeDouble(() => exited("", 1));
     const verdict = await runRound(double, one, { k: 2 });
     expect(verdict.tallies.map((tally) => tally.verdict)).toEqual(["fail"]);
+  });
+});
+
+describe("round caps", () => {
+  it("refuses more scenarios than JUDGE_MAX_SCENARIOS", async () => {
+    const double = new RuntimeDouble(() => exited(""));
+    const scenarios = Array.from({ length: JUDGE_MAX_SCENARIOS + 1 }, (_, n) => scenarioOf(n + 1, [stepOf(["a"], 0)]));
+    await expect(runRound(double, scenarios, { k: 1 })).rejects.toMatchObject({ code: "set_invalid" });
+    expect(double.calls).toEqual([]);
+  });
+
+  it("refuses a scenario with more steps than JUDGE_MAX_STEPS", async () => {
+    const double = new RuntimeDouble(() => exited(""));
+    const steps = Array.from({ length: JUDGE_MAX_STEPS + 1 }, () => stepOf(["a"], 0));
+    await expect(runRound(double, [scenarioOf(1, steps)], { k: 1 })).rejects.toMatchObject({ code: "set_invalid" });
+    expect(double.calls).toEqual([]);
+  });
+
+  it("accepts exactly the caps", async () => {
+    const double = new RuntimeDouble(() => exited(""));
+    const steps = Array.from({ length: JUDGE_MAX_STEPS }, () => stepOf(["a"], 0));
+    const verdict = await runRound(double, [scenarioOf(1, steps)], { k: 1 });
+    expect(verdict.tallies).toHaveLength(1);
   });
 });
 

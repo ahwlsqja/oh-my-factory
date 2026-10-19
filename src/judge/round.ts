@@ -2,7 +2,7 @@ import { containerSpecFor, goldenFor } from "../container/golden.js";
 import { digestOf, ImageRefError, type PinnedImage, pinnedImage } from "../container/image-ref.js";
 import { createMeasured, type MeasureDeps, NotGoldenError } from "../container/measure.js";
 import type { ContainerRuntime, ImageInfo } from "../container/runtime.js";
-import type { OwnedLabels } from "../container/spec.js";
+import { JUDGE_MAX_SCENARIOS, JUDGE_MAX_STEPS, type OwnedLabels } from "../container/spec.js";
 import { buildSutImage } from "../container/sut-build.js";
 import type { JudgeConfig } from "../core/config.js";
 import type { DecisionClass, InterfaceContract } from "../decision/types.js";
@@ -151,6 +151,13 @@ function assertSet(scenarios: readonly RoundScenario[]): void {
     (scenario) => scenario.set.scenario_ref === scenario.scenario_ref && scenario.set.steps.length > 0,
   );
   if (refs.size !== scenarios.length || !consistent) throw new JudgeRoundError("set_invalid");
+  // The container lifetimes are sized for at most this many scenarios and steps (`judgeLifetimeSeconds`): a caller that
+  // outgrew them would let a container stop itself in the middle of the round, so the round is refused before any container.
+  if (
+    scenarios.length > JUDGE_MAX_SCENARIOS ||
+    scenarios.some((scenario) => scenario.set.steps.length > JUDGE_MAX_STEPS)
+  )
+    throw new JudgeRoundError("set_invalid");
 }
 
 const sameInvoke = (

@@ -125,6 +125,9 @@ const sutSeconds = (stepS: number): number =>
  *   worst case above;
  * - workcopy serves a tree and is replaced after `WORKCOPY_GATE_EXECS` execs: the probe, the boot caps, that many gate
  *   execs at `WORKCOPY_GATE_EXEC_S` each followed by a state check, and the remove.
+ * The sleep begins at `docker start`, so a container's own create and inspect come before it and fall outside the lifetime;
+ * the margin covers them. `runJudgeRound` refuses a set above `JUDGE_MAX_SCENARIOS` scenarios or `JUDGE_MAX_STEPS` steps in
+ * a scenario (`set_invalid`), so no caller outgrows these bounds silently.
  * Never more than `MAX_LIFETIME_S`. An agent role has no judge lifetime (null).
  */
 export function judgeLifetimeSeconds(role: ContainerRole, limits: RoleLimits): number | null {
