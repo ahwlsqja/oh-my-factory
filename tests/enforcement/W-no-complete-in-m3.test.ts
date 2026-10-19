@@ -52,6 +52,8 @@ const MAY_NAME_DONE = [
   "work/ledger-verify.ts",
   "work/transitions.ts",
   "work/types.ts",
+  // Read-only work-state allowlist and counts; this projection never assigns the done state.
+  "ui/read-model.ts",
 ];
 
 function commandNames(help: string): string[] {

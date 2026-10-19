@@ -15,6 +15,7 @@ import { createGoal, readGoal, referencedMetrics, semanticHash } from "../goal/g
 import { diffStat } from "../goal/git.js";
 import type { ApprovalExpectation } from "../goal/goal-lock.js";
 import { type GapReport, measureGoal } from "../goal/measure.js";
+import { provenanceLines } from "../goal/provenance.js";
 import { metricSha256, proposeMetric, readProposal } from "../goal/metrics.js";
 import { createMarkdownStore } from "../adapters/state-markdown.js";
 import { type BudgetState, budgetStateFromEvents } from "../core/budget.js";
@@ -43,7 +44,7 @@ function printAudit(report: AuditReport): void {
   }
   if (report.state === "tampered") {
     console.log(
-      `a lock does not match the ledger and measurement is stopped; run omf goal approve ${report.goal_id} to repair it`,
+      `measurement is stopped; approving again repairs a changed goal.md or watched path, other problems are listed below`,
     );
   }
   if (report.budget !== null) {
@@ -52,6 +53,8 @@ function printAudit(report: AuditReport): void {
   if (report.wall_time_exceeded) console.log("wall time exceeded (J6)");
   printList("problems", report.problems);
   printList("needs re-approval (J1)", report.regime_changes);
+  printList("warnings", report.warnings);
+  printList("still template text in goal.md (replace before you approve)", report.placeholders);
 }
 
 const listOrNone = (items: readonly string[]): string => (items.length === 0 ? "none" : items.join(", "));
@@ -107,6 +110,7 @@ export function approvalScreen(
   out(
     `decision rule: ${safeText(front.prereg.decision_rule)} (minimum observation ${safeText(front.prereg.min_observation)})`,
   );
+  for (const warning of audit.warnings) out(`warning: ${safeText(warning)}`);
   const metrics: Record<string, string> = {};
   for (const id of referencedMetrics(front)) {
     const proposal = readProposal(status.dir, id);
@@ -160,6 +164,7 @@ function printGap(report: GapReport, file: string): void {
   for (const g of report.guardrails) console.log(`guardrail ${g.metric_id}: ${g.status}`);
   printList("needs re-approval (J1)", report.regime_changes);
   if (report.wall_time_exceeded) console.log("wall time exceeded (J6)");
+  for (const line of provenanceLines(report.provenance)) console.log(line);
   console.log(`report: ${file}`);
 }
 
@@ -184,10 +189,54 @@ function budgetLine(kind: string, state: BudgetState | null): string {
     : `${kind}: ${state.remaining} of ${state.declared + state.raised} left`;
 }
 
+/**
+ * The headline of `omf goal status`. The run-state fold says "running" for any goal that is not stopped, even before
+ * J1 has approved it, so while the run state is "running" the audit state decides the words. Blocked, failed and
+ * final states keep their own names. Only this text changes; the JSON keeps the raw run state and audit state.
+ */
+function headline(report: GoalStatusReport): string {
+  if (report.state !== "running") return report.state;
+  switch (report.audit_state) {
+    case "draft":
+      return "not approved yet, no work has started";
+    case "needs_reapproval":
+      return "reapproval required, no new work until you approve again";
+    case "tampered":
+      return "stopped, the audit found problems";
+    case "invalid":
+      return "not runnable, the goal file is invalid";
+    default:
+      return report.ticks === 0 ? "approved, no tick has run yet" : "running";
+  }
+}
+
+/** What to do next when the audit, not the run state, is what holds the goal back (text only). */
+function auditNextSteps(report: GoalStatusReport): string[] {
+  const id = report.goal_id;
+  if (report.state !== "running") {
+    // Blocked, failed, finish and cancelled goals still need the audit when it found problems or a changed goal.
+    return report.audit_state === "tampered" || report.audit_state === "needs_reapproval"
+      ? [`omf goal audit ${id} (shows what the audit found)`]
+      : [];
+  }
+  switch (report.audit_state) {
+    case "draft":
+      return [`omf goal audit ${id} (then omf goal approve ${id} if it reports no problems)`];
+    case "needs_reapproval":
+      return [`omf goal audit ${id} (shows what changed), then omf goal approve ${id}`];
+    case "tampered":
+      return [`omf goal audit ${id} (lists the problems; review them before you decide anything else)`];
+    case "invalid":
+      return [`omf goal audit ${id} (lists the problems to fix in goal.md)`];
+    default:
+      return [];
+  }
+}
+
 function printStatus(report: GoalStatusReport): void {
   const audit = report.audit_state.replace("needs_reapproval", "needs re-approval");
   console.log(
-    `goal ${report.goal_id}: ${report.state} (audit: ${audit}; ${report.ticks} ${report.ticks === 1 ? "tick" : "ticks"})`,
+    `goal ${report.goal_id}: ${headline(report)} (audit: ${audit}; ${report.ticks} ${report.ticks === 1 ? "tick" : "ticks"})`,
   );
   if (report.open_escalation !== null) {
     console.log(
@@ -202,7 +251,7 @@ function printStatus(report: GoalStatusReport): void {
       .map(([name, count]) => `${name.replace(/_/g, " ")} ${count}`)
       .join(", ")}`,
   );
-  printList("next steps", report.next_steps);
+  printList("next steps", [...auditNextSteps(report), ...report.next_steps]);
 }
 
 /** What `omf goal tick` may print or emit as JSON: the TickResult without the model's titles (D29). */
@@ -260,7 +309,9 @@ export function registerGoalCommands(program: Command): void {
       const status = requireProject(process.cwd());
       const file = createGoal(status.dir, goalId);
       console.log(`created ${file}`);
-      console.log(`edit it, propose its metrics with omf metric propose, then run omf goal audit ${goalId}`);
+      console.log(
+        `edit it (the comments in the file explain each field), propose its metrics with omf metric propose, then run omf goal audit ${goalId}`,
+      );
     });
 
   goal
