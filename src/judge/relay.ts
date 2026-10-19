@@ -13,8 +13,11 @@ export interface RelayInput {
   runtime: ContainerRuntime;
   /** The contract's `run` argv: the program the candidate exposes. Scenario argv are appended to it, as separate elements. */
   run: readonly string[];
-  /** One fresh, created-and-measured SUT container per scenario session; release removes it. */
-  acquire: () => Promise<{ handle: ContainerHandle; release: () => Promise<void> }>;
+  /**
+   * One fresh, created-and-measured SUT container per scenario session; release removes it. A `null` handle is a container
+   * the candidate's own image failed during the probe window (already removed): the session fails its first step without an exec.
+   */
+  acquire: () => Promise<{ handle: ContainerHandle | null; release: () => Promise<void> }>;
 }
 
 /**
@@ -32,7 +35,11 @@ export interface RelayInput {
  * no status (the docker client was killed) is an `error` whatever the container state, because nothing says how the program ended.
  * A timeout kills the docker client, not the process inside the container, so the container is removed at once and nothing keeps
  * running behind the next step. A candidate-installed `sleep` can keep a SUT container alive past its lifetime; the sweep of the
- * next run removes it.
+ * next run removes it. The probe that measures the container before its first step is the same window: the probe `sh` and the
+ * `sleep` come from the candidate-built image, so a probe that fails, hangs, prints something unreadable or reports a vendor
+ * binary or credential, with the container neither removed nor stopped by the host, never reaches the relay as a container;
+ * `acquire` hands back a null handle and the first step comes back `signaled` `container_exited`, like a step against a
+ * container the candidate ended.
  */
 export function createContainerScenarioRunner(input: RelayInput): ScenarioRunner {
   if (input.run.length === 0) throw new Error("relay run argv is empty");
@@ -46,17 +53,19 @@ export function createContainerScenarioRunner(input: RelayInput): ScenarioRunner
         return { runStep: async () => ({ outcome: "refused", code: "unknown_fixture" }), close: async () => {} };
       }
       const lease = await input.acquire();
-      let gone = false;
+      const { handle } = lease;
+      let gone = handle === null;
       const stop = async (outcome: StepObservation): Promise<StepObservation> => {
         gone = true;
-        markHostEnded(lease.handle);
-        await runtime.remove(lease.handle);
+        if (handle === null) return outcome;
+        markHostEnded(handle);
+        await runtime.remove(handle);
         return outcome;
       };
       return {
         async runStep(step, limits) {
-          if (gone) return { outcome: "signaled", signal: "container_exited" };
-          const result = await runtime.exec(lease.handle, {
+          if (gone || handle === null) return { outcome: "signaled", signal: "container_exited" };
+          const result = await runtime.exec(handle, {
             argv: [...input.run, ...step.argv],
             stdin: step.stdin,
             workdir: SCRATCH,
@@ -69,7 +78,7 @@ export function createContainerScenarioRunner(input: RelayInput): ScenarioRunner
           if (result.kind === "exited" && result.status === null) return stop({ outcome: "error" });
           const status = result.kind === "exited" ? (result.status ?? 0) : 0;
           if (result.kind === "error" || status !== 0) {
-            const { cause } = await stopCause(runtime, lease.handle);
+            const { cause } = await stopCause(runtime, handle);
             // Only a container that still runs leaves a non-zero exit to the candidate; one it ended itself is its failure.
             if (cause === "candidate") return stop({ outcome: "signaled", signal: "container_exited" });
             if (cause === "host" || cause === "unknown") return stop({ outcome: "error" });

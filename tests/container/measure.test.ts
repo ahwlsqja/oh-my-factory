@@ -119,10 +119,25 @@ describe("a measurement that cannot be made records nothing and removes the cont
     ],
     ["a probe that times out", { kind: "timeout", stdout: "", stderr: "" }, "probe_failed"],
     ["a probe with no end line", "socket:0\n", "probe_malformed"],
-  ] as const)("for %s", async (_name, probe, code) => {
+  ] as const)("for %s (harness: the host's image, so the measurement itself failed)", async (_name, probe, code) => {
     const f = await measureFixture({ probe });
-    await expect(createMeasured(f.deps, f.spec("sut"), f.golden("sut"))).rejects.toMatchObject({ code });
+    await expect(createMeasured(f.deps, f.spec("harness"), f.golden("harness"))).rejects.toMatchObject({ code });
     expect(f.lifecycle()).toEqual(["create", "inspect", "start", "exec", "rm"]);
+    expect(f.isolationEvents()).toEqual([]);
+    expect(f.run().stages.harness).toBeNull();
+  });
+
+  it.each([
+    ["a probe that exits non-zero", { kind: "exited", status: 1, signal: null, stdout: "", stderr: "x" }],
+    ["a probe that times out", { kind: "timeout", stdout: "", stderr: "" }],
+    ["a probe with no end line", "socket:0\n"],
+  ] as const)("for %s (sut: the candidate-built image, so the candidate's failure)", async (_name, probe) => {
+    const f = await measureFixture({ probe });
+    await expect(createMeasured(f.deps, f.spec("sut"), f.golden("sut"))).rejects.toMatchObject({
+      name: "CandidateContainerFailure",
+      code: "probe_unanswered",
+    });
+    expect(f.lifecycle()).toEqual(["create", "inspect", "start", "exec", "inspect", "rm"]);
     expect(f.isolationEvents()).toEqual([]);
     expect(f.run().stages.sut).toBeNull();
   });

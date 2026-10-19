@@ -1,6 +1,6 @@
 import { containerSpecFor, goldenFor } from "../container/golden.js";
 import { digestOf, ImageRefError, type PinnedImage, pinnedImage } from "../container/image-ref.js";
-import { createMeasured, type MeasureDeps, NotGoldenError } from "../container/measure.js";
+import { CandidateContainerFailure, createMeasured, type MeasureDeps, NotGoldenError } from "../container/measure.js";
 import type { ContainerRuntime, ImageInfo } from "../container/runtime.js";
 import { JUDGE_MAX_SCENARIOS, JUDGE_MAX_STEPS, type OwnedLabels } from "../container/spec.js";
 import { buildSutImage } from "../container/sut-build.js";
@@ -335,7 +335,14 @@ export async function runJudgeRound(input: JudgeRoundInput): Promise<RoundVerdic
       runtime,
       run: input.run,
       acquire: async () => {
-        const sut = await create("sut", images.sut);
+        let sut: Awaited<ReturnType<typeof create>>;
+        try {
+          sut = await create("sut", images.sut);
+        } catch (error) {
+          // The candidate-built image failed the probe window: this (scenario, rep) fails, the round goes on.
+          if (error instanceof CandidateContainerFailure) return { handle: null, release: async () => {} };
+          throw error;
+        }
         return {
           handle: sut.handle,
           release: async () => {
