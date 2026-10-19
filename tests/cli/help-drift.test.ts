@@ -56,6 +56,7 @@ describe("documentation drift", () => {
       "decide add",
       "decide lint",
       "decide show",
+      "ui",
     ]) {
       expect(paths).toContain(path);
     }
