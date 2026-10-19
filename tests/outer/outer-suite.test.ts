@@ -1,8 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
+import { confirmByTyping } from "../../src/cli/confirm.js";
+import { sha256Hex } from "../../src/core/canonical-json.js";
+import { hashEvent, Ledger, type LedgerEvent } from "../../src/core/ledger.js";
 import { makeTempDir } from "../helpers/tmp.js";
 
 // covers: S11.5.outer-contracts-hold
@@ -89,35 +93,40 @@ describe("outer contract suite", () => {
     expect(failedIds(required)).toEqual(["K07"]);
   });
 
-  it("strips locations and credentials from what a contract's child inherits", () => {
+  it("strips locations and credentials from what a contract's child inherits, and nothing else it can name", () => {
     const script = `import { cleanEnv } from ${JSON.stringify(pathToFileURL(HARNESS).href)};
 console.log(JSON.stringify(Object.keys(cleanEnv(process.env)).sort()));`;
+    const scrubbed = [
+      "GIT_DIR",
+      "GIT_AUTHOR_NAME",
+      "OMF_HOME",
+      "OMF_OUTER_BIN",
+      "XDG_CONFIG_HOME",
+      "CODEX_HOME",
+      "CLAUDE_CONFIG_DIR",
+      "ANTHROPIC_API_KEY",
+      "ANTHROPIC_BASE_URL",
+      "OPENAI_API_KEY",
+      "GITHUB_TOKEN",
+      "GH_TOKEN",
+      "AWS_ACCESS_KEY_ID",
+      "AWS_REGION",
+      "DOCKER_HOST",
+      "FOO_API_KEY",
+      "FOO_TOKEN",
+      "FOO_SECRET",
+      "SOME_SECRET",
+    ];
+    // Names that merely contain a scrubbed word, but do not start or end like one, stay.
+    const kept = ["HOME", "PATH", "KEEP_ME", "X_OMF_Y", "MY_GIT_THING", "NOT_GH_X", "TOKENS", "API_KEYS"];
     const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
       encoding: "utf8",
-      env: {
-        PATH: process.env.PATH ?? "",
-        HOME: "/home/someone",
-        KEEP_ME: "yes",
-        GIT_DIR: "/x",
-        GIT_AUTHOR_NAME: "n",
-        OMF_HOME: "/o",
-        XDG_CONFIG_HOME: "/x",
-        CODEX_HOME: "/c",
-        CLAUDE_CONFIG_DIR: "/c",
-        ANTHROPIC_API_KEY: "k",
-        OPENAI_API_KEY: "k",
-        GITHUB_TOKEN: "t",
-        SOME_SECRET: "s",
-        DOCKER_HOST: "tcp://x",
-      },
+      env: { ...Object.fromEntries([...scrubbed, ...kept].map((name) => [name, "v"])), PATH: process.env.PATH ?? "" },
     });
     expect(result.status, result.stderr).toBe(0);
-    const kept = JSON.parse(result.stdout) as string[];
-    expect(kept).toEqual(expect.arrayContaining(["HOME", "KEEP_ME", "PATH"]));
-    // Whatever else the operating system adds (macOS adds __CF_USER_TEXT_ENCODING), none of the planted names survives.
-    expect(
-      kept.filter((name) => /^(GIT_|OMF_|XDG_|CODEX|CLAUDE|ANTHROPIC_|OPENAI_|GITHUB_|DOCKER_)|SECRET$/.test(name)),
-    ).toEqual([]);
+    const left = JSON.parse(result.stdout) as string[];
+    expect(left.filter((name) => scrubbed.includes(name))).toEqual([]);
+    expect(kept.filter((name) => !left.includes(name))).toEqual([]);
   });
 
   // K01's fixture drives a terminal, so without python3 and pty the proof is skipped with its reason; with
@@ -160,5 +169,62 @@ console.log(JSON.stringify(Object.keys(cleanEnv(process.env)).sort()));`;
     const suite = runSuite(omf, ["--only", "K02"]);
     expect(suite.status).toBe(1);
     expect(failedIds(suite)).toEqual(["K02"]);
+  });
+
+  it("fails when one contract fails among passing ones, and when a contract runs nothing", { timeout: 120_000 }, () => {
+    const shebang = "#!/usr/bin/env node\n";
+    const write = `${shebang}import { mkdirSync as outerBreak } from "node:fs";\nouterBreak(\`\${process.env.HOME}/.claude\`, { recursive: true });\n`;
+    const omf = brokenBuild([["cli/main.js", shebang, write]]);
+    const mixed = runSuite(omf, ["--only", "K02,K09"]);
+    expect(failedIds(mixed)).toEqual(["K02"]);
+    expect(mixed.report.contracts.find((c) => c.id === "K09")).toMatchObject({ fail: 0, exit: 0 });
+    expect(mixed.report.ok).toBe(false);
+    expect(mixed.status).toBe(1);
+
+    // A copy of the runner with one contract that holds no test: an empty contract proves nothing and fails.
+    const copy = join(makeTempDir("omf-outer-copy-"), "outer");
+    cpSync(join(ROOT, "outer"), copy, { recursive: true, dereference: true });
+    writeFileSync(
+      join(copy, "contracts", "K10-empty.mjs"),
+      '// K10: only a skipped test, with no reason\nimport { it } from "node:test";\nit.skip("nothing ran");\n',
+    );
+    const empty = spawnSync(process.execPath, [join(copy, "run.mjs"), "--omf", BUILT, "--json", "--only", "K10"], {
+      encoding: "utf8",
+    });
+    expect(empty.status, empty.stderr).toBe(1);
+    const report = JSON.parse(empty.stdout) as { ok: boolean; contracts: Contract[] };
+    expect(report.contracts).toMatchObject([{ id: "K10", pass: 0, fail: 0, skipped: 1, skip_reasons: [], exit: 0 }]);
+    expect(report.ok).toBe(false);
+  });
+});
+
+describe("kernel promises the contracts lean on", () => {
+  it("a ledger event whose hash is right but whose shape is wrong fails verification naming the schema", () => {
+    const ledger = new Ledger(makeTempDir("omf-outer-ledger-"));
+    ledger.append({ actor: "omf", type: "project.initialized", payload: {} });
+    const [line = ""] = readFileSync(ledger.file, "utf8").trimEnd().split("\n");
+    const event = JSON.parse(line) as LedgerEvent;
+    const { hash: _old, ...body } = { ...event, actor: "Not A Valid Actor" };
+    writeFileSync(ledger.file, `${JSON.stringify({ ...body, hash: hashEvent(body) })}\n`);
+    const verdict = ledger.verify();
+    expect(verdict.ok).toBe(false);
+    expect(verdict).toMatchObject({ seq: 1 });
+    expect((verdict as { reason: string }).reason).toMatch(/^schema: /);
+    expect(sha256Hex("x")).toHaveLength(64);
+  });
+
+  it("typing the id confirms, and an answer that merely contains or starts with it does not", async () => {
+    const answer = async (typed: string): Promise<boolean> => {
+      const input = new PassThrough();
+      const output = new PassThrough();
+      const pending = confirmByTyping("w-abc123", "retype: ", { input, output });
+      input.write(`${typed}\n`);
+      return await pending;
+    };
+    expect(await answer("w-abc123")).toBe(true);
+    expect(await answer("  w-abc123  ")).toBe(true);
+    for (const wrong of ["w-abc123x", "xw-abc123", "w-abc12", "w-abc123 w-abc123", "", "yes"]) {
+      expect(await answer(wrong), wrong).toBe(false);
+    }
   });
 });
