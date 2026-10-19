@@ -297,6 +297,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
           ...(spec.workdir === undefined ? {} : { workdir: spec.workdir }),
           ...(spec.env === undefined ? {} : { env: spec.env }),
           ...(secret === undefined ? {} : { secret: secret.name }),
+          role: handle.role,
         },
         name,
       );

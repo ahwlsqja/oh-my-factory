@@ -1,4 +1,5 @@
 import { isAbsolute } from "node:path";
+import { agentExecEnvRefused } from "../core/env-deny.js";
 import { isDigestPinned } from "./image-ref.js";
 import type { PinnedImage } from "./image-ref.js";
 import {
@@ -125,6 +126,12 @@ export interface ExecArgvSpec {
   env?: Readonly<Record<string, string>>;
   /** Emitted as `--env <NAME>` with no value; the docker client takes the value from its own environment. */
   secret?: SecretEnvName;
+  /**
+   * The role of the container. For an agent role (implementer, author) `env` may not set HOME, a vendor variable
+   * (CODEX_*, OPENAI_*, ANTHROPIC_*, CLAUDE_CONFIG_DIR) or a credential-shaped name: those would move the CLI's home or
+   * endpoint, or hand it a second key. Nothing sets an env on an agent exec today; this keeps it that way.
+   */
+  role?: ContainerRole;
   /** True adds `-i`; the bytes themselves travel on the process stdin, never in argv. */
   stdin: boolean;
 }
@@ -144,6 +151,9 @@ export function execArgv(name: string, exec: ExecArgvSpec, context: string | nul
   for (const [key, value] of Object.entries(exec.env ?? {})) {
     // A secret in `env` would put its value in argv; the only way to give an exec a secret is `secret`, by name.
     if (!ENV_NAME_RE.test(key) || (SECRET_ENV_NAMES as readonly string[]).includes(key) || value.includes("\0")) {
+      throw new ContainerSpecError("invalid_exec");
+    }
+    if ((exec.role === "implementer" || exec.role === "author") && agentExecEnvRefused(key)) {
       throw new ContainerSpecError("invalid_exec");
     }
     flags.push("--env", `${key}=${value}`);
