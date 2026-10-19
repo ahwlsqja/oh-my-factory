@@ -78,12 +78,9 @@ describe("agent container lifetime", () => {
   });
 
   // A negative guard: green before the lifetime existed, kept so the judge containers keep their idle sleep.
-  it.each(["sut", "harness", "workcopy"] as const)(
-    "negative guard: the %s idle sleep stays 2147483647",
-    (role) => {
-      expect(tail(createArgv(specFor(role), "ctx")).at(-1)).toBe("2147483647");
-    },
-  );
+  it.each(["sut", "harness", "workcopy"] as const)("negative guard: the %s idle sleep stays 2147483647", (role) => {
+    expect(tail(createArgv(specFor(role), "ctx")).at(-1)).toBe("2147483647");
+  });
 
   it("is built into the spec the stations use, from the role's own table", () => {
     for (const role of ["author", "implementer"] as const) {

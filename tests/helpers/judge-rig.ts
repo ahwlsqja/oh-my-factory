@@ -155,7 +155,9 @@ export function runtimeDouble(options: RuntimeOptions = {}): RuntimeDouble {
         ? Object.values(options.owned ?? {}).flatMap((list) => [...list])
         : [...(options.owned?.[filter.run_id] ?? [])]
       ).map((resource) =>
-        resource.work_id === THIS_ITEM && options.workId !== undefined ? { ...resource, work_id: options.workId } : resource,
+        resource.work_id === THIS_ITEM && options.workId !== undefined
+          ? { ...resource, work_id: options.workId }
+          : resource,
       ),
     remove: async (handle) => {
       removed.push(`container:${handle.name}`);

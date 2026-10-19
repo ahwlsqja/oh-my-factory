@@ -326,7 +326,8 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
         const tag = line.trim();
         if (!tag || tag.startsWith("<none>")) continue;
         const run = /^omf-sut:(.+)-\d+$/.exec(tag)?.[1] ?? "";
-        if (filter.run_id === null || run === filter.run_id) resources.push({ kind: "image", name: tag, run_id: run, work_id: "" });
+        if (filter.run_id === null || run === filter.run_id)
+          resources.push({ kind: "image", name: tag, run_id: run, work_id: "" });
       }
       return resources;
     },

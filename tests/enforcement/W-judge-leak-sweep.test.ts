@@ -68,12 +68,16 @@ describe("W-judge-leak-sweep", () => {
     ];
     acquireLock(sealLockFile(itemDir));
     try {
-      expect(await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK })).toMatchObject({ containers: 1 });
+      expect(await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK })).toMatchObject({
+        containers: 1,
+      });
       expect(memory.owned.map((resource) => resource.name)).toEqual([`omf-author-${EARLIER}-1-1`]);
     } finally {
       releaseLock(sealLockFile(itemDir));
     }
-    expect(await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK })).toMatchObject({ containers: 1 });
+    expect(await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK })).toMatchObject({
+      containers: 1,
+    });
     expect(memory.owned).toEqual([]);
   });
 
@@ -86,7 +90,9 @@ describe("W-judge-leak-sweep", () => {
       { kind: "container", name: `omf-author-${EARLIER}-1-1`, run_id: EARLIER, work_id: WORK },
       { kind: "container", name: `omf-author-${OTHER_ITEM}-1-1`, run_id: OTHER_ITEM, work_id: OTHER_WORK },
     ];
-    expect(await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK })).toMatchObject({ containers: 1 });
+    expect(await sweepOrphans({ runtime: memory, itemDir, currentRunId: CURRENT, workId: WORK })).toMatchObject({
+      containers: 1,
+    });
     expect(memory.owned.map((resource) => resource.run_id)).toEqual([OTHER_ITEM]);
   });
 
@@ -212,7 +218,12 @@ describe("W-judge-leak-sweep", () => {
     expect(created).toHaveLength(2);
     const memory = new MemoryRuntime();
     memory.owned = created.map((name) => ({ kind: "container" as const, name, run_id: CHILD_RUN, work_id: WORK }));
-    const swept = await sweepOrphans({ runtime: memory, itemDir, currentRunId: "r-20261015T000000Z-ffff", workId: WORK });
+    const swept = await sweepOrphans({
+      runtime: memory,
+      itemDir,
+      currentRunId: "r-20261015T000000Z-ffff",
+      workId: WORK,
+    });
     expect(swept.containers).toBe(2);
     expect(memory.owned).toEqual([]);
   });
