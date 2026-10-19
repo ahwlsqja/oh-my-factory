@@ -106,6 +106,13 @@ describe("findTestWeakening", () => {
     "@Ignore",
     "#[ignore]",
     '#[ignore = "slow"]',
+    "func init() {",
+    "func  init  () {",
+    "os.Exit(0)",
+    "os._exit(0)",
+    "sys.exit(0)",
+    "process.exit(0)",
+    "pytest.exit('stop')",
   ])("flags an added marker: %s", (line) => {
     const diff = modify("tests/a.test.ts", [` ctx`, `+${line}`]);
     expect(findTestWeakening(diff, [])).toEqual(["tests/a.test.ts"]);
@@ -130,6 +137,23 @@ describe("findTestWeakening", () => {
       "",
     ].join("\n");
     expect(findTestWeakening(diff, [])).toEqual(["pkg/zz_test.go"]);
+  });
+
+  it("flags a conftest.py anywhere, even outside a test path", () => {
+    const added = (path: string): string =>
+      [
+        `diff --git a/${path} b/${path}`,
+        "new file mode 100644",
+        "index 0000000..2222222",
+        "--- /dev/null",
+        `+++ b/${path}`,
+        "@@ -0,0 +1 @@",
+        '+collect_ignore_glob = ["*"]',
+        "",
+      ].join("\n");
+    for (const path of ["conftest.py", "pkg/conftest.py", "a/b/c/Conftest.py"])
+      expect(findTestWeakening(added(path), [])).toEqual([path]);
+    expect(findTestWeakening(modify("pkg/conftest.py", ["-x = 1", "+x = 2"]), [])).toEqual(["pkg/conftest.py"]);
   });
 
   it("flags a new tests/conftest.py that ignores collected tests", () => {
@@ -407,6 +431,68 @@ describe("findTestWeakening", () => {
         "+      exclude: ['a'],",
       ]);
       expect(findTestWeakening(diff, [])).toEqual(["tests/vitest.config.ts"]);
+    });
+
+    it.each([
+      ["tests/.coveragerc", "-exclude_lines = a", "+exclude_lines = b"],
+      ["tests/codecov.yml", "-  ignore: [a]", "+  ignore: [b]"],
+      ["tests/package.json", '-  "test": "vitest"', '+  "test": "vitest --passWithNoTests"'],
+    ])("an edit of the coverage-only file %s that is not a threshold raise is weakening", (path, from, to) => {
+      expect(findTestWeakening(modify(path, [from, to]), [])).toEqual([path]);
+    });
+
+    it.each([
+      ["tests/.coveragerc", "-fail_under = 80", "+fail_under = 90"],
+      ["tests/codecov.yml", "-    target: 80", "+    target: 90"],
+    ])("a pure threshold raise of the coverage-only file %s is not weakening", (path, from, to) => {
+      expect(findTestWeakening(modify(path, [from, to]), [])).toEqual([]);
+    });
+
+    describe("same-line config changes", () => {
+      const edit = (from: string, to: string) =>
+        findTestWeakening(modify("tests/vitest.config.ts", [`-${from}`, `+${to}`]), []);
+      const flagged = ["tests/vitest.config.ts"];
+
+      it("flags a boolean turned off while a threshold goes up on the same line", () => {
+        expect(
+          edit(
+            "  coverage: { enabled: true, thresholds: { lines: 80 } },",
+            "  coverage: { enabled: false, thresholds: { lines: 90 } },",
+          ),
+        ).toEqual(flagged);
+      });
+
+      it("flags a string added while a threshold goes up on the same line", () => {
+        expect(edit("  thresholds:{lines:80}, exclude:[]", '  thresholds:{lines:90}, exclude:["**/*"]')).toEqual(
+          flagged,
+        );
+      });
+
+      it("flags a non-threshold number change on the same line as a raised threshold", () => {
+        expect(edit("  { lines: 80, retries: 2 }", "  { lines: 90, retries: 0 }")).toEqual(flagged);
+        expect(edit("  { lines: 80, timeout: 1000 }", "  { lines: 90, timeout: 1 }")).toEqual(flagged);
+        expect(edit("  { lines: 80, maxFailures: 1 }", "  { lines: 90, maxFailures: 99 }")).toEqual(flagged);
+      });
+
+      it("flags threshold keys that change order or name", () => {
+        expect(edit("  { lines: 80, branches: 70 }", "  { branches: 90, lines: 80 }")).toEqual(flagged);
+        expect(edit("  { lines: 80 }", "  { functions: 90 }")).toEqual(flagged);
+      });
+
+      it("flags an expression value that cannot be compared", () => {
+        expect(edit("  { lines: 80 }", "  { lines: 90 - 100 }")).toEqual(flagged);
+        expect(edit("  { lines: 80 + 5 }", "  { lines: 90 + 5 }")).toEqual(flagged);
+      });
+
+      it("does not flag a pure raise of every threshold on one line", () => {
+        expect(
+          edit(
+            "  coverage: { enabled: true, thresholds: { lines: 80, branches: 70 } },",
+            "  coverage: { enabled: true, thresholds: { lines: 90, branches: 70 } },",
+          ),
+        ).toEqual([]);
+        expect(edit("fail_under = 80", "fail_under = 90.5 # raised")).toEqual([]);
+      });
     });
 
     it("a runner config outside a test path is only checked for thresholds", () => {

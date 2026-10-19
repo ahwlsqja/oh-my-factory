@@ -26,6 +26,14 @@ describe("runAudit test-weakening risk", () => {
     });
   });
 
+  it("a same-line config change that raises a threshold and turns coverage off is high", async () => {
+    const risk = await effective(
+      { "src/a.ts": "1\n", "tests/vitest.config.ts": "  coverage: { enabled: true, thresholds: { lines: 80 } },\n" },
+      { "tests/vitest.config.ts": "  coverage: { enabled: false, thresholds: { lines: 90 } },\n" },
+    );
+    expect(risk).toEqual({ class: "high", rules: ["test-weakening"], paths: ["tests/vitest.config.ts"] });
+  });
+
   it("an edit that keeps every assertion is not high", async () => {
     expect(
       (await effective({ "tests/a.test.ts": "expect(a).toBe(1);\n" }, { "tests/a.test.ts": "expect(a).toBe(2);\n" }))

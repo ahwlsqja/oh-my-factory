@@ -458,9 +458,9 @@ high risk by itself, neither when a candidate declares it nor when the audit rea
 no diff yet, so it does not make an item high at dispatch. After the implementation the audit runs a deterministic
 test-weakening check on the diff and raises the item to high only for a change that weakens tests: a deleted test file,
 a test that loses more assertion lines than it gains, an added skip, only, todo, fixme, expected-failure or x- or f-prefixed marker (`xit`, `xdescribe`, `fit` and the like),
-a hook that changes how other tests run (`conftest.py`, a Go `TestMain`, `this.skip()`), a lowered or removed threshold
-(every `key: number` pair of a line is compared, and a line it cannot pair counts as weakening), or a new or edited test
-runner or coverage config under a test path (unless it only raises numbers). A runner or coverage config outside a test
+a hook that changes how other tests run (a `conftest.py` at any depth, a Go `TestMain` or `func init()`, `this.skip()`, a process exit such as `os.Exit`, `sys.exit`, `process.exit` or `pytest.exit`), a lowered or removed threshold
+(every `key: number` pair of the code part of a line is compared, so a commented-out threshold counts as removed, and a line it cannot pair counts as weakening), a new or edited test
+runner or coverage config under a test path (unless it only raises threshold numbers and leaves the rest of every changed line exactly as it was; `.coveragerc`, `codecov.yml` and `package.json` under a test path are held to the same rule), or a binary section (one byte such as a NUL makes a section binary) on a test path or a coverage or runner config, which cannot be read and so counts as weakening. A mode-only change stays normal. A runner or coverage config outside a test
 path gets only the lowered-threshold check. A test change that does not weaken tests no longer adds the high-risk-paths
 review area to the evidence, which it used to. When
 the check cannot run, for example the diff cannot be read in full, every test change stays high. Risk only rises between
@@ -474,7 +474,7 @@ Known limits of the goal loop:
 - The test-weakening check is line based. It does not follow a block comment that spans lines, an early `return` or
   `if (false)` that stops a test from running, a weaker matcher (`toBeTruthy` for `toBe(1)`), an assertion replaced by
   one that is always true, edits to snapshots or fixtures, or an `include` or `exclude` that narrows which tests run.
-  A binary section has no lines to read. It counts removed and added assertion lines, so a rewrite that keeps the count
+  What a binary section changes is not inspected: it is flagged as unreadable, never judged. The check counts removed and added assertion lines, so a rewrite that keeps the count
   looks unchanged. A raised tolerance (a codecov `threshold`, a screenshot threshold) is not detected.
 
 - The seed lint catches numbers and metric names, not paraphrase. A model that restates a threshold in other
