@@ -114,6 +114,23 @@ describe("INI semicolon comments", () => {
     expect(await audited({ [path]: before }, { [path]: after })).toMatchObject({ class: "high" });
   });
 
+  it.each([
+    ["pytest.ini", "[pytest]\naddopts = --cov=pkg --cov-fail-under=90\n"],
+    ["tox.ini", "[pytest]\naddopts = --cov=pkg --cov-fail-under=90\n"],
+    ["setup.cfg", "[tool:pytest]\naddopts = --cov=pkg --cov-fail-under=90\n"],
+  ])("%s: an inline ; payload that really lowers the threshold is weakening", async (path, before) => {
+    const after = before.replace("--cov-fail-under=90", "--cov-fail-under=95 --junitxml ; --cov-fail-under=10");
+    expect(findTestWeakening(realDiff({ [path]: before }, { [path]: after }), [])).toEqual([path]);
+    expect(await audited({ [path]: before }, { [path]: after })).toMatchObject({ class: "high" });
+  });
+
+  it(".coveragerc: `fail_under = 95 ; fail_under = 10` really lowers the threshold", async () => {
+    const before = { ".coveragerc": "[report]\nfail_under = 90\n" };
+    const after = { ".coveragerc": "[report]\nfail_under = 95 ; fail_under = 10\n" };
+    expect(findTestWeakening(realDiff(before, after), [])).toEqual([".coveragerc"]);
+    expect(await audited(before, after)).toMatchObject({ class: "high" });
+  });
+
   it("a trailing ; comment after a raised threshold is still a raise", () => {
     const diff = realDiff({ ".coveragerc": "fail_under = 80\n" }, { ".coveragerc": "fail_under = 90 ; raised\n" });
     expect(findTestWeakening(diff, [])).toEqual([]);

@@ -6,9 +6,12 @@ import { isTestPath } from "./risk.js";
  * paths where the change makes the tests weaker: the file is deleted, it loses more assertion lines than it gains, it gains
  * more skip/only/todo/x-prefixed markers than it loses, a numeric threshold goes down, or a runner or coverage config under
  * a test path (including `.coveragerc`, `codecov.yml` and `package.json`) is added or edited in any way other than raising
- * threshold numbers with the rest of every changed line unchanged, a `conftest.py` at any depth is added or edited, or
- * a binary section (nothing to read) sits on a test path or a coverage/runner config. Comment lines count as neither
- * assertions, markers nor thresholds. Touching a test file, or adding one, is not weakening by itself.
+ * threshold numbers with the rest of every changed line unchanged, a `conftest.py` at any depth is added, edited or
+ * deleted, or a binary section (nothing to read) sits on a test path or a coverage/runner config. On an added line,
+ * markers are searched in the code part, plus any code after a closed block comment or after a CR, U+2028 or U+2029
+ * inside a comment; a pure comment line is not a marker. Comment stripping is unchanged for assertion counting and for
+ * removed lines, and comment lines are never thresholds. In INI-style configs a line that starts with `;` is a comment.
+ * Touching a test file, or adding one, is not weakening by itself.
  *
  * Returns the sorted paths, or `null` when the diff cannot be read in full: a file section that does not parse, or, when
  * `auditedPaths` is given, a test or coverage-config path of that list with no section, or a flagged path that is not in
@@ -64,9 +67,9 @@ function isConftest(path: string): boolean {
   return basename(path).toLowerCase() === "conftest.py";
 }
 
-/** INI-style configs (`.coveragerc`, `setup.cfg`, `tox.ini`, `pytest.ini`) also start a comment with `;`. */
+/** INI-style configs (`.coveragerc*`, `setup.cfg`, `tox.ini`, `pytest.ini`): a line that starts with `;` is a comment. */
 function isIniConfig(path: string): boolean {
-  return /^\.?coveragerc(\.[^/]+)?$|\.(ini|cfg)$/i.test(basename(path));
+  return /^\.?coveragerc(\.[^/]+)?$|^(setup\.cfg|tox\.ini|pytest\.ini)$/i.test(basename(path));
 }
 
 function isCoverageConfig(path: string): boolean {
@@ -155,7 +158,10 @@ interface LineCode {
   ambiguous: boolean;
 }
 
-/** Quoted markers are data. A prior unquoted slash may start a regex, so an apparent comment is ambiguous. */
+/**
+ * Quoted markers are data. A prior unquoted slash may start a regex, so an apparent comment is ambiguous. In INI-style
+ * configs `;` is a comment only as the first non-blank character: pytest and coverage.py do not strip inline comments.
+ */
 function codeOf(line: string, hashComment = false, semicolonComment = false): LineCode {
   if (COMMENT_START.test(line) || (semicolonComment && /^\s*;/.test(line))) return { text: null, ambiguous: false };
   let quote: string | null = null;
@@ -170,7 +176,7 @@ function codeOf(line: string, hashComment = false, semicolonComment = false): Li
     } else if (
       at > 0 &&
       /\s/.test(line[at - 1] ?? "") &&
-      ((char === "/" && line[at + 1] === "/") || (hashComment && char === "#") || (semicolonComment && char === ";"))
+      ((char === "/" && line[at + 1] === "/") || (hashComment && char === "#"))
     ) {
       return unquotedSlash ? { text: line, ambiguous: true } : { text: line.slice(0, at), ambiguous: false };
     } else if (char === "/") {
