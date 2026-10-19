@@ -1,3 +1,4 @@
+import { isRunning } from "../container/running.js";
 import type { ContainerHandle, ContainerRuntime } from "../container/runtime.js";
 import { observationOf } from "../scenario/observe.js";
 import type { ScenarioRunner, ScenarioSession } from "../scenario/runner.js";
@@ -32,15 +33,6 @@ export function createContainerScenarioRunner(input: RelayInput): ScenarioRunner
   if (input.run.length === 0) throw new Error("relay run argv is empty");
   const { runtime } = input;
 
-  async function isRunning(handle: ContainerHandle): Promise<boolean> {
-    try {
-      const doc = (await runtime.inspect(handle)) as { State?: { Running?: unknown } } | null;
-      return doc?.State?.Running === true;
-    } catch {
-      return false;
-    }
-  }
-
   return {
     id: "container-relay",
     executes: "candidate",
@@ -50,10 +42,10 @@ export function createContainerScenarioRunner(input: RelayInput): ScenarioRunner
       }
       const lease = await input.acquire();
       let gone = false;
-      const stop = async (signal: string): Promise<StepObservation> => {
+      const stop = async (outcome: StepObservation): Promise<StepObservation> => {
         gone = true;
         await runtime.remove(lease.handle);
-        return { outcome: "signaled", signal };
+        return outcome;
       };
       return {
         async runStep(step, limits) {
@@ -66,10 +58,17 @@ export function createContainerScenarioRunner(input: RelayInput): ScenarioRunner
             timeoutMs: limits.timeoutMs,
             maxOutputBytes: limits.maxOutputBytes,
           });
-          if (result.kind === "timeout" || result.kind === "output_limit") return stop(result.kind);
-          const suspect =
-            result.kind === "error" || (result.kind === "exited" && (result.status ?? 0) >= SUSPECT_STATUS);
-          if (suspect && !(await isRunning(lease.handle))) return stop("container_exited");
+          if (result.kind === "timeout" || result.kind === "output_limit")
+            return stop({ outcome: "signaled", signal: result.kind });
+          const status = result.kind === "exited" ? (result.status ?? 0) : 0;
+          const suspect = result.kind === "error" || status !== 0;
+          if (suspect && !(await isRunning(runtime, lease.handle))) {
+            // A container that went away under a step it was given is the host's doing when docker reports an ordinary
+            // failure status (its lifetime ran out: `docker exec` answers 1), so it is a fault, never the candidate's exit.
+            // 125 and up, and an exec client failure, stay the candidate's: it is the one that can kill its own container.
+            const hostCut = result.kind === "exited" && status < SUSPECT_STATUS;
+            return stop(hostCut ? { outcome: "error" } : { outcome: "signaled", signal: "container_exited" });
+          }
           if (result.kind === "error") return { outcome: "error" };
           const observation = observationOf(result);
           // observationOf reports undecodable stdout as `error`; from a candidate that is the candidate's own output.

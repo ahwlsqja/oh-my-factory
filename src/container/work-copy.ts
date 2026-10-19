@@ -7,11 +7,12 @@ import { applyPatchToDir, exportTree, isDirClean } from "../git/ops.js";
 import type { StageGolden } from "../isolation/evaluate.js";
 import { containerSpecFor, goldenFor } from "./golden.js";
 import { createMeasured, type MeasureDeps, type MeasuredContainer, NotGoldenError } from "./measure.js";
+import { isRunning } from "./running.js";
 import type { ContainerHandle, ContainerRuntime, ImageInfo } from "./runtime.js";
 import { type ContainerSpec, type OwnedLabels, WORKCOPY_GATE_EXEC_S, WORKCOPY_GATE_EXECS } from "./spec.js";
 import { tarOfDir } from "./tar-dir.js";
 
-export type WorkCopyErrorCode = "build_failed" | "extract_failed" | "not_golden" | "timeout";
+export type WorkCopyErrorCode = "build_failed" | "extract_failed" | "not_golden" | "timeout" | "container_gone";
 
 /** The message is the code; no path and no command output ever appears in it. */
 export class WorkCopyError extends Error {
@@ -175,6 +176,16 @@ class ContainerWorkCopy implements WorkCopy {
       if (result.kind === "timeout" || result.kind === "output_limit") {
         this.stale = true;
         await this.removeContainer();
+      } else if (
+        result.kind === "exited" &&
+        result.status !== 0 &&
+        !(await isRunning(this.ctx.runtime, this.container))
+      ) {
+        // The container is gone (its lifetime ran out): `docker exec` answered a failure status the caller would read as a
+        // gate fail or a test status. That is the host's doing, so it comes back as an error result, like a failed recreate.
+        this.stale = true;
+        await this.removeContainer();
+        return errorResult(new WorkCopyError("container_gone"));
       }
       return result;
     } catch (error) {

@@ -77,8 +77,11 @@ export class MemoryRuntime implements ContainerRuntime {
     return handle;
   }
 
-  async inspect(): Promise<unknown> {
-    return {};
+  /** Containers a test stopped by hand (a lifetime that ran out): still known to the daemon, no longer running. */
+  readonly stopped = new Set<string>();
+
+  async inspect(handle: ContainerHandle): Promise<unknown> {
+    return { State: { Running: this.live.has(handle.name) && !this.stopped.has(handle.name) } };
   }
 
   async start(handle: ContainerHandle): Promise<void> {

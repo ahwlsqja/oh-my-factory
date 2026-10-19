@@ -90,6 +90,23 @@ describe("container scenario runner", () => {
     });
   });
 
+  it("a non-zero exit from a container that is gone is a runtime fault, never the candidate's exit", async () => {
+    const cut = relay(({ state }) => {
+      state.dead = true; // the container's lifetime ran out: docker exec answers status 1
+      return exited("", 1);
+    });
+    const session = await cut.open();
+    expect(await session.runStep(step(["x"]), LIMITS)).toEqual({ outcome: "error" });
+    expect(cut.double.calls).toContain("remove:omf-sut-test-1");
+    // the container stays gone for the rest of the scenario
+    expect(await session.runStep(step(["y"]), LIMITS)).toEqual({ outcome: "signaled", signal: "container_exited" });
+  });
+
+  it("a non-zero exit from a container that is still running stays the candidate's exit", async () => {
+    const { open } = relay(() => exited("", 1));
+    expect(await (await open()).runStep(step(["x"]), LIMITS)).toEqual({ outcome: "exited", exit_code: 1, stdout: "" });
+  });
+
   it("keeps a high exit status when the container is still running, and releases once on close", async () => {
     const { open, released } = relay(() => exited("", 126));
     const session = await open();

@@ -42,6 +42,19 @@ describe("fault outcomes", () => {
   });
 });
 
+describe("a SUT container that stops mid-round", () => {
+  it("ends the round as round_error, not as a failed step", async () => {
+    const double = new RuntimeDouble(({ state }) => {
+      state.dead = true;
+      return exited("", 1);
+    });
+    await expect(runRound(double, [scenarioOf(1, [stepOf(["a"], 0)])], { k: 2 })).rejects.toMatchObject({
+      name: "JudgeRoundError",
+      code: "round_error",
+    });
+  });
+});
+
 describe("runJudgeRound", () => {
   const always0 = () => exited("");
 

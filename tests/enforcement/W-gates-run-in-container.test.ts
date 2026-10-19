@@ -57,6 +57,39 @@ describe("W-gates-run-in-container", () => {
     expect(memory.live.size).toBe(0);
   });
 
+  it("a work copy that stops mid-gate is an infrastructure error, not a gate fail and not a test status", async () => {
+    const fx = calcFixture();
+    const memory = new MemoryRuntime();
+    memory.onExec = (name, spec) => {
+      if (isTar(spec.argv)) return EXIT_0;
+      memory.stopped.add(name);
+      return exit(1);
+    };
+    const { factory } = workCopies(memory);
+    const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
+    const gates: JudgeConfigDecl["gates"] = {
+      fast: ["npm", "run", "lint"],
+      full: null,
+      deep: null,
+      required: ["fast"],
+    };
+    const gated = await runGates(gates, copy);
+    expect(gated.values.fast).toBe("skip");
+    expect(gated.details[0]).toMatchObject({ gate: "fast", value: "skip", exit: null, outcome: "error" });
+    await copy.dispose();
+
+    const proven = await proveTest({
+      quarantine: fx.quarantine,
+      base: fx.base,
+      head: fx.head,
+      testCommand: TEST_COMMAND,
+      explicitTestPaths: [],
+      copies: factory,
+    });
+    expect(proven).toMatchObject({ status: "MISCONFIGURED", reason: "test-command-unrunnable" });
+    expect(proven.test_exit).toBeNull();
+  });
+
   it("proveTest reports FAILED when the test also passes on the reverted tree", async () => {
     const fx = calcFixture();
     const memory = new MemoryRuntime();

@@ -142,6 +142,40 @@ describe("ContainerWorkCopyFactory (spec section 4.8)", () => {
     await copy.dispose();
   });
 
+  it("a non-zero exit from a container that is gone is an infrastructure error, and the next command gets a fresh one", async () => {
+    const fx = calcFixture();
+    const memory = new MemoryRuntime();
+    memory.onExec = (name, spec) => {
+      if (spec.argv[0] !== "gate") return EXIT_0;
+      memory.stopped.add(name); // the lifetime ran out during the gate: docker exec answers status 1
+      return exit(1);
+    };
+    const { factory } = workCopies(memory);
+    const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
+    const first = memory.specs[0]?.name;
+    expect(await copy.run(["gate"], OPTIONS)).toEqual({
+      kind: "error",
+      code: "workcopy_container_gone",
+      message: "container_gone",
+    });
+    expect(memory.calls).toContain(`remove ${first}`);
+    memory.onExec = () => EXIT_0;
+    expect((await copy.run(["echo"], OPTIONS)).kind).toBe("exited");
+    expect(memory.specs).toHaveLength(2);
+    await copy.dispose();
+  });
+
+  it("a non-zero exit from a container that is still running is the gate's own result", async () => {
+    const fx = calcFixture();
+    const memory = new MemoryRuntime();
+    memory.onExec = (_name, spec) => (spec.argv[0] === "gate" ? exit(1) : EXIT_0);
+    const { factory } = workCopies(memory);
+    const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
+    expect(await copy.run(["gate"], OPTIONS)).toMatchObject({ kind: "exited", status: 1 });
+    expect(memory.specs).toHaveLength(1);
+    await copy.dispose();
+  });
+
   it("a recreate that fails comes back as an error result, not an exception", async () => {
     const fx = calcFixture();
     const memory = new MemoryRuntime();
