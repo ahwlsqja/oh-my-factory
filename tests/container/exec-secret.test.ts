@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { execArgv } from "../../src/container/argv.js";
+import { markMeasured } from "../../src/container/measured-handles.js";
 import { createDockerRuntime } from "../../src/container/docker-cli.js";
 import { createDockerRuntimeSync } from "../../src/container/docker-sync.js";
 import { ContainerSpecError, SECRET_ENV_NAMES, type SecretEnvName } from "../../src/container/spec.js";
@@ -40,7 +41,8 @@ function runtimeOver(fake: FakeDocker, log: Logged[]) {
 async function started(fake: FakeDocker, log: Logged[]) {
   addImage(fake.state, IMPLEMENTER_BASE);
   const runtime = runtimeOver(fake, log);
-  const handle = await runtime.create(spec);
+  // Stands in for createMeasured: a secret exec needs a handle that was measured.
+  const handle = markMeasured(await runtime.create(spec));
   await runtime.start(handle);
   return { runtime, handle };
 }
@@ -160,7 +162,8 @@ describe("the runtime and a secret", () => {
       context: "fake",
       env: { PATH: bin.path, HOME: "/home/x", ANTHROPIC_API_KEY: "caller-env-must-not-pass" },
     });
-    const handle = await runtime.create(spec);
+    // Stands in for createMeasured: a secret exec needs a handle that was measured.
+    const handle = markMeasured(await runtime.create(spec));
     await runtime.start(handle);
     await runtime.exec(handle, PLAIN);
     await runtime.exec(handle, { ...PLAIN, secret: secretHandle() });

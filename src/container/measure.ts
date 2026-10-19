@@ -10,6 +10,7 @@ import type {
   StageMeasurement,
   ViolationCode,
 } from "../isolation/types.js";
+import { markMeasured } from "./measured-handles.js";
 import type { ContainerHandle, ContainerRuntime } from "./runtime.js";
 import { type ContainerSpec, ROLE_STAGE } from "./spec.js";
 
@@ -190,7 +191,7 @@ export async function createMeasured(
     }
     if (measurement.violations.length > 0) throw new NotGoldenError(measurement.violations);
     keep = true;
-    return { handle, measurement };
+    return { handle: markMeasured(handle), measurement };
   } finally {
     // Idempotent. A failed removal leaves an orphan that carries the omf.owner label for the owner-label sweep.
     if (!keep) await runtime.remove(handle).catch(() => undefined);

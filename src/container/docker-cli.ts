@@ -26,6 +26,7 @@ import {
   RuntimeError,
   type SecretHandle,
 } from "./runtime.js";
+import { isMeasured } from "./measured-handles.js";
 import { ContainerSpecError, ROLE_SECRET, isImageId } from "./spec.js";
 
 export type DockerRunner = (
@@ -285,8 +286,9 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
       const name = await requireLocal();
       const { secret } = spec;
       // Candidate code runs in every judge role, and it can read whatever its container is given: only an agent role, which is
-      // measured for that, ever receives a key, and only the key of its own vendor.
-      if (secret !== undefined && ROLE_SECRET[handle.role] !== secret.name)
+      // measured for that, ever receives a key, and only the key of its own vendor. "Measured" is checked here: the handle must
+      // be one `createMeasured` returned, so a container that was never judged golden cannot be given a key.
+      if (secret !== undefined && (ROLE_SECRET[handle.role] !== secret.name || !isMeasured(handle)))
         throw new ContainerSpecError("invalid_exec");
       // The argv is built (and `spec.env` and the secret name validated) before the value is read.
       const argv = execArgv(

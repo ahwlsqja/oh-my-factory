@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { execArgv } from "../../src/container/argv.js";
+import { markMeasured } from "../../src/container/measured-handles.js";
 import {
   CREDENTIAL_SHAPED_ENV_NAMES,
   ContainerSpecError,
@@ -24,7 +25,8 @@ const CODEX_KEY = "sk-codex-test-0123456789abcdefghij";
 async function startedAuthor(fake: FakeDocker) {
   addImage(fake.state, AUTHOR_BASE);
   const runtime = fakeRuntime(fake);
-  const handle = await runtime.create(specFor("author"));
+  // Stands in for createMeasured: a secret exec needs a handle that was measured.
+  const handle = markMeasured(await runtime.create(specFor("author")));
   await runtime.start(handle);
   return { runtime, handle };
 }
