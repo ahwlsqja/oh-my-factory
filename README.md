@@ -25,10 +25,12 @@
 > target, control bands), the J8 budget commands, the work-item store with its `work` and `veto`
 > commands, and the goal loop: `omf goal tick` turns the gap into work items with a model that
 > never sees the numbers. The verification line runs through three commands: `omf seal` (the sealing author in a container),
-> `omf run` and `omf report`. The offline tests of them use a fake Docker, and the real-daemon suites in `tests/gated` are written but not
-> yet recorded, so no run has yet shown that a real container isolates a real model. Gated container runs are recorded for the `docker inspect` parser, the work
-> copy, the two-container round trip and the real isolation probe; no gated run of the author container or of the
-> whole line is recorded, and none is recorded for the implementer container or for any suite that calls a model.
+> `omf run` and `omf report`. The offline tests of them use a fake Docker. Five real-daemon suites in `tests/gated` are recorded
+> in `docs/evidence/gated-runs.json`: `G-inspect-parser-real` (the `docker inspect` parser), `G-work-copy-real`,
+> `G-two-container-roundtrip`, `G-real-isolation-probe` and `G-implementer-boundary-real` (a real implementer container
+> measures L2, a real bundle imports, and the repository changes only by one branch). Not yet recorded: `G-author-boundary-real`,
+> `G-author-canary`, `G-skeleton-real`, `G-implementer-real-run` and `G-e6-l2-leak-redteam`, so no gated run of the author container or of the whole line is recorded, and no run has yet shown that a
+> real model is isolated.
 > See [What works today](#what-works-today).
 
 ---
@@ -118,7 +120,7 @@ or **designed** and not built yet.
   loaded over stdin, and the SUT never sees an expectation) and measures each with
   `docker inspect` before candidate code runs in it. GATE-3 reads those measurements from the ledger. Only the offline
   form against a fake Docker is tested, and what a real container does is not enforced beyond the gated runs recorded in
-  `docs/evidence/gated-runs.json` (the real isolation probe and the two-container round trip); the implementer container has no recorded run. The implementer container is run by `omf run`, offline against a fake Docker only
+  `docs/evidence/gated-runs.json` (the `docker inspect` parser, the work copy, the real isolation probe, the two-container round trip and the implementer boundary run, which measures a real implementer container at L2 without a model); no gated run with a real model or of the author container is recorded. `omf run` otherwise runs the implementer container offline against a fake Docker only
   ([`docs/implementer.md`](docs/implementer.md)) and the author container is started only by `omf seal`, which has not been run against a real daemon or model, so a real line stops at GATE-3 as `isolation_unmeasured` when the author stage was not measured in that run ([`docs/container-judge.md`](docs/container-judge.md)).
 - **Empty means fail.** *Partly built.* The line skeleton (`E7a`), GATE-2 (`E7b`) and the gate line, the
   audit and GATE-3 (`E7c`) read a missing measurement as a failure, never as a pass. The judge's verdict

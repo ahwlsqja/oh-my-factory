@@ -103,11 +103,11 @@ OMF_AUTHOR_API_KEY=<dedicated, spend-limited key> npm run test:gated -- --model 
 OMF_AUTHOR_API_KEY=<dedicated, spend-limited key> OMF_IMPLEMENTER_API_KEY=<dedicated, spend-limited key> npm run test:gated -- --model --only G-skeleton-real
 ```
 
-Type the two key lines with the keychain form instead of the placeholder, so no key text enters the shell history (the leading `!` runs it in your shell; `omf-gated-openai` and `omf-gated-anthropic` are the keychain service names to store the keys under):
+Type the two key lines with the keychain form instead of the placeholder, so no key text enters the shell history (type the lines as shown in bash or zsh, without a leading `!`, which in those shells negates the exit status and is only a Claude Code prompt shortcut; `omf-gated-openai` and `omf-gated-anthropic` are the keychain service names to store the keys under):
 
 ```console
-! OMF_AUTHOR_API_KEY="$(security find-generic-password -a "$USER" -s omf-gated-openai -w)" npm run test:gated -- --model --only G-author-canary
-! OMF_AUTHOR_API_KEY="$(security find-generic-password -a "$USER" -s omf-gated-openai -w)" OMF_IMPLEMENTER_API_KEY="$(security find-generic-password -a "$USER" -s omf-gated-anthropic -w)" npm run test:gated -- --model --only G-skeleton-real
+OMF_AUTHOR_API_KEY="$(security find-generic-password -a "$USER" -s omf-gated-openai -w)" npm run test:gated -- --model --only G-author-canary
+OMF_AUTHOR_API_KEY="$(security find-generic-password -a "$USER" -s omf-gated-openai -w)" OMF_IMPLEMENTER_API_KEY="$(security find-generic-password -a "$USER" -s omf-gated-anthropic -w)" npm run test:gated -- --model --only G-skeleton-real
 ```
 
 The driver starts the `omf-m3f` profile, passes the test process the union of the keys that the suites matched by `--only` read (all of them without `--only`), each under its own name, so one vitest process holds every key of every matched suite and runs the output through a redactor. A key is passed on the command line of the one command that needs it and is never written to a file; the suites print nothing, and a failure message is a fixed string. Use dedicated keys with a provider-side spend limit: code in the container can read the key it is given, and author spend is not recorded or bounded by OMF in money (see What it costs for the wall-time, output and call caps it does enforce).

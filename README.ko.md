@@ -25,9 +25,11 @@
 > 작업 항목 저장소와 `work`, `veto` 명령, 그리고 목표 루프가 들어 있습니다. `omf goal tick` 은
 > 모델이 숫자를 보지 못하게 한 채 격차를 작업 항목으로 바꿉니다.
 > 검증 라인은 `omf seal`(컨테이너 안의 봉인 작성자), `omf run`, `omf report` 세 명령으로 돕니다. 이를 확인하는 오프라인 시험은
-> 가짜 Docker 를 쓰고, 진짜 데몬을 쓰는 `tests/gated` 시험은 작성만 되어 아직 기록되지 않았기 때문에, 진짜 컨테이너가 진짜 모델을 격리한다는 것을 보인 실행은 아직 없습니다.
-> 컨테이너 게이트 실행은 `docker inspect` 파서, 작업 사본, 컨테이너 두 개 왕복, 실제 격리 탐침에 대해 기록되어 있고,
-> 작성자 컨테이너와 전체 라인의 게이트 실행은 기록된 것이 없으며 구현자 컨테이너와 모델을 부르는 시험도 마찬가지입니다.
+> 가짜 Docker 를 씁니다. 진짜 데몬을 쓰는 `tests/gated` 시험 다섯 개는 `docs/evidence/gated-runs.json` 에 기록되어 있습니다:
+> `G-inspect-parser-real`(`docker inspect` 파서), `G-work-copy-real`, `G-two-container-roundtrip`, `G-real-isolation-probe`,
+> `G-implementer-boundary-real`(진짜 구현자 컨테이너가 L2 로 측정되고, 진짜 번들이 import 되며, 저장소는 브랜치 하나로만 바뀝니다).
+> 아직 기록되지 않은 것은 `G-author-boundary-real`, `G-author-canary`, `G-skeleton-real`, `G-implementer-real-run`,
+> `G-e6-l2-leak-redteam` 이므로 작성자 컨테이너와 전체 라인의 게이트 실행은 기록된 것이 없으며, 진짜 모델이 격리된다는 것을 보인 실행도 아직 없습니다.
 > [지금 되는 것](#지금-되는-것)을 보세요.
 
 ---
@@ -112,8 +114,8 @@ OMF 는 루프 두 개를 돌립니다.
 - **격리는 선언이 아니라 측정.** *일부 구현됨.* 판정기는 후보를 SUT 와 하네스 두 일회용 컨테이너(네트워크 없음,
   `docker.sock` 없음, 마운트된 경로 없음; 하네스만 시나리오를 stdin 으로 받아
   들고 있고 SUT 는 기대값을 보지 못합니다)에서 돌리고, 후보 코드가 돌기 전에 컨테이너마다 `docker inspect` 로 측정합니다. GATE-3 는 그 측정을 원장에서 읽습니다. 지금 시험되는 것은 가짜 Docker 를 쓴 오프라인 형태뿐입니다.
-  실제 컨테이너 실행은 `docs/evidence/gated-runs.json` 에 기록된 것(실제 격리 탐침, 컨테이너 두 개 왕복) 밖에서는 강제되지 않으며,
-  구현자 컨테이너는 `omf run` 이 띄우지만 가짜 Docker 로만 시험되었고([`docs/implementer.md`](docs/implementer.md)) 작성자 컨테이너는 `omf seal` 만 띄우고 그것도 실제 데몬이나 모델로 돌려 본 적이 없어서, 그 실행에서 작성자 단계가 측정되지 않았으면 라인은 GATE-3 에서 `isolation_unmeasured` 로 멈춥니다
+  실제 컨테이너 실행은 `docs/evidence/gated-runs.json` 에 기록된 것(`docker inspect` 파서, 작업 사본, 실제 격리 탐침, 컨테이너 두 개 왕복, 모델 없이 진짜 구현자 컨테이너를 L2 로 측정한 구현자 경계 실행) 밖에서는 강제되지 않으며, 모델을 쓰는 게이트 실행과 작성자 컨테이너의 게이트 실행은 기록된 것이 없습니다.
+  `omf run` 이 띄우는 구현자 컨테이너는 그 밖에는 가짜 Docker 로만 시험되었고([`docs/implementer.md`](docs/implementer.md)) 작성자 컨테이너는 `omf seal` 만 띄우고 그것도 실제 데몬이나 모델로 돌려 본 적이 없어서, 그 실행에서 작성자 단계가 측정되지 않았으면 라인은 GATE-3 에서 `isolation_unmeasured` 로 멈춥니다
   ([`docs/container-judge.md`](docs/container-judge.md)).
 - **비어 있으면 실패.** *일부 구현됨.* 라인 뼈대 (`E7a`), GATE-2 (`E7b`), 게이트 줄·감사·GATE-3 (`E7c`) 는
   없는 측정을 통과가 아니라 실패로 읽습니다. 심판의 판정(`E7d`)도 같습니다. 판정이 없거나 형식이 틀리거나 다른 라운드의 것이면 라운드가 끝나며 통과로 읽지 않습니다.
