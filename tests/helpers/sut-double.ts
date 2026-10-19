@@ -115,6 +115,8 @@ export class RuntimeDouble implements ContainerRuntime {
     env: Readonly<Record<string, string>> | undefined;
   }[] = [];
   tamper: Tamper | null = null;
+  /** The daemon cannot answer an inspect (a failed call): the state of a container is then unknown. */
+  failInspect = false;
   private readonly live = new Map<string, SutState>();
   private readonly harness = new HarnessDouble();
 
@@ -149,6 +151,7 @@ export class RuntimeDouble implements ContainerRuntime {
     return { name: spec.name, id: `id-${spec.name}`, role: spec.labels.role };
   }
   async inspect(handle: ContainerHandle): Promise<unknown> {
+    if (this.failInspect) throw new Error("inspect failed");
     const state = this.live.get(handle.name);
     return { State: { Running: state !== undefined && !state.dead } };
   }

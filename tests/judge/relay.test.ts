@@ -76,30 +76,38 @@ describe("container scenario runner", () => {
     expect(double.calls).not.toContain("remove:omf-sut-test-1");
   });
 
-  it("separates a runtime fault from a candidate that killed its own container", async () => {
-    const fault = relay(() => ({ kind: "error", code: "EIO", message: "client failed" }));
-    expect(await (await fault.open()).runStep(step(["x"]), LIMITS)).toEqual({ outcome: "error" });
+  it("an exec client error is a runtime fault whether or not the container is alive", async () => {
+    const alive = relay(() => ({ kind: "error", code: "EIO", message: "client failed" }));
+    expect(await (await alive.open()).runStep(step(["x"]), LIMITS)).toEqual({ outcome: "error" });
 
-    const killer = relay(({ state }) => {
+    // A candidate cannot end its own container (PID 1 is the idle sleep, which takes no signal), so a gone one is the host's.
+    const gone = relay(({ state }) => {
       state.dead = true;
       return { kind: "error", code: "EIO", message: "client failed" };
     });
-    expect(await (await killer.open()).runStep(step(["x"]), LIMITS)).toEqual({
-      outcome: "signaled",
-      signal: "container_exited",
-    });
+    expect(await (await gone.open()).runStep(step(["x"]), LIMITS)).toEqual({ outcome: "error" });
+    expect(gone.double.calls).toContain("remove:omf-sut-test-1");
   });
 
-  it("a non-zero exit from a container that is gone is a runtime fault, never the candidate's exit", async () => {
-    const cut = relay(({ state }) => {
-      state.dead = true; // the container's lifetime ran out: docker exec answers status 1
-      return exited("", 1);
-    });
-    const session = await cut.open();
-    expect(await session.runStep(step(["x"]), LIMITS)).toEqual({ outcome: "error" });
-    expect(cut.double.calls).toContain("remove:omf-sut-test-1");
-    // the container stays gone for the rest of the scenario
-    expect(await session.runStep(step(["y"]), LIMITS)).toEqual({ outcome: "signaled", signal: "container_exited" });
+  it.each([1, 125, 137])(
+    "a non-zero exit (status %i) from a container that is gone is a runtime fault, never the candidate's exit",
+    async (status) => {
+      const cut = relay(({ state }) => {
+        state.dead = true;
+        return exited("", status);
+      });
+      const session = await cut.open();
+      expect(await session.runStep(step(["x"]), LIMITS)).toEqual({ outcome: "error" });
+      expect(cut.double.calls).toContain("remove:omf-sut-test-1");
+      // the container stays gone for the rest of the scenario
+      expect(await session.runStep(step(["y"]), LIMITS)).toEqual({ outcome: "signaled", signal: "container_exited" });
+    },
+  );
+
+  it.each([1, 137])("a failed inspect after a non-zero exit (status %i) is a runtime fault", async (status) => {
+    const blind = relay(() => exited("", status));
+    blind.double.failInspect = true;
+    expect(await (await blind.open()).runStep(step(["x"]), LIMITS)).toEqual({ outcome: "error" });
   });
 
   it("a non-zero exit from a container that is still running stays the candidate's exit", async () => {

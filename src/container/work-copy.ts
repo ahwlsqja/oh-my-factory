@@ -7,7 +7,7 @@ import { applyPatchToDir, exportTree, isDirClean } from "../git/ops.js";
 import type { StageGolden } from "../isolation/evaluate.js";
 import { containerSpecFor, goldenFor } from "./golden.js";
 import { createMeasured, type MeasureDeps, type MeasuredContainer, NotGoldenError } from "./measure.js";
-import { isRunning } from "./running.js";
+import { containerState } from "./running.js";
 import type { ContainerHandle, ContainerRuntime, ImageInfo } from "./runtime.js";
 import { type ContainerSpec, type OwnedLabels, WORKCOPY_GATE_EXEC_S, WORKCOPY_GATE_EXECS } from "./spec.js";
 import { tarOfDir } from "./tar-dir.js";
@@ -177,12 +177,12 @@ class ContainerWorkCopy implements WorkCopy {
         this.stale = true;
         await this.removeContainer();
       } else if (
-        result.kind === "exited" &&
-        result.status !== 0 &&
-        !(await isRunning(this.ctx.runtime, this.container))
+        ((result.kind === "exited" && result.status !== 0) || result.kind === "error") &&
+        (await containerState(this.ctx.runtime, this.container)) !== "running"
       ) {
-        // The container is gone (its lifetime ran out): `docker exec` answered a failure status the caller would read as a
-        // gate fail or a test status. That is the host's doing, so it comes back as an error result, like a failed recreate.
+        // The container is gone or its state is unknown (a failed inspect), after a non-zero exit of any status or an exec client
+        // error. A command cannot end its own container (PID 1 is the idle sleep, which takes no signal), so this is the host's
+        // doing, never a gate or test result: it comes back as an error result, like a failed recreate.
         this.stale = true;
         await this.removeContainer();
         return errorResult(new WorkCopyError("container_gone"));

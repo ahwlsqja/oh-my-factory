@@ -46,6 +46,8 @@ export class MemoryRuntime implements ContainerRuntime {
   owned: OwnedResource[] = [];
   failCreate = false;
   failImageRemoval = false;
+  /** The daemon cannot answer an inspect: the state of a container is then unknown. */
+  failInspect = false;
   onExec: (name: string, spec: ExecSpec) => ProcessResult | Promise<ProcessResult> = () => EXIT_0;
 
   async endpoint(): Promise<{ kind: "unix"; local: true }> {
@@ -81,6 +83,7 @@ export class MemoryRuntime implements ContainerRuntime {
   readonly stopped = new Set<string>();
 
   async inspect(handle: ContainerHandle): Promise<unknown> {
+    if (this.failInspect) throw new Error("inspect failed");
     return { State: { Running: this.live.has(handle.name) && !this.stopped.has(handle.name) } };
   }
 

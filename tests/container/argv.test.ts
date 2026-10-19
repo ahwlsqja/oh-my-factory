@@ -242,3 +242,18 @@ describe("listing and image removal", () => {
     expect(() => removeImageArgv("-f" as ImageId, null)).toThrow();
   });
 });
+
+describe("PID 1 of every container is the idle sleep", () => {
+  // The gone-container rule rests on it: a candidate cannot end its own container from inside, because PID 1 installs no
+  // signal handlers and the kernel drops signals sent to a namespace init from inside the namespace.
+  it.each(["sut", "harness", "workcopy", "implementer", "author"] as const)("%s: sleep, no init wrapper", (role) => {
+    const argv = createArgv(specFor(role), null);
+    expect(argv).not.toContain("--init");
+    expect(argv.some((element) => element.startsWith("--init"))).toBe(false);
+    const entry = argv.indexOf("--entrypoint");
+    expect(argv.slice(entry, entry + 2)).toEqual(["--entrypoint", "sleep"]);
+    // the image and the lifetime in seconds follow the entrypoint, and nothing after them
+    expect(argv).toHaveLength(entry + 4);
+    expect(argv[entry + 3]).toMatch(/^[0-9]+$/);
+  });
+});

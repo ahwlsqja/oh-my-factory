@@ -142,26 +142,48 @@ describe("ContainerWorkCopyFactory (spec section 4.8)", () => {
     await copy.dispose();
   });
 
-  it("a non-zero exit from a container that is gone is an infrastructure error, and the next command gets a fresh one", async () => {
+  it.each([
+    ["status 1", exit(1)],
+    ["status 125", exit(125)],
+    ["status 137", exit(137)],
+    ["an exec client error", { kind: "error", code: "EIO", message: "client failed" } as const],
+  ])(
+    "a failed exec (%s) in a container that is gone is an infrastructure error, and the next command gets a fresh one",
+    async (_name, answer) => {
+      const fx = calcFixture();
+      const memory = new MemoryRuntime();
+      memory.onExec = (name, spec) => {
+        if (spec.argv[0] !== "gate") return EXIT_0;
+        memory.stopped.add(name); // the lifetime ran out during the gate
+        return answer;
+      };
+      const { factory } = workCopies(memory);
+      const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
+      const first = memory.specs[0]?.name;
+      expect(await copy.run(["gate"], OPTIONS)).toEqual({
+        kind: "error",
+        code: "workcopy_container_gone",
+        message: "container_gone",
+      });
+      expect(memory.calls).toContain(`remove ${first}`);
+      memory.onExec = () => EXIT_0;
+      expect((await copy.run(["echo"], OPTIONS)).kind).toBe("exited");
+      expect(memory.specs).toHaveLength(2);
+      await copy.dispose();
+    },
+  );
+
+  it("a failed inspect after a non-zero exit is an infrastructure error, never the gate's result", async () => {
     const fx = calcFixture();
     const memory = new MemoryRuntime();
-    memory.onExec = (name, spec) => {
-      if (spec.argv[0] !== "gate") return EXIT_0;
-      memory.stopped.add(name); // the lifetime ran out during the gate: docker exec answers status 1
-      return exit(1);
-    };
     const { factory } = workCopies(memory);
     const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
-    const first = memory.specs[0]?.name;
-    expect(await copy.run(["gate"], OPTIONS)).toEqual({
-      kind: "error",
-      code: "workcopy_container_gone",
-      message: "container_gone",
-    });
-    expect(memory.calls).toContain(`remove ${first}`);
-    memory.onExec = () => EXIT_0;
-    expect((await copy.run(["echo"], OPTIONS)).kind).toBe("exited");
-    expect(memory.specs).toHaveLength(2);
+    memory.onExec = (_name, spec) => {
+      if (spec.argv[0] === "gate") memory.failInspect = true;
+      return spec.argv[0] === "gate" ? exit(1) : EXIT_0;
+    };
+    expect(await copy.run(["gate"], OPTIONS)).toMatchObject({ kind: "error", code: "workcopy_container_gone" });
+    memory.failInspect = false;
     await copy.dispose();
   });
 
