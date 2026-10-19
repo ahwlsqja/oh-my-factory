@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { commitAll, gitIn, makeGitRepo, makeTempDir } from "../helpers/tmp.js";
 
-// M3h-D14, M3h-D15, owner decisions 2 and 3 of 2026-10-19: the stage0 outer-suite job and the kernel-path report are
+// The stage0 outer-suite job and the kernel-path report are
 // advisory. They run with a read-only token, sit outside the `ci` aggregate, use the stage0 release's suite (never the
 // pull request's copy) and the base commit's report script. Each workflow step's shell is executed here, not grepped.
 

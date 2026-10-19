@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { makeTempDir } from "../helpers/tmp.js";
 
-// M3h-D8: a model suite gets only the keys it reads, each under its own name. G-author-canary reads the author key,
+// A model suite gets only the keys it reads, each under its own name. G-author-canary reads the author key,
 // G-skeleton-real reads both, the two older model suites read the implementer key. No vendor key name ever passes.
 const SCRIPT = fileURLToPath(new URL("../../scripts/gated-docker.mjs", import.meta.url));
 

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 // The read-only `omf ui` work edits src/cli/main.ts in parallel. The W verbs therefore sit behind one registration
-// function in their own files, and main.ts holds exactly one import and one call (M3h-D18).
+// function in their own files, and main.ts holds exactly one import and one call.
 const read = (path: string): string => readFileSync(new URL(`../../src/cli/${path}`, import.meta.url), "utf8");
 
 const W_MODULE =

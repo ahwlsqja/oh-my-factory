@@ -6,7 +6,7 @@ import { omf } from "../helpers/cli.js";
 import { cleanStations, finished, passGates, setupLine, station } from "../helpers/line.js";
 
 // covers: S5.0.run-report-idempotent
-// M3h-D17: a second `omf run` on an item that already ran and any number of `omf report` calls change nothing, and a report
+// A second `omf run` on an item that already ran and any number of `omf report` calls change nothing, and a report
 // prints only what the verified ledger vouches for, rendered from the validated evidence.json (never the bytes of evidence.md).
 const JUDGE_LINE = "judge: deterministic checks only (model judge not available)";
 

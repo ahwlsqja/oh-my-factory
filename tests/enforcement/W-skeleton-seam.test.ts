@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 // The seam test appends the author measurement itself, so it may show the line's logic but must never be read as sealing
-// evidence: it names itself a seam, the conformance matrix cannot count it, and it cannot assert merge_recommended (owner
-// decision O-1: the noise check is never evaluated, so a success is capped at human_needed).
+// evidence: it names itself a seam, the conformance matrix cannot count it, and it cannot assert merge_recommended (the
+// noise check is never evaluated, so a success is capped at human_needed).
 
 const ROOT = new URL("../../", import.meta.url);
 const read = (path: string): string => readFileSync(new URL(path, ROOT), "utf8");
@@ -83,7 +83,7 @@ describe("W-skeleton-seam", () => {
     expect(mapped).not.toContain(SEAM);
   });
 
-  it("holds the O-1 ceiling: it asserts human_needed and mentions merge_recommended only to deny it", () => {
+  it("holds the human_needed ceiling: it asserts human_needed and mentions merge_recommended only to deny it", () => {
     expect(ceiling(seam)).toEqual({ human: true, denies: true, positive: false });
     // Positive controls: a ceiling that lives only in a comment, or a positive assertion, does not count.
     expect(ceiling('// expect(x).toBe("human_needed")\n// expect(x).not.toBe("merge_recommended")')).toEqual({

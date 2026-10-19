@@ -10,7 +10,7 @@ import { latestEvidence, setupSearchItem, writeSearchConfig } from "./skeleton-k
 // covers: S5.0.skeleton-real-line
 // G-skeleton-real. The whole line through the shipped CLI with the real Codex author, the real
 // Claude implementer and the real judge, on a staged item (see skeleton-kit.ts): decide lint, omf seal, omf run, omf report,
-// with one rework round. It asserts what the line may claim under owner decision O-1: outcome success, recommendation
+// with one rework round. It asserts what the line may claim while the noise check stays unevaluated: outcome success, recommendation
 // human_needed (never merge_recommended: the noise check is not evaluated), run isolation level L2 and noise_check_not_evaluated
 // as the only unverified area. Decision signatures come from the fixture. Same fixed-message rule as the other model suites:
 // no expect call, nothing printed. Written, never run by an agent; not enforced until docs/evidence/gated-runs.json records it.
@@ -44,7 +44,7 @@ describeGatedModel("G-skeleton-real", (ctx) => {
       );
       assertTrue(authorL2, "no author L2 measurement is in the ledger");
 
-      const run = cli(["run", f.workId], keys);
+      const run = cli(["run", f.workId], { OMF_IMPLEMENTER_API_KEY: keys.OMF_IMPLEMENTER_API_KEY });
       assertTrue(run.code === 0, "omf run did not finish with success");
       const submitted = events().filter((event) => event.type === "work.submitted");
       assertTrue(submitted.length === 1, "the item was not submitted exactly once");

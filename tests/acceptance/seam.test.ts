@@ -6,7 +6,7 @@ import { eventsOfType, runSeamLine, type SeamRun } from "../helpers/line-m3f.js"
 
 // SEAM test (spec §7). The whole line S1..S7 over a fake daemon, with the author and implementer measurements appended by the
 // test itself. It shows the line's logic, one rework round included; it does not show that anything was sealed or isolated, so
-// it maps to no requirement. Under owner decision O-1 the noise check is never evaluated, so the best a success can say is
+// it maps to no requirement. The noise check is never evaluated, so the best a success can say is
 // human_needed.
 
 /** Five train behaviours, so masked feedback can be released (fewer is withheld), one contradiction canary, one test behaviour. */
@@ -62,7 +62,7 @@ describe("seam: the whole line with an injected author measurement", () => {
     expect(eventsOfType(run, "feedback.test_run_consumed")).toHaveLength(1);
     expect(eventsOfType(run, "feedback.test_run_completed")).toHaveLength(1);
 
-    // The ceiling of O-1: success, human_needed, never merge_recommended.
+    // The ceiling: success, human_needed, never merge_recommended.
     expect(run.result.outcome).toBe("success");
     expect(run.result.evidence.recommendation).toBe("human_needed");
     expect(run.result.evidence.recommendation).not.toBe("merge_recommended");

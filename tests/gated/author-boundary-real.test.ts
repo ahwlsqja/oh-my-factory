@@ -14,6 +14,10 @@ import { gatedRuntime, ownedLeftovers } from "./lifecycle-support.js";
 // the boundary: L2 from the real probe, tmpfs mounts only, a bridge network, one scoped secret, no vendor credential file, a
 // writable answer path. Written, never run by an agent; not enforced until docs/evidence/gated-runs.json records it.
 
+const asRecord = (value: unknown): Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+const asArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+
 describeGated("G-author-boundary-real", (ctx) => {
   it("measures L2 and leaves the author tmpfs mounts, one scoped secret, no Claude binary or .codex and a writable answer path", async () => {
     const runtime = trackRuntime(gatedRuntime(ctx));
@@ -40,15 +44,20 @@ describeGated("G-author-boundary-real", (ctx) => {
       expect(inspected.stdout).not.toContain("CODEX_API_KEY");
 
       // The mounts and limits as the daemon reports them: no bind, four tmpfs paths, bridge network, read-only root.
-      const doc = (JSON.parse(inspected.stdout) as Array<Record<string, any>>)[0] ?? {};
-      const host = doc.HostConfig ?? {};
+      const parsed: unknown = JSON.parse(inspected.stdout);
+      const doc = asRecord(Array.isArray(parsed) ? parsed[0] : undefined);
+      const host = asRecord(doc.HostConfig);
       expect(host.Binds ?? []).toEqual([]);
-      expect((doc.Mounts ?? []).every((mount: { Type: string }) => mount.Type === "tmpfs")).toBe(true);
-      expect(Object.keys(host.Tmpfs ?? {}).sort()).toEqual(["/agent", "/in", "/out", "/tmp"]);
+      expect(asArray(doc.Mounts).every((mount) => asRecord(mount).Type === "tmpfs")).toBe(true);
+      expect(Object.keys(asRecord(host.Tmpfs)).sort()).toEqual(["/agent", "/in", "/out", "/tmp"]);
       expect(host.NetworkMode).toBe("bridge");
       expect(host.ReadonlyRootfs).toBe(true);
       expect(host.CapDrop).toEqual(["ALL"]);
-      expect((host.SecurityOpt ?? []).some((option: string) => option.startsWith("no-new-privileges"))).toBe(true);
+      expect(
+        asArray(host.SecurityOpt).some(
+          (option) => typeof option === "string" && option.startsWith("no-new-privileges"),
+        ),
+      ).toBe(true);
 
       // Inside: the Codex CLI is there, no Claude binary, no credential directory, no Docker socket, a writable answer path.
       expect((await sh("command -v codex")).status).toBe(0);
