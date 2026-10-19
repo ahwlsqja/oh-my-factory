@@ -48,6 +48,8 @@ const MAY_SPAWN: readonly string[] = [
   "seal/session.ts",
   // The synchronous twin of the Docker CLI adapter, for the doctor probe only; it spawns the `docker` program and nothing else.
   "container/docker-sync.ts",
+  // Opens only the fixed platform browser launcher with one URL argument, never candidate code (ui-browser.test.ts).
+  "cli/ui.ts",
 ];
 
 const NO_SPAWN_DIRS = ["gate", "audit", "isolation"];

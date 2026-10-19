@@ -126,6 +126,7 @@ OMF 는 루프 두 개를 돌립니다.
 | 명령 | 하는 일 |
 |---|---|
 | `omf init` | 현재 저장소의 호스트 상태를 `~/.omf` 아래에 만듭니다. 저장소와 에이전트 CLI 설정에는 아무것도 쓰지 않습니다. |
+| `omf ui [--port <port>] [--no-open]` | 선택적으로 사용하는 로컬 읽기 전용 운영 대시보드를 엽니다. 검증된 스냅샷의 목표 ID, 공개된 격차 구간, 작업, 사람 확인 코드, 기록된 증거 추천과 최근 이벤트를 보여 줍니다. 승인이나 실행은 하지 않습니다. 기본 포트 `0`은 사용 가능한 루프백 포트를 고르고, `--no-open`은 세션 URL만 출력합니다. [UI 안내](docs/ui.md)를 참고하세요. |
 | `omf doctor [--json] [--strict]` | git, Docker, Claude Code, Codex, 저장소, 원장을 점검하고 `preflight.json` 을 씁니다. 에이전트 CLI 는 쓰고 버리는 임시 홈에서 실행합니다. Docker 가 없거나 실행 중이 아니거나 에이전트 CLI 가 없으면 필요한 단계를 밝힌 경고로 보고하고, 문제와 경고마다 한 줄 조치(`fix`)가 붙습니다. `--strict` 는 도구 누락 경고를 문제로 봅니다(원장 꼬리 손상은 경고로 남습니다). 설정의 `[judge]` 에 이미지와 Docker 컨텍스트가 있으면 격리 수준을 쓰고 버리는 컨테이너로 참고용 점검하고, 없으면 이유와 함께 `unmeasurable` 로 보고합니다. JSON 보고서에는 참고용 `implementer` 항목도 있어, 구현자 이미지가 설정됐는지와 `OMF_IMPLEMENTER_API_KEY` 설정 여부를 이름만으로 알려 줍니다(값은 절대 싣지 않습니다). |
 | `omf ledger verify [--json]` | 원장의 해시 체인을 확인합니다. 원장이 손상됐으면 stderr 둘째 줄에 경로, 줄 번호, 다음 행동이 나오고 `--json` 은 같은 내용을 필드로 냅니다. `--json` 의 오류는 모두 `{ "ok": false, "error": { "code": "...", "message": "..." } }` 형태입니다(code: `not_initialized`, `ledger_corrupt`, `not_a_git_repository`, `git_not_found`, `unsupported_repository`, `symlink_refused`, `cannot_run`). 키는 snake_case 입니다. `omf init` 전에는 종료 코드 2 입니다. |
 | `omf goal new <id>` | 템플릿으로 호스트 상태에 `goal.md` 를 만듭니다. |
