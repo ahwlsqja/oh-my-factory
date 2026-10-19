@@ -132,15 +132,16 @@ or **designed** and not built yet.
 | Command | What it does |
 |---|---|
 | `omf init` | Creates host state for the current repository under `~/.omf`. Writes nothing to the repository or to the agent CLIs' configuration. |
+| `omf ui [--port <port>] [--no-open]` | Opens an optional, local read-only operations dashboard. Shows verified snapshot state, goal IDs, disclosed gap buckets, work, human-attention codes, recorded evidence recommendations and recent events. No approvals or execution. Port `0` (the default) chooses an available loopback port; `--no-open` prints the session URL. See [the UI guide](docs/ui.md). |
 | `omf doctor [--json] [--strict]` | Checks git, Docker, Claude Code and Codex, the repository and the ledger, and writes `preflight.json`. Runs the agent CLIs with a throwaway home. A missing or unreachable Docker, or a missing agent CLI, is a warning that names the stage that needs it; every problem and warning has a one-line fix. `--strict` turns the missing-tool warnings into problems; a torn ledger tail stays a warning. It also reports an advisory isolation probe (a throwaway container) when `[judge]` names an image and a Docker context, otherwise `unmeasurable` with the reason. The JSON report also carries an advisory `implementer` row: whether an implementer image is configured and whether `OMF_IMPLEMENTER_API_KEY` is set, by name only, never the value. |
 | `omf ledger verify [--json]` | Checks the ledger's hash chain. On a corrupt ledger, stderr line 2 gives the path, the line and the next step; `--json` gives the same as fields. With `--json` every error is `{ "ok": false, "error": { "code": "...", "message": "..." } }` (codes: `not_initialized`, `ledger_corrupt`, `not_a_git_repository`, `git_not_found`, `unsupported_repository`, `symlink_refused`, `cannot_run`); keys are snake_case. Exit 2 before `omf init`. |
 | `omf goal new <id>` | Creates `goal.md` in host state from a template. |
 | `omf metric propose <id> --unit <u> -- <command>` | Proposes a metric: the command that prints its value, the unit, and the paths whose change is a regime change. |
-| `omf goal audit <id>` | Checks the goal, its locks and the ledger, and reports regime changes. Writes nothing. |
+| `omf goal audit <id>` | Checks the goal, its locks and the ledger, reports regime changes, and lists template text you have not replaced yet (`placeholders` in `--json`). Writes nothing. |
 | `omf goal approve <id>` | J1: shows what will be locked (metrics and their bands) and approves it after you type the goal id in a terminal. |
 | `omf goal measure <id>` | Runs the locked metrics (in Docker, or on the host with `--runner host`), computes the gap to target and the control bands, and writes a gap report to host state. |
 | `omf goal tick <id>` | One pass of the goal loop (spec §4.4): audit, measure, ask a model for work, filter its candidates with code, dispatch work items, check staleness and the loop guards. Needs a reconciler (see "Run the goal loop"). |
-| `omf goal status <id>` | Shows the run state (`running`, `blocked_on_user`, `failed`, `finish`, `cancelled`), the open escalation with the commands that unblock it, the rounds left and the open work items. |
+| `omf goal status <id>` | Shows the run state (`running`, `blocked_on_user`, `failed`, `finish`, `cancelled`; a goal that is still a draft or needs re-approval says so instead of `running`, and an approved goal with no tick yet says that), the open escalation with the commands that unblock it, the rounds left and the open work items. |
 | `omf goal resume <id>` | J6 continue: after you fixed what stopped the goal, a typed confirmation in a terminal lets ticks run again. |
 | `omf goal cancel <id>` | J6 stop: a typed confirmation in a terminal cancels the goal and every open work item. |
 | `omf budget show <id> [--json]` | Prints the rounds, disclosure and wall-time budgets: declared, raised, consumed and remaining. |
@@ -202,13 +203,23 @@ report, including `problem_details` and `warning_details` with the fix and the s
 
 ## Define and measure a goal
 
+Commands that record a person's decision (`omf metric propose`, `omf goal approve`, `omf goal resume`,
+`omf goal cancel`, `omf work approve`, `omf work veto`, `omf budget declare`, `omf budget raise`, `omf decide resolve` and `omf decide defer`) identify you as
+`human:<email>`, where the email is what `git config user.email` returns inside the repository. Set it first, or
+the command stops and says so. The identifier is printed in the command output, including the confirmation
+prompt, and is stored in the project's `ledger.jsonl`, in the proposal and lock files, and in a work item's `item.md`
+(its `approval` field) under `~/.omf` (or `OMF_HOME`), all on your machine. OMF never sends it anywhere: there is no telemetry and nothing is published.
+Before you paste output, a ledger excerpt or a report into an issue or a chat, redact the address, for example by
+replacing it with `human:you@example.com`. It is not a secret, but it is personal data. See
+[`SECURITY.md`](SECURITY.md) for what else to leave out.
+
 ```console
 $ omf init
 initialized ~/.omf/projects/3186047891f1f0a0
 
 $ omf goal new g-demo
 created ~/.omf/projects/3186047891f1f0a0/goals/g-demo/goal.md
-edit it, propose its metrics with omf metric propose, then run omf goal audit g-demo
+edit it (the comments in the file explain each field), propose its metrics with omf metric propose, then run omf goal audit g-demo
 
 $ # edit goal.md: target m-demo <= 5 ms, lagging: [m-demo]
 $ omf metric propose m-demo --unit ms -- sh -c 'echo 7'
@@ -223,7 +234,7 @@ goal g-demo: Say what this goal is in a few words
 objective: The outcome you want, in plain words
 target: m-demo <= 5 ms
 leading: none; lagging: m-demo; guardrails: none
-budget: 10 rounds, 72h wall time, at most 2 open work items
+budget: 10 rounds, 14d wall time, at most 2 open work items
 decision rule: target met for 2 consecutive measurements and no guardrail breach (minimum observation 7d)
 metric m-demo: ["sh","-c","echo 7"] -> ms; watches none
 bands m-demo: none (not monitored)
@@ -234,14 +245,43 @@ $ omf goal measure g-demo --runner host
 goal g-demo (regime 1), runner host
 target m-demo: 7 ms; target <= 5 ms; gap 2 (decrease, medium)
   m-demo [target, lagging]: 7 ms
+measured at revision 4f1c9a0e7b2d (clean), observed 2026-10-12T06:27:24.995Z
+working directory: repository root (host, no isolation)
+fingerprint: 9be03c51a7d2 (recorded in the ledger as input_sha256)
+limit: The tree was observed once, before the first metric ran; it was not watched while the metrics ran.
+limit: The fingerprint covers HEAD and the list of changed paths, not file contents: an edit to a file that was already modified keeps the same fingerprint.
+limit: An edit made while a metric runs can change its value without changing this record.
+limit: Gitignored files are not part of the observation.
 report: ~/.omf/projects/3186047891f1f0a0/goals/g-demo/reports/2026-10-12T06-27-24-995Z-gap.json
 warning: measured on the host without isolation (--runner host)
 ```
+
+The provenance lines (also stored in the gap report as `provenance`) say which commit was measured, whether
+the tree was clean or dirty with a count of changed paths, and where the metric ran: the repository root on the
+host, or `/work`, a read-only mount of it, in Docker. They are host-only, like the rest of the report. The
+fingerprint is the `input_sha256` the ledger already records, taken once before the first metric ran. It does not
+prove that files stayed unchanged while the metrics ran, and it cannot tell two edits of an already modified file
+apart, so a value measured while you or an agent edit the checkout may not match the revision shown.
+
+The generated `goal.md` explains each field in `#` notes inside the front matter. Under `## Approach` it has three
+subsections to fill in: `### Why`, `### Constraints` and `### Done when`. That section and `objective` are the only
+text a model sees (see "Run the goal loop"), so write them in words, without numbers or metric ids.
+`omf goal audit` also lists any template text you have not replaced yet (for example the placeholder metric id
+`m-replace-me`); this list is advice and does not change the audit result.
+The same list is the `placeholders` field of `omf goal audit --json`.
+In the template, `#` notes also mark which values are OMF defaults you may keep (the budget) and which are your decisions (the target value and operator, `min_observation`, `decision_rule`).
 
 Re-approval first shows why it is needed: lock problems, the regime changes, and the diff of any changed
 watched path. If the goal or a metric changes while you read it, nothing is approved. Re-approval never changes
 the budgets: if `goal.md` differs from the rounds or wall time already in force, `omf goal approve` refuses, and
 raising either is a separate decision (J8).
+
+Wall time is calendar time from the first approval, and success needs readings that span the minimum observation,
+so the generated `goal.md` pairs a 7d minimum observation with a 14d wall time. If you set a wall time that is not
+longer than the minimum observation, `omf goal audit` and the approval screen warn that the goal cannot reach
+success before the budget ends. It is a warning, not a refusal: approve anyway, then when the budget runs out raise
+it with `omf budget raise <id> wall_time <duration>` and continue with `omf goal resume <id>`. Nothing raises the
+budget or resets elapsed time for you.
 
 Known limits of "metric code cannot change quietly":
 
@@ -254,6 +294,125 @@ Known limits of "metric code cannot change quietly":
 - `bands/<metric>.yaml` is locked with the goal: its hash is part of the J1 approval, so editing, adding or
   deleting one is a regime change. A goal approved before bands were locked keeps unlocked bands until it is
   approved again, and the approval screen says so.
+
+## Measure without Docker
+
+A metric is any command that prints a number. You do not need Docker to define, approve and measure one: approve
+the goal in a terminal as usual and measure with `--runner host`. This walkthrough uses a throwaway repository and
+Biome (the linter this project uses) as the tool being measured. Replace the tool and the number with your own
+once it works.
+
+**What the host runner is.** The command runs in the repository root, on the working tree as it is right now
+(uncommitted edits included), with only `PATH`, a throwaway `HOME` and the C locale in its environment. There is
+no isolation: it can read and write anything your user can, and nothing stops it from changing the repository.
+`omf goal measure --runner host` says so on stderr every time. Use it for commands you wrote or reviewed. If
+another process edits files while it runs, the value moves with them.
+
+**The contract.** The metric command must print its value as the last non-empty line of stdout, as a plain
+number (`3`, `0.25`, `-1`, `1e3`). Anything printed before that line is ignored, so a script can print a human
+summary first. The measurement fails, with a reason, and records no value when the command prints nothing, the
+last line is not a number, the command exits non-zero, runs longer than two minutes, or prints more than 1 MiB.
+`omf goal measure` then exits 1, so a script that cannot read its tool must exit non-zero rather than print a
+guess. The script below follows that rule for Biome itself: if Biome exits non-zero (for example because a file
+has a lint error), the script exits 1 and reports no value, even though Biome still prints a summary. Fix the
+errors first; a warnings count taken next to errors would be a number nobody asked for.
+
+**Choose the quantity first.** Biome counts warnings and infos separately, and the plain `biome lint` output
+ends with a line for each (`Found N warnings.` and `Found N infos.`). Those are different quantities, and the
+goal should name one. The script below counts warnings and ignores infos; to track infos instead, read
+`summary.infos` and change the metric id and unit to match. Reading the JSON summary also avoids parsing text
+meant for people.
+
+The fixture, in a new directory. Every file is a plain block you can copy.
+
+```json biome.json
+{
+  "linter": {
+    "rules": {
+      "style": { "useConst": "info" },
+      "suspicious": { "noVar": "warn" }
+    }
+  }
+}
+```
+
+```js src/app.js
+var a = 1;
+var c = 3;
+var d = 4;
+let b = 2;
+console.log(a, b, c, d);
+```
+
+```js scripts/count-biome-warnings.mjs
+import { spawnSync } from "node:child_process";
+
+const run = spawnSync(
+  "npx",
+  ["--no-install", "biome", "lint", "--max-diagnostics=none", "--reporter=json", "."],
+  { encoding: "utf8" },
+);
+if (run.error) {
+  console.error(`could not run biome: ${run.error.message}`);
+  process.exit(1);
+}
+if (run.status !== 0) {
+  console.error(`biome exited with ${run.status}; fix its errors first, no value is reported`);
+  process.exit(1);
+}
+let summary;
+try {
+  summary = JSON.parse(run.stdout).summary;
+} catch {
+  console.error("biome did not print a JSON summary");
+  process.exit(1);
+}
+if (!Number.isInteger(summary?.warnings) || !Number.isInteger(summary?.infos)) {
+  console.error("the biome summary has no warning and info counts");
+  process.exit(1);
+}
+console.log(`warnings: ${summary.warnings} (measured), infos: ${summary.infos} (ignored)`);
+console.log(summary.warnings);
+```
+
+Set it up (`git init`, add Biome with `npm install --save-dev --save-exact @biomejs/biome@2.5.15`, then create the three files) and
+check the script before OMF sees it. `npx biome lint .` should report 3 warnings and 1 info, and the script
+should end with `3`. Commit the files too: J1 approval refuses to lock a metric while a path it watches has
+uncommitted changes.
+
+```console
+$ node scripts/count-biome-warnings.mjs
+warnings: 3 (measured), infos: 1 (ignored)
+3
+```
+
+Now define the goal. `omf goal new g-biome-zero` writes `goal.md`; in it set the target to
+`metric_id: m-biome-warnings`, `operator: "<="`, `value: 0`, `unit: warnings`, and `lagging: [m-biome-warnings]`.
+The metric id, the unit and the target unit must be the same strings in every command below.
+
+```console
+$ omf init
+$ omf goal new g-biome-zero
+$ omf metric propose m-biome-warnings --unit warnings --watch scripts/count-biome-warnings.mjs --watch biome.json -- node scripts/count-biome-warnings.mjs
+$ omf goal audit g-biome-zero
+$ git add biome.json scripts src
+$ git -c user.email=dev@example.com -c user.name=Dev commit -m "Add the Biome fixture"
+$ omf goal approve g-biome-zero
+$ omf goal measure g-biome-zero --runner host
+```
+
+`omf goal approve` needs a terminal and you type the goal id yourself; nothing here approves for you. The
+measurement should read `target m-biome-warnings: 3 warnings; target <= 0 warnings; gap 3 (decrease, large)`, the same number the
+script printed.
+
+**Choose what to watch.** `--watch` is repeatable and names the files whose change must be a regime change: here
+the script, which defines how the number is computed, and `biome.json`, which decides what counts as a warning.
+A watch covers a whole file, not a part of it. If you also watch `package.json` to catch a Biome upgrade, its
+`version` field is watched too, so a release that only bumps the version changes the watched file, and the goal
+correctly needs re-approval (J1) before the next measurement. That is the check working, not a bug. Keep the
+watches to the files that define the metric, and do not drop a watch to avoid re-approving: the unwatched change
+could then alter the number without anyone approving it. If a tool upgrade should count, watch the lockfile, or
+let the script read and print the tool version, and accept re-approval when it changes.
 
 ## Run the goal loop
 
@@ -355,7 +514,7 @@ OMF keeps everything outside your repository, one directory per project:
     bands/<metric>.yaml   control bands (locked with the goal)
     reports/              gap reports (<stamp>-gap.json) and tick reports (<stamp>-tick.md)
     reconcile/            the exact model input and raw output of each tick
-    work/<work-id>/       item.md (state and progress) and intent.md
+    work/<work-id>/       item.md (state, progress and the approval, with the approver) and intent.md
     tick.lock             held while a tick runs
   vault/
     metrics/proposed/     metric proposals, <metric>.json
@@ -366,6 +525,9 @@ OMF keeps everything outside your repository, one directory per project:
 
 Set `OMF_HOME` to use another location. OMF refuses to keep state inside the repository or inside
 `~/.claude` or `~/.codex`. Directories are `0700` and files `0600`.
+
+The ledger, the metric proposals and the J1 locks also hold the `human:<email>` of whoever proposed or approved
+(see "Define and measure a goal"); redact it before sharing any of them.
 
 Reports and the `reconcile/` files hold real measured values. They stay in host state, and the model never reads them.
 

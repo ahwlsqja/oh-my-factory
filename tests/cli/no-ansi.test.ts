@@ -13,6 +13,7 @@ const HELP = [
   ["--help"],
   ["--version"],
   ["init", "--help"],
+  ["ui", "--help"],
   ["doctor", "--help"],
   ["ledger", "--help"],
   ["ledger", "verify", "--help"],

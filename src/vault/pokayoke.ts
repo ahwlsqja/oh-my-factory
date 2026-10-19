@@ -323,8 +323,15 @@ export function scanWorktreeCanaries(
 const PROBLEM_PREFIX = "sealed material inside the repository or an OMF worktree";
 const PROBLEM_LISTED = 5;
 
-/** The `omf doctor` problem line for this project, or null when the scan is clean. Paths only. */
-export function sealedProblem(location: ProjectLocation, env: NodeJS.ProcessEnv = process.env): string | null {
+const VAULT_FIX = "move the listed vault files out of the repository and the OMF worktrees, then run omf doctor again";
+const CANARY_FIX =
+  "a canary-shaped string sits in an ordinary file, such as a test fixture or a documentation example; do not move source or tests into the vault. Build such a value at run time, or use a placeholder that does not match the pattern, then run omf doctor again. If the string is a genuine sealed canary that reached a committed file, the scenarios are exposed: remove it and treat the sealed set as burned (re-author and re-seal), because editing the working tree leaves the value in git history";
+
+/** The `omf doctor` problem line and its fix for this project, or null when the scan is clean. Paths only. */
+export function sealedReport(
+  location: ProjectLocation,
+  env: NodeJS.ProcessEnv = process.env,
+): { problem: string; fix: string } | null {
   const { findings } = fullScan(location, env);
   if (findings.length === 0) return null;
   const listed = findings
@@ -332,5 +339,13 @@ export function sealedProblem(location: ProjectLocation, env: NodeJS.ProcessEnv 
     .map((finding) => `${finding.kind}: ${finding.path}`)
     .join(", ");
   const more = findings.length > PROBLEM_LISTED ? ", ..." : "";
-  return `${PROBLEM_PREFIX}: ${findings.length} finding(s) (${listed}${more})`;
+  const hasCanary = findings.some((finding) => finding.kind === "canary");
+  const hasOther = findings.some((finding) => finding.kind !== "canary");
+  const fix = hasCanary ? (hasOther ? `${VAULT_FIX}; for a canary finding, ${CANARY_FIX}` : CANARY_FIX) : VAULT_FIX;
+  return { problem: `${PROBLEM_PREFIX}: ${findings.length} finding(s) (${listed}${more})`, fix };
+}
+
+/** The `omf doctor` problem line for this project, or null when the scan is clean. Paths only. */
+export function sealedProblem(location: ProjectLocation, env: NodeJS.ProcessEnv = process.env): string | null {
+  return sealedReport(location, env)?.problem ?? null;
 }
