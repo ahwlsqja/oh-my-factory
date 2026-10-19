@@ -15,11 +15,12 @@
 //                                               G-skeleton-real reads OMF_AUTHOR_API_KEY and OMF_IMPLEMENTER_API_KEY,
 //                                               G-author-canary the first, the older model suites the second
 //   npm run test:gated -- --record              also append one record per fully passed suite to
-//                                               docs/evidence/gated-runs.json (clean working tree only)
+//                                               docs/evidence/gated-runs.json (clean working tree only; the evidence file
+//                                               itself may differ, so runs can follow one another before it is committed)
 //
 // Exit codes: 0 every selected gated test passed; 1 a gated test failed or nothing could be recorded;
 // 2 refused (colima or docker missing, another OMF_GATED value, a context that is not the omf-m3f socket,
-// --record on a dirty tree, --model without a usable key for every selected model suite, an unknown argument);
+// --record on a tree with changes other than the evidence file, --model without a usable key for every selected model suite, an unknown argument);
 // 3 colima could not start the profile.
 //
 // The run never changes the user's current Docker context (`--activate=false`, and it is restored if it changed anyway).
@@ -70,6 +71,8 @@ export function keysFor(only) {
   return { keys: [...new Set(selected.flatMap(([, keys]) => keys))].sort() };
 }
 
+/** The one path a `--record` run leaves modified, relative to the repository root as `git status --porcelain` prints it. */
+const EVIDENCE_PATH = "docs/evidence/gated-runs.json";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SCHEMA = new URL("../schemas/gated-runs.schema.json", import.meta.url);
 /** colima's socket for the profile; a context that points anywhere else is refused. */
@@ -325,7 +328,8 @@ function record(deps, testEnv, reportFile, head) {
       return EXIT.failed;
     }
     appendGatedRuns(deps.evidenceFile, records);
-    deps.log(`recorded ${records.map((r) => r.test).join(", ")}`);
+    deps.log(`recorded ${records.map((r) => r.test).join(", ")} at commit ${head}`);
+    deps.log("records pending: docs/evidence/gated-runs.json is changed but not committed; commit it before merging");
     return EXIT.ok;
   } catch (err) {
     deps.log(`nothing recorded: ${err instanceof Error ? err.message : String(err)}`);
@@ -364,7 +368,10 @@ export function main(argv, env, deps) {
   let head = "";
   if (args.record) {
     const tree = deps.run("git", ["status", "--porcelain"], { cwd: deps.root });
-    if (tree.status !== 0 || tree.stdout.trim() !== "") return refuse(deps, "--record needs a clean working tree");
+    // Records of earlier runs are not committed yet, so the evidence file alone may differ; anything else would make the record name the wrong code.
+    const changed = tree.stdout.split("\n").filter((line) => line.trim() !== "");
+    if (tree.status !== 0 || changed.some((line) => line.slice(3) !== EVIDENCE_PATH))
+      return refuse(deps, "--record needs a clean working tree (only docs/evidence/gated-runs.json may differ)");
     const read = deps.run("git", ["rev-parse", "HEAD"], { cwd: deps.root });
     head = read.stdout.trim();
     if (read.status !== 0 || head === "") return refuse(deps, "--record could not read the current commit");
