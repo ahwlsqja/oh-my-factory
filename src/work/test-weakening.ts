@@ -28,13 +28,15 @@ export function findTestWeakening(
     seen.add(normalizePath(path));
     const isTest = isTestPath(path, explicitTestPaths);
     const isHook = isConftest(path);
+    const ini = isIniConfig(path);
     if (!isTest && !isCoverageConfig(path) && !isHook) continue;
     // A binary section has no lines to read: on a test path or a coverage/runner config it is weakening, never "unchanged".
-    if (binary && !deleted && (isTest || isCoverageConfig(path))) found.add(path);
-    else if (isHook && !deleted) found.add(path);
+    // Deleting a pytest hook or a binary runner/coverage config removes what decides how tests run, so it is weakening too.
+    if (binary && (isTest || isCoverageConfig(path) || isHook)) found.add(path);
+    else if (isHook) found.add(path);
     else if (isTest && (deleted || assertionsLost(removed, added) || markersGained(removed, added))) found.add(path);
-    else if (isTest && isCoverageConfig(path) && !onlyRaisesThresholds(removed, added)) found.add(path);
-    else if (thresholdLowered(removed, added)) found.add(path);
+    else if (isTest && isCoverageConfig(path) && !onlyRaisesThresholds(removed, added, ini)) found.add(path);
+    else if (thresholdLowered(removed, added, ini)) found.add(path);
   }
   if (auditedPaths !== undefined) {
     const audited = new Set(auditedPaths.map((path) => normalizePath(path)));
@@ -60,6 +62,11 @@ function isRunnerConfig(path: string): boolean {
 /** A `conftest.py` at any depth is a pytest hook: it means nothing outside pytest, so adding or editing it can only change how tests run. */
 function isConftest(path: string): boolean {
   return basename(path).toLowerCase() === "conftest.py";
+}
+
+/** INI-style configs (`.coveragerc`, `setup.cfg`, `tox.ini`, `pytest.ini`) also start a comment with `;`. */
+function isIniConfig(path: string): boolean {
+  return /^\.?coveragerc(\.[^/]+)?$|\.(ini|cfg)$/i.test(basename(path));
 }
 
 function isCoverageConfig(path: string): boolean {
@@ -149,8 +156,8 @@ interface LineCode {
 }
 
 /** Quoted markers are data. A prior unquoted slash may start a regex, so an apparent comment is ambiguous. */
-function codeOf(line: string, hashComment = false): LineCode {
-  if (COMMENT_START.test(line)) return { text: null, ambiguous: false };
+function codeOf(line: string, hashComment = false, semicolonComment = false): LineCode {
+  if (COMMENT_START.test(line) || (semicolonComment && /^\s*;/.test(line))) return { text: null, ambiguous: false };
   let quote: string | null = null;
   let unquotedSlash = false;
   for (let at = 0; at < line.length; at += 1) {
@@ -163,7 +170,7 @@ function codeOf(line: string, hashComment = false): LineCode {
     } else if (
       at > 0 &&
       /\s/.test(line[at - 1] ?? "") &&
-      ((char === "/" && line[at + 1] === "/") || (hashComment && char === "#"))
+      ((char === "/" && line[at + 1] === "/") || (hashComment && char === "#") || (semicolonComment && char === ";"))
     ) {
       return unquotedSlash ? { text: line, ambiguous: true } : { text: line.slice(0, at), ambiguous: false };
     } else if (char === "/") {
@@ -187,8 +194,43 @@ function assertionsLost(removed: readonly string[], added: readonly string[]): b
 const MARKER =
   /\b(it|test|describe|suite|context|bench)(\.\w+)*\.(skip|only|todo|fixme|fails|skipIf|runIf)\b|\{[^}]*\b(skip|todo|only)\s*:\s*true|\b(ctx|context|t)\.(skip|todo)\(|(?<![\w.$])(xit|xtest|xdescribe|fit|ftest|fdescribe)\s*\(|\bpytest\.mark\.(skip|xfail)|\bpytest\.(skip|xfail)\(|@unittest\.skip|\bt\.Skip(f|Now)?\(|\bself\.skipTest\(|\.failing\b|expectedFailure|^\s*pytestmark\s*=|\bthis\.skip\s*\(|\bfunc\s+TestMain\s*\(|\bfunc\s+init\s*\(|\b(os\.(Exit|_exit)|sys\.exit|process\.exit|pytest\.exit)\s*\(|@Disabled\b|@Ignore\b|#\[ignore\b/;
 
+/** A CR, U+2028 or U+2029 ends a line for a JavaScript or Python reader even though `git diff` does not split there. */
+const LINE_TERMINATOR = /[\r\u2028\u2029]/;
+
+/**
+ * The part of a comment-looking added line that a runner would still read as code: whatever follows a closed block comment
+ * (`/* x *\/ describe.only(...)`), and whatever follows a CR or U+2028 line terminator inside a line comment. A line
+ * comment that holds only text yields nothing, so a commented-out marker stays no marker.
+ */
+function codeBehindComment(line: string): string {
+  const rest = line.trimStart();
+  const close = (open: string, end: string): string | null => {
+    if (!rest.startsWith(open)) return null;
+    const at = rest.indexOf(end, open.length);
+    return at < 0 ? "" : afterComment(rest.slice(at + end.length));
+  };
+  const block = close("/*", "*/") ?? close("<!--", "-->");
+  if (block !== null) return block;
+  if (rest.startsWith("*") && rest.includes("*/")) return afterComment(rest.slice(rest.indexOf("*/") + 2));
+  const cut = rest.search(LINE_TERMINATOR);
+  return cut < 0 ? "" : afterComment(rest.slice(cut + 1));
+}
+
+/** What follows a comment is code unless it opens another comment. */
+function afterComment(rest: string): string {
+  return codeOf(rest).text ?? codeBehindComment(rest);
+}
+
+/** Added lines are searched for markers after their comment part is dropped, including code that hides behind a comment opener. */
+function countAddedMarkers(added: readonly string[]): number {
+  return added.filter((line) => {
+    const code = codeOf(line).text;
+    return MARKER.test(code ?? codeBehindComment(line));
+  }).length;
+}
+
 function markersGained(removed: readonly string[], added: readonly string[]): boolean {
-  return count(added, MARKER) > count(removed, MARKER);
+  return countAddedMarkers(added) > count(removed, MARKER);
 }
 
 const PAIR = /([A-Za-z_][\w-]*)["']?\s*[:=]\s*(\d+(?:\.\d+)?)\b/g;
@@ -196,20 +238,20 @@ const THRESHOLD_KEYS =
   /^(threshold|thresholds|lines|branches|functions|statements|min|minimum|min_coverage|coverage|fail[_-]under|cov-fail-under|target|percent|\w*threshold\w*)$/i;
 
 /** Configs also admit hash comments; ambiguous boundaries retain the raw text for conservative handling. */
-function configCodeOf(line: string): LineCode {
-  return codeOf(line, true);
+function configCodeOf(line: string, ini = false): LineCode {
+  return codeOf(line, true, ini);
 }
 
 /** Every `key: number` or `key = number` pair of the code part of a line, in order (a one-line `{ lines: 80, branches: 90 }` has two). */
-function pairsOf(line: string): Array<[string, number]> {
-  return [...(configCodeOf(line).text ?? "").matchAll(PAIR)].map((match) => [
+function pairsOf(line: string, ini = false): Array<[string, number]> {
+  return [...(configCodeOf(line, ini).text ?? "").matchAll(PAIR)].map((match) => [
     (match[1] ?? "").toLowerCase(),
     Number(match[2]),
   ]);
 }
 
-function thresholds(lines: readonly string[]): Array<[string, number]> {
-  return lines.flatMap((line) => pairsOf(line).filter(([key]) => THRESHOLD_KEYS.test(key)));
+function thresholds(lines: readonly string[], ini = false): Array<[string, number]> {
+  return lines.flatMap((line) => pairsOf(line, ini).filter(([key]) => THRESHOLD_KEYS.test(key)));
 }
 
 interface Masked {
@@ -226,8 +268,8 @@ const VALUE_END = /^%?\s*(?:[,}\];)]|$)/;
  * Masks only the numeric value of each recognized threshold pair, so the rest of the line can be compared as exact text.
  * Returns null for a comment line, for a non-finite value, and for a value that is part of an expression (`80 + 5`).
  */
-function maskThresholds(line: string): Masked | null {
-  const parsed = configCodeOf(line);
+function maskThresholds(line: string, ini = false): Masked | null {
+  const parsed = configCodeOf(line, ini);
   const code = parsed.text;
   if (code === null || parsed.ambiguous) return null;
   let text = "";
@@ -255,11 +297,11 @@ function maskThresholds(line: string): Masked | null {
  * values that are finite and did not go down. Every other number (retries, timeout) is part of the text and must be equal.
  * Anything it cannot read this way is undecidable and counts as weakening.
  */
-function onlyRaisesThresholds(removed: readonly string[], added: readonly string[]): boolean {
+function onlyRaisesThresholds(removed: readonly string[], added: readonly string[], ini = false): boolean {
   if (removed.length === 0 || removed.length !== added.length) return false;
   return removed.every((line, index) => {
-    const before = maskThresholds(line);
-    const after = maskThresholds(added[index] ?? "");
+    const before = maskThresholds(line, ini);
+    const after = maskThresholds(added[index] ?? "", ini);
     if (before === null || after === null || before.keys.length === 0) return false;
     return (
       before.text === after.text &&
@@ -269,17 +311,17 @@ function onlyRaisesThresholds(removed: readonly string[], added: readonly string
   });
 }
 
-function thresholdLowered(removed: readonly string[], added: readonly string[]): boolean {
+function thresholdLowered(removed: readonly string[], added: readonly string[], ini = false): boolean {
   if (
     [...removed, ...added].some(
-      (line) => configCodeOf(line).ambiguous && pairsOf(line).some(([key]) => THRESHOLD_KEYS.test(key)),
+      (line) => configCodeOf(line, ini).ambiguous && pairsOf(line, ini).some(([key]) => THRESHOLD_KEYS.test(key)),
     )
   ) {
     return true;
   }
-  const after = thresholds(added);
+  const after = thresholds(added, ini);
   // A threshold key that disappears (the line or the whole config file is removed) counts as lowered.
-  return thresholds(removed).some(([key, before]) => {
+  return thresholds(removed, ini).some(([key, before]) => {
     const same = after.filter(([name]) => name === key);
     return same.length === 0 || same.some(([, now]) => now < before);
   });
