@@ -122,4 +122,60 @@ describe("findTestWeakening", () => {
   it("returns an empty list for an empty diff", () => {
     expect(findTestWeakening("", [])).toEqual([]);
   });
+
+  it("flags a removed threshold line and a deleted coverage config that held one", () => {
+    expect(findTestWeakening(modify("vitest.config.ts", ["-      lines: 90,", " "]), [])).toEqual(["vitest.config.ts"]);
+    const deleted = [
+      "diff --git a/codecov.yml b/codecov.yml",
+      "deleted file mode 100644",
+      "index 1111111..0000000",
+      "--- a/codecov.yml",
+      "+++ /dev/null",
+      "@@ -1,3 +0,0 @@",
+      "-coverage:",
+      "-  target: 80",
+      "-",
+      "",
+    ].join("\n");
+    expect(findTestWeakening(deleted, [])).toEqual(["codecov.yml"]);
+    expect(findTestWeakening(modify("vitest.config.ts", ["-      include: ['src'],", " "]), [])).toEqual([]);
+  });
+
+  it("reads C-quoted git paths with octal escapes", () => {
+    const quoted = '"tests/\\355\\225\\234\\352\\270\\200.test.ts"';
+    const modifyQuoted = [
+      `diff --git "a/tests/\\355\\225\\234\\352\\270\\200.test.ts" "b/tests/\\355\\225\\234\\352\\270\\200.test.ts"`,
+      "index 1111111..2222222 100644",
+      '--- "a/tests/\\355\\225\\234\\352\\270\\200.test.ts"',
+      '+++ "b/tests/\\355\\225\\234\\352\\270\\200.test.ts"',
+      "@@ -1,3 +1,1 @@",
+      "-  expect(a).toBe(1);",
+      "-  expect(b).toBe(2);",
+      " x",
+      "",
+    ].join("\n");
+    expect(quoted).toContain("355");
+    expect(findTestWeakening(modifyQuoted, [])).toEqual(["tests/한글.test.ts"]);
+    const deleted = [
+      'diff --git "a/tests/\\355\\225\\234\\352\\270\\200.test.ts" "b/tests/\\355\\225\\234\\352\\270\\200.test.ts"',
+      "deleted file mode 100644",
+      "index 1111111..0000000",
+      "Binary files a/x and /dev/null differ",
+      "",
+    ].join("\n");
+    expect(findTestWeakening(deleted, [])).toEqual(["tests/한글.test.ts"]);
+  });
+
+  it("decodes quote, backslash and tab escapes in quoted paths", () => {
+    const diff = [
+      'diff --git "a/tests/a\\tb\\"c.test.ts" "b/tests/a\\tb\\"c.test.ts"',
+      "index 1111111..2222222 100644",
+      '--- "a/tests/a\\tb\\"c.test.ts"',
+      '+++ "b/tests/a\\tb\\"c.test.ts"',
+      "@@ -1,1 +1,0 @@",
+      "-  expect(a).toBe(1);",
+      "",
+    ].join("\n");
+    expect(findTestWeakening(diff, [])).toEqual(['tests/a\tb"c.test.ts']);
+  });
 });

@@ -46,8 +46,19 @@ interface Section {
   added: string[];
 }
 
+const SIMPLE_ESCAPES: Record<string, number> = { a: 7, b: 8, f: 12, n: 10, r: 13, t: 9, v: 11, '"': 34, "\\": 92 };
+
+/** Decodes a git C-quoted name (`"..."` with octal and single-character escapes); an unquoted name is returned as is. */
 function unquote(raw: string): string {
-  return raw.startsWith('"') && raw.endsWith('"') ? raw.slice(1, -1) : raw;
+  if (!(raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"'))) return raw;
+  const bytes: number[] = [];
+  const encoder = new TextEncoder();
+  for (const [token] of raw.slice(1, -1).matchAll(/\\[0-7]{1,3}|\\[\s\S]|[^\\]+/g)) {
+    if (!token.startsWith("\\")) bytes.push(...encoder.encode(token));
+    else if (/^\\[0-7]/.test(token)) bytes.push(Number.parseInt(token.slice(1), 8) & 0xff);
+    else bytes.push(SIMPLE_ESCAPES[token[1] ?? ""] ?? token.codePointAt(1) ?? 0);
+  }
+  return new TextDecoder().decode(Uint8Array.from(bytes));
 }
 
 function parseSection(lines: string[]): Section | null {
@@ -70,16 +81,18 @@ function parseSection(lines: string[]): Section | null {
     } else if (line.startsWith("-")) removed.push(line.slice(1));
     else if (line.startsWith("+")) added.push(line.slice(1));
   }
-  if (path === null) return lines.length > 1 && (deleted || inHunk) ? null : binaryOrModeOnly(lines);
+  if (path === null) return lines.length > 1 && inHunk ? null : binaryOrModeOnly(lines);
   return { path, deleted, removed, added };
 }
 
 /** A section with no `---`/`+++` lines (a mode change or a binary file) has no text lines to weaken anything. */
 function binaryOrModeOnly(lines: string[]): Section | null {
-  const header = /^diff --git a\/(.+) b\/(.+)$/.exec(lines[0] ?? "");
-  if (header === null || header[1] !== header[2]) return null;
+  const header = /^diff --git ("(?:[^"\\]|\\.)*"|a\/\S.*?) ("(?:[^"\\]|\\.)*"|b\/.+)$/.exec(lines[0] ?? "");
+  const from = unquote(header?.[1] ?? "");
+  const to = unquote(header?.[2] ?? "");
+  if (header === null || !from.startsWith("a/") || !to.startsWith("b/") || from.slice(2) !== to.slice(2)) return null;
   const deleted = lines.some((line) => line.startsWith("deleted file mode"));
-  return { path: header[1] ?? "", deleted, removed: [], added: [] };
+  return { path: to.slice(2), deleted, removed: [], added: [] };
 }
 
 const ASSERTION =
@@ -118,5 +131,9 @@ function thresholds(lines: readonly string[]): Array<[string, number]> {
 
 function thresholdLowered(removed: readonly string[], added: readonly string[]): boolean {
   const after = thresholds(added);
-  return thresholds(removed).some(([key, before]) => after.some(([name, now]) => name === key && now < before));
+  // A threshold key that disappears (the line or the whole config file is removed) counts as lowered.
+  return thresholds(removed).some(([key, before]) => {
+    const same = after.filter(([name]) => name === key);
+    return same.length === 0 || same.some(([, now]) => now < before);
+  });
 }
