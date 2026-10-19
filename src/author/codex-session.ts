@@ -77,12 +77,32 @@ export function parseAnswer(text: string): { ok: true; yaml: string } | { ok: fa
   return { ok: true, yaml };
 }
 
-/** Occurrences of the key as text and in its JSON-escaped spelling (the answer is JSON, so a quote in the key is escaped). */
+/**
+ * The spellings of the key searched in the answer: as text, JSON-escaped (the answer is JSON, so a quote in the key is
+ * escaped), base64 with and without padding, base64url, hex in both cases and URL-encoded. A key that is split, reversed or
+ * otherwise transformed is not found; docs/author.md says so and asks for a dedicated, capped, short-lived key.
+ */
+function keySpellings(plain: string): string[] {
+  const bytes = Buffer.from(plain, "utf8");
+  const base64 = bytes.toString("base64");
+  const hex = bytes.toString("hex");
+  return [
+    ...new Set([
+      plain,
+      JSON.stringify(plain).slice(1, -1),
+      base64,
+      base64.replace(/=+$/, ""),
+      bytes.toString("base64url"),
+      hex,
+      hex.toUpperCase(),
+      encodeURIComponent(plain),
+    ]),
+  ].filter((spelling) => spelling !== "");
+}
+
+/** Occurrences of the key in any of its searched spellings. */
 function keyHits(text: string, credential: Credential): number {
-  const plain = credential.reveal();
-  const escaped = JSON.stringify(plain).slice(1, -1);
-  const hits = text.split(plain).length - 1;
-  return escaped === plain ? hits : hits + (text.split(escaped).length - 1);
+  return keySpellings(credential.reveal()).reduce((hits, spelling) => hits + (text.split(spelling).length - 1), 0);
 }
 
 const fileEntry = (path: string, text: string): TarEntry => ({

@@ -54,6 +54,8 @@ The key is `OMF_AUTHOR_API_KEY`, set for the one command: `OMF_AUTHOR_API_KEY=..
 
 The author's own tool calls in the container can read and use the key. The bound is a dedicated, spend-limited provider key; do not reuse a key that has no spend limit. `omf doctor --json` names the variable and whether it is set, never the value.
 
+OMF scans the answer, and the Codex output, for the key as text and in five other spellings: JSON-escaped, base64 (with and without padding), base64url, hex (either case) and URL-encoded. A key that was split, reversed, shifted or otherwise computed from is not found, and neither is base64 of a longer string that merely contains the key at another alignment. So use a dedicated key that is capped in spend and short-lived (expiring within days, or revoked after the gated runs), and revoke it if a run ends in `credential_in_output`.
+
 ## What the measurement trusts
 
 OMF measures the author container with `docker inspect` before the key reaches it. That measurement trusts the `docker` client found on PATH and the configured docker context. A replaced client, or a shim that answers the probe, can make every stage, the author's included, measure L2 through the shipped command. The offline acceptance avoids this only by its fixture choice. This is not enforced. [not enforced: S7.docker-client-trusted]
