@@ -51,3 +51,6 @@ src/author/**
 outer/**
 docs/requirements.json
 scripts/conformance-matrix.mjs
+# The advisory report script and the stage0 pin judge pull requests, so edits to them need the owner.
+scripts/kernel-paths.mjs
+docs/maintainers/stage0.txt
