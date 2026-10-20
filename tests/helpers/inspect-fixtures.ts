@@ -47,6 +47,7 @@ export function goldenInspect(): InspectDoc {
       VolumesFrom: null,
       Sysctls: {},
       Runtime: "runc",
+      Init: false,
     },
   };
 }

@@ -30,13 +30,13 @@ type JudgeRole = (typeof JUDGE_ROLES)[number];
 // byte, and the spec type cannot express a mount, a volume, a privilege or a network (spec §7, M3f-D2). What the daemon
 // then reports about the container is judged by the per-run measurement.
 const HEAD = (role: JudgeRole): string =>
-  `--context colima-omf-m3f create --name omf-${role}-${FIXTURE_RUN_ID}-1-1 --pull never --label omf.owner=omf --label omf.work=${FIXTURE_WORK_ID} --label omf.run=${FIXTURE_RUN_ID} --label omf.round=1 --label omf.role=${role} --network none --cap-drop ALL --security-opt no-new-privileges --read-only --user 65532:65532 --pids-limit 256 --memory 512m --cpus 1 --stop-timeout 1 --env LC_ALL=C`;
+  `--context colima-omf-m3f create --name omf-${role}-${FIXTURE_RUN_ID}-1-1 --pull never --label omf.owner=omf --label omf.work=${FIXTURE_WORK_ID} --label omf.run=${FIXTURE_RUN_ID} --label omf.round=1 --label omf.role=${role} --network none --cap-drop ALL --security-opt no-new-privileges --read-only --user 65532:65532 --pids-limit 256 --memory 512m --cpus 1 --stop-timeout 1 --init=false --env LC_ALL=C`;
 const OWNED = "nosuid,nodev,uid=65532,gid=65532";
 
 const GOLDEN: Record<JudgeRole, string> = {
-  sut: `${HEAD("sut")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /scratch:rw,size=64m,${OWNED} --entrypoint sleep ${SUT_BASE} 2147483647`,
-  harness: `${HEAD("harness")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /state:rw,size=16m,${OWNED} --entrypoint sleep ${HARNESS_BASE} 2147483647`,
-  workcopy: `${HEAD("workcopy")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /work:rw,size=256m,nosuid,nodev,exec,uid=65532,gid=65532 --entrypoint sleep ${SUT_BASE} 2147483647`,
+  sut: `${HEAD("sut")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /scratch:rw,size=64m,${OWNED} --entrypoint sleep ${SUT_BASE} 1703`,
+  harness: `${HEAD("harness")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /state:rw,size=16m,${OWNED} --entrypoint sleep ${HARNESS_BASE} 578633`,
+  workcopy: `${HEAD("workcopy")} --tmpfs /tmp:rw,size=64m,${OWNED} --tmpfs /work:rw,size=256m,nosuid,nodev,exec,uid=65532,gid=65532 --entrypoint sleep ${SUT_BASE} 32933`,
 };
 
 describe("the golden create argv", () => {
@@ -125,6 +125,6 @@ describe("no builder can emit a mount, a privilege or a network other than none"
       Absent<"env">,
     ] = [true, true, true, true, true, true, true];
     expect(absent.every(Boolean)).toBe(true);
-    expect(Object.keys(specFor("sut")).sort()).toEqual(["image", "labels", "limits", "name", "tmpfs"]);
+    expect(Object.keys(specFor("sut")).sort()).toEqual(["image", "labels", "lifetime_s", "limits", "name", "tmpfs"]);
   });
 });

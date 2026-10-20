@@ -110,6 +110,7 @@ const CREATE = {
     "--memory",
     "--cpus",
     "--stop-timeout",
+    "--init",
     "--env",
     "--tmpfs",
     "--entrypoint",
@@ -144,6 +145,7 @@ function create(state, args) {
     network: one("--network", "bridge"),
     cap_drop: valuesOf(parsed, "--cap-drop"),
     security_opt: valuesOf(parsed, "--security-opt"),
+    init: one("--init", null),
     read_only: parsed.flags.some(([flag]) => flag === "--read-only"),
     user: one("--user", ""),
     env: valuesOf(parsed, "--env"),
@@ -211,6 +213,7 @@ function inspectDoc(state, container, hooks) {
       CgroupnsMode: "private",
       VolumesFrom: null,
       Runtime: "runc",
+      ...(container.init === null ? {} : { Init: container.init === "true" }),
       Tmpfs: Object.fromEntries(container.tmpfs.map((tmpfs) => [tmpfs.destination, tmpfs.options])),
     },
   };

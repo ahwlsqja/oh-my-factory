@@ -32,7 +32,12 @@ export async function sweepItemBestEffort(
     const item = findWorkItem(location.dir, workId);
     const open = runtime ?? openRuntime(readConfig(location.dir), env);
     if (item === null || open === null) return;
-    await sweepItemOrphans({ runtime: open, itemDir: item.dir, workId: item.front.work_id });
+    await sweepItemOrphans({
+      runtime: open,
+      itemDir: item.dir,
+      workId: item.front.work_id,
+      projectDir: location.dir,
+    });
   } catch {
     // nothing to report: the next seal or run sweeps again
   }

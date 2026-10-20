@@ -1,13 +1,16 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { hostClock, LIFETIME_SLACK_MS, markHostEnded, resetLifecycle } from "../../src/container/lifecycle.js";
 import { MeasureError, NotGoldenError } from "../../src/container/measure.js";
-import { roleTmpfs } from "../../src/container/spec.js";
+import { roleTmpfs, WORKCOPY_GATE_EXEC_S, WORKCOPY_GATE_EXECS } from "../../src/container/spec.js";
 import { ContainerWorkCopyFactory, type Launch, WorkCopyError } from "../../src/container/work-copy.js";
 import { revertPatch } from "../../src/git/ops.js";
 import { EXIT_0, exit, MemoryRuntime } from "../helpers/memory-runtime.js";
 import { calcFixture } from "../helpers/prove-fixture.js";
 import { workCopies, workCopyDeps } from "../helpers/work-copy-fixture.js";
+
+afterEach(resetLifecycle);
 
 const OPTIONS = { timeoutMs: 5000, maxOutputBytes: 1024 * 1024 };
 const bytes = (stdin: string | Buffer | undefined): Buffer => (Buffer.isBuffer(stdin) ? stdin : Buffer.alloc(0));
@@ -103,7 +106,197 @@ describe("ContainerWorkCopyFactory (spec section 4.8)", () => {
     await copy.dispose();
   });
 
-  it("a recreate that fails comes back as an error result, not an exception", async () => {
+  it("replaces the container with a fresh one once its gate exec budget is spent, so its lifetime is never outrun", async () => {
+    const fx = calcFixture();
+    const memory = new MemoryRuntime();
+    const { factory } = workCopies(memory, { build: ["make"] });
+    const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
+    for (let n = 0; n < WORKCOPY_GATE_EXECS; n += 1) await copy.run(["echo", String(n)], OPTIONS);
+    const gates = memory.execs.filter((e) => e.argv[0] === "echo");
+    expect(new Set(gates.map((e) => e.name)).size).toBe(1);
+    expect(memory.specs).toHaveLength(1);
+    await copy.run(["echo", "next"], OPTIONS);
+    expect(memory.specs).toHaveLength(2);
+    expect(memory.live.size).toBe(1);
+    const last = memory.execs.at(-1);
+    expect(last?.argv).toEqual(["echo", "next"]);
+    expect(last?.name).not.toBe(gates[0]?.name);
+    // the fresh container is booted like the first: extract, then build, before the command, and its budget starts again
+    expect(memory.execs.slice(-3).map((e) => e.argv[0])).toEqual(["tar", "make", "echo"]);
+    for (let n = 1; n < WORKCOPY_GATE_EXECS; n += 1) await copy.run(["echo", "again"], OPTIONS);
+    expect(memory.specs).toHaveLength(2);
+    await copy.dispose();
+    expect(memory.live.size).toBe(0);
+  });
+
+  it("clamps an injected gate timeout to the cap the lifetime is sized from", async () => {
+    const fx = calcFixture();
+    const memory = new MemoryRuntime();
+    const timeouts: number[] = [];
+    memory.onExec = (_name, spec) => {
+      timeouts.push(spec.timeoutMs);
+      return EXIT_0;
+    };
+    const { factory } = workCopies(memory);
+    const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
+    await copy.run(["echo"], { timeoutMs: 3_600_000, maxOutputBytes: 1024 });
+    await copy.run(["echo"], { timeoutMs: 5000, maxOutputBytes: 1024 });
+    expect(timeouts.slice(-2)).toEqual([WORKCOPY_GATE_EXEC_S * 1000, 5000]);
+    await copy.dispose();
+  });
+
+  /** The host clock reads the start, then jumps to the moment the container's lifetime has run out. */
+  const lifetimeRunsOut = (memory: MemoryRuntime, name: string): void => {
+    const lifetime = memory.specs.find((spec) => spec.name === name)?.lifetime_s ?? 0;
+    hostClock.now = () => lifetime * 1000 - LIFETIME_SLACK_MS;
+  };
+
+  it.each([
+    ["negative guard: status 1", exit(1)],
+    ["negative guard: status 125", exit(125)],
+    ["negative guard: status 137", exit(137)],
+    ["an exec client error", { kind: "error", code: "EIO", message: "client failed" } as const],
+  ])(
+    "a failed exec (%s) in a container whose lifetime ran out is an infrastructure error, and the next command gets a fresh one",
+    async (_name, answer) => {
+      const fx = calcFixture();
+      const memory = new MemoryRuntime();
+      hostClock.now = () => 0;
+      memory.onExec = (name, spec) => {
+        if (spec.argv[0] !== "gate") return EXIT_0;
+        memory.stopped.add(name);
+        lifetimeRunsOut(memory, name);
+        return answer;
+      };
+      const { factory } = workCopies(memory);
+      const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
+      const first = memory.specs[0]?.name;
+      expect(await copy.run(["gate"], OPTIONS)).toEqual({
+        kind: "error",
+        code: "workcopy_container_gone",
+        message: "container_gone",
+      });
+      expect(memory.calls).toContain(`remove ${first}`);
+      memory.onExec = () => EXIT_0;
+      expect((await copy.run(["echo"], OPTIONS)).kind).toBe("exited");
+      expect(memory.specs).toHaveLength(2);
+      await copy.dispose();
+    },
+  );
+
+  it("negative guard: a failed inspect after a non-zero exit is an infrastructure error, never the gate's result", async () => {
+    const fx = calcFixture();
+    const memory = new MemoryRuntime();
+    const { factory } = workCopies(memory);
+    const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
+    memory.onExec = (_name, spec) => {
+      if (spec.argv[0] === "gate") memory.failInspect = true;
+      return spec.argv[0] === "gate" ? exit(1) : EXIT_0;
+    };
+    expect(await copy.run(["gate"], OPTIONS)).toMatchObject({ kind: "error", code: "workcopy_container_gone" });
+    memory.failInspect = false;
+    await copy.dispose();
+  });
+
+  it("negative guard: a container the host removed during the command is an infrastructure error", async () => {
+    const fx = calcFixture();
+    const memory = new MemoryRuntime();
+    const { factory } = workCopies(memory);
+    const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
+    memory.onExec = (name, spec) => {
+      if (spec.argv[0] !== "gate") return EXIT_0;
+      markHostEnded(name);
+      memory.stopped.add(name);
+      return exit(137);
+    };
+    expect(await copy.run(["gate"], OPTIONS)).toMatchObject({ kind: "error", code: "workcopy_container_gone" });
+    await copy.dispose();
+  });
+
+  describe("a container that stopped early on its own is the command's failure, reported without a status", () => {
+    it.each([
+      ["status 1", exit(1)],
+      ["status 137", exit(137)],
+      ["an exec client error", { kind: "error", code: "EIO", message: "client failed" } as const],
+    ])(
+      "%s comes back as the candidate_stopped error result, and the next command gets a fresh container",
+      async (_name, answer) => {
+        const fx = calcFixture();
+        const memory = new MemoryRuntime();
+        hostClock.now = () => 0;
+        const { factory } = workCopies(memory);
+        const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
+        memory.onExec = (name, spec) => {
+          if (spec.argv[0] !== "gate") return EXIT_0;
+          memory.stopped.add(name);
+          hostClock.now = () => 60_000;
+          return answer;
+        };
+        expect(await copy.run(["gate"], OPTIONS)).toEqual({
+          kind: "error",
+          code: "workcopy_candidate_stopped",
+          message: "candidate_stopped",
+        });
+        memory.onExec = () => EXIT_0;
+        expect((await copy.run(["echo"], OPTIONS)).kind).toBe("exited");
+        expect(memory.specs).toHaveLength(2);
+        await copy.dispose();
+      },
+    );
+
+    it("an OOM kill (State.OOMKilled true) is the candidate_stopped error result", async () => {
+      const fx = calcFixture();
+      const memory = new MemoryRuntime();
+      hostClock.now = () => 0;
+      const { factory } = workCopies(memory);
+      const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
+      memory.onExec = (name) => {
+        memory.stopped.add(name);
+        memory.stopState.set(name, { OOMKilled: true, ExitCode: 137 });
+        return exit(137);
+      };
+      expect(await copy.run(["gate"], OPTIONS)).toMatchObject({ kind: "error", code: "workcopy_candidate_stopped" });
+      await copy.dispose();
+    });
+  });
+
+  it.each([
+    ["running", false],
+    ["stopped", true],
+  ])("an exit with no status is an error result whatever the container state (%s)", async (_state, stopped) => {
+    const fx = calcFixture();
+    const memory = new MemoryRuntime();
+    hostClock.now = () => 0;
+    const { factory } = workCopies(memory);
+    const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
+    memory.onExec = (name, spec) => {
+      if (spec.argv[0] !== "gate") return EXIT_0;
+      if (stopped) memory.stopped.add(name);
+      return { kind: "exited", status: null, signal: "SIGKILL", stdout: "", stderr: "" };
+    };
+    expect(await copy.run(["gate"], OPTIONS)).toEqual({
+      kind: "error",
+      code: "workcopy_exit_unknown",
+      message: "exit_unknown",
+    });
+    memory.onExec = () => EXIT_0;
+    expect((await copy.run(["echo"], OPTIONS)).kind).toBe("exited");
+    expect(memory.specs).toHaveLength(2);
+    await copy.dispose();
+  });
+
+  it("a non-zero exit from a container that is still running is the gate's own result", async () => {
+    const fx = calcFixture();
+    const memory = new MemoryRuntime();
+    memory.onExec = (_name, spec) => (spec.argv[0] === "gate" ? exit(1) : EXIT_0);
+    const { factory } = workCopies(memory);
+    const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
+    expect(await copy.run(["gate"], OPTIONS)).toMatchObject({ kind: "exited", status: 1 });
+    expect(memory.specs).toHaveLength(1);
+    await copy.dispose();
+  });
+
+  it("a recreate whose extract fails comes back as the boot_failed error result, not an exception or a status", async () => {
     const fx = calcFixture();
     const memory = new MemoryRuntime();
     const { factory } = workCopies(memory);
@@ -113,8 +306,8 @@ describe("ContainerWorkCopyFactory (spec section 4.8)", () => {
     memory.onExec = () => exit(1);
     expect(await copy.run(["echo"], OPTIONS)).toEqual({
       kind: "error",
-      code: "workcopy_extract_failed",
-      message: "extract_failed",
+      code: "workcopy_boot_failed",
+      message: "boot_failed",
     });
     expect(memory.live.size).toBe(0);
     await copy.dispose();

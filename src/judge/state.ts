@@ -1,8 +1,9 @@
-import { existsSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { ProcessResult } from "../adapters/process-group.js";
 import type { PinnedImage } from "../container/image-ref.js";
 import type { ContainerHandle, ContainerRuntime, ExecSpec, ImageInfo, OwnedResource } from "../container/runtime.js";
+import { readRunIds, removeStagingDirs } from "../container/item-sweep.js";
+import { markHostEnded } from "../container/lifecycle.js";
 import { assertName, type ContainerRole, type ContainerSpec, type ImageId } from "../container/spec.js";
 import { registerCleanup } from "../core/cleanup-registry.js";
 import { isLockHeld, sealLockFile } from "../core/lock.js";
@@ -31,6 +32,7 @@ class Tracker implements TrackedRuntime {
 
   close(): void {
     const names = [...this.names];
+    for (const name of names) markHostEnded(name);
     if (names.length > 0) this.inner.removeAllSync(names);
     for (const name of names) this.forget(name);
   }
@@ -95,6 +97,7 @@ class Tracker implements TrackedRuntime {
 
   /** Forgotten only after the daemon confirmed: a failed removal stays tracked for `close()` and for a signal. */
   async remove(handle: ContainerHandle): Promise<void> {
+    markHostEnded(handle);
     await this.inner.remove(handle);
     this.forget(handle.name);
   }
@@ -108,6 +111,7 @@ class Tracker implements TrackedRuntime {
   }
 
   removeAllSync(names: readonly string[]): void {
+    for (const name of names) markHostEnded(name);
     this.inner.removeAllSync(names);
     for (const name of names) this.forget(name);
   }
@@ -171,6 +175,8 @@ export interface SweepInput {
   currentRunId: string;
   /** The item's id: only containers whose `omf.work` label is this item are selected, since two items can share a run id. */
   workId: string;
+  /** The project's state directory (`location.dir`): the root the staging path must really lie under (`runsOnStatePath`). */
+  projectDir: string;
 }
 
 export interface SweepResult {
@@ -187,22 +193,25 @@ const ROLE_OF_NAME = /^omf-(sut|harness|workcopy|implementer|author)-/;
 /**
  * Removes what earlier runs of THIS work item left in the daemon and on disk. The item claim allows one run at a time, so any
  * other run of the item is an orphan. Selection is by run id and by the `omf.work` label: run ids are only unique to the
- * second, so a container counts only when its run is under `<item>/runs/` and its label is this item. Round images carry no
- * label and are selected by run id. Only per-round SUT images (`omf-sut:`) are removed; the cached harness image is kept. Containers go first, then host directories. A resource whose name does not match the container name
- * pattern is left alone; an owned container whose name is off the full pattern is reported in `skipped`.
+ * second, so a container or round image counts only when its run is under `<item>/runs/` and its `omf.work` label is this item. Only per-round SUT images (`omf-sut:`) are removed; the cached harness image is kept.
+ * Containers go first, then host directories. A resource whose name does not match the container name pattern is left alone; an owned container whose name is off the full pattern is reported in `skipped`.
  * An author container of an earlier pass is removed too, except while the item's `seal.lock` is held: a running
  * `omf seal` owns its own author container, and the lock is held for the whole call.
  */
 export async function sweepOrphans(input: SweepInput): Promise<SweepResult> {
   const runsDir = join(input.itemDir, "runs");
-  const earlier = new Set(existsSync(runsDir) ? readdirSync(runsDir) : []);
-  earlier.delete(input.currentRunId);
   const result: SweepResult = { containers: 0, images: 0, staging: 0, skipped: [] };
+  const runIds = readRunIds(runsDir);
+  if (runIds === null) return result;
+  const earlier = new Set(runIds);
+  earlier.delete(input.currentRunId);
   const sealing = isLockHeld(sealLockFile(input.itemDir));
   for (const resource of await input.runtime.listOwned({ run_id: null })) {
     if (!earlier.has(resource.run_id)) continue;
+    // A container and a round image are both selected by the `omf.work` label as well as the run id: run ids are only unique
+    // to the second, and an image whose label could not be read (empty) is never selected.
+    if (resource.work_id !== input.workId) continue;
     if (resource.kind === "container") {
-      if (resource.work_id !== input.workId) continue;
       const role = ROLE_OF_NAME.exec(resource.name)?.[1] as ContainerRole | undefined;
       if (role === undefined) continue;
       if (role === "author" && sealing) continue;
@@ -215,20 +224,14 @@ export async function sweepOrphans(input: SweepInput): Promise<SweepResult> {
       }
       await input.runtime.remove({ name: resource.name, id: resource.name, role });
       result.containers += 1;
-    } else if (resource.name.startsWith("omf-sut:")) {
-      await input.runtime.removeImage(resource.name as ImageId);
+    } else if (resource.name.startsWith("omf-sut:") && resource.image_id !== undefined) {
+      // By the id read at inspect time, so a tag another item took over since the listing is not removed.
+      await input.runtime.removeImage(resource.image_id as ImageId);
       result.images += 1;
     }
   }
-  for (const runId of earlier) {
-    // `judge` holds judge staging; `implementer-stage` holds an implementer bundle, quarantine and tree that may carry the key.
-    for (const name of ["judge", "implementer-stage"]) {
-      const stageDir = join(runsDir, runId, name);
-      if (!existsSync(stageDir)) continue;
-      rmSync(stageDir, { recursive: true, force: true });
-      result.staging += 1;
-    }
-  }
+  // `judge` holds judge staging; `implementer-stage` holds an implementer bundle, quarantine and tree. Symlinks are never followed.
+  result.staging += removeStagingDirs(runsDir, earlier, input.projectDir);
   return result;
 }
 
@@ -245,7 +248,9 @@ export async function sweepImplementerContainers(input: {
   workId: string;
 }): Promise<number> {
   const runsDir = join(input.itemDir, "runs");
-  const runs = new Set(existsSync(runsDir) ? readdirSync(runsDir) : []);
+  const runIds = readRunIds(runsDir);
+  if (runIds === null) return 0;
+  const runs = new Set(runIds);
   runs.add(input.currentRunId);
   let removed = 0;
   for (const resource of await input.runtime.listOwned({ run_id: null })) {

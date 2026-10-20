@@ -7,7 +7,6 @@ import {
   type ContainerRole,
   type ContainerSpec,
   ContainerSpecError,
-  IDLE_ARGS,
   IDLE_ENTRYPOINT,
   IMPLEMENTER_FIXED_ENV,
   type ImageId,
@@ -98,6 +97,8 @@ export function createArgv(spec: ContainerSpec, context: string | null): string[
     String(limits.cpus),
     "--stop-timeout",
     "1",
+    // A daemon configured with `init: true` would put docker-init at PID 1 with the sleep as a killable child; this overrides it.
+    "--init=false",
     "--env",
     "LC_ALL=C",
     ...fixedEnvOf(spec.labels.role).flatMap(([name, value]) => ["--env", `${name}=${value}`]),
@@ -105,7 +106,7 @@ export function createArgv(spec: ContainerSpec, context: string | null): string[
     "--entrypoint",
     IDLE_ENTRYPOINT,
     spec.image,
-    ...(spec.lifetime_s === undefined ? IDLE_ARGS : [String(spec.lifetime_s)]),
+    String(spec.lifetime_s),
   ];
 }
 

@@ -115,6 +115,10 @@ export class RuntimeDouble implements ContainerRuntime {
     env: Readonly<Record<string, string>> | undefined;
   }[] = [];
   tamper: Tamper | null = null;
+  /** The daemon cannot answer an inspect (a failed call): the state of a container is then unknown. */
+  failInspect = false;
+  /** What the daemon reports about a stopped container besides `Running` (`OOMKilled`, `ExitCode`, `FinishedAt`), by name. */
+  readonly stopState = new Map<string, Record<string, unknown>>();
   private readonly live = new Map<string, SutState>();
   private readonly harness = new HarnessDouble();
 
@@ -149,8 +153,10 @@ export class RuntimeDouble implements ContainerRuntime {
     return { name: spec.name, id: `id-${spec.name}`, role: spec.labels.role };
   }
   async inspect(handle: ContainerHandle): Promise<unknown> {
+    if (this.failInspect) throw new Error("inspect failed");
     const state = this.live.get(handle.name);
-    return { State: { Running: state !== undefined && !state.dead } };
+    const running = state !== undefined && !state.dead;
+    return { State: { Running: running, ...(running ? {} : this.stopState.get(handle.name)) } };
   }
   async start(handle: ContainerHandle): Promise<void> {
     this.calls.push(`start:${handle.name}`);

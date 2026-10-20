@@ -10,9 +10,15 @@ import type {
   StageMeasurement,
   ViolationCode,
 } from "../isolation/types.js";
+import { recordStarted } from "./lifecycle.js";
 import { markMeasured } from "./measured-handles.js";
+import { stopCause } from "./running.js";
 import type { ContainerHandle, ContainerRuntime } from "./runtime.js";
 import { type ContainerSpec, ROLE_STAGE } from "./spec.js";
+import { PROBE_TIMEOUT_MS } from "./probe-timeout.js";
+
+/** The cap of the isolation probe, milliseconds; `judgeLifetimeSeconds` derives `JUDGE_PROBE_S` from it. */
+export { PROBE_TIMEOUT_MS };
 
 /**
  * `inspect_unparseable`: the daemon's document lacked an isolation field (absence is never a pass). `probe_failed` and
@@ -37,6 +43,45 @@ export class NotGoldenError extends Error {
 }
 
 /**
+ * The SUT container runs from the candidate-built round image, so what its `sleep` and the probe `sh` do is the candidate's
+ * doing. `probe_unanswered`: the probe did not answer (or its container had stopped) and the container was not removed or
+ * stopped by the host. `probe_flagged`: the probe found a vendor binary, a credential path or a socket in the candidate-built
+ * image. Either is a failure of that (scenario, rep), never a `NotGoldenError` and never an infrastructure fault. The
+ * container is already removed when this is thrown. Only the `sut` role throws it.
+ */
+export type CandidateContainerFailureCode = "probe_unanswered" | "probe_flagged";
+
+export class CandidateContainerFailure extends Error {
+  constructor(readonly code: CandidateContainerFailureCode) {
+    super(code);
+    this.name = "CandidateContainerFailure";
+  }
+}
+
+/** The violations only the in-container probe can produce: for a candidate-built image they are the candidate's. */
+const PROBE_VIOLATIONS: ReadonlySet<ViolationCode> = new Set([
+  "vendor_binary_present",
+  "credential_present",
+  "docker_socket_present",
+]);
+
+/**
+ * Whether a probe that did not answer is the candidate's. Same attribution as a failed step (`relay.ts`): an exit with no status
+ * is the client's; otherwise `stopCause` decides, and a container the host removed or stopped, or that the daemon would not
+ * describe, stays infrastructure. A client error against a container that still runs is the client's too.
+ */
+async function candidateEndedProbe(
+  runtime: ContainerRuntime,
+  handle: ContainerHandle,
+  answer: ProcessResult,
+): Promise<boolean> {
+  if (answer.kind === "exited" && answer.status === null) return false;
+  const { cause } = await stopCause(runtime, handle);
+  if (cause === "host" || cause === "unknown") return false;
+  return !(answer.kind === "error" && cause === "running");
+}
+
+/**
  * One line per finding, always ending in `end`, so a truncated answer is malformed and never clean. A constant: nothing
  * from the host, a scenario or the candidate is ever interpolated into it. A tripwire for base images that ship a vendor
  * CLI, a credential file or a socket; the daemon's `docker inspect` stays the authority.
@@ -50,7 +95,6 @@ const PROBE_SCRIPT = [
 
 export const CONTAINER_PROBE_ARGV: readonly string[] = Object.freeze(["sh", "-c", PROBE_SCRIPT]);
 
-const PROBE_TIMEOUT_MS = 15_000;
 const PROBE_MAX_BYTES = 16 * 1024;
 const MAX_PROBE_LINES = 64;
 const VENDOR_LINE = /^vendor:([a-z0-9-]{1,32})$/;
@@ -145,7 +189,9 @@ export interface MeasuredContainer {
  *
  * A facts violation records L1, removes the container and throws `NotGoldenError`; the container never started, so neither its
  * entrypoint nor the probe's `sh` ran. A probe-only violation records L1, removes and throws. A parse or probe failure removes
- * the container and records nothing. Only a golden container is returned, still running, for the caller to use and remove. An
+ * the container and records nothing. For the `sut` role the probe window belongs to the candidate (its image replaced `sleep`
+ * and `sh`): a probe that did not answer while the host did not end the container, and a probe that reports a vendor binary,
+ * a credential or a socket, throw `CandidateContainerFailure` instead of `MeasureError` and `NotGoldenError`. Only a golden container is returned, still running, for the caller to use and remove. An
  * error from `create` (no context, a remote endpoint) propagates as the runtime raised it: no container exists yet.
  *
  * With `defer` (see `DeferredMeasureDeps`) nothing is recorded here: a golden container's full judgment goes to the callback,
@@ -178,18 +224,36 @@ export async function createMeasured(
     } catch {
       throw new MeasureError("create_failed");
     }
+    // The sleep began no earlier than now: the reference for telling a lifetime that ran out from a container that stopped early.
+    recordStarted(handle, spec.lifetime_s);
     const answer = await runtime.exec(handle, {
       argv: CONTAINER_PROBE_ARGV,
       timeoutMs: PROBE_TIMEOUT_MS,
       maxOutputBytes: PROBE_MAX_BYTES,
     });
-    const measurement = judgeObserved(stage, facts, probeChecks(answer), golden, deps.now());
+    let checks: ContainerChecks;
+    try {
+      checks = probeChecks(answer);
+    } catch (error) {
+      if (
+        spec.labels.role === "sut" &&
+        error instanceof MeasureError &&
+        (await candidateEndedProbe(runtime, handle, answer))
+      )
+        throw new CandidateContainerFailure("probe_unanswered");
+      throw error;
+    }
+    const measurement = judgeObserved(stage, facts, checks, golden, deps.now());
     if ("defer" in deps) {
       if (measurement.violations.length === 0) deps.defer(measurement);
     } else {
       recordStageMeasurement(deps.sink, deps.scope, deps.itemDir, measurement);
     }
-    if (measurement.violations.length > 0) throw new NotGoldenError(measurement.violations);
+    if (measurement.violations.length > 0) {
+      if (spec.labels.role === "sut" && measurement.violations.every((code) => PROBE_VIOLATIONS.has(code)))
+        throw new CandidateContainerFailure("probe_flagged");
+      throw new NotGoldenError(measurement.violations);
+    }
     keep = true;
     return { handle: markMeasured(handle), measurement };
   } finally {

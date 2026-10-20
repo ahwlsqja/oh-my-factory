@@ -1,3 +1,4 @@
+import { imageIdFor } from "./image-id.js";
 import type { ProcessResult } from "../../src/adapters/process-group.js";
 import type {
   ContainerHandle,
@@ -29,6 +30,12 @@ export interface RecordedExec {
  * store, so it serves the tests of lifecycle and work-copy behaviour; measurement is tested against the fake docker (Task 4).
  * `calls` lists the daemon-changing requests in order: "create N", "start N", "remove N", "removeAllSync N,M", "rmi ID".
  */
+/** A labelled round image is listed with the id the daemon reported when it was inspected; the double derives one from the name. */
+const withImageId = (resource: OwnedResource): OwnedResource =>
+  resource.kind === "image" && resource.work_id !== "" && resource.image_id === undefined
+    ? { ...resource, image_id: imageIdFor(resource.name) }
+    : resource;
+
 export class MemoryRuntime implements ContainerRuntime {
   readonly context = "colima-omf-m3f";
   readonly specs: ContainerSpec[] = [];
@@ -38,7 +45,11 @@ export class MemoryRuntime implements ContainerRuntime {
   /** What `listOwned` reports; removals delete from it. */
   owned: OwnedResource[] = [];
   failCreate = false;
+  /** The daemon refuses to remove a container: it stays known and running (an orphan for the sweep). */
+  failRemove = false;
   failImageRemoval = false;
+  /** The daemon cannot answer an inspect: the state of a container is then unknown. */
+  failInspect = false;
   onExec: (name: string, spec: ExecSpec) => ProcessResult | Promise<ProcessResult> = () => EXIT_0;
 
   async endpoint(): Promise<{ kind: "unix"; local: true }> {
@@ -70,8 +81,16 @@ export class MemoryRuntime implements ContainerRuntime {
     return handle;
   }
 
-  async inspect(): Promise<unknown> {
-    return {};
+  /** Containers a test stopped by hand (a lifetime that ran out): still known to the daemon, no longer running. */
+  readonly stopped = new Set<string>();
+
+  /** What the daemon reports about a stopped container besides `Running` (`OOMKilled`, `ExitCode`, `FinishedAt`), by name. */
+  readonly stopState = new Map<string, Record<string, unknown>>();
+
+  async inspect(handle: ContainerHandle): Promise<unknown> {
+    if (this.failInspect) throw new Error("inspect failed");
+    const running = this.live.has(handle.name) && !this.stopped.has(handle.name);
+    return { State: { Running: running, ...(running ? {} : this.stopState.get(handle.name)) } };
   }
 
   async start(handle: ContainerHandle): Promise<void> {
@@ -85,17 +104,20 @@ export class MemoryRuntime implements ContainerRuntime {
 
   async remove(handle: ContainerHandle): Promise<void> {
     this.calls.push(`remove ${handle.name}`);
+    if (this.failRemove) throw new Error("remove failed");
     this.forget([handle.name]);
   }
 
   async removeImage(id: ImageId): Promise<void> {
     if (this.failImageRemoval) throw new Error("image removal failed");
     this.calls.push(`rmi ${id}`);
-    this.owned = this.owned.filter((resource) => !(resource.kind === "image" && resource.name === id));
+    this.owned = this.owned.filter((resource) => !(resource.kind === "image" && withImageId(resource).image_id === id));
   }
 
   async listOwned(filter: { run_id: string | null }): Promise<OwnedResource[]> {
-    return this.owned.filter((resource) => filter.run_id === null || resource.run_id === filter.run_id);
+    return this.owned
+      .filter((resource) => filter.run_id === null || resource.run_id === filter.run_id)
+      .map(withImageId);
   }
 
   removeAllSync(names: readonly string[]): void {

@@ -172,6 +172,8 @@ export const DEVIATIONS: readonly Deviation[] = [
   { name: "privileged mode", edit: host("Privileged", true), codes: ["privileged"] },
   { name: "a missing no-new-privileges", edit: host("SecurityOpt", []), codes: ["no_new_privileges_missing"] },
   { name: "another runtime", edit: host("Runtime", "nvidia"), codes: ["runtime_unexpected"] },
+  { name: "a daemon default of init true", edit: host("Init", true), codes: ["init_not_disabled"] },
+  { name: "init left unset", edit: (doc) => void delete doc.HostConfig.Init, codes: ["init_not_disabled"] },
   { name: "a root user", edit: (doc) => void (doc.Config.User = "0:0"), codes: ["root_user"] },
   {
     name: "an extra environment name",
@@ -216,6 +218,7 @@ export function goldenInspectDoc(role: ContainerRole): InspectDoc {
       VolumesFrom: null,
       Sysctls: {},
       Runtime: "runc",
+      Init: false,
       Tmpfs: Object.fromEntries(destinations.map((destination) => [destination, "rw,nosuid,nodev"])),
     },
   };

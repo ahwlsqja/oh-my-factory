@@ -77,7 +77,7 @@ describe("S4", () => {
       owned: {
         [earlier]: [
           { kind: "container", name: `omf-sut-${earlier}-1-3`, run_id: earlier, work_id: THIS_ITEM },
-          { kind: "image", name: `omf-sut:${earlier}-1`, run_id: earlier, work_id: "" },
+          { kind: "image", name: `omf-sut:${earlier}-1`, run_id: earlier, work_id: THIS_ITEM },
           { kind: "image", name: "omf-harness:0123456789ab", run_id: earlier, work_id: "" },
         ],
         [other]: [{ kind: "container", name: `omf-sut-${other}-1-1`, run_id: other, work_id: "w-ba9876543210" }],

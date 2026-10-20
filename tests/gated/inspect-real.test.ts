@@ -18,6 +18,7 @@ const HARDENED = [
   "--read-only",
   "--user",
   "65532:65532",
+  "--init=false",
 ];
 const SHAPES: ReadonlyArray<{ name: string; flags: string[] }> = [
   { name: "minimal", flags: [] },
@@ -59,6 +60,10 @@ describeGated("G-inspect-parser-real", () => {
           writeFixture(shape.name, scrubInspect(raw, { id: raw[0]?.Id ?? "", ...scrubTargets() }));
         }
         expect(() => containerFactsFromInspect(raw), shape.name).not.toThrow();
+        // `--init=false` is reported back as false; a create that does not say it leaves the key unset (the daemon default).
+        expect(containerFactsFromInspect(raw).init, shape.name).toBe(
+          shape.flags.includes("--init=false") ? false : null,
+        );
       });
     } finally {
       for (const name of names) gatedDocker(["rm", "--force", "--volumes", name]);

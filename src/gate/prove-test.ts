@@ -41,7 +41,9 @@ export interface ProveTestResult {
   test_paths: number;
 }
 
-const DEFAULT_TIMEOUT_MS = 600_000;
+/** The default timeout of the test command, milliseconds; `WORKCOPY_GATE_EXEC_S` in the container layer is pinned to it. */
+export const PROVE_TEST_DEFAULT_TIMEOUT_MS = 600_000;
+const DEFAULT_TIMEOUT_MS = PROVE_TEST_DEFAULT_TIMEOUT_MS;
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 
 /** A normal exit status is the only verdict a test run gives; a timeout, the output limit, a runner error or a signal is not one. */

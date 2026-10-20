@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { recordStarted } from "../../src/container/lifecycle.js";
 import type { MeasureDeps } from "../../src/container/measure.js";
 import type { ContainerRuntime, ImageInfo } from "../../src/container/runtime.js";
 import type { ImageId } from "../../src/container/spec.js";
@@ -23,16 +24,21 @@ export const LABELS = { work_id: "w-0123456789ab", run_id: "r-20261015T090000Z-a
  * about the work copy's lifecycle; the test of the default launch below uses the real `createMeasured`.
  */
 export function stubLaunch(runtime: ContainerRuntime): Launch {
-  return async (spec) => ({
-    handle: await runtime.create(spec),
-    measurement: {
-      ...hostStage("sut", AT),
-      mode: "container",
-      level: "L2",
-      violations: [],
-      facts_sha256: "a".repeat(64),
-    },
-  });
+  return async (spec) => {
+    const handle = await runtime.create(spec);
+    // Like createMeasured, which records the host time just after `docker start` returned.
+    recordStarted(handle, spec.lifetime_s);
+    return {
+      handle,
+      measurement: {
+        ...hostStage("sut", AT),
+        mode: "container",
+        level: "L2",
+        violations: [],
+        facts_sha256: "a".repeat(64),
+      },
+    };
+  };
 }
 
 export function measureDeps(runtime: ContainerRuntime): MeasureDeps {

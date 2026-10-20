@@ -19,7 +19,7 @@ import {
 import { auditPayloadOf, gatesEvaluatedEvent } from "../gate/events.js";
 import type { RunOptions, WorkCopyFactory } from "../gate/ports.js";
 import { type ProveTestResult, proveTest } from "../gate/prove-test.js";
-import { type GateRunResult, runGates } from "../gate/run-gates.js";
+import { GateInfrastructureError, type GateRunResult, runGates } from "../gate/run-gates.js";
 import { auditGoal } from "../goal/audit.js";
 import { type GitTarget, HostGitError } from "../git/hardened.js";
 import { commitMessages, unifiedDiff } from "../git/ops.js";
@@ -76,7 +76,7 @@ function lockedWatchedGlobs(location: ProjectLocation, ctx: StationContext): rea
 /** A stop of the station for the errors a hostile tree or the environment can cause; anything else is a bug and propagates. */
 function stopFor(error: unknown): ReasonCode | null {
   if (error instanceof WorkCopyError) return error.code === "not_golden" ? "gate_blocked" : "infra_failure";
-  if (error instanceof WorkCopiesError) return "infra_failure";
+  if (error instanceof WorkCopiesError || error instanceof GateInfrastructureError) return "infra_failure";
   if (error instanceof HostGitError) return "gate_blocked";
   return null;
 }

@@ -27,7 +27,7 @@ import {
   type SecretHandle,
 } from "./runtime.js";
 import { isMeasured } from "./measured-handles.js";
-import { ContainerSpecError, ROLE_SECRET, isImageId } from "./spec.js";
+import { ContainerSpecError, ROLE_SECRET, WORK_ID_RE, isImageId } from "./spec.js";
 
 export type DockerRunner = (
   argv: readonly string[],
@@ -56,7 +56,8 @@ export interface DockerRuntimeOptions {
 /** A path that cannot exist, used when neither DOCKER_CONFIG nor an absolute HOME is known: the client then finds no context and fails closed. */
 const UNSET_HOME_DOCKER_CONFIG = "/nonexistent/omf-docker-config";
 const QUICK_MS = 15_000;
-const META_MS = 60_000;
+/** The cap of a docker call that creates, inspects, starts or removes a container, milliseconds. */
+export const META_MS = 60_000;
 const PULL_MS = 600_000;
 const META_BYTES = 4 * 1024 * 1024;
 const FAILURE_CAP = 2000;
@@ -316,6 +317,20 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
     },
 
     async listOwned(filter) {
+      const roundImage = async (tag: string, contextName: string): Promise<{ work: string; id: string } | null> => {
+        try {
+          const docs = JSON.parse(await succeed(imageInspectArgv(tag, contextName), META_MS)) as unknown;
+          const doc = Array.isArray(docs) ? docs[0] : undefined;
+          const labels = doc?.Config?.Labels as Record<string, unknown> | null | undefined;
+          const work = labels?.["omf.work"];
+          const id = doc?.Id;
+          return typeof work === "string" && WORK_ID_RE.test(work) && typeof id === "string" && isImageId(id)
+            ? { work, id }
+            : null;
+        } catch {
+          return null;
+        }
+      };
       const name = await requireLocal();
       const resources: OwnedResource[] = [];
       for (const line of (await succeed(listOwnedArgv("container", filter.run_id, name), META_MS)).split("\n")) {
@@ -326,8 +341,18 @@ export function createDockerRuntime(options: DockerRuntimeOptions): ContainerRun
         const tag = line.trim();
         if (!tag || tag.startsWith("<none>")) continue;
         const run = /^omf-sut:(.+)-\d+$/.exec(tag)?.[1] ?? "";
-        if (filter.run_id === null || run === filter.run_id)
-          resources.push({ kind: "image", name: tag, run_id: run, work_id: "" });
+        if (filter.run_id === null || run === filter.run_id) {
+          // `image ls` cannot print a label, so a round image's `omf.work` label is read by inspect. One that cannot be read
+          // (gone since the listing, no label, not a work id, no image id) has no work id, and a sweep never selects it.
+          const read = run === "" ? null : await roundImage(tag, name);
+          resources.push({
+            kind: "image",
+            name: tag,
+            run_id: run,
+            work_id: read?.work ?? "",
+            ...(read === null ? {} : { image_id: read.id }),
+          });
+        }
       }
       return resources;
     },

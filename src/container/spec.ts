@@ -1,5 +1,6 @@
 import type { AuthorConfig, ImplementerConfig, JudgeConfig } from "../core/config.js";
 import { type PinnedImage, isDigestPinned } from "./image-ref.js";
+import { PROBE_TIMEOUT_MS } from "./probe-timeout.js";
 
 /** The containers OMF starts: three judge roles, the implementer and the sealing author. */
 export const CONTAINER_ROLES = ["sut", "harness", "workcopy", "implementer", "author"] as const;
@@ -27,8 +28,8 @@ export const ROLE_NETWORK: Readonly<Record<ContainerRole, "none" | "bridge">> = 
 export const SANDBOX_USER = "65532:65532";
 /** Containers idle until `docker exec` gives them work. The base image must ship `sleep` (a stated limit). */
 export const IDLE_ENTRYPOINT = "sleep";
-/** What a judge container sleeps for: it is removed by the run, and a killed run's leftovers by the next sweep. */
-export const IDLE_ARGS: readonly string[] = ["2147483647"];
+/** The longest a container may sleep: `assertSpec` refuses a longer lifetime. */
+export const MAX_LIFETIME_S = 2147483647;
 
 /**
  * Seconds of slack on top of an agent container's own bounds: the daemon's start-up, the time between the host's
@@ -46,6 +47,115 @@ export const AUTHOR_STEPS_S = 15 + 30 + 30 + 30;
  * capture (300) and the finalize (120).
  */
 export const IMPLEMENTER_STEPS_S = 15 + 30 + (30 + 4 * 120) + 30 + 300 + 120;
+
+/** The isolation probe `createMeasured` runs in every container, seconds (its cap, `PROBE_TIMEOUT_MS`). */
+export const JUDGE_PROBE_S = PROBE_TIMEOUT_MS / 1000;
+/**
+ * The scenario bounds the judge lifetimes are sized from: at most this many steps in a scenario and scenarios in a set.
+ * Copies of `MAX_STEPS` and `MAX_SCENARIOS_PER_SET` in src/scenario/types.ts so the container layer imports nothing from
+ * there; tests/container/judge-lifetime.test.ts pins both.
+ */
+export const JUDGE_MAX_STEPS = 12;
+export const JUDGE_MAX_SCENARIOS = 100;
+/**
+ * The caps of the two execs that boot a work copy, seconds: the `tar -x` upload and the declared build. Copies of
+ * `EXTRACT_TIMEOUT_MS` and `BUILD_TIMEOUT_MS` in work-copy.ts, which imports this module; tests/container/judge-lifetime.test.ts pins them.
+ */
+export const WORKCOPY_BOOT_S = 120 + 600;
+/**
+ * The most gate execs one work copy container is sized to serve, and the cap of each, seconds. A stale copy gets a fresh container.
+ * `WORKCOPY_GATE_EXEC_S` is the default timeout of `runGates` and `proveTest`, and `ContainerWorkCopy.run` clamps every
+ * injected timeout to it, so no gate exec outruns it; the test pins all three together.
+ */
+export const WORKCOPY_GATE_EXECS = 32;
+export const WORKCOPY_GATE_EXEC_S = 600;
+
+/**
+ * The cap of one docker call that creates, inspects, starts or removes a container, seconds. A copy of `META_MS` in
+ * docker-cli.ts, which imports this module; tests/container/judge-lifetime.test.ts pins the two together.
+ */
+export const JUDGE_DOCKER_CALL_S = 60;
+/**
+ * The calls the code makes, counted line by line from src/judge/relay.ts, src/judge/round.ts, src/container/measure.ts and
+ * src/container/work-copy.ts. A "step" is one scenario step relayed to a SUT; an "exec call" runs at `judge.step_timeout_ms`,
+ * a "docker call" at `JUDGE_DOCKER_CALL_S`.
+ */
+/** Per step: the `exec` of the step and the harness `observe`, both exec calls. */
+export const JUDGE_STEP_EXEC_CALLS = 2;
+/** Per step: the `containerState` inspect (`stopCause`) the relay makes after a non-zero exit or an exec client error (counted for every step; a null status is never inspected, the budget counts that call conservatively). */
+export const JUDGE_STEP_DOCKER_CALLS = 1;
+/** Per SUT after its start: the remove of `stop` (a cut or killed step) and the remove of `close`. */
+export const JUDGE_SUT_END_DOCKER_CALLS = 2;
+/** Per SUT before its start, made by the harness lifetime clock: create, inspect, start. */
+export const JUDGE_SUT_BOOT_DOCKER_CALLS = 3;
+/** Per (rep, scenario): the harness `begin`, an exec call. */
+export const JUDGE_BEGIN_EXEC_CALLS = 1;
+/** Per round: the harness `load` and `verdict`, exec calls. */
+export const JUDGE_ROUND_EXEC_CALLS = 2;
+/** Per round: the harness own create, start and remove, docker calls. */
+export const JUDGE_ROUND_DOCKER_CALLS = 3;
+/** Per work copy gate exec: the inspect after a non-zero exit, a docker call, counted for every exec. */
+export const WORKCOPY_EXEC_DOCKER_CALLS = 1;
+/** Per work copy container: its remove, a docker call. */
+export const WORKCOPY_END_DOCKER_CALLS = 1;
+/**
+ * A judge bound is the computed worst case times this factor, plus the margin. The worst case adds up caps that the host
+ * reaches one after the other; the factor covers the daemon's own latency between them.
+ */
+export const JUDGE_SAFETY_FACTOR = 1.5;
+
+const boundOf = (worstS: number): number =>
+  Math.min(MAX_LIFETIME_S, Math.ceil(JUDGE_SAFETY_FACTOR * worstS) + AGENT_LIFETIME_MARGIN_S);
+
+/** The seconds one relayed step can take: its exec and observe at the step cap, and the state check. */
+const stepSeconds = (stepS: number): number =>
+  JUDGE_STEP_EXEC_CALLS * stepS + JUDGE_STEP_DOCKER_CALLS * JUDGE_DOCKER_CALL_S;
+/** The worst case of one SUT container from its start: the probe, every step, and both removes. */
+const sutSeconds = (stepS: number): number =>
+  JUDGE_PROBE_S + JUDGE_MAX_STEPS * stepSeconds(stepS) + JUDGE_SUT_END_DOCKER_CALLS * JUDGE_DOCKER_CALL_S;
+
+/**
+ * How long a judge container sleeps before it stops itself, so a run killed by SIGKILL cannot leave one behind for ever
+ * (the next item sweep removes it earlier). The bound is wall-clock time from the container start, so it is sized from
+ * everything the host does while the container is alive, each call at its cap, times `JUDGE_SAFETY_FACTOR`, plus the margin:
+ * - sut serves one scenario: the probe, and at most `JUDGE_MAX_STEPS` steps of an exec, an `observe` and a state check, then
+ *   the two removes (`JUDGE_STEP_*` and `JUDGE_SUT_END_DOCKER_CALLS`);
+ * - harness stays alive for the whole round: the probe, `load`, `verdict`, its own create, start and remove, and for each of
+ *   `judge.k` reps of up to `JUDGE_MAX_SCENARIOS` scenarios a `begin`, the SUT's create, inspect and start, and the SUT's own
+ *   worst case above;
+ * - workcopy serves a tree and is replaced after `WORKCOPY_GATE_EXECS` execs: the probe, the boot caps, that many gate
+ *   execs at `WORKCOPY_GATE_EXEC_S` each followed by a state check, and the remove.
+ * The sleep begins at `docker start`, so a container's own create and inspect come before it and fall outside the lifetime;
+ * the margin covers them. `runJudgeRound` refuses a set above `JUDGE_MAX_SCENARIOS` scenarios or `JUDGE_MAX_STEPS` steps in
+ * a scenario (`set_invalid`), so no caller outgrows these bounds silently.
+ * Never more than `MAX_LIFETIME_S`. An agent role has no judge lifetime (null).
+ */
+export function judgeLifetimeSeconds(role: ContainerRole, limits: RoleLimits): number | null {
+  if (role === "author" || role === "implementer") return null;
+  if (limits.kind !== "judge") throw new ContainerSpecError("invalid_limits");
+  const stepS = Math.ceil(limits.judge.step_timeout_ms / 1000);
+  if (role === "sut") return boundOf(sutSeconds(stepS));
+  if (role === "workcopy") {
+    const exec = WORKCOPY_GATE_EXEC_S + WORKCOPY_EXEC_DOCKER_CALLS * JUDGE_DOCKER_CALL_S;
+    return boundOf(
+      JUDGE_PROBE_S + WORKCOPY_BOOT_S + WORKCOPY_GATE_EXECS * exec + WORKCOPY_END_DOCKER_CALLS * JUDGE_DOCKER_CALL_S,
+    );
+  }
+  const each = JUDGE_BEGIN_EXEC_CALLS * stepS + JUDGE_SUT_BOOT_DOCKER_CALLS * JUDGE_DOCKER_CALL_S + sutSeconds(stepS);
+  return boundOf(
+    JUDGE_ROUND_EXEC_CALLS * stepS +
+      JUDGE_PROBE_S +
+      JUDGE_ROUND_DOCKER_CALLS * JUDGE_DOCKER_CALL_S +
+      limits.judge.k * JUDGE_MAX_SCENARIOS * each,
+  );
+}
+
+/** The lifetime of any role: `agentLifetimeSeconds` for the agents, `judgeLifetimeSeconds` for the judge roles. */
+export function roleLifetimeSeconds(role: ContainerRole, limits: RoleLimits): number {
+  const seconds = agentLifetimeSeconds(role, limits) ?? judgeLifetimeSeconds(role, limits);
+  if (seconds === null) throw new ContainerSpecError("invalid_limits");
+  return seconds;
+}
 
 /**
  * How long an agent container sleeps before it stops itself, so a host killed by SIGKILL cannot leave a container with a
@@ -191,10 +301,10 @@ export interface ContainerSpec {
   tmpfs: readonly TmpfsSpec[];
   limits: { memory_mb: number; cpus: number; pids: number };
   /**
-   * Seconds the container sleeps before it stops itself (`agentLifetimeSeconds`). Required for the two agent roles, refused
-   * for the judge roles, which keep the idle sleep.
+   * Seconds the container sleeps before it stops itself (`roleLifetimeSeconds`). Required for every role: no container with a lifetime (author,
+   * implementer, SUT, harness, work copy) sleeps for ever; the `omf-measure` container is `docker run --rm` and has none.
    */
-  lifetime_s?: number;
+  lifetime_s: number;
 }
 
 // The run id pattern of the W events and the work id pattern of the W verbs, repeated here so the container layer imports
@@ -274,10 +384,8 @@ export function assertSpec(spec: ContainerSpec): void {
     cpus > 0 &&
     cpus <= 64;
   if (!limitsOk) throw new ContainerSpecError("invalid_limits");
-  const agent = spec.labels.role === "implementer" || spec.labels.role === "author";
   const { lifetime_s: lifetime } = spec;
-  if (agent !== (lifetime !== undefined)) throw new ContainerSpecError("invalid_limits");
-  if (lifetime !== undefined && !(Number.isInteger(lifetime) && lifetime >= 1 && lifetime <= 2147483647)) {
+  if (!(Number.isInteger(lifetime) && lifetime >= 1 && lifetime <= MAX_LIFETIME_S)) {
     throw new ContainerSpecError("invalid_limits");
   }
 }

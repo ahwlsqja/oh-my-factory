@@ -471,7 +471,7 @@ describe("sealItem", () => {
     expect(sessions).toBe(0);
   });
 
-  it("sweeps the author and implementer containers of earlier runs of this item, and nothing else", async () => {
+  it("sweeps the author, implementer and judge containers of earlier runs of this item, and nothing of another item", async () => {
     const r = rig();
     mkdirSync(join(r.l.f.item.dir, "runs", EARLIER), { recursive: true });
     r.runtime.owned = [
@@ -481,9 +481,7 @@ describe("sealItem", () => {
       { kind: "container", name: `omf-author-${OTHER_ITEM}-1-1`, run_id: OTHER_ITEM, work_id: "w-other0000000" },
     ];
     expect((await sealItem(r.deps())).status).toBe("sealed");
-    expect(r.runtime.owned.map((resource) => resource.name).sort()).toEqual(
-      [`omf-author-${OTHER_ITEM}-1-1`, `omf-sut-${EARLIER}-1-3`].sort(),
-    );
+    expect(r.runtime.owned.map((resource) => resource.name)).toEqual([`omf-author-${OTHER_ITEM}-1-1`]);
   });
 
   it("keeps an implementer container while a live process holds the item claim, and still sweeps the author one", async () => {

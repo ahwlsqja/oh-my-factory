@@ -45,6 +45,7 @@ const golden = (image: string, destinations: string[]) => ({
   volumes_from: [],
   sysctls: [],
   runtime: "runc",
+  init: false,
 });
 
 describe("FakeDocker", () => {
@@ -89,9 +90,21 @@ describe("FakeDocker", () => {
 // golden argv must equal the facts of a document a real daemon produced. The fixture is captured by the gated inspect test.
 const REAL = new URL("../fixtures/docker-inspect/hardened-tmpfs.json", import.meta.url);
 
+describe("FakeDocker and --init=false", () => {
+  it("reports Init false for the golden create argv", async () => {
+    expect((await factsOf(new FakeDocker(), "sut")).init).toBe(false);
+  });
+});
+
 describe("FakeDocker against a real docker inspect document", () => {
   it.skipIf(!existsSync(REAL))("a golden container has the same facts as the committed real document", async () => {
-    const mask = (facts: ContainerFacts) => ({ ...facts, container_id: "", image: "", env_names: [], mounts: [] });
+    const mask = (facts: ContainerFacts) => ({
+      ...facts,
+      container_id: "",
+      image: "",
+      env_names: [],
+      mounts: [],
+    });
     const real = containerFactsFromInspect(JSON.parse(readFileSync(REAL, "utf8")));
     expect(mask(await factsOf(new FakeDocker(), "sut"))).toEqual(mask(real));
   });

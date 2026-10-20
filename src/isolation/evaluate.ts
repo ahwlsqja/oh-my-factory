@@ -142,6 +142,7 @@ export function evaluateStage(
   flag("volumes_from", facts.volumes_from.length > 0);
   flag("sysctl_set", facts.sysctls.length > 0);
   flag("runtime_unexpected", facts.runtime !== "runc");
+  flag("init_not_disabled", facts.init !== false);
 
   for (const mount of facts.mounts) {
     flag("docker_socket_mounted", isDockerSocket(mount));

@@ -311,7 +311,8 @@
               "userns_host",
               "volumes_from",
               "sysctl_set",
-              "runtime_unexpected"
+              "runtime_unexpected",
+              "init_not_disabled"
             ]
           }
         },

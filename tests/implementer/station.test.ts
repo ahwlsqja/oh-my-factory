@@ -319,7 +319,14 @@ describe("S3 run marker before the first container", () => {
     expect(left).toHaveLength(1);
     expect(left[0]).toMatch(/^omf-implementer-/);
     expect(existsSync(marker)).toBe(true);
-    expect(await sweepItemOrphans({ runtime: rig.spy.runtime, itemDir: rig.itemDir, workId: rig.workId })).toBe(1);
+    expect(
+      await sweepItemOrphans({
+        runtime: rig.spy.runtime,
+        itemDir: rig.itemDir,
+        projectDir: rig.itemDir,
+        workId: rig.workId,
+      }),
+    ).toBe(1);
     expect(Object.keys(rig.fake.state.containers)).toEqual([]);
     rig.fake.gate = null;
     release();

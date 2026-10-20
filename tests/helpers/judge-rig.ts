@@ -1,3 +1,4 @@
+import { imageIdFor } from "./image-id.js";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pinnedImage } from "../../src/container/image-ref.js";
@@ -154,16 +155,25 @@ export function runtimeDouble(options: RuntimeOptions = {}): RuntimeDouble {
       (filter.run_id === null
         ? Object.values(options.owned ?? {}).flatMap((list) => [...list])
         : [...(options.owned?.[filter.run_id] ?? [])]
-      ).map((resource) =>
-        resource.work_id === THIS_ITEM && options.workId !== undefined
-          ? { ...resource, work_id: options.workId }
-          : resource,
-      ),
+      )
+        .map((resource) =>
+          resource.work_id === THIS_ITEM && options.workId !== undefined
+            ? { ...resource, work_id: options.workId }
+            : resource,
+        )
+        .map((resource) =>
+          resource.kind === "image" && resource.work_id !== ""
+            ? { ...resource, image_id: imageIdFor(resource.name) }
+            : resource,
+        ),
     remove: async (handle) => {
       removed.push(`container:${handle.name}`);
     },
     removeImage: async (id) => {
-      removed.push(`image:${id}`);
+      const known = Object.values(options.owned ?? {})
+        .flatMap((list) => [...list])
+        .find((resource) => resource.kind === "image" && imageIdFor(resource.name) === id);
+      removed.push(`image:${known?.name ?? id}`);
     },
   };
   return { runtime: parts as ContainerRuntime, removed };

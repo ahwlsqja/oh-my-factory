@@ -242,3 +242,19 @@ describe("listing and image removal", () => {
     expect(() => removeImageArgv("-f" as ImageId, null)).toThrow();
   });
 });
+
+describe("PID 1 of every container is the idle sleep, never docker-init", () => {
+  // The sleep is PID 1 and a candidate can still end it (it can install the `sleep` the PATH finds, or push PID 1 into an OOM
+  // kill), which is why a stopped container is attributed by `stopCause` and not assumed to be the host's. A daemon configured
+  // with `init: true` would put docker-init at PID 1 with the sleep as a killable child, so every create says --init=false and the
+  // measurement reads HostConfig.Init back against the golden value false.
+  it.each(["sut", "harness", "workcopy", "implementer", "author"] as const)("%s: sleep, --init=false", (role) => {
+    const argv = createArgv(specFor(role), null);
+    expect(argv.filter((element) => element.startsWith("--init"))).toEqual(["--init=false"]);
+    const entry = argv.indexOf("--entrypoint");
+    expect(argv.slice(entry, entry + 2)).toEqual(["--entrypoint", "sleep"]);
+    // the image and the lifetime in seconds follow the entrypoint, and nothing after them
+    expect(argv).toHaveLength(entry + 4);
+    expect(argv[entry + 3]).toMatch(/^[0-9]+$/);
+  });
+});

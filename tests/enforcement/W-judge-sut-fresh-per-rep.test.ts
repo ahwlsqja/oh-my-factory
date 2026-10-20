@@ -6,7 +6,7 @@ import { type Candidate, exited, RuntimeDouble } from "../helpers/sut-double.js"
 vi.mock("../../src/container/measure.js", async () => (await import("../helpers/measure-mock.js")).measureMockModule());
 beforeEach(resetMeasureHook);
 
-// M3f-D7: one fresh, measured SUT container per (scenario, rep). The candidate below leaves a file under /tmp and a
+// One fresh, measured SUT container per (scenario, rep). The candidate below leaves a file under /tmp and a
 // background process, and kills its own PID 1. None of it may be visible to another scenario or another rep.
 const candidate: Candidate = ({ argv, state }) => {
   switch (argv[1]) {

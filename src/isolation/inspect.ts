@@ -127,6 +127,18 @@ function unwrap(inspect: unknown): Json {
 }
 
 /**
+ * `HostConfig.Init` is a pointer the Engine API omits (or prints null) when the create did not say `--init`: the daemon's own
+ * default then applies, which may be true. Unset reads as `null`, so it can be judged against the golden false; a value that is
+ * not a boolean is malformed.
+ */
+function initOf(host: Json): boolean | null {
+  const value = own(host, "Init");
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "boolean") throw new InspectParseError("HostConfig.Init");
+  return value;
+}
+
+/**
  * `docker inspect <id>` JSON (the array of one, or the object) to the facts the evaluator judges.
  * Every isolation-relevant field is required: a missing one throws instead of defaulting to the safe
  * value. Mounts from the three places Docker reports them are merged and de-duplicated, so a bind that
@@ -135,7 +147,7 @@ function unwrap(inspect: unknown): Json {
  * The field mapping follows the Docker Engine API and is checked against real `docker inspect` output
  * (tests/fixtures/docker-inspect). A field reads as empty when absent only if the runtime omits it when
  * unset (omitempty: Sysctls, Runtime, HostConfig.Mounts, Tmpfs) and its absence cannot hide a weakening;
- * StorageOpt, Annotations and Init are never read. For every other field a default would hide an unknown,
+ * StorageOpt and Annotations are never read. For every other field a default would hide an unknown,
  * so the parser throws instead.
  */
 export function containerFactsFromInspect(inspect: unknown): ContainerFacts {
@@ -193,5 +205,6 @@ export function containerFactsFromInspect(inspect: unknown): ContainerFacts {
     volumes_from: strings(host, "VolumesFrom", "HostConfig.VolumesFrom"),
     sysctls: sysctls === null ? [] : Object.keys(sysctls).sort(),
     runtime: own(host, "Runtime") === undefined ? "" : text(host, "Runtime", "HostConfig.Runtime"),
+    init: initOf(host),
   };
 }
