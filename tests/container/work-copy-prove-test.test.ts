@@ -82,7 +82,7 @@ async function staleCopy() {
 }
 
 describe("a stale work copy whose recreate fails, seen by runGates", () => {
-  it("a build that exits 2 is a gate fail", async () => {
+  it("negative guard: a build that exits 2 is a gate fail", async () => {
     const { memory, copy } = await staleCopy();
     memory.onExec = (_name, spec) => (spec.argv[0] === "make" ? exit(2) : EXIT_0);
     expect((await runGates(GATES, copy)).values.fast).toBe("fail");
@@ -211,7 +211,7 @@ describe.each(STOPPED_EARLY)(
       expect(result).toMatchObject({ status: "MISCONFIGURED", reason: "test-command-unrunnable", test_exit: null });
     });
 
-    it("is a gate fail in runGates", async () => {
+    it("negative guard: is a gate fail in runGates", async () => {
       const fx = calcFixture();
       const memory = new MemoryRuntime();
       hostClock.now = () => 0;

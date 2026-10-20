@@ -136,7 +136,7 @@ describe("the probe window of a SUT container belongs to the candidate", () => {
   it.each([
     ["its probe gets a docker client error while the SUT still runs", "sh_client_error"],
     ["its probe exits with no status (the docker client was killed)", "sh_null_status"],
-  ] as const)("%s: infrastructure, the round ends as round_error", async (_title, behavior) => {
+  ] as const)("negative guard: %s: infrastructure, the round ends as round_error", async (_title, behavior) => {
     const { round } = await rig(behavior);
     await expect(round()).rejects.toMatchObject({ name: "JudgeRoundError", code: "round_error" });
   });
