@@ -289,7 +289,7 @@ describe("ContainerWorkCopyFactory (spec section 4.8)", () => {
     await copy.dispose();
   });
 
-  it("a recreate that fails comes back as an error result, not an exception", async () => {
+  it("a recreate whose extract fails comes back as a failing exit, not an exception", async () => {
     const fx = calcFixture();
     const memory = new MemoryRuntime();
     const { factory } = workCopies(memory);
@@ -298,9 +298,11 @@ describe("ContainerWorkCopyFactory (spec section 4.8)", () => {
     await copy.applyPatch(patch, { reverse: true });
     memory.onExec = () => exit(1);
     expect(await copy.run(["echo"], OPTIONS)).toEqual({
-      kind: "error",
-      code: "workcopy_extract_failed",
-      message: "extract_failed",
+      kind: "exited",
+      status: 1,
+      signal: null,
+      stdout: "",
+      stderr: "",
     });
     expect(memory.live.size).toBe(0);
     await copy.dispose();

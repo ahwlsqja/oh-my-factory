@@ -67,6 +67,12 @@ function errorResult(error: unknown): CommandResult {
     : { kind: "error", code: "runtime_error", message: "runtime_error" };
 }
 
+/**
+ * What a recreate whose candidate build (or extract) failed is reported as: a failing exit of the command that asked for the
+ * container. The candidate's build is not reproducible, which is the candidate's failure, so the gate fails (never `skip`).
+ */
+const BOOT_FAILED_RESULT: CommandResult = { kind: "exited", status: 1, signal: null, stdout: "", stderr: "" };
+
 class ContainerWorkCopy implements WorkCopy {
   readonly id: string;
   private readonly root: string;
@@ -79,6 +85,8 @@ class ContainerWorkCopy implements WorkCopy {
   /** Gate execs served by the current container; its lifetime is sized for `WORKCOPY_GATE_EXECS` of them. */
   private execs = 0;
   private gone = false;
+  /** The boot exec in progress (or last run): tells a build timeout, which is the candidate's, from an extract timeout. */
+  private bootExec: "extract_failed" | "build_failed" = "extract_failed";
 
   constructor(
     private readonly ctx: ContainerWorkCopyDeps & { launch: Launch },
@@ -145,6 +153,7 @@ class ContainerWorkCopy implements WorkCopy {
     workdir?: string,
   ): Promise<void> {
     if (this.container === null) throw new WorkCopyError(failure);
+    this.bootExec = failure;
     const result = await this.ctx.runtime.exec(this.container, {
       argv,
       ...(stdin === undefined ? {} : { stdin }),
@@ -176,11 +185,31 @@ class ContainerWorkCopy implements WorkCopy {
     }
   }
 
+  /** Replaces the container. A failure of the candidate's own build or extract is a failing result; any other is infrastructure. */
+  private async recreate(): Promise<CommandResult | null> {
+    try {
+      await this.removeContainer();
+      await this.boot();
+      return null;
+    } catch (error) {
+      if (error instanceof WorkCopyError) {
+        const candidate =
+          error.code === "build_failed" ||
+          error.code === "extract_failed" ||
+          (error.code === "timeout" && this.bootExec === "build_failed");
+        if (candidate) return BOOT_FAILED_RESULT;
+      }
+      return { kind: "error", code: "runtime_error", message: "runtime_error" };
+    }
+  }
+
   /**
    * Every command runs at most `WORKCOPY_GATE_EXEC_S` seconds, whatever timeout the caller injects, because the lifetime is sized from it.
    * A container that has served `WORKCOPY_GATE_EXECS` commands is replaced like a stale one, so no container is asked for more than its
-   * lifetime was sized for. A failure to recreate comes back as an error result, because `proveTest` does not catch a throw from `run`;
-   * `runGates` turns the error results that mean a lost container (`container_gone`, `exit_unknown`) or `runtime_error` into an infrastructure stop. A result
+   * lifetime was sized for. A failure to recreate comes back as a result, because `proveTest` does not catch a throw from `run`: a
+   * failure of the candidate's build or extract (`build_failed`, `extract_failed`, a build timeout) is a failing exit, since the
+   * candidate build is not reproducible; any other (create, measure, daemon) is a `runtime_error` result. `runGates` turns the error
+   * results that mean a lost container (`container_gone`, `exit_unknown`) or `runtime_error` into an infrastructure stop. A result
    * that is already decided is never changed by a failed removal of the container. After a
    * non-zero exit, an exec client error or no status, `stopCause` says why a container is not running: the host's (removed, stopped,
    * lifetime elapsed, or unknown) is `container_gone`, no status is `exit_unknown`, and a container that stopped early on its own is the
@@ -191,8 +220,8 @@ class ContainerWorkCopy implements WorkCopy {
     if (this.gone) return { kind: "error", code: "runtime_error", message: "runtime_error" };
     try {
       if (this.stale || this.execs >= WORKCOPY_GATE_EXECS) {
-        await this.removeContainer();
-        await this.boot();
+        const failed = await this.recreate();
+        if (failed !== null) return failed;
       }
       if (this.container === null) return errorResult(null);
       this.execs += 1;
