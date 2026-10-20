@@ -11,8 +11,10 @@ import type { CommandResult, CommandTarget, RunOptions } from "./ports.js";
 
 /**
  * The error codes of a work copy that lost its container or could not run at all: the host's doing, never evidence about a gate.
- * `runtime_error` is what the work copy reports for a failure the candidate cannot cause (a docker client spawn failure, a
- * recreate that failed on the daemon, a disposed copy), so it stops the line like a lost container.
+ * `runtime_error` is what the work copy reports for a failure the candidate cannot cause: a docker client error or an exit with no
+ * status, a recreate that failed in the client (during the build or extract exec), on create, measure or the daemon, an extract
+ * timeout, or a disposed copy. It stops the line like a lost container. A recreate that failed on the candidate's own build or
+ * extract (a non-zero exit, or a build timeout) is `workcopy_boot_failed`, which is not here: the gate fails.
  */
 const LOST_CONTAINER_CODES: ReadonlySet<string> = new Set([
   "workcopy_container_gone",

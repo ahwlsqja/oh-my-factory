@@ -216,14 +216,19 @@ class ContainerWorkCopy implements WorkCopy {
   /**
    * Every command runs at most `WORKCOPY_GATE_EXEC_S` seconds, whatever timeout the caller injects, because the lifetime is sized from it.
    * A container that has served `WORKCOPY_GATE_EXECS` commands is replaced like a stale one, so no container is asked for more than its
-   * lifetime was sized for. A failure to recreate comes back as a result, because `proveTest` does not catch a throw from `run`: a
-   * failure of the candidate's build or extract (`build_failed`, `extract_failed`, a build timeout) is a failing exit, since the
-   * candidate build is not reproducible; any other (create, measure, daemon) is a `runtime_error` result. `runGates` turns the error
-   * results that mean a lost container (`container_gone`, `exit_unknown`) or `runtime_error` into an infrastructure stop. A result
-   * that is already decided is never changed by a failed removal of the container. After a
-   * non-zero exit, an exec client error or no status, `stopCause` says why a container is not running: the host's (removed, stopped,
-   * lifetime elapsed, or unknown) is `container_gone`, no status is `exit_unknown`, and a container that stopped early on its own is the
-   * command's failure and comes back as a failed exit. A timeout or the output limit kills only the docker client, not the process in the container, so the
+   * lifetime was sized for. A failure to recreate comes back as a result, because `proveTest` does not catch a throw from `run`, and
+   * never as a status. Two causes are told apart:
+   * - the candidate's own build or extract failed (an exec that exited with a non-zero status, or a build timeout): the error result
+   *   `workcopy_boot_failed`, which `runGates` turns into `fail` and `proveTest` into no test status (MISCONFIGURED);
+   * - anything the candidate cannot cause (the docker client failed or exited with no status, an extract timeout, create, measure,
+   *   a golden refusal, the daemon): the error result `runtime_error`, which `runGates` turns into an infrastructure stop
+   *   (`GateInfrastructureError`) and `proveTest` into no test status.
+   * `runGates` also stops the line on the results that mean a lost container (`container_gone`, `exit_unknown`). A result that is already
+   * decided is never changed by a failed removal of the container. A null exit status is never inspected: it is `exit_unknown`
+   * whatever the container state. After a non-zero exit or an exec client error, `stopCause` says why a container is not running: the
+   * host's (removed, stopped, lifetime elapsed, or unknown) is `container_gone`, and a container that stopped early on its own is the
+   * command's failure, the error result `workcopy_candidate_stopped` (no status is passed on, so `runGates` fails the gate and
+   * `proveTest` reads no test status). A timeout or the output limit kills only the docker client, not the process in the container, so the
    * container is removed by name and the next command starts in a fresh one: nothing keeps running behind it.
    */
   async run(argv: readonly string[], options: RunOptions): Promise<CommandResult> {

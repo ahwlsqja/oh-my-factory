@@ -6,6 +6,7 @@ import { markHostEnded, resetLifecycle } from "../../src/container/lifecycle.js"
 import { CONTAINER_PROBE_ARGV } from "../../src/container/measure.js";
 import type { ContainerRuntime } from "../../src/container/runtime.js";
 import { Ledger } from "../../src/core/ledger.js";
+import { loadRunIsolation } from "../../src/isolation/record.js";
 import type { HarnessRequest } from "../../src/judge/harness-protocol.js";
 import { runJudgeRound } from "../../src/judge/round.js";
 import { HarnessDouble } from "../helpers/sut-double.js";
@@ -26,7 +27,15 @@ const exited = (stdout: string, status = 0): ProcessResult => ({
 });
 
 /** What the first SUT container's probe does; every other probe, step and harness call is clean. */
-type ProbeBehavior = "sleep_exits" | "sh_exit_1" | "sh_hangs" | "sh_garbage" | "sh_vendor" | "host_removed";
+type ProbeBehavior =
+  | "sleep_exits"
+  | "sh_exit_1"
+  | "sh_hangs"
+  | "sh_garbage"
+  | "sh_vendor"
+  | "sh_client_error"
+  | "sh_null_status"
+  | "host_removed";
 
 async function rig(behavior: ProbeBehavior) {
   const harness = new HarnessDouble();
@@ -59,6 +68,11 @@ async function rig(behavior: ProbeBehavior) {
         return { kind: "timeout", stdout: "", stderr: "" };
       case "sh_garbage":
         return exited("not the grammar\n");
+      case "sh_client_error":
+        // The docker client failed against a SUT that still runs: nothing says the candidate did it.
+        return { kind: "error", code: "EIO", message: "client failed" };
+      case "sh_null_status":
+        return { kind: "exited", status: null, signal: "SIGKILL", stdout: "", stderr: "" };
       case "sh_vendor":
         return exited("vendor:claude\nsocket:0\nend\n");
       case "host_removed": {
@@ -96,7 +110,7 @@ async function rig(behavior: ProbeBehavior) {
       round: 1,
       now: () => AT,
     });
-  return { fake, round };
+  return { fake, round, ledger, itemDir: join(dir, "items", WORK), scope };
 }
 
 import { pinnedImage } from "../../src/container/image-ref.js";
@@ -117,6 +131,26 @@ describe("the probe window of a SUT container belongs to the candidate", () => {
       ["0000000000000002", ["pass", "pass"]],
     ]);
     expect(Object.keys(fake.state.containers)).toEqual([]);
+  });
+
+  it.each([
+    ["its probe gets a docker client error while the SUT still runs", "sh_client_error"],
+    ["its probe exits with no status (the docker client was killed)", "sh_null_status"],
+  ] as const)("%s: infrastructure, the round ends as round_error", async (_title, behavior) => {
+    const { round } = await rig(behavior);
+    await expect(round()).rejects.toMatchObject({ name: "JudgeRoundError", code: "round_error" });
+  });
+
+  it("negative guard: a probe that reports a vendor binary is still recorded as a measurement and lowers the isolation level", async () => {
+    const { round, ledger, itemDir, scope } = await rig("sh_vendor");
+    await round();
+    const sut = ledger
+      .readVerified()
+      .filter((event) => event.type === "isolation.measured" && event.payload.stage === "sut");
+    const flagged = sut.filter((event) => event.payload.level === "L1");
+    expect(flagged).toHaveLength(1);
+    expect(flagged[0]?.payload.violations).toEqual(["vendor_binary_present"]);
+    expect(loadRunIsolation(itemDir, scope, ledger.readVerified()).stages.sut?.level).toBe("L1");
   });
 
   it("negative guard: a SUT removed by the host during the probe stays a round error", async () => {
