@@ -17,6 +17,7 @@ export type WorkCopyErrorCode =
   | "build_failed"
   | "extract_failed"
   | "not_golden"
+  | "runtime_error"
   | "timeout"
   | "container_gone"
   | "exit_unknown";
@@ -61,17 +62,20 @@ const CONTAINER_STOPPED_STATUS = 137;
 let copySerial = 0;
 let containerSerial = 0;
 
+const RUNTIME_ERROR_RESULT: CommandResult = { kind: "error", code: "runtime_error", message: "runtime_error" };
+
 function errorResult(error: unknown): CommandResult {
-  return error instanceof WorkCopyError
+  return error instanceof WorkCopyError && error.code !== "runtime_error"
     ? { kind: "error", code: `workcopy_${error.code}`, message: error.code }
-    : { kind: "error", code: "runtime_error", message: "runtime_error" };
+    : RUNTIME_ERROR_RESULT;
 }
 
 /**
- * What a recreate whose candidate build (or extract) failed is reported as: a failing exit of the command that asked for the
- * container. The candidate's build is not reproducible, which is the candidate's failure, so the gate fails (never `skip`).
+ * What a recreate whose candidate build (or extract) failed is reported as: an error result with its own code, never a status.
+ * The candidate's build is not reproducible, which is the candidate's failure, so `runGates` fails the gate; and because it
+ * carries no exit status, `proveTest` cannot read it as a test status (a failing test is what PROVEN needs).
  */
-const BOOT_FAILED_RESULT: CommandResult = { kind: "exited", status: 1, signal: null, stdout: "", stderr: "" };
+const BOOT_FAILED_RESULT: CommandResult = { kind: "error", code: "workcopy_boot_failed", message: "boot_failed" };
 
 class ContainerWorkCopy implements WorkCopy {
   readonly id: string;
@@ -162,7 +166,9 @@ class ContainerWorkCopy implements WorkCopy {
       maxOutputBytes: OUTPUT_LIMIT_BYTES,
     });
     if (result.kind === "timeout") throw new WorkCopyError("timeout");
-    if (result.kind !== "exited" || result.status !== 0) throw new WorkCopyError(failure);
+    // The docker client failed or was killed: nothing says what the candidate's command did, so it is the host's, not the candidate's.
+    if (result.kind !== "exited" || result.status === null) throw new WorkCopyError("runtime_error");
+    if (result.status !== 0) throw new WorkCopyError(failure);
   }
 
   private async removeContainer(): Promise<void> {
@@ -199,7 +205,7 @@ class ContainerWorkCopy implements WorkCopy {
           (error.code === "timeout" && this.bootExec === "build_failed");
         if (candidate) return BOOT_FAILED_RESULT;
       }
-      return { kind: "error", code: "runtime_error", message: "runtime_error" };
+      return RUNTIME_ERROR_RESULT;
     }
   }
 
@@ -217,7 +223,7 @@ class ContainerWorkCopy implements WorkCopy {
    * container is removed by name and the next command starts in a fresh one: nothing keeps running behind it.
    */
   async run(argv: readonly string[], options: RunOptions): Promise<CommandResult> {
-    if (this.gone) return { kind: "error", code: "runtime_error", message: "runtime_error" };
+    if (this.gone) return RUNTIME_ERROR_RESULT;
     try {
       if (this.stale || this.execs >= WORKCOPY_GATE_EXECS) {
         const failed = await this.recreate();

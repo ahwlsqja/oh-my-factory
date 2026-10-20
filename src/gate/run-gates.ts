@@ -21,6 +21,13 @@ const LOST_CONTAINER_CODES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The error codes of a work copy that tell the candidate's own failure, without a status: a recreate whose candidate build or
+ * extract failed (`workcopy_boot_failed`) and a command in a container that stopped early on its own (`workcopy_candidate_stopped`).
+ * A gate that meets one is `fail`, never `skip`.
+ */
+const CANDIDATE_FAILURE_CODES: ReadonlySet<string> = new Set(["workcopy_boot_failed", "workcopy_candidate_stopped"]);
+
+/**
  * A declared gate (required or not) ran in a container that was lost, or the work copy could not run it for a reason of the host. That is an infrastructure error that blocks the line: it
  * must not become `skip`, which a gate that is not required would turn into GREEN. The message is the code only.
  */
@@ -68,7 +75,8 @@ function rulesOf(stdout: string): number | null {
  * stdout and stderr are hostile and nothing else is kept.
  */
 export function gateValueOf(result: CommandResult): { value: GateLineValue; rules: number | null } {
-  if (result.kind === "error") return { value: "skip", rules: null };
+  if (result.kind === "error")
+    return { value: result.code !== null && CANDIDATE_FAILURE_CODES.has(result.code) ? "fail" : "skip", rules: null };
   if (result.kind !== "exited") return { value: "fail", rules: null };
   const rules = rulesOf(result.stdout);
   if (result.status !== 0) return { value: "fail", rules };
