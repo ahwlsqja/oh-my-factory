@@ -72,7 +72,8 @@ function rulesOf(stdout: string): number | null {
 }
 
 /**
- * exit 0 is `pass` (`empty` when the marker says 0 rules); a non-zero exit, a signal, a timeout or the output limit is `fail`;
+ * exit 0 is `pass` (`empty` when the marker says 0 rules); a non-zero exit, a signal, a timeout or the output limit is `fail`, and so are the error results
+ * `workcopy_boot_failed` and `workcopy_candidate_stopped`;
  * a runner error is `skip` (the gate never ran: environment), except a lost container, which `runGates` stops on. Only the exit status and the marker integer are read;
  * stdout and stderr are hostile and nothing else is kept.
  */

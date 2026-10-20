@@ -223,9 +223,11 @@ class ContainerWorkCopy implements WorkCopy {
    * A container that has served `WORKCOPY_GATE_EXECS` commands is replaced like a stale one, so no container is asked for more than its
    * lifetime was sized for. A failure to recreate comes back as a result, because `proveTest` does not catch a throw from `run`, and
    * never as a status. Two causes are told apart:
-   * - the candidate's own build or extract failed (an exec that exited with a non-zero status, or a build timeout): the error result
+   * - the candidate's own build or extract failed (an exec that exited with a non-zero status in a container that still runs or stopped
+   *   early on its own, as `stopCause` says, or a build timeout): the error result
    *   `workcopy_boot_failed`, which `runGates` turns into `fail` and `proveTest` into no test status (MISCONFIGURED);
-   * - anything the candidate cannot cause (the docker client failed or exited with no status, an extract timeout, create, measure,
+   * - anything the candidate cannot cause (the docker client failed or exited with no status, a non-zero build or extract exit of a container that the host removed or stopped
+   *   or the daemon would not describe, an extract timeout, create, measure,
    *   a golden refusal, the daemon): the error result `runtime_error`, which `runGates` turns into an infrastructure stop
    *   (`GateInfrastructureError`) and `proveTest` into no test status.
    * `runGates` also stops the line on the results that mean a lost container (`container_gone`, `exit_unknown`). A result that is already
