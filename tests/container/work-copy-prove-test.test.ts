@@ -135,7 +135,7 @@ describe("a stale recreate whose boot exec exits non-zero asks why the container
     await copy.dispose();
   });
 
-  it("a build that exits 1 while the daemon stops answering is MISCONFIGURED in copy B", async () => {
+  it("negative guard: a build that exits 1 while the daemon stops answering is MISCONFIGURED in copy B", async () => {
     const fx = calcFixture();
     const memory = new MemoryRuntime();
     const seen = { make: 0, test: 0 };
@@ -168,7 +168,7 @@ describe("a stale recreate whose boot exec exits non-zero asks why the container
     expect(result).toMatchObject({ status: "MISCONFIGURED", reason: "test-command-unrunnable", test_exit: null });
   });
 
-  it("a build that exits 2 with the container running stays workcopy_boot_failed (fail)", async () => {
+  it("negative guard: a build that exits 2 with the container running stays workcopy_boot_failed (fail)", async () => {
     const { memory, copy } = await staleCopy();
     memory.onExec = (_name, spec) => (spec.argv[0] === "make" ? exit(2) : EXIT_0);
     expect(await copy.run(["ok"], OPTIONS)).toMatchObject({ kind: "error", code: "workcopy_boot_failed" });

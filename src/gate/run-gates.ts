@@ -14,7 +14,8 @@ import type { CommandResult, CommandTarget, RunOptions } from "./ports.js";
  * `runtime_error` is what the work copy reports for a failure the candidate cannot cause: a docker client error or an exit with no
  * status, a recreate that failed in the client (during the build or extract exec), on create, measure or the daemon, an extract
  * timeout, or a disposed copy. It stops the line like a lost container. A recreate that failed on the candidate's own build or
- * extract (a non-zero exit, or a build timeout) is `workcopy_boot_failed`, which is not here: the gate fails.
+ * extract (a non-zero exit, or a build timeout) is `workcopy_boot_failed`, which is not here: the gate fails. A non-zero exit counts
+ * as `workcopy_boot_failed` only when stopCause says running or candidate; when it says host or unknown it is `runtime_error`.
  */
 const LOST_CONTAINER_CODES: ReadonlySet<string> = new Set([
   "workcopy_container_gone",
