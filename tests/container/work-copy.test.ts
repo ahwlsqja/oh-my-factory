@@ -213,31 +213,38 @@ describe("ContainerWorkCopyFactory (spec section 4.8)", () => {
     await copy.dispose();
   });
 
-  describe("a container that stopped early on its own is the command's failure", () => {
+  describe("a container that stopped early on its own is the command's failure, reported without a status", () => {
     it.each([
-      ["status 1", exit(1), 1],
-      ["status 137", exit(137), 137],
-      ["an exec client error", { kind: "error", code: "EIO", message: "client failed" } as const, 137],
-    ])("%s comes back as a failed exit, and the next command gets a fresh container", async (_name, answer, status) => {
-      const fx = calcFixture();
-      const memory = new MemoryRuntime();
-      hostClock.now = () => 0;
-      const { factory } = workCopies(memory);
-      const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
-      memory.onExec = (name, spec) => {
-        if (spec.argv[0] !== "gate") return EXIT_0;
-        memory.stopped.add(name);
-        hostClock.now = () => 60_000;
-        return answer;
-      };
-      expect(await copy.run(["gate"], OPTIONS)).toMatchObject({ kind: "exited", status });
-      memory.onExec = () => EXIT_0;
-      expect((await copy.run(["echo"], OPTIONS)).kind).toBe("exited");
-      expect(memory.specs).toHaveLength(2);
-      await copy.dispose();
-    });
+      ["status 1", exit(1)],
+      ["status 137", exit(137)],
+      ["an exec client error", { kind: "error", code: "EIO", message: "client failed" } as const],
+    ])(
+      "%s comes back as the candidate_stopped error result, and the next command gets a fresh container",
+      async (_name, answer) => {
+        const fx = calcFixture();
+        const memory = new MemoryRuntime();
+        hostClock.now = () => 0;
+        const { factory } = workCopies(memory);
+        const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
+        memory.onExec = (name, spec) => {
+          if (spec.argv[0] !== "gate") return EXIT_0;
+          memory.stopped.add(name);
+          hostClock.now = () => 60_000;
+          return answer;
+        };
+        expect(await copy.run(["gate"], OPTIONS)).toEqual({
+          kind: "error",
+          code: "workcopy_candidate_stopped",
+          message: "candidate_stopped",
+        });
+        memory.onExec = () => EXIT_0;
+        expect((await copy.run(["echo"], OPTIONS)).kind).toBe("exited");
+        expect(memory.specs).toHaveLength(2);
+        await copy.dispose();
+      },
+    );
 
-    it("an OOM kill (State.OOMKilled true) is the command's failure", async () => {
+    it("an OOM kill (State.OOMKilled true) is the candidate_stopped error result", async () => {
       const fx = calcFixture();
       const memory = new MemoryRuntime();
       hostClock.now = () => 0;
@@ -248,7 +255,7 @@ describe("ContainerWorkCopyFactory (spec section 4.8)", () => {
         memory.stopState.set(name, { OOMKilled: true, ExitCode: 137 });
         return exit(137);
       };
-      expect(await copy.run(["gate"], OPTIONS)).toMatchObject({ kind: "exited", status: 137 });
+      expect(await copy.run(["gate"], OPTIONS)).toMatchObject({ kind: "error", code: "workcopy_candidate_stopped" });
       await copy.dispose();
     });
   });

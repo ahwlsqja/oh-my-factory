@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { ProcessResult } from "../../src/adapters/process-group.js";
-import { resetLifecycle } from "../../src/container/lifecycle.js";
+import { hostClock, resetLifecycle } from "../../src/container/lifecycle.js";
 import type { JudgeConfigDecl } from "../../src/decision/types.js";
 import { runGates } from "../../src/gate/run-gates.js";
 import { proveTest } from "../../src/gate/prove-test.js";
@@ -118,3 +118,58 @@ describe("a stale work copy whose recreate fails, seen by runGates", () => {
     },
   );
 });
+
+/** The container is found stopped early on its own (the host clock is well inside its lifetime) after the test exec answers `answer`. */
+const STOPPED_EARLY: ReadonlyArray<readonly [string, ProcessResult]> = [
+  ["an exec client error", clientError],
+  ["a failing exit", exit(137)],
+];
+
+describe.each(STOPPED_EARLY)(
+  "a test exec that gets %s while the container is found stopped early",
+  (_title, answer) => {
+    it("is MISCONFIGURED in copy B, never PROVEN", async () => {
+      const fx = calcFixture();
+      const memory = new MemoryRuntime();
+      hostClock.now = () => 0;
+      let tests = 0;
+      memory.onExec = (name, spec) => {
+        if (spec.argv[0] !== TEST_COMMAND[0]) return EXIT_0;
+        tests += 1;
+        if (tests === 1) return EXIT_0;
+        memory.stopped.add(name);
+        hostClock.now = () => 60_000;
+        return answer;
+      };
+      const { factory } = workCopies(memory, { build: ["make"] });
+      const result = await proveTest({
+        quarantine: fx.quarantine,
+        base: fx.base,
+        head: fx.head,
+        testCommand: TEST_COMMAND,
+        explicitTestPaths: [],
+        copies: factory,
+        timeoutMs: 60_000,
+      });
+      expect(result).toMatchObject({ status: "MISCONFIGURED", reason: "test-command-unrunnable", test_exit: null });
+    });
+
+    it("is a gate fail in runGates", async () => {
+      const fx = calcFixture();
+      const memory = new MemoryRuntime();
+      hostClock.now = () => 0;
+      const { factory } = workCopies(memory);
+      const copy = await factory.create({ quarantine: fx.quarantine, sha: fx.head });
+      memory.onExec = (name, spec) => {
+        if (spec.argv[0] !== "ok") return EXIT_0;
+        memory.stopped.add(name);
+        hostClock.now = () => 60_000;
+        return answer;
+      };
+      const result = await runGates(GATES, copy);
+      expect(result.values.fast).toBe("fail");
+      expect(result.verdict.status).not.toBe("GREEN");
+      await copy.dispose();
+    });
+  },
+);

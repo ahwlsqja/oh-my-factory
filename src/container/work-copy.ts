@@ -56,9 +56,6 @@ export const EXTRACT_TIMEOUT_MS = 120_000;
 export const BUILD_TIMEOUT_MS = 600_000;
 const OUTPUT_LIMIT_BYTES = 1024 * 1024;
 
-/** What a command that stopped its own container is reported as when the exec client gave no status: a kill, as `docker exec` would say. */
-const CONTAINER_STOPPED_STATUS = 137;
-
 let copySerial = 0;
 let containerSerial = 0;
 
@@ -76,6 +73,13 @@ function errorResult(error: unknown): CommandResult {
  * carries no exit status, `proveTest` cannot read it as a test status (a failing test is what PROVEN needs).
  */
 const BOOT_FAILED_RESULT: CommandResult = { kind: "error", code: "workcopy_boot_failed", message: "boot_failed" };
+
+/** What a command in a container that stopped early on its own is reported as: the candidate's failure, but never a status. */
+const CANDIDATE_STOPPED_RESULT: CommandResult = {
+  kind: "error",
+  code: "workcopy_candidate_stopped",
+  message: "candidate_stopped",
+};
 
 class ContainerWorkCopy implements WorkCopy {
   readonly id: string;
@@ -256,11 +260,11 @@ class ContainerWorkCopy implements WorkCopy {
         }
         if (cause === "candidate") {
           // The container stopped early on its own (the command ended its PID 1 or pushed it into an OOM kill): the command's
-          // failure. It reads as a failed exit, never as a skip, and the next command starts in a fresh container.
+          // failure, but whatever the exec client reported is a status of the stop, not of the command, so none is passed on.
+          // `runGates` fails the gate, `proveTest` reads no test status, and the next command starts in a fresh container.
           this.stale = true;
           await this.removeQuietly();
-          if (result.kind === "error")
-            return { kind: "exited", status: CONTAINER_STOPPED_STATUS, signal: null, stdout: "", stderr: "" };
+          return CANDIDATE_STOPPED_RESULT;
         } else if (result.kind === "error") {
           // The container still runs, so only the docker client failed (it could not be started): the host's doing, and a
           // gate result must never be made of it. It reaches `runGates` as `runtime_error`, not as the client's own code.
