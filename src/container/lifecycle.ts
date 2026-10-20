@@ -24,9 +24,10 @@ const lives = new Map<string, Life>();
 export const hostClock: { now: () => number } = { now: () => performance.now() };
 
 /**
- * The slack the lifetime check gives, milliseconds: it only absorbs the difference between the host's clock and the daemon's
- * and the latency of the calls around `docker start`. A live round never gets near the lifetime, because every bound is 1.5 times
- * the worst case of the calls made while the container is alive (`judgeLifetimeSeconds`).
+ * The slack the lifetime check gives, milliseconds. The container's `sleep` runs on the daemon's clock from the container start;
+ * the host measures on its own monotonic clock from just after `docker start` returned. The slack covers only the skew between
+ * those two clocks, not any round-trip. What keeps a live round away from the lifetime is the 1.5 times safety factor on every
+ * bound (`judgeLifetimeSeconds`), not this slack.
  */
 export const LIFETIME_SLACK_MS = 5000;
 
