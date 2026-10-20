@@ -76,7 +76,7 @@ describe("W-gates-run-in-container", () => {
       copies: factory,
     });
 
-  it("a work copy that stops early on its own is a gate fail and a failing test status, never a skip", async () => {
+  it("a work copy that stops early on its own is a gate fail and no test status, never a skip", async () => {
     const fx = calcFixture();
     const memory = new MemoryRuntime();
     hostClock.now = () => 0;
@@ -95,8 +95,7 @@ describe("W-gates-run-in-container", () => {
     await copy.dispose();
 
     const proven = await proveOn(factory, fx);
-    expect(proven).toMatchObject({ status: "MISCONFIGURED", reason: "baseline-test-failed" });
-    expect(proven.test_exit).toBe(137);
+    expect(proven).toMatchObject({ status: "MISCONFIGURED", reason: "test-command-unrunnable", test_exit: null });
   });
 
   it.each([
