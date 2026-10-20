@@ -172,7 +172,12 @@ class ContainerWorkCopy implements WorkCopy {
     if (result.kind === "timeout") throw new WorkCopyError("timeout");
     // The docker client failed or was killed: nothing says what the candidate's command did, so it is the host's, not the candidate's.
     if (result.kind !== "exited" || result.status === null) throw new WorkCopyError("runtime_error");
-    if (result.status !== 0) throw new WorkCopyError(failure);
+    if (result.status !== 0) {
+      // A daemon that stopped answering makes the docker client exit non-zero too, so ask why the container is not running, as run() does.
+      const { cause } = await stopCause(this.ctx.runtime, this.container);
+      if (cause === "host" || cause === "unknown") throw new WorkCopyError("runtime_error");
+      throw new WorkCopyError(failure);
+    }
   }
 
   private async removeContainer(): Promise<void> {

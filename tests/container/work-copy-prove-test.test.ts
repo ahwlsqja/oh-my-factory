@@ -119,6 +119,63 @@ describe("a stale work copy whose recreate fails, seen by runGates", () => {
   );
 });
 
+describe("a stale recreate whose boot exec exits non-zero asks why the container stopped", () => {
+  it("a build that exits 1 while inspect fails is an infrastructure error in runGates", async () => {
+    const { memory, copy } = await staleCopy();
+    memory.onExec = (_name, spec) => {
+      if (spec.argv[0] !== "make") return EXIT_0;
+      memory.failInspect = true;
+      return exit(1);
+    };
+    await expect(runGates(GATES, copy)).rejects.toMatchObject({
+      name: "GateInfrastructureError",
+      gate: "fast",
+      code: "runtime_error",
+    });
+    await copy.dispose();
+  });
+
+  it("a build that exits 1 while the daemon stops answering is MISCONFIGURED in copy B", async () => {
+    const fx = calcFixture();
+    const memory = new MemoryRuntime();
+    const seen = { make: 0, test: 0 };
+    memory.onExec = (_name, spec) => {
+      const head = spec.argv[0];
+      if (head === "make") {
+        seen.make += 1;
+        if (seen.make === 3) {
+          memory.failInspect = true;
+          return exit(1);
+        }
+        return EXIT_0;
+      }
+      if (head === TEST_COMMAND[0]) {
+        seen.test += 1;
+        return seen.test === 1 ? EXIT_0 : exit(1);
+      }
+      return EXIT_0;
+    };
+    const { factory } = workCopies(memory, { build: ["make"] });
+    const result = await proveTest({
+      quarantine: fx.quarantine,
+      base: fx.base,
+      head: fx.head,
+      testCommand: TEST_COMMAND,
+      explicitTestPaths: [],
+      copies: factory,
+      timeoutMs: 60_000,
+    });
+    expect(result).toMatchObject({ status: "MISCONFIGURED", reason: "test-command-unrunnable", test_exit: null });
+  });
+
+  it("a build that exits 2 with the container running stays workcopy_boot_failed (fail)", async () => {
+    const { memory, copy } = await staleCopy();
+    memory.onExec = (_name, spec) => (spec.argv[0] === "make" ? exit(2) : EXIT_0);
+    expect(await copy.run(["ok"], OPTIONS)).toMatchObject({ kind: "error", code: "workcopy_boot_failed" });
+    await copy.dispose();
+  });
+});
+
 /** The container is found stopped early on its own (the host clock is well inside its lifetime) after the test exec answers `answer`. */
 const STOPPED_EARLY: ReadonlyArray<readonly [string, ProcessResult]> = [
   ["an exec client error", clientError],
